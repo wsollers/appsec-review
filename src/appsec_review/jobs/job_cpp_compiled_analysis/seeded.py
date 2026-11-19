@@ -38,9 +38,9 @@ from appsec_review.seeding import record, units as unit_selection
 from appsec_review.storage import canonical_json, tool_input_json
 
 from .clang_cfg import NO_BLOCK_LINES_GAP, SourceCfg, parse_cfgs
-from .llvm_ir import IrFunction, parse_module
+from .llvm_ir import IrFunction
 
-SEEDED_IMPL = "cpp-seeded-compiled/3"
+SEEDED_IMPL = "cpp-seeded-compiled/4"
 MAX_IR_BYTES = 64 * 1024 * 1024
 MAX_CFG_BYTES = 16 * 1024 * 1024
 REPLAY = {"ir": "replay-ir.json", "ast": "replay-ast.json", "cfg": "replay-cfg.json"}
@@ -99,9 +99,9 @@ def _publish(unit: UnitContext, case_id: str, mode: str, cataloged: Mapping[str,
              checkpointable: bool = True) -> dict[str, Any]:
     """Write the ledger artifact, qualify the coverage and finish the shard."""
     base = _base()
+    document = {"schema": record.RECORD_SCHEMA, "branch": mode, "project": case_id, "seeded": section}
     ledger = base._json_artifact(unit, base._case_root(unit, case_id) / f"seeded-{mode}-ledger.json",
-                                 {"schema": record.RECORD_SCHEMA, "branch": mode, "project": case_id,
-                                  "seeded": section})
+                                document, immutable=True)
     compact = seeding.compact_record({**section, "gaps": list(dict.fromkeys([*gaps, *section.get("gaps", ())]))},
                                      ledger=ledger, skipped=skipped)
     sample = seeding.coverage_gap(section)
@@ -177,6 +177,9 @@ def _source_cfgs(unit: UnitContext, case_id: str, root: Path, subset: Sequence[M
     if failures is None:
         gaps.append(f"source_cfg_unavailable: {case_id} cfg replay receipt unusable (exit {execution['exit_code']})")
         return found, replay, execution
+    if execution["exit_code"] not in (0, 2) or (execution["exit_code"] != 0 and not failures):
+        gaps.append(f"source_cfg_unavailable: {case_id} cfg replay failed with exit {execution['exit_code']}")
+        return found, replay, execution
     for position, command in enumerate(subset):
         if position in failures:
             gaps.append("source_cfg_unavailable: " + failures[position])
@@ -185,7 +188,14 @@ def _source_cfgs(unit: UnitContext, case_id: str, root: Path, subset: Sequence[M
         if not path.is_file() or path.is_symlink() or path.stat().st_size > MAX_CFG_BYTES:
             gaps.append(f"source_cfg_unavailable: {command['target_path']}: CFG text unavailable or over bound")
             continue
-        module = parse_cfgs(path.read_text(encoding="utf-8", errors="replace"), block_limit=settings.block_limit)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            gaps.append(f"source_cfg_unparsed: {command['target_path']}: CFG text is unreadable")
+            continue
+        module = parse_cfgs(text, block_limit=settings.block_limit)
+        if not module.functions and text.strip():
+            gaps.append(f"source_cfg_unparsed: {command['target_path']}: CFG text has no readable functions")
         found[position] = list(module.functions)
         gaps.extend(f"{command['target_path']}: {gap}" for gap in module.gaps)
     return found, replay, execution
@@ -283,14 +293,21 @@ def ir_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], set
             gaps.append(f"{command['target_path']}: LLVM IR output unavailable or over bound")
             failures[position] = gaps[-1]
             continue
-        module = parse_module(ir_path.read_text(encoding="utf-8", errors="replace"),
-                              block_limit=settings.block_limit)
+        module = base._read_ir_module(ir_path, block_limit=settings.block_limit)
         for function in module.functions:
             parsed.append((position, function))
         if module.unparsed:
-            gaps.append(f"{command['target_path']}: {len(module.unparsed)} function(s) carry no debug "
-                        "subprogram and were not parsed (compile with -g)")
-    local = [(pos, fn) for pos, fn in parsed if _function_path(mapping["root"], fn) is not None]
+            failures[position] = (f"{command['target_path']}: LLVM IR could not be fully parsed: "
+                                  + "; ".join(module.unparsed[:10]))
+            gaps.append(failures[position])
+    local, locations = [], {}
+    for pos, fn in parsed:
+        admitted, location, gap = base._ir_source(unit, mapping, subset[pos], fn)
+        if gap:
+            gaps.append(gap)
+        if admitted:
+            local.append((pos, fn))
+            locations[(pos, fn.linkage_name)] = location
     defs = {_function_key(subset[pos], fn.linkage_name): (pos, fn) for pos, fn in local}
     external_defs: dict[str, list[str]] = {}
     for key, (_, fn) in defs.items():
@@ -383,11 +400,7 @@ def ir_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], set
         identity_value = LogicalIdentity.derive(EntityKind.IR_ENTITY, mapping["case_snapshot"],
             {"compile_unit_id": compile_unit, "function": fn.linkage_name,
              "definition_line": fn.start_line})
-        location = None
-        if fn.start_line > 0:
-            location = base._location(snapshot, target, target_path, fn.start_line, 1, method="ir-debug-info")
-        else:
-            gaps.append(f"ir_location_unresolved: {name} has no debug definition line")
+        location = locations[(pos, fn.linkage_name)]
         builder.add_entity(EntityRecord(identity_value, f"{pos}:{fn.linkage_name}", fn.name,
             f"define {fn.linkage_name}",
             {"kind": "function", "linkage_name": fn.linkage_name, "internal": fn.internal,
@@ -450,7 +463,7 @@ def ir_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], set
                "ranges": {key: [fn.path, fn.start_line, max(fn.end_line, fn.start_line)]
                           for key, (_, fn) in selected_defs.items() if fn.start_line > 0}}
     return finish(section, builder=builder, path=path, fingerprint=fingerprint, shard=shard,
-                  checkpointable=not failures,
+                  checkpointable=not failures and not cfg_gaps and not cfg_missing,
                   extras={"entity_count": len(builder.entities), "basic_block_count": blocks,
                           "call_edge_count": edges, "source_cfg_count": len(source_cfg), "handoff": handoff,
                           "handoff_sha256": hashlib.sha256(canonical_json(handoff)).hexdigest()})
@@ -517,6 +530,11 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
     tool_identity = {"tool": "clang-18", "image": execution["image_id"], "callee_decl": 1, **identity}
     artifacts = [execution["execution"], cataloged["compile_database"], replay]
     failures = dict(failures or {})
+    builder, path, fingerprint, shard = base._new_builder(
+        unit, "analysis", case_id, "ast", artifacts, gaps, tool_identity, mapping["case_snapshot"])
+    parsed_units: dict[int, set[str]] = {}
+    count = 0 if tool_gap else base._add_ast_entities(
+        unit, case_id, {**cataloged, "compile_commands": subset}, failures, builder, shard, gaps, parsed_units)
     failed_rows = {selected[pos] for pos in failures}
     resolved_rows = set(selected) if not tool_gap else set()
     # A seed is resolved for the AST when its function was dumped by a unit that replayed cleanly.
@@ -525,17 +543,24 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
         functions.setdefault(tuple(row[:3]), []).append(row[3])
     document = {"columns": ["seed_path", "seed_start_line", "seed_end_line", "function_name"],
                 "rows": []}
+
+    def dumped_rows(name):
+        linkage = handoff.get("functions", {}).get(name, {}).get("linkage_name", name)
+        return {selected[pos] for pos, linkages in parsed_units.items() if linkage in linkages}
+
     for seed in scope_seeds.seeds:
         for name in functions.get(seed.key, ()):
             rows = set(handoff["function_units"].get(name, ()))
-            if rows & resolved_rows - failed_rows:
+            if rows & resolved_rows & dumped_rows(name) - failed_rows:
                 document["rows"].append([*seed.key, name])
             else:
                 reasons[seed.key] = record.REASON_RUN_FAILED
+                if rows & resolved_rows - failed_rows:
+                    gaps.append(f"ast_function_unavailable: {name} was not present in the parsed AST")
     hood = {"columns": ["function_name", "function_path", "function_start_line", "function_start_column", "depth"],
             "rows": [[name, "", 0, 1, depth] for name, depth in sorted(handoff["neighborhood"].items(),
                                                                        key=lambda item: (item[1], item[0]))
-                     if set(handoff["function_units"].get(name, ())) & resolved_rows - failed_rows]}
+                     if set(handoff["function_units"].get(name, ())) & resolved_rows & dumped_rows(name) - failed_rows]}
     section = record.with_reasons(seeding.ledger.seeded_section(
         depth=settings.depth, seed_limit=settings.seed_limit, scope_seeds=scope_seeds, plan=plan,
         seed_functions=document, neighborhood=hood), reasons)
@@ -545,15 +570,12 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
     if tool_gap:
         gaps.append(tool_gap)
     gaps.extend(gap for gap in section["gaps"] if gap not in gaps)
-    builder, path, fingerprint, shard = base._new_builder(
-        unit, "analysis", case_id, "ast", artifacts, gaps, tool_identity, mapping["case_snapshot"])
     if tool_gap:
         return _publish(unit, case_id, "ast", cataloged, builder=builder, path=path, fingerprint=fingerprint,
                         shard=shard, gaps=gaps, section=section, coverage="unavailable",
                         extras={"entity_count": 0}, checkpointable=False)
-    count = base._add_ast_entities(unit, case_id, {**cataloged, "compile_commands": subset}, failures,
-                                   builder, shard, gaps)
     gaps[:] = list(dict.fromkeys(gaps))
     return _publish(unit, case_id, "ast", cataloged, builder=builder, path=path, fingerprint=fingerprint,
                     shard=shard, gaps=gaps, section=section, coverage="partial",
-                    extras={"entity_count": count}, checkpointable=not failures)
+                    extras={"entity_count": count},
+                    checkpointable=not failures and record.REASON_RUN_FAILED not in reasons.values())

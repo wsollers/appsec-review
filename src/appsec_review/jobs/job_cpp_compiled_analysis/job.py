@@ -3,7 +3,7 @@ from __future__ import annotations
 from appsec_review.interchange import bounded_gap_messages
 
 from collections.abc import Mapping
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -27,17 +27,18 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import atomic_json, canonical_json, file_sha256, tool_input_json
+from appsec_review.storage import atomic_json, canonical_json, file_sha256, protected_json, tool_input_json
 from appsec_review.jobs.job_cpp_compiled_analysis.datasets import CONTRACT, DATASETS
 from appsec_review.jobs.job_cpp_compiled_analysis import seeded
 
 SCHEMA = "appsec-review/cpp-compiled-analysis/2"
 PROJECT_TASKS = ("projects",)
 BRANCHES = ("compiled", "ast", "ir", "infer", "binary")
-BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/2", "ast": "clang-ast/3",
-                   "ir": "llvm-ir/2",
+AST_NODE_LIMIT = 20000
+BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/3", "ast": "clang-ast/4",
+                   "ir": "llvm-ir/3",
                    "infer": "infer-cpp-adapter/2",
-                   "binary": "elf-symbols/2"}
+                   "binary": "elf-symbols/3"}
 
 
 def _project_key(root: PurePosixPath) -> str:
@@ -53,8 +54,17 @@ def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
             "size_bytes": path.stat().st_size}
 
 
-def _json_artifact(unit: UnitContext, path: Path, value: Any) -> dict[str, Any]:
-    atomic_json(path, value)
+def _json_artifact(unit: UnitContext, path: Path, value: Any, *, immutable: bool = False) -> dict[str, Any]:
+    if immutable:
+        digest = hashlib.sha256(canonical_json(value)).hexdigest()
+        path = path.with_name(f"{path.stem}-{digest}{path.suffix}")
+        if path.exists():
+            if path.is_symlink() or file_sha256(path) != digest:
+                raise ValueError("immutable C++ artifact changed")
+        else:
+            protected_json(path, value)
+    else:
+        atomic_json(path, value)
     return _artifact(unit.job.run_root, path)
 
 
@@ -112,19 +122,28 @@ def _load_checkpoint(unit: UnitContext, case_id: str, stage: str, identity: str)
     if document.get("identity") != identity or not isinstance(document.get("result"), Mapping):
         return None
     result = dict(document["result"])
-    for value in result.values():
-        if isinstance(value, Mapping) and isinstance(value.get("path"), str) and isinstance(value.get("sha256"), str):
-            artifact = (unit.job.run_root / value["path"]).resolve()
-            if unit.job.run_root.resolve() not in artifact.parents or not artifact.is_file() or file_sha256(artifact) != value["sha256"]:
-                return None
-    if result.get("terminal_status") != "SUCCEEDED" and result.get("checkpointable") is not True:
+    def intact(value: Any) -> bool:
+        if isinstance(value, Mapping):
+            if isinstance(value.get("path"), str) and isinstance(value.get("sha256"), str):
+                artifact = unit.job.run_root / value["path"]
+                if (artifact.is_symlink() or unit.job.run_root.resolve() not in artifact.resolve().parents
+                        or not artifact.is_file() or file_sha256(artifact) != value["sha256"]):
+                    return False
+            return True
+        return all(intact(item) for item in value) if isinstance(value, list) else True
+
+    if not all(intact(value) for key, value in result.items() if key == "evidence" or isinstance(value, Mapping)):
+        return None
+    if result.get("checkpointable") is False or (
+            result.get("terminal_status") != "SUCCEEDED" and result.get("checkpointable") is not True):
         return None
     return {**result, "checkpoint_reused": True}
 
 
 def _save_checkpoint(unit: UnitContext, case_id: str, stage: str, identity: str,
                      result: Mapping[str, Any]) -> None:
-    if result.get("terminal_status") != "SUCCEEDED" and result.get("checkpointable") is not True:
+    if result.get("checkpointable") is False or (
+            result.get("terminal_status") != "SUCCEEDED" and result.get("checkpointable") is not True):
         return
     atomic_json(_case_root(unit, case_id) / "checkpoints" / f"{stage}.json",
                 {"schema": "appsec-review/cpp-checkpoint/1", "identity": identity,
@@ -141,9 +160,27 @@ def _run_tool(unit: UnitContext, case_id: str, argv: tuple[str, ...], executor_f
         target_root=unit.job.target_root or unit.job.repository_root, scratch_root=root,
     ))
     receipt = root / "execution.json"
-    retained = unit.unit_root / (f"{case_id}-{label}-execution.json" if label else f"{case_id}-execution.json")
+    retained = unit.unit_root / f"{case_id}-{label or argv[0]}-{file_sha256(receipt)}-execution.json"
     retained.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(receipt, retained)
+    if retained.exists():
+        if retained.is_symlink() or file_sha256(retained) != file_sha256(receipt):
+            raise ValueError("retained compiler execution changed")
+    else:
+        shutil.copyfile(receipt, retained)
+    evidence = [_artifact(unit.job.run_root, retained)]
+    for stream in ("stdout", "stderr"):
+        source = unit.job.run_root / getattr(result, f"{stream}_path")
+        digest = file_sha256(source)
+        destination = root / "evidence" / "execution" / f"{digest}-{stream}.bin"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not destination.exists():
+            shutil.copyfile(source, destination)
+        elif destination.is_symlink() or file_sha256(destination) != digest:
+            raise ValueError("retained compiler stream changed")
+        evidence.append({**_artifact(unit.job.run_root, destination),
+                         "original_path": source.relative_to(unit.job.run_root).as_posix()})
+    mode = "binary" if argv[0] == "symbols" else argv[0]
+    atomic_json(root / "analysis" / mode / "execution-evidence.json", {"artifacts": evidence})
     return {"execution": _artifact(unit.job.run_root, retained), "exit_code": result.exit_code,
             "timed_out": result.timed_out, "oom_killed": result.oom_killed,
             "image_id": result.image_id, "image_digest": result.image_digest,
@@ -223,14 +260,35 @@ def _raw_arguments(row: Mapping[str, Any]) -> list[str]:
     return list(raw)
 
 
+def _compile_path(value: str, root: Path, mapping: Mapping[str, Any], *, directory: str = "",
+                  source_only: bool = False) -> str:
+    source_dir = workspace_root(str(mapping.get("source_dir", mapping["root"])))
+    build_dir = workspace_root(str(mapping.get("build_dir", project_prefix(mapping["root"]) + "build")))
+    value = value.replace("\\", "/")
+    if not value.startswith("/"):
+        cwd = directory.replace("\\", "/")
+        if not cwd.startswith("/"):
+            cwd = posixpath.join(source_dir, cwd)
+        value = posixpath.join(cwd or source_dir, value)
+    value = posixpath.normpath(value)
+    aliases = [(root.as_posix() + "/source", "/scratch/source"), (source_dir, "/scratch/source")]
+    if not source_only:
+        aliases = [(root.as_posix() + "/build", "/scratch/build"), (build_dir, "/scratch/build"), *aliases]
+    for prefix, destination in sorted(aliases, key=lambda pair: -len(pair[0])):
+        if value == prefix or value.startswith(prefix + "/"):
+            return destination + value[len(prefix):]
+    return value
+
+
 def _sanitize_arguments(row: Mapping[str, Any], case_root: Path, source_path: str,
-                        target_root: str = "") -> list[str]:
+                        target_root: str = "", *, mapping: Mapping[str, Any] | None = None) -> list[str]:
     raw = _raw_arguments(row)
     compiler = "clang++-18" if PurePosixPath(source_path).suffix.lower() in {".cc", ".cpp", ".cxx", ".c++", ".mm"} else "clang-18"
     result = [compiler]
     skip_next = False
-    source_seen = False
-    paired = {"-I", "-isystem", "-iquote", "-idirafter", "-include", "-imacros", "-x", "--target"}
+    context = mapping or {"root": target_root}
+    path_flags = ("-isystem", "-iquote", "-idirafter", "-include", "-imacros", "-I", "--sysroot")
+    paired = {*path_flags, "-x", "--target"}
     drop_paired = {"-o", "-MF", "-MT", "-MQ", "-MJ"}
     for value in raw[1:]:
         if skip_next:
@@ -241,26 +299,27 @@ def _sanitize_arguments(row: Mapping[str, Any], case_root: Path, source_path: st
             continue
         if value in {"-c", "-M", "-MM", "-MD", "-MMD", "-MP"}:
             continue
-        mapped = value.replace(str(case_root).replace("\\", "/"), "/scratch")
-        if target_root:
-            mapped = mapped.replace(workspace_root(target_root), "/scratch/source")
         if value in paired:
             result.append(value)
             continue
         if result[-1] in paired:
-            result.append(mapped)
+            result.append(_compile_path(value, case_root, context, directory=str(row.get("directory", "")))
+                          if result[-1] in path_flags else value)
             continue
-        if mapped == source_path:
-            source_seen = True
+        flag = next((flag for flag in path_flags if value.startswith(flag) and len(value) > len(flag)), None)
+        if flag:
+            separator = "=" if value[len(flag):].startswith("=") else ""
+            result.append(flag + separator + _compile_path(value[len(flag) + len(separator):],
+                          case_root, context, directory=str(row.get("directory", ""))))
             continue
-        if mapped.startswith(("-D", "-U", "-I", "-isystem", "-iquote", "-idirafter", "-std=", "-f", "-m",
-                              "-W", "--sysroot=", "--target=")):
-            result.append(mapped)
+        if value.startswith(("-D", "-U", "-std=", "-f", "-m", "-W", "--target=")):
+            result.append(value)
     result.append(source_path)
     return result
 
 
-def _output_path(row: Mapping[str, Any], root: Path, target_root: str = "") -> str | None:
+def _output_path(row: Mapping[str, Any], root: Path, target_root: str = "",
+                 *, mapping: Mapping[str, Any] | None = None) -> str | None:
     raw = _raw_arguments(row)
     value = row.get("output") if isinstance(row.get("output"), str) else None
     if value is None:
@@ -270,17 +329,12 @@ def _output_path(row: Mapping[str, Any], root: Path, target_root: str = "") -> s
                 break
     if not value:
         return None
-    normalized = value.replace("\\", "/")
-    directory = str(row.get("directory", "")).replace("\\", "/")
-    if not normalized.startswith("/") and not re.match(r"^[A-Za-z]:/", normalized):
-        normalized = posixpath.normpath(posixpath.join(directory, normalized))
-    prefixes = ((root / "build").as_posix(), "/scratch/build",
-                workspace_root(target_root) + "/build" if target_root else "")
-    for prefix in prefixes:
-        if normalized == prefix:
-            return "build"
-        if normalized.startswith(prefix + "/"):
-            return "build/" + normalized[len(prefix) + 1:]
+    normalized = _compile_path(value, root, mapping or {"root": target_root},
+                               directory=str(row.get("directory", "")))
+    if normalized == "/scratch/build":
+        return "build"
+    if normalized.startswith("/scratch/build/"):
+        return "build/" + normalized[len("/scratch/build/"):]
     return None
 
 
@@ -301,6 +355,26 @@ def normalize_link_commands(value: Any, outputs: list[Mapping[str, Any]]) -> lis
                        "receipt": str(item.get("receipt", "")),
                        "command_sha256": str(item.get("command_sha256", ""))})
     return result
+
+
+def _accepted_links(unit: UnitContext, receipt: Mapping[str, Any]) -> tuple[list[Mapping[str, Any]], list[str]]:
+    identity = receipt.get("link_database")
+    if not isinstance(identity, Mapping):
+        return [], ["accepted link database is unavailable"]
+    path = unit.job.run_root / str(identity.get("path", ""))
+    if (path.is_symlink() or unit.job.run_root.resolve() not in path.resolve().parents or not path.is_file()
+            or file_sha256(path) != identity.get("sha256")):
+        raise ValueError("accepted link database identity changed")
+    if path.stat().st_size > 4 * 1024 * 1024:
+        raise ValueError("accepted link database exceeds bound")
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    if (not isinstance(rows, list) or len(rows) > 4096 or
+            identity.get("relationship_count") != len(rows) or any(
+                not isinstance(row, Mapping) or not isinstance(row.get("output_path"), str) or
+                not isinstance(row.get("input_paths"), list) or
+                any(not isinstance(value, str) for value in row["input_paths"]) for row in rows)):
+        raise ValueError("accepted link database shape/count is invalid")
+    return rows, []
 
 
 def _tu_identity(mapping: Mapping[str, Any], row: Mapping[str, Any]) -> str:
@@ -327,25 +401,26 @@ def normalize_compile_db(root: Path, mapping: Mapping[str, Any]) -> list[dict[st
         raw_arguments = list(row.get("arguments") or shlex.split(str(row.get("command", ""))))
         if "-cc1" in raw_arguments:
             continue
-        target_path = _mapped_path(str(row["file"]), root, target_root)
-        prefix = project_prefix(target_root)
-        if not target_path.startswith(prefix) or target_path.startswith("/"):
-            normalized_file = str(row["file"]).replace("\\", "/")
-            matches = [item for item in mapping.get("files", ())
-                       if normalized_file.endswith("/" + str(item["scratch_path"])[len("source/"):])]
-            if len(matches) != 1:
-                raise ValueError(f"compile database path does not resolve uniquely: {row['file']}")
-            target_path = str(matches[0]["target_path"])
-        scratch_source = "/scratch/source/" + target_path[len(prefix):]
-        arguments = _sanitize_arguments(row, root, scratch_source, target_root)
-        source_record = next((item for item in mapping.get("files", ())
-                              if item.get("target_path") == target_path), None)
-        if source_record is None:
-            raise ValueError(f"compile database source is not in the accepted case mapping: {target_path}")
-        result.append({"project_key": mapping["project_key"], "index": index, "directory": "/scratch/source",
+        if not isinstance(row.get("directory"), str) or not row["directory"].replace("\\", "/").startswith("/"):
+            raise ValueError("compile directory has no accepted absolute identity")
+        directory = _compile_path(str(row.get("directory", "")), root, mapping)
+        if not any(directory == prefix or directory.startswith(prefix + "/")
+                   for prefix in ("/scratch/source", "/scratch/build")):
+            raise ValueError(f"compile directory is outside accepted source/build context: {row.get('directory')}")
+        scratch_source = _compile_path(row["file"], root, mapping, directory=str(row.get("directory", "")),
+                                       source_only=True)
+        matches = [item for item in mapping.get("files", ()) if scratch_source == "/scratch/" + item["scratch_path"]]
+        if len(matches) != 1:
+            raise ValueError(f"compile database source is not in the accepted case mapping: {row['file']}")
+        source_record = matches[0]
+        target_path = source_record["target_path"]
+        arguments = _sanitize_arguments(row, root, scratch_source, target_root, mapping=mapping)
+        result.append({"project_key": mapping["project_key"], "index": index, "directory": directory,
                        "file": scratch_source, "target_path": target_path, "arguments": arguments,
-                       "source_sha256": source_record["sha256"], "output_path": _output_path(row, root, target_root),
-                       "command_sha256": hashlib.sha256(canonical_json(arguments)).hexdigest()})
+                       "source_sha256": source_record["sha256"],
+                       "output_path": _output_path(row, root, target_root, mapping=mapping),
+                       "command_sha256": hashlib.sha256(canonical_json({
+                           "arguments": arguments, "directory": directory})).hexdigest()})
         result[-1]["compile_unit_id"] = _tu_identity(mapping, result[-1])
     return sorted(result, key=lambda item: (item["target_path"], item["command_sha256"]))
 
@@ -378,10 +453,14 @@ def replay_failures(root: Path, mode: str, commands: list[Mapping[str, Any]]) ->
         return None
     failures: dict[int, str] = {}
     for index, (record, command) in enumerate(zip(records, commands)):
-        if not isinstance(record, Mapping) or record.get("index") != index:
+        if (not isinstance(record, Mapping) or type(record.get("index")) is not int or record["index"] != index
+                or ("source" in record and "file" in command and record["source"] != command["file"])):
             safety.fail("replay receipt command identity is invalid", action=f"compiled.{mode}")
             return None
-        if record.get("exit_code") == 0:
+        if record.get("output_truncated"):
+            failures[index] = f"{command['target_path']}: {mode} replay output was truncated"
+            continue
+        if type(record.get("exit_code")) is int and record["exit_code"] == 0 and not record.get("timeout"):
             continue
         stderr = str(record.get("stderr", ""))[:8192]
         prefix = f"{command['target_path']}: {mode} replay"
@@ -415,20 +494,50 @@ def _location(snapshot: str, target: Path, path: str, line: int = 1, column: int
 def _new_builder(unit: UnitContext, name: str, case_id: str, branch: str,
                  artifacts: list[Mapping[str, Any]], gaps: list[str], tool: Mapping[str, Any],
                  scope_snapshot: str):
+    evidence = []
+    root = _case_root(unit, case_id)
+    modes = ("ir", "cfg") if branch == "ir" else (branch,) if branch in {"ast", "binary"} else ()
+    for mode in modes:
+        paths = sorted((root / "analysis" / mode).glob("*"))
+        paths += [root / f"replay-{mode}.json"]
+        for source in paths:
+            if not source.is_file() or source.is_symlink() or source.stat().st_size > 64 * 1024 * 1024:
+                continue
+            digest = file_sha256(source)
+            retained = root / "evidence" / mode / f"{digest}-{source.name}"
+            retained.parent.mkdir(parents=True, exist_ok=True)
+            if not retained.exists():
+                shutil.copyfile(source, retained)
+            elif file_sha256(retained) != digest:
+                raise ValueError("retained compiler evidence changed")
+            evidence.append(_artifact(unit.job.run_root, retained))
+            if source.name == "execution-evidence.json":
+                evidence.extend(json.loads(source.read_text(encoding="utf-8"))["artifacts"])
     fingerprint = index_fingerprint(name=name, target_snapshot=scope_snapshot,
-        producer_artifacts=artifacts, tool_identity=tool,
-        parser_identity=f"cpp-{branch}-parser/{3 if branch == 'ast' else 2}",
-        normalizer_identity=f"cpp-{branch}-normalizer/3", mapping_identity="cpp-source-mapping/2")
+        producer_artifacts=[*artifacts, *evidence], tool_identity=tool,
+        parser_identity=BRANCH_IDENTITY[branch],
+        normalizer_identity=f"cpp-{branch}-normalizer/4", mapping_identity="cpp-source-mapping/4")
     shard = f"cpp-{case_id}-{branch}"
     physical_shard = hashlib.sha256(shard.encode()).hexdigest()[:16]
     path = unit.job.run_root / "data" / "indices" / name / f"{fingerprint}-{physical_shard}.sqlite"
-    return IndexBuilder(path, name=name, fingerprint=fingerprint,
-                        target_snapshot=unit.job.source_fingerprint, shard_id=shard), path, fingerprint, shard
+    builder = IndexBuilder(path, name=name, fingerprint=fingerprint,
+                           target_snapshot=unit.job.source_fingerprint, shard_id=shard)
+    builder.cpp_evidence = evidence
+    return builder, path, fingerprint, shard
 
 
 def _finish_index(unit: UnitContext, builder: IndexBuilder, path: Path, fingerprint: str,
                   shard: str, name: str, branch: str, gaps: list[str],
                   seeded: Mapping[str, Any] | None = None) -> Mapping[str, Any]:
+    # Outcomes and late parse/location gaps are semantic inputs too. A retry must not select an
+    # earlier shard merely because the executor's receipt and compile command did not change.
+    fingerprint = hashlib.sha256(canonical_json({
+        "inputs": fingerprint, "entities": [asdict(item) for item in builder.entities],
+        "relations": [asdict(item) for item in builder.relations],
+        "coverage": builder.coverage, "gaps": gaps,
+    })).hexdigest()
+    path = path.with_name(f"{fingerprint}-{hashlib.sha256(shard.encode()).hexdigest()[:16]}.sqlite")
+    builder.path, builder.fingerprint = path, fingerprint
     sha, reused = builder.build_or_reuse()
     producer: dict[str, Any] = {"job": "job_cpp_compiled_analysis", "unit": unit.unit_id, "branch": branch}
     if seeded is not None:
@@ -438,6 +547,7 @@ def _finish_index(unit: UnitContext, builder: IndexBuilder, path: Path, fingerpr
                              producer, tuple(gaps), shard)
     return {"index_identity": asdict(identity), "index_reused": reused,
             "artifact": _artifact(unit.job.run_root, path), "gaps": gaps,
+            "evidence": builder.cpp_evidence,
             "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
 
@@ -518,15 +628,18 @@ def _build_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any])
                 builder.add_relation(RelationRecord(RelationKind.LINKS_INTO, input_id, output_id,
                     True, 1.0, payload={"mapping": "captured-link-command"}))
                 related += 1
-    coverage_gap = None if related else "no exact compile-output or captured link relation was available"
-    builder.add_coverage("compile-and-link", "complete" if coverage_gap is None else "partial", coverage_gap)
-    return _finish_index(unit, builder, path, fingerprint, shard, "build", "compiled", [])
+    gaps = list(catalog.get("gaps", ()))
+    if not related:
+        gaps.append("no exact compile-output or captured link relation was available")
+    builder.add_coverage("compile-and-link", "partial" if gaps else "complete", "; ".join(gaps) or None)
+    return _finish_index(unit, builder, path, fingerprint, shard, "build", "compiled",
+                         gaps)
 
 
-def _walk_ast(value: Any, *, limit: int = 20000):
+def _walk_ast(value: Any, *, limit: int | None = 20000):
     stack = [value]
     count = 0
-    while stack and count < limit:
+    while stack and (limit is None or count < limit):
         item = stack.pop()
         if not isinstance(item, Mapping):
             continue
@@ -538,6 +651,8 @@ def _walk_ast(value: Any, *, limit: int = 20000):
 
 
 def _load_ast_document(path: Path) -> Mapping[str, Any]:
+    if path.is_symlink() or path.stat().st_size > 64 * 1024 * 1024:
+        raise ValueError("Clang AST output is unsafe or over bound")
     text = path.read_text(encoding="utf-8")
     decoder = json.JSONDecoder()
     documents: list[Mapping[str, Any]] = []
@@ -550,6 +665,8 @@ def _load_ast_document(path: Path) -> Mapping[str, Any]:
         value, offset = decoder.raw_decode(text, offset)
         if not isinstance(value, Mapping):
             raise ValueError("Clang AST record is not an object")
+        if not isinstance(value.get("kind"), str) or not value["kind"]:
+            raise ValueError("Clang AST record has no node kind")
         documents.append(value)
         if len(documents) > 4096:
             raise ValueError("Clang AST declaration count exceeds bound")
@@ -593,6 +710,7 @@ class _AstLocations:
         self.command = command
         self.files = mapping["files"]
         self.current_file: str | None = None
+        self.last_file: str | None = None
         self.cache: dict[str, tuple[Mapping[str, Any], bytes] | None] = {}
 
     def _source(self, raw: str) -> tuple[Mapping[str, Any], bytes] | None:
@@ -631,6 +749,7 @@ class _AstLocations:
                 self.current_file = point["file"]
             if point is selected:
                 selected_file = self.current_file
+        self.last_file = selected_file
         if macro:
             self.current_file = None
             return None, "macro spelling/expansion location is ambiguous"
@@ -680,7 +799,7 @@ class _AstLocations:
 def _ast_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execution: Mapping[str, Any],
                failures: Mapping[int, str] | None = None) -> Mapping[str, Any]:
     gaps: list[str] = []
-    failures = failures or {}
+    failures = dict(failures or {})
     builder, path, fingerprint, shard = _new_builder(unit, "analysis", case_id, "ast",
         [execution["execution"], catalog["compile_database"]], gaps,
         {"tool": "clang-18", "image": execution["image_id"], "callee_decl": 1},
@@ -689,13 +808,13 @@ def _ast_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], exec
     builder.add_coverage("clang-ast", "partial" if gaps else "complete",
                          "; ".join(bounded_gap_messages(gaps, 10)) or None)
     result = dict(_finish_index(unit, builder, path, fingerprint, shard, "analysis", "ast", gaps))
-    result["entity_count"] = count
+    result.update(entity_count=count, checkpointable=not failures)
     return result
 
 
 def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
-                      failures: Mapping[int, str], builder: IndexBuilder, shard: str,
-                      gaps: list[str]) -> int:
+                      failures: dict[int, str], builder: IndexBuilder, shard: str,
+                      gaps: list[str], parsed_units: dict[int, set[str]] | None = None) -> int:
     root = _case_root(unit, case_id)
     count = 0
     seen_entities: set[str] = set()
@@ -709,13 +828,18 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
         except (OSError, ValueError, UnicodeDecodeError):
             from appsec_review.runtime import execution_safety as safety
             safety.fail("Clang AST output is unavailable or malformed", action="cpp.ast")
-            gaps.append(f"{command['target_path']}: Clang AST output unavailable or invalid")
+            failures[index] = f"{command['target_path']}: Clang AST output unavailable or invalid"
+            gaps.append(failures[index])
             continue
+        if parsed_units is not None:
+            parsed_units[index] = set()
         locations = _AstLocations(unit, catalog["mapping"], command)
         admitted = set(command.get("ast_linkages", ()))
         excluded: set[int] = set()
         location_gaps: set[str] = set()
-        for node in _walk_ast(document):
+        accepted_paths = {"/scratch/" + row["scratch_path"] for row in catalog["mapping"]["files"]}
+        retained = filtered = 0
+        for node in _walk_ast(document, limit=None):
             location, location_gap = locations.resolve(node)
             if id(node) in excluded:
                 continue
@@ -730,6 +854,19 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
             if kind not in {"FunctionDecl", "CXXMethodDecl", "VarDecl", "RecordDecl", "CallExpr",
                             "DeclRefExpr", "FieldDecl", "ParmVarDecl", "TypedefDecl"}:
                 continue
+            if not command.get("ast_filters") and locations.last_file:
+                raw = locations.last_file
+                normalized = posixpath.normpath(raw if raw.startswith("/") else
+                                                posixpath.join(command["directory"], raw))
+                if normalized not in accepted_paths:
+                    filtered += 1
+                    continue
+            if retained >= AST_NODE_LIMIT:
+                gaps.append(f"ast_truncated: {command['target_path']}: node detail cut at {AST_NODE_LIMIT}")
+                break
+            retained += 1
+            if parsed_units is not None and kind in {"FunctionDecl", "CXXMethodDecl"}:
+                parsed_units[index].add(str(node.get("mangledName") or node.get("name") or ""))
             declared = _callee_decl(node)
             name = str(node.get("name") or (declared.get("name") if isinstance(declared, Mapping) else None) or kind)
             if location_gap:
@@ -755,83 +892,124 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
                  "compile_unit_id": command["compile_unit_id"], "shard_id": shard},
                 location))
             count += 1
+        if filtered:
+            gaps.append(f"ast_source_filtered: {command['target_path']}: {filtered} nodes outside accepted sources")
         gaps.extend(f"ast_location_unresolved: {command['target_path']} "
                     f"({command['compile_unit_id']}): {message}" for message in sorted(location_gaps))
     return count
 
 
-_IR_ENTITY = re.compile(r"^define\s+.*?@(?P<name>[^\s(]+)\(")
-_IR_CALL = re.compile(r"\bcall\b.*?@(?P<name>[^\s(]+)\(")
+def _ir_source(unit: UnitContext, mapping: Mapping[str, Any], command: Mapping[str, Any], function):
+    """Admit debug paths through the accepted mapping and bytes, not a TU/display-name fallback."""
+    relative = function.path
+    raw = relative if relative.startswith("/") else posixpath.join("/scratch/source", relative)
+    resolver = _AstLocations(unit, mapping, command)
+    source = resolver._source(raw)
+    if source is None:
+        return False, None, f"ir_source_unresolved: {function.linkage_name}: {relative}"
+    location, gap = resolver.resolve({"loc": {"file": raw, "line": function.start_line, "col": 1}})
+    if location is not None:
+        location = replace(location, mapping_method="ir-debug-info")
+    return True, location, f"ir_location_unresolved: {function.linkage_name}: {gap}" if gap else None
+
+
+def _read_ir_module(path: Path, *, block_limit: int):
+    from .llvm_ir import IrModule, parse_module
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return IrModule((), unparsed=("LLVM IR text is unreadable",))
+    return parse_module(text, block_limit=block_limit)
 
 
 def _ir_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execution: Mapping[str, Any],
-              failures: Mapping[int, str] | None = None) -> Mapping[str, Any]:
+              failures: Mapping[int, str] | None = None, *, cfgs=None, cfg_gaps=(),
+              block_limit: int = 4000) -> Mapping[str, Any]:
     root = _case_root(unit, case_id)
-    gaps: list[str] = []
-    failures = failures or {}
-    builder, path, fingerprint, shard = _new_builder(unit, "analysis", case_id, "ir",
-        [execution["execution"], catalog["compile_database"]], gaps,
-        {"tool": "clang-18-llvm-ir", "image": execution["image_id"]},
-        catalog["mapping"]["case_snapshot"])
-    entities: dict[str, list[tuple[str, str]]] = {}
-    pending_calls: list[tuple[str, str, str]] = []
-    count = blocks = instructions = 0
-    for index, command in enumerate(catalog["compile_commands"]):
+    gaps: list[str] = list(cfg_gaps)
+    failures = dict(failures or {})
+    commands, mapping = catalog["compile_commands"], catalog["mapping"]
+    parsed, locations = [], {}
+    for index, command in enumerate(commands):
         if index in failures:
             gaps.append(failures[index])
             continue
         ir_path = root / "analysis" / "ir" / f"tu-{index:04d}.ll"
-        if not ir_path.is_file() or ir_path.stat().st_size > 64 * 1024 * 1024:
-            gaps.append(f"{command['target_path']}: LLVM IR output unavailable or over bound")
+        if not ir_path.is_file() or ir_path.is_symlink() or ir_path.stat().st_size > seeded.MAX_IR_BYTES:
+            failures[index] = f"{command['target_path']}: LLVM IR output unavailable or over bound"
+            gaps.append(failures[index])
             continue
-        current: str | None = None
-        for line_number, line in enumerate(ir_path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-            match = _IR_ENTITY.match(line)
-            if match:
-                name = match.group("name")
-                identity = LogicalIdentity.derive(EntityKind.IR_ENTITY, catalog["mapping"]["case_snapshot"],
-                    {"compile_unit_id": command["compile_unit_id"], "function": name,
-                     "definition_line": line_number})
-                builder.add_entity(EntityRecord(identity, f"{index}:{name}", name, line[:8192],
-                    {"kind": "function", "ir_line": line_number,
-                     "project_id": catalog["mapping"]["project_id"],
-                     "compile_unit_id": command["compile_unit_id"], "shard_id": shard},
-                    _location(unit.job.source_fingerprint, unit.job.target_root or Path(),
-                              command["target_path"], ambiguous=True, method="debug-or-tu-fallback")))
-                entities.setdefault(name, []).append((command["compile_unit_id"], identity.value))
-                current = identity.value
-                count += 1
-            elif current and line.endswith(":"):
-                blocks += 1
-            elif current and line.startswith("  "):
-                instructions += 1
-                call = _IR_CALL.search(line)
-                if call:
-                    pending_calls.append((current, call.group("name"), command["compile_unit_id"]))
+        module = _read_ir_module(ir_path, block_limit=block_limit)
+        if module.unparsed:
+            failures[index] = f"{command['target_path']}: LLVM IR could not be fully parsed: " + "; ".join(module.unparsed[:10])
+            gaps.append(failures[index])
+        for fn in module.functions:
+            admitted, location, gap = _ir_source(unit, mapping, command, fn)
+            if gap:
+                gaps.append(gap)
+            if admitted:
+                parsed.append((index, fn))
+                locations[(index, fn.linkage_name)] = location
+            if fn.truncated:
+                gaps.append(f"export_truncated: {fn.linkage_name} flow detail: {', '.join(fn.truncated)}")
+    cfgs = cfgs or {}
+    source_cfg, ambiguous_cfg, missing_cfg = seeded._match_cfgs(
+        parsed, {(pos, fn.linkage_name) for pos, fn in parsed}, cfgs)
+    if source_cfg:
+        gaps.append(seeded.NO_BLOCK_LINES_GAP)
+    if ambiguous_cfg:
+        gaps.append("source_cfg_ambiguous: " + ", ".join(ambiguous_cfg[:20]))
+    if missing_cfg:
+        gaps.append("source_cfg_unmatched: " + ", ".join(missing_cfg[:20]))
+    builder, path, fingerprint, shard = _new_builder(unit, "analysis", case_id, "ir",
+        [execution["execution"], catalog["compile_database"]], gaps,
+        {"tool": "clang-18-llvm-ir", "image": execution["image_id"], "block_limit": block_limit},
+        mapping["case_snapshot"])
+    entities, external = {}, {}
+    for index, fn in parsed:
+        command = commands[index]
+        identity = LogicalIdentity.derive(EntityKind.IR_ENTITY, mapping["case_snapshot"], {
+            "compile_unit_id": command["compile_unit_id"], "function": fn.linkage_name,
+            "definition_line": fn.start_line})
+        entities[(index, fn.linkage_name)] = identity.value
+        if not fn.internal:
+            external.setdefault(fn.linkage_name, []).append(identity.value)
+        builder.add_entity(EntityRecord(identity, f"{index}:{fn.linkage_name}", fn.name,
+            f"define {fn.linkage_name}", {
+                "kind": "function", "linkage_name": fn.linkage_name, "internal": fn.internal,
+                "flow": fn.flow(), "seeded": False, "project_id": mapping["project_id"],
+                "compile_unit_id": command["compile_unit_id"], "shard_id": shard,
+                **({"source_cfg": source_cfg[(index, fn.linkage_name)].to_payload()}
+                   if (index, fn.linkage_name) in source_cfg else {}),
+            }, locations[(index, fn.linkage_name)]))
     call_edges = 0
     seen_calls: set[tuple[str, str]] = set()
     ambiguous_names: set[str] = set()
-    for caller, callee_name, caller_tu in pending_calls:
-        candidates = entities.get(callee_name, ())
-        local = [identity for tu, identity in candidates if tu == caller_tu]
-        resolved = local if len(local) == 1 else [identity for _, identity in candidates]
-        if len(resolved) == 1:
-            edge = (caller, resolved[0])
-            if edge not in seen_calls:
-                seen_calls.add(edge)
-                builder.add_relation(RelationRecord(RelationKind.CALLS, caller, resolved[0], True, 1.0,
-                                                    payload={"mapping": "unique-ir-definition"}))
-                call_edges += 1
-        elif len(resolved) > 1:
-            ambiguous_names.add(callee_name)
+    for index, fn in parsed:
+        caller = entities[(index, fn.linkage_name)]
+        for call in fn.calls:
+            local = entities.get((index, call.callee_linkage))
+            resolved = [local] if local else external.get(call.callee_linkage, ())
+            if len(resolved) == 1:
+                edge = (caller, resolved[0])
+                if edge not in seen_calls:
+                    seen_calls.add(edge)
+                    builder.add_relation(RelationRecord(RelationKind.CALLS, caller, resolved[0], True, 1.0,
+                        payload={"mapping": "unique-ir-definition", "line": call.line,
+                                 "callee_linkage": call.callee_linkage}))
+                    call_edges += 1
+            elif len(resolved) > 1:
+                ambiguous_names.add(call.callee_linkage)
     if ambiguous_names:
         gaps.append("ambiguous cross-translation-unit IR callees were not related: " +
                     ", ".join(sorted(ambiguous_names)[:20]))
     builder.add_coverage("llvm-ir", "partial" if gaps else "complete",
                          "; ".join(bounded_gap_messages(gaps, 10)) or None)
     result = dict(_finish_index(unit, builder, path, fingerprint, shard, "analysis", "ir", gaps))
-    result.update(entity_count=count, basic_block_count=blocks, instruction_count=instructions,
-                  call_edge_count=call_edges)
+    result.update(entity_count=len(entities), basic_block_count=sum(len(fn.blocks) for _, fn in parsed),
+                  instruction_count=sum(fn.instruction_count for _, fn in parsed),
+                  call_edge_count=call_edges, source_cfg_count=len(source_cfg),
+                  checkpointable=not failures and not cfg_gaps and not missing_cfg)
     return result
 
 
@@ -944,17 +1122,50 @@ def _binary_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], e
     records_path = _case_root(unit, case_id) / "analysis" / "binary" / "records.json"
     gaps = []
     try:
+        if records_path.is_symlink() or records_path.stat().st_size > 64 * 1024 * 1024:
+            raise ValueError("binary record set is unsafe or over bound")
         records = json.loads(records_path.read_text(encoding="utf-8"))
+        if not isinstance(records, list) or any(not isinstance(item, Mapping) for item in records):
+            raise ValueError("binary record set is not a list of objects")
     except (OSError, ValueError, UnicodeDecodeError):
         from appsec_review.runtime import execution_safety as safety
         safety.fail("binary analysis output is unavailable or malformed", action="cpp.binary")
         records, gaps = [], ["binary/symbol analysis produced no valid bounded record set"]
+    if execution.get("exit_code", 0) != 0:
+        gaps.append(f"binary inspection exited with status {execution['exit_code']}")
+    expected = {item["path"]: item for item in catalog.get("outputs", ())}
+    observed = set()
+    if len(records) > 4096:
+        gaps.append("binary record set truncated at 4096 artifacts")
     builder, path, fingerprint, shard = _new_builder(unit, "compiled", case_id, "binary",
         [execution["execution"], catalog["artifact_catalog"]], gaps,
         {"tool": "binutils-2.42", "image": execution["image_id"]}, catalog["mapping"]["case_snapshot"])
     symbols = 0
     seen_entities: set[str] = set()
     for record_index, record in enumerate(records[:4096]):
+        if (not isinstance(record.get("path"), str) or not isinstance(record.get("sha256"), str)
+                or not isinstance(record.get("symbols"), list) or
+                any(not isinstance(line, str) for line in record["symbols"])):
+            gaps.append(f"binary record {record_index} has an invalid artifact or symbol shape")
+            continue
+        if expected and (record["path"] not in expected or
+                         record["sha256"] != expected[record["path"]]["sha256"]):
+            gaps.append(f"binary record is not an accepted artifact: {record['path']}")
+            continue
+        observed.add(record["path"])
+        tools = record.get("tools")
+        for tool in ("nm", "readelf"):
+            receipt = tools.get(tool) if isinstance(tools, Mapping) else None
+            if not isinstance(receipt, Mapping):
+                gaps.append(f"{record['path']}: {tool} outcome unavailable")
+                continue
+            if type(receipt.get("exit_code")) is not int or receipt["exit_code"] != 0 or receipt.get("timeout"):
+                gaps.append(f"{record['path']}: {tool} failed with exit {receipt.get('exit_code')}: "
+                            f"{str(receipt.get('stderr', ''))[:512]}")
+            if receipt.get("output_truncated") or receipt.get("stderr_truncated"):
+                gaps.append(f"{record['path']}: {tool} output truncated")
+        if len(record["symbols"]) > 10000:
+            gaps.append(f"{record['path']}: symbols truncated at 10000")
         kind = {"object": EntityKind.OBJECT_FILE, "library": EntityKind.LIBRARY,
                 "executable": EntityKind.EXECUTABLE}.get(record.get("kind"), EntityKind.EVIDENCE_ARTIFACT)
         artifact = LogicalIdentity.derive(kind, catalog["mapping"]["case_snapshot"],
@@ -983,9 +1194,11 @@ def _binary_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], e
                                              "artifact_id": artifact.value, "shard_id": shard}))
             builder.add_relation(RelationRecord(RelationKind.CONTAINS, artifact.value, symbol.value, True, 1.0))
             symbols += 1
+    if set(expected) - observed:
+        gaps.append("binary inspection omitted accepted artifacts: " + ", ".join(sorted(set(expected) - observed)[:20]))
     builder.add_coverage("symbols-and-hardening", "partial" if gaps else "complete", "; ".join(gaps) or None)
     result = dict(_finish_index(unit, builder, path, fingerprint, shard, "compiled", "binary", gaps))
-    result.update(entity_count=len(records), symbol_count=symbols)
+    result.update(entity_count=len(observed), symbol_count=symbols, checkpointable=not gaps)
     return result
 
 
@@ -1091,7 +1304,8 @@ def _unbuilt_project(unit: UnitContext, action: Mapping[str, Any]) -> dict[str, 
 
 def _implementation_files() -> tuple[Path, ...]:
     here = Path(__file__).parent
-    return (Path(__file__), here / "seeded.py", here / "llvm_ir.py", *seeding.implementation_sources())
+    return (Path(__file__), here / "seeded.py", here / "llvm_ir.py", here / "clang_cfg.py",
+            here.parent / "cpp_index_scopes.py", *seeding.implementation_sources())
 
 
 def build_job(*, executor_factory=None) -> Job:
@@ -1128,8 +1342,9 @@ def build_job(*, executor_factory=None) -> Job:
             project_key = str(action["project_key"])
             receipt = action["receipt"]
             case_root = _case_root(unit, project_key)
-            if case_root.exists():
-                shutil.rmtree(case_root)
+            for name in ("source", "build", "analysis", "checkpoints"):
+                if (case_root / name).exists():
+                    shutil.rmtree(case_root / name)
             if receipt.get("terminal_status") != "SUCCEEDED" and not receipt.get("workspace"):
                 # The unit was planned but never built (upstream project build or language build
                 # failed before a workspace existed): keep it as a named, blocked project.
@@ -1168,7 +1383,8 @@ def build_job(*, executor_factory=None) -> Job:
             relative = PurePosixPath(str(action["root"]))
             target_source = (unit.job.target_root or Path()).resolve() / Path(*relative.parts)
             source = case_root / "source"
-            shutil.copytree(target_source, source, ignore=shutil.ignore_patterns(".git", "build", "target"))
+            shutil.copytree(target_source, source, symlinks=True,
+                            ignore=shutil.ignore_patterns(".git", ".hg", ".svn"))
             build_relative = PurePosixPath(str(receipt["recipe"]["build_dir"]))
             built = workspace / Path(*build_relative.parts)
             build = case_root / "build"
@@ -1193,16 +1409,22 @@ def build_job(*, executor_factory=None) -> Job:
                     raise ValueError("accepted native source mapping changed")
                 files.append({"target_path": project_prefix(str(action["root"])) + relative_file,
                               "scratch_path": f"source/{relative_file}", "sha256": file_sha256(path)})
-            mapping = {"schema": "appsec-review/cpp-source-mapping/3", "project_key": project_key,
+            build_files = [{"scratch_path": path.relative_to(case_root).as_posix(), "sha256": file_sha256(path)}
+                           for path in _source_files(build)]
+            context = {"source_dir": str(action["root"]), "build_dir": build_relative.as_posix()}
+            mapping = {"schema": "appsec-review/cpp-source-mapping/4", "project_key": project_key,
                        "project_id": action["project_id"], "display_name": relative.name,
                        "build_system": action.get("build_system"), "root": action["root"],
-                       "case_snapshot": hashlib.sha256(canonical_json(files)).hexdigest(), "files": files,
+                       "case_snapshot": hashlib.sha256(canonical_json({
+                           "files": files, "build_files": build_files, **context})).hexdigest(),
+                       "files": files, "build_files": build_files, **context,
                        "language_build_fingerprint": receipt.get("fingerprint"),
                        "language_build_handoff_sha256": action["language_build_handoff_sha256"],
                        "family": action.get("family", "native"),
                        "native_components": list(action.get("native_components", ())),
                        "compile_database_origin": action.get("compile_database_origin", "build-system")}
-            artifact = _json_artifact(unit, _case_root(unit, project_key) / "source-mapping.json", mapping)
+            artifact = _json_artifact(unit, _case_root(unit, project_key) / "source-mapping.json", mapping,
+                                      immutable=True)
             projects[project_key] = {"mapping": mapping, "artifact": artifact,
                                      "project_key": project_key, "profile": action["build_system"],
                                      "build_receipt": receipt, "terminal_status": receipt.get("terminal_status"),
@@ -1225,10 +1447,13 @@ def build_job(*, executor_factory=None) -> Job:
                 projects[case_id] = {"project_key": case_id, "mapping": mapping, "gaps": [gap],
                                      "terminal_status": "BLOCKED_BY_COMPILE"}
                 continue
+            candidate_links, link_gaps = _accepted_links(unit, compiled["build_receipt"])
             identity = _checkpoint_identity(unit, case_id, "catalog",
                                             {"language_build": compiled["build_receipt"]["fingerprint"],
                                              "mapping": prepared[case_id]["artifact"]["sha256"],
-                                             "link_normalizer": "native-link-normalizer/2"})
+                                             "accepted_compile": compiled["build_receipt"].get("native_compile_database"),
+                                             "accepted_links": compiled["build_receipt"].get("link_database"),
+                                             "normalizer": "native-compile-link-normalizer/4"})
             reused = _load_checkpoint(unit, case_id, "catalog", identity)
             if reused is not None:
                 projects[case_id] = reused
@@ -1239,7 +1464,7 @@ def build_job(*, executor_factory=None) -> Job:
                 # tool-native-cpp reads this as the application uid for the AST and IR replays.
                 normalized = root / "normalized-compile-commands.json"
                 tool_input_json(normalized, commands)
-                compile_artifact = _artifact(unit.job.run_root, normalized)
+                compile_artifact = _json_artifact(unit, root / "compile-commands.json", commands, immutable=True)
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 from appsec_review.runtime import execution_safety as safety
                 safety.fail(f"produced compile database is invalid: {type(exc).__name__}", action="cpp.catalog")
@@ -1257,18 +1482,17 @@ def build_job(*, executor_factory=None) -> Job:
                 if kind:
                     outputs.append({"path": path.relative_to(root).as_posix(), "kind": kind,
                                     "sha256": file_sha256(path), "size_bytes": path.stat().st_size})
-            links_path = root / "build" / ".appsec-review-link-commands.json"
-            link_commands = []
-            if links_path.is_file() and not links_path.is_symlink() and links_path.stat().st_size <= 4 * 1024 * 1024:
-                candidate_links = json.loads(links_path.read_text(encoding="utf-8"))
-                link_commands = normalize_link_commands(candidate_links, outputs)
-            output_artifact = _json_artifact(unit, root / "artifact-catalog.json", outputs)
-            link_artifact = _json_artifact(unit, root / "normalized-link-commands.json", link_commands)
+            link_commands = normalize_link_commands(candidate_links, outputs)
+            if len(link_commands) != len(candidate_links):
+                link_gaps.append("accepted link relationships could not all resolve to retained build artifacts")
+            output_artifact = _json_artifact(unit, root / "artifact-catalog.json", outputs, immutable=True)
+            link_artifact = _json_artifact(unit, root / "normalized-link-commands.json", link_commands, immutable=True)
             result = {"project_key": case_id, "mapping": mapping, "compile_commands": commands,
                       "compile_database": compile_artifact, "artifact_catalog": output_artifact,
                       "link_database": link_artifact, "link_commands": link_commands,
                       "outputs": outputs, "image_id": compiled["build_receipt"]["image"]["image_id"],
-                      "build_receipt": compiled["build_receipt"], "gaps": [],
+                      "build_receipt": compiled["build_receipt"], "gaps": link_gaps,
+                      "checkpointable": not link_gaps,
                       "terminal_status": "SUCCEEDED",
                       "counts": {"compile_units": len(commands), "objects": sum(x["kind"] == "object" for x in outputs),
                                  "libraries": sum(x["kind"] == "library" for x in outputs),
@@ -1303,7 +1527,10 @@ def build_job(*, executor_factory=None) -> Job:
                 identity_values = {
                     "compile_database": cataloged["compile_database"]["sha256"],
                     "branch_identity": BRANCH_IDENTITY[name],
+                    "mapping": cataloged["mapping"],
                 }
+                if seeded_settings is not None:
+                    identity_values["settings"] = asdict(seeded_settings)
                 if name != "infer":
                     identity_values.update({
                         "artifact_catalog": cataloged["artifact_catalog"]["sha256"],
@@ -1341,6 +1568,10 @@ def build_job(*, executor_factory=None) -> Job:
                                          f"{case_id} {name} execution failed", action=f"cpp.{name}")
                     tool_gap = (None if execution["exit_code"] == 0 else
                                 f"{case_id} {name} failed with exit {execution['exit_code']}")
+                    if execution["timed_out"] or execution["oom_killed"]:
+                        tool_gap = f"{case_id} {name} {'timed out' if execution['timed_out'] else 'ran out of memory'}"
+                    elif name == "binary" and execution["exit_code"] == 2:
+                        tool_gap = None  # The bounded per-artifact receipts describe partial inspection.
                     failures: dict[int, str] | None = None
                     if name in {"ast", "ir"} and not execution["timed_out"] and not execution["oom_killed"]:
                         failures = replay_failures(_case_root(unit, case_id), name,
@@ -1351,6 +1582,8 @@ def build_job(*, executor_factory=None) -> Job:
                             tool_gap = None
                         elif tool_gap and failures:
                             tool_gap += "; " + "; ".join(list(failures.values())[:5])
+                        if failures is None:
+                            tool_gap = f"{case_id} {name} replay receipt unusable"
                     if tool_gap:
                         builder, path, fingerprint, shard = _new_builder(
                             unit, "compiled" if name == "binary" else "analysis", case_id, name,
@@ -1363,7 +1596,13 @@ def build_job(*, executor_factory=None) -> Job:
                     elif name == "ast":
                         result = _ast_index(unit, case_id, cataloged, execution, failures)
                     elif name == "ir":
-                        result = _ir_index(unit, case_id, cataloged, execution, failures)
+                        from .llvm_ir import MAX_BLOCKS
+                        flow_settings = replace(seeded_settings, block_limit=seeded_settings.block_limit or MAX_BLOCKS)
+                        cfg_gaps = []
+                        cfgs, _, _ = seeded._source_cfgs(unit, case_id, _case_root(unit, case_id),
+                            cataloged["compile_commands"], flow_settings, executor_factory, cfg_gaps)
+                        result = _ir_index(unit, case_id, cataloged, execution, failures, cfgs=cfgs,
+                                           cfg_gaps=cfg_gaps, block_limit=flow_settings.block_limit)
                     else:
                         result = _binary_index(unit, case_id, cataloged, execution)
                 _save_checkpoint(unit, case_id, f"branch-{name}", identity, result)

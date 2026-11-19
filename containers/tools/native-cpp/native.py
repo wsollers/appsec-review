@@ -6,7 +6,6 @@ import json
 import hashlib
 import os
 from pathlib import Path
-import re
 import shlex
 import shutil
 import subprocess
@@ -16,12 +15,6 @@ ROOT = Path("/scratch")
 SOURCE = ROOT / "source"
 BUILD = ROOT / "build"
 OUT = ROOT / "analysis"
-
-_NAMESPACE = re.compile(r"\bnamespace\s+([A-Za-z_]\w*)\s*\{")
-_FUNCTION = re.compile(
-    r"(?m)^[\t ]*(?:[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*(?:<[^;{}]+>)?[\s*&]+)+"
-    r"([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:const\s*)?\{"
-)
 
 
 def run(argv: list[str], *, cwd: Path, timeout: int = 540) -> int:
@@ -124,25 +117,6 @@ def load_commands(mode: str = "") -> list[dict]:
     return value
 
 
-def ast_filter(source: str) -> str:
-    """Derive a bounded declaration filter from the current source file."""
-    try:
-        text = Path(source).read_text(encoding="utf-8", errors="replace")[:1024 * 1024]
-    except OSError:
-        return Path(source).stem
-    text = text.replace('extern "C"', "")
-    namespaces = [name for name in _NAMESPACE.findall(text) if name not in {"std", "__gnu_cxx"}]
-    if namespaces:
-        return "|".join(sorted(set(namespaces)))
-    functions = sorted(set(_FUNCTION.findall(text)))
-    if "main" in functions:
-        return "main"
-    if functions:
-        prefix = os.path.commonprefix(functions)
-        return prefix if len(prefix) >= 3 else functions[0]
-    return Path(source).stem
-
-
 def replay(mode: str) -> int:
     commands = load_commands(mode)
     destination = OUT / mode
@@ -152,12 +126,14 @@ def replay(mode: str) -> int:
         arguments = list(row["arguments"])
         source = row["file"]
         stem = f"tu-{index:04d}"
-        filters = [str(name) for name in row.get("ast_filters") or () if str(name)][:400] if mode == "ast" else []
+        filters = [str(name) for name in row.get("ast_filters") or () if str(name)] if mode == "ast" else []
+        filters_truncated = len(filters) > 400
+        filters = filters[:400]
         if mode == "ast":
             output = destination / f"{stem}.json"
-            argvs = [[arguments[0], *arguments[1:], "-Xclang", "-ast-dump=json",
-                      "-Xclang", "-ast-dump-filter", "-Xclang", name, "-fsyntax-only"]
-                     for name in (filters or [ast_filter(source)])]
+            argvs = [[*arguments, "-Xclang", "-ast-dump=json",
+                      *(["-Xclang", "-ast-dump-filter", "-Xclang", name] if name else []),
+                      "-fsyntax-only"] for name in (filters or [""])]
         elif mode == "cfg":
             # Source-level clang::CFG text (debug.DumpCFG) for the unit; the plist the analyzer writes
             # is discarded. The checker prints to stderr, which is what is retained.
@@ -170,7 +146,7 @@ def replay(mode: str) -> int:
         try:
             code, stdout, stderr = 0, b"", b""
             for argv in argvs:
-                completed = subprocess.run(argv, cwd=SOURCE, stdin=subprocess.DEVNULL,
+                completed = subprocess.run(argv, cwd=Path(row.get("directory", SOURCE)), stdin=subprocess.DEVNULL,
                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                            timeout=180, check=False, env={"PATH": os.environ["PATH"],
                                            "HOME": "/tmp", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
@@ -185,6 +161,9 @@ def replay(mode: str) -> int:
                 (destination / f"{stem}.plist").unlink(missing_ok=True)
             results.append({"index": index, "source": source, "exit_code": code,
                             "output": output.relative_to(ROOT).as_posix(),
+                            "output_truncated": filters_truncated or (
+                                len(stdout) > 64 * 1024 * 1024 if mode == "ast" else
+                                len(stderr) > 16 * 1024 * 1024 if mode == "cfg" else False),
                             "stderr": stderr.decode("utf-8", "replace")[:8192]})
         except subprocess.TimeoutExpired:
             results.append({"index": index, "source": source, "exit_code": None,
@@ -204,14 +183,29 @@ def symbols() -> int:
         if path.suffix not in {".o", ".a", ".so"} and magic != b"\x7fELF":
             continue
         kind = "object" if path.suffix == ".o" else "library" if path.suffix in {".a", ".so"} else "executable"
-        nm = subprocess.run(["nm", "-P", "--defined-only", str(path)], capture_output=True, check=False)
-        elf = subprocess.run(["readelf", "-h", "-l", "-d", str(path)], capture_output=True, check=False)
+        tools, streams = {}, {}
+        for tool, args, limit in (("nm", ["-P", "--defined-only"], 4 * 1024 * 1024),
+                                  ("readelf", ["-h", "-l", "-d"], 1024 * 1024)):
+            try:
+                completed = subprocess.run([tool, *args, str(path)], capture_output=True, check=False, timeout=180)
+                stdout, stderr = completed.stdout, completed.stderr
+                tools[tool] = {"exit_code": completed.returncode, "timeout": False,
+                               "stderr": stderr.decode("utf-8", "replace")[:8192],
+                               "stderr_truncated": len(stderr) > 8192,
+                               "output_truncated": len(stdout) > limit or (
+                                   tool == "nm" and len(stdout.splitlines()) > 10000)}
+                streams[tool] = stdout[:limit].decode("utf-8", "replace")
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                tools[tool] = {"exit_code": None, "timeout": isinstance(exc, subprocess.TimeoutExpired),
+                               "stderr": str(exc)[:8192], "output_truncated": False}
+                streams[tool] = ""
         records.append({"path": path.relative_to(ROOT).as_posix(), "kind": kind,
                         "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                        "symbols": nm.stdout.decode("utf-8", "replace")[:4 * 1024 * 1024].splitlines()[:10000],
-                        "metadata": elf.stdout.decode("utf-8", "replace")[:1024 * 1024]})
+                        "symbols": streams["nm"].splitlines()[:10000],
+                        "metadata": streams["readelf"], "tools": tools})
     (destination / "records.json").write_text(json.dumps(records, sort_keys=True), encoding="utf-8")
-    return 0
+    return 2 if any(receipt["exit_code"] != 0 or receipt.get("output_truncated")
+                    for record in records for receipt in record["tools"].values()) else 0
 
 
 def main() -> int:

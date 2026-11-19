@@ -236,10 +236,16 @@ def test_compile_and_link_normalization_edge_cases(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="malformed"):
         cpp_job.normalize_compile_db(case_root, mapping)
 
-    # -cc1 skipped + unique suffix match works!
+    # A display suffix outside accepted source/build context cannot admit a source.
     db_path.write_text(json.dumps([
         {"directory": "/ext", "file": "/ext/unique.c", "arguments": ["clang", "-cc1", "unique.c"]},
         {"directory": "/ext", "file": "/ext/sub/unique.c", "command": "gcc -c /ext/sub/unique.c -o unique.o"},
+    ]), encoding="utf-8")
+    with pytest.raises(ValueError, match="outside accepted"):
+        cpp_job.normalize_compile_db(case_root, mapping)
+    db_path.write_text(json.dumps([
+        {"directory": "/scratch/source", "file": "unique.c", "arguments": ["clang", "-cc1", "unique.c"]},
+        {"directory": "/scratch/source", "file": "unique.c", "command": "gcc -c unique.c -o unique.o"},
     ]), encoding="utf-8")
     norm = cpp_job.normalize_compile_db(case_root, mapping)
     assert len(norm) == 1 and norm[0]["target_path"] == "unique.c"
@@ -248,7 +254,7 @@ def test_compile_and_link_normalization_edge_cases(tmp_path: Path) -> None:
     db_path.write_text(json.dumps([
         {"directory": "/ext", "file": "/ext/dup.cpp", "command": "g++ -c /ext/dup.cpp"},
     ]), encoding="utf-8")
-    with pytest.raises(ValueError, match="does not resolve uniquely"):
+    with pytest.raises(ValueError, match="outside accepted"):
         cpp_job.normalize_compile_db(case_root, mapping)
 
     # Unmapped file raises.
@@ -462,11 +468,11 @@ def _stage_language_build(run_root: Path, target_root: Path, fingerprint: str) -
         "schema": "appsec-review/native-component-compile-database/2",
         "entries": [
             {"directory": "/workspace/app", "file": "/workspace/app/main.cpp",
-             "arguments": ["clang++", "-c", "/workspace/app/main.cpp", "-o", "/workspace/app/build/main.o"],
-             "output": "/workspace/app/build/main.o"},
+             "arguments": ["clang++", "-c", "/workspace/app/main.cpp", "-o", "/workspace/build/main.o"],
+             "output": "/workspace/build/main.o"},
             {"directory": "/workspace/app", "file": "/workspace/app/helper.cpp",
-             "arguments": ["clang++", "-c", "/workspace/app/helper.cpp", "-o", "/workspace/app/build/helper.o"],
-             "output": "/workspace/app/build/helper.o"},
+             "arguments": ["clang++", "-c", "/workspace/app/helper.cpp", "-o", "/workspace/build/helper.o"],
+             "output": "/workspace/build/helper.o"},
         ],
     })
 
@@ -493,6 +499,8 @@ def _stage_language_build(run_root: Path, target_root: Path, fingerprint: str) -
             "entry_count": 2,
         },
         "recipe": {"build_dir": "build"},
+        "link_database": {**cpp_job._artifact(run_root, ws / "build/.appsec-review-link-commands.json"),
+                          "relationship_count": 1},
         "image": {"image_id": DIGEST},
         "artifacts": [{"path": extra_art.relative_to(run_root).as_posix(), "sha256": file_sha256(extra_art)}],
         "gaps": [],
@@ -572,6 +580,98 @@ def _write_language_build_handoff(run_root: Path, fingerprint: str, receipts: li
         "handoff_path": handoff_path.relative_to(run_root).as_posix(),
         "handoff_sha256": file_sha256(handoff_path),
     })
+
+
+def _prepared_catalog_inputs(tmp_path, *, nested_sources=False, external_links=False):
+    unit = _make_unit(tmp_path, repository_root=tmp_path / "empty-repo")
+    staged = _stage_language_build(unit.job.run_root, unit.job.target_root, unit.job.source_fingerprint)
+    if nested_sources:
+        for directory in ("src/build", "src/target"):
+            path = unit.job.target_root / "app" / directory / "valid.cpp"
+            path.parent.mkdir(parents=True)
+            path.write_text("int valid() { return 1; }\n")
+    summary = json.loads((unit.job.run_root / "data/language_build/summary.json").read_text())
+    receipt = summary["receipts"][0]
+    if external_links:
+        local = staged["ws"] / "build/.appsec-review-link-commands.json"
+        accepted = unit.job.run_root / "data/language_build/accepted-links.json"
+        local.rename(accepted)
+        receipt["link_database"] = {**cpp_job._artifact(unit.job.run_root, accepted), "relationship_count": 1}
+        atomic_json(staged["ws_manifest_path"], {
+            "schema": "appsec-review/build-workspace-manifest/1",
+            "files": {p.relative_to(staged["ws"]).as_posix(): file_sha256(p)
+                      for p in staged["ws"].rglob("*") if p.is_file()},
+        })
+        receipt["workspace_manifest"]["sha256"] = file_sha256(staged["ws_manifest_path"])
+    _write_language_build_handoff(unit.job.run_root, unit.job.source_fingerprint, summary["receipts"])
+    handlers = {item.unit_id: item.handler for item in cpp_job.build_job().units}
+    unit._store["plan.accepted_cpp_plan"] = handlers["plan.accepted_cpp_plan"](unit)
+    unit._store["prepare.projects"] = handlers["prepare.projects"](unit)
+    return unit, handlers
+
+
+def test_catalog_consumes_accepted_link_database_and_invalidates_changed_input(tmp_path):
+    unit, handlers = _prepared_catalog_inputs(tmp_path, external_links=True)
+    first = handlers["catalog.projects"](unit)["projects"]["proj-app"]
+    assert first["link_commands"][0]["input_paths"] == ["build/libhelper.a", "build/main.o"]
+    assert handlers["catalog.projects"](unit)["projects"]["proj-app"]["checkpoint_reused"]
+    old_path = unit.job.run_root / first["link_database"]["path"]
+    old_bytes = old_path.read_bytes()
+    receipt = unit._store["prepare.projects"]["projects"]["proj-app"]["build_receipt"]
+    changed = unit.job.run_root / "data/language_build/accepted-links-v2.json"
+    atomic_json(changed, [{**first["link_commands"][0], "input_paths": ["build/main.o"]}])
+    receipt["link_database"] = {**cpp_job._artifact(unit.job.run_root, changed), "relationship_count": 1}
+    second = handlers["catalog.projects"](unit)["projects"]["proj-app"]
+    assert not second.get("checkpoint_reused")
+    assert second["link_commands"][0]["input_paths"] == ["build/main.o"]
+    assert old_path.read_bytes() == old_bytes
+    changed.write_text("[]")
+    with pytest.raises(ValueError, match="link.*identity changed"):
+        handlers["catalog.projects"](unit)
+
+
+def test_prepare_retains_real_sources_named_build_and_target(tmp_path):
+    unit, _ = _prepared_catalog_inputs(tmp_path, nested_sources=True)
+    mapping = unit._store["prepare.projects"]["projects"]["proj-app"]["mapping"]
+    paths = {row["target_path"] for row in mapping["files"]}
+    assert {"app/src/build/valid.cpp", "app/src/target/valid.cpp"} <= paths
+
+
+def test_compile_relationship_gap_reaches_branch_and_published_summary(tmp_path):
+    unit, handlers = _prepared_catalog_inputs(tmp_path)
+    catalog = handlers["catalog.projects"](unit)
+    good = catalog["projects"]["proj-app"]
+    good["outputs"], good["link_commands"] = [], []
+    unit._store["catalog.projects"] = {"projects": {"proj-app": good}}
+    output = handlers["compiled.projects"](unit)
+    result = output["projects"]["proj-app"]
+    assert result["terminal_status"] == output["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any("no exact compile-output" in gap for gap in output["gaps"])
+    upstream = unit.job.run_root / "upstream.json"
+    write_manifest(upstream, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
+                   target_root=unit.job.target_root, indexes=[])
+    unit.job.input_manifest_path, unit.job.input_manifest_sha256 = upstream, file_sha256(upstream)
+    unit._store.update({f"{name}.projects": {"projects": {}} for name in cpp_job.BRANCHES})
+    unit._store["compiled.projects"] = output
+    published = handlers["acceptance.publish_handoff"](unit)
+    summary = json.loads((unit.job.run_root / published["artifact"]["path"]).read_text())
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any("no exact compile-output" in gap for gap in summary["gaps"])
+
+
+def test_scope_rechecks_generated_build_bytes_and_accepted_command_context(tmp_path):
+    from appsec_review.jobs.cpp_index_scopes import _scope
+    unit, handlers = _prepared_catalog_inputs(tmp_path)
+    catalog = handlers["catalog.projects"](unit)["projects"]["proj-app"]
+    scope = _scope(unit.job.run_root, "proj-app", catalog)
+    assert scope.container_compile_database()[0]["directory"] == "/target/source"
+    catalog["compile_commands"][0]["directory"] = "/scratch/build"
+    with pytest.raises(ValueError, match="command context differs"):
+        _scope(unit.job.run_root, "proj-app", catalog)
+    catalog["compile_commands"][0]["directory"] = "/scratch/source"
+    (scope.case_root / "build/notes.txt").write_text("changed include context")
+    with pytest.raises(ValueError, match="build context changed"):
+        _scope(unit.job.run_root, "proj-app", catalog)
 
 
 def test_full_whole_program_pipeline_units_and_publish(tmp_path: Path) -> None:
@@ -672,55 +772,46 @@ def test_full_whole_program_pipeline_units_and_publish(tmp_path: Path) -> None:
                     {"index": 1, "exit_code": 0},
                 ]))
             elif mode == "ir":
-                # Cross-TU call main -> helper + ambiguous call main -> ambig (defined in both TUs)
+                # Valid debug-bound definitions: exact cross-TU helper and local ambig.
                 (dest / "tu-0000.ll").write_text("\n".join([
-                    "define dso_local i32 @main() {",
+                    "define dso_local i32 @main() !dbg !1 {",
                     "entry:",
                     "  %0 = call i32 @helper()",
                     "  %1 = call i32 @helper()",
                     "  %2 = call i32 @ambig()",
                     "  ret i32 %0",
                     "}",
-                    "define internal i32 @ambig() {",
+                    "define internal i32 @ambig() !dbg !2 {",
                     "entry:",
                     "  ret i32 1",
                     "}",
+                    '!1 = distinct !DISubprogram(name: "main", file: !3, line: 1)',
+                    '!2 = distinct !DISubprogram(name: "ambig", file: !3, line: 1)',
+                    '!3 = !DIFile(filename: "main.cpp", directory: "/scratch/source")',
                 ]), encoding="utf-8")
                 (dest / "tu-0001.ll").write_text("\n".join([
-                    "define dso_local i32 @helper() {",
+                    "define dso_local i32 @helper() !dbg !1 {",
                     "entry:",
                     "  ret i32 42",
                     "}",
-                    "define dso_local i32 @ambig() {",
+                    "define dso_local i32 @ambig() !dbg !2 {",
                     "entry:",
                     "  ret i32 2",
                     "}",
+                    '!1 = distinct !DISubprogram(name: "helper", file: !3, line: 1)',
+                    '!2 = distinct !DISubprogram(name: "ambig", file: !3, line: 1)',
+                    '!3 = !DIFile(filename: "helper.cpp", directory: "/scratch/source")',
                 ]), encoding="utf-8")
-                # Notice: ambig in TU 0 has 1 local candidate so local resolves; add ambig2 called from main
-                # that is defined twice in TU 1 to trigger ambiguous_names!
-                (dest / "tu-0000.ll").write_text(
-                    (dest / "tu-0000.ll").read_text(encoding="utf-8").replace(
-                        "  ret i32 %0", "  %3 = call i32 @dup_ext()\n  ret i32 %0"
-                    ),
-                    encoding="utf-8",
-                )
-                (dest / "tu-0001.ll").write_text(
-                    (dest / "tu-0001.ll").read_text(encoding="utf-8")
-                    + "\ndefine weak i32 @dup_ext() {\nentry:\n  ret i32 7\n}\n"
-                    + "define weak i32 @dup_ext() {\nentry:\n  ret i32 8\n}\n",
-                    encoding="utf-8",
-                )
                 (dest / "receipt.json").write_text(json.dumps([
                     {"index": 0, "exit_code": 0},
                     {"index": 1, "exit_code": 0},
                 ]))
             elif mode == "symbols":
+                outputs = base._store["catalog.projects"]["projects"]["proj-app"]["outputs"]
                 (dest / "records.json").write_text(json.dumps([
-                    {"path": "build/main.o", "kind": "object", "sha256": "1" * 64, "metadata": "ELF 64-bit",
-                     "symbols": ["helper U", "main T", "main T"]},
-                    {"path": "build/main.o", "kind": "object", "sha256": "1" * 64, "metadata": "dup"},
-                    {"path": "build/custom.bin", "kind": "unknown_kind", "sha256": "2" * 64, "symbols": []},
-                ]), encoding="utf-8")
+                    {**item, "metadata": "ELF 64-bit", "symbols": ["helper T", "main T"],
+                     "tools": {name: {"exit_code": 0} for name in ("nm", "readelf")}}
+                    for item in outputs]), encoding="utf-8")
             return _exec_result(base.job.run_root, root, req.tool_id, 0)
 
     job = cpp_job.build_job(executor_factory=lambda _u: WholeProgramExecutor())
@@ -768,9 +859,8 @@ def test_full_whole_program_pipeline_units_and_publish(tmp_path: Path) -> None:
         assert conn.execute("SELECT COUNT(*) FROM relations").fetchone()[0] >= 2
 
     ir_out = run_unit("ir.projects")
-    assert any("ambiguous cross-translation-unit IR callees" in g
-               for g in ir_out["projects"]["proj-app"]["gaps"])
-    assert ir_out["projects"]["proj-app"]["call_edge_count"] >= 1
+    assert ir_out["projects"]["proj-app"]["call_edge_count"] == 2
+    assert any("source_cfg_unavailable" in g for g in ir_out["projects"]["proj-app"]["gaps"])
 
     ast_out = run_unit("ast.projects")
     assert any("Clang AST output unavailable or invalid" in g for g in ast_out["projects"]["proj-app"]["gaps"])
@@ -845,12 +935,16 @@ def test_plan_prepare_catalog_and_branch_error_paths(tmp_path: Path) -> None:
         u_prep._store["plan.accepted_cpp_plan"] = {"plan": {"actions": [act]}}
         return handlers["prepare.projects"](u_prep)
 
-    # Existing case_root cleaned up + missing build_dir uses mkdir + SUCCEEDED when no gaps!
+    # Mutable source staging is cleared; retained evidence outside it survives preparation.
     stale_case = cpp_job._case_root(u_prep, base_action["project_key"])
     stale_case.mkdir(parents=True, exist_ok=True)
-    (stale_case / "marker").write_text("old", encoding="utf-8")
+    (stale_case / "source").mkdir()
+    (stale_case / "source/marker").write_text("old", encoding="utf-8")
+    (stale_case / "evidence").mkdir()
+    (stale_case / "evidence/marker").write_text("retained", encoding="utf-8")
     ok_prep = call_prepare_with({"recipe": {"build_dir": "nonexistent_build_dir"}})
-    assert ok_prep["terminal_status"] == "SUCCEEDED" and not (stale_case / "marker").exists()
+    assert ok_prep["terminal_status"] == "SUCCEEDED" and not (stale_case / "source/marker").exists()
+    assert (stale_case / "evidence/marker").read_text() == "retained"
 
     with pytest.raises(ValueError, match="workspace is unavailable or outside"):
         call_prepare_with({"workspace": "../outside"})

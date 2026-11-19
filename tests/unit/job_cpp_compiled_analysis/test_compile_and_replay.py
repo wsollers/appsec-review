@@ -26,6 +26,115 @@ from appsec_review.runtime import plan_jobs
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def _native_driver(tmp_path):
+    spec = importlib.util.spec_from_file_location("native_cpp_outcomes", ROOT / "containers/tools/native-cpp/native.py")
+    driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver)
+    driver.ROOT, driver.SOURCE, driver.BUILD, driver.OUT = (
+        tmp_path, tmp_path / "source", tmp_path / "build", tmp_path / "analysis")
+    driver.SOURCE.mkdir()
+    driver.BUILD.mkdir()
+    return driver
+
+
+def test_whole_program_native_ast_is_not_filtered_by_source_display_names(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    driver = _native_driver(tmp_path)
+    source = driver.SOURCE / "unit.cpp"
+    source.write_text("namespace one { int left() { return 1; } }\n"
+                      "namespace two { int right() { return 2; } }\nint main() { return 0; }\n")
+    (tmp_path / "normalized-compile-commands.json").write_text(json.dumps([
+        {"file": str(source), "directory": str(driver.BUILD), "arguments": ["clang++-18", str(source)]}]))
+    calls = []
+
+    def execute(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return SimpleNamespace(returncode=0, stdout=b'{"kind":"TranslationUnitDecl","inner":[]}', stderr=b"")
+
+    monkeypatch.setattr(driver.subprocess, "run", execute)
+    assert driver.replay("ast") == 0
+    assert len(calls) == 1
+    assert "-ast-dump-filter" not in calls[0][0]
+    assert calls[0][1]["cwd"] == driver.BUILD
+
+
+@pytest.mark.parametrize("exit_code", [0, 1])
+def test_native_symbol_subcommand_outcomes_reach_the_real_normalizer(tmp_path, monkeypatch, exit_code):
+    from types import SimpleNamespace
+    from appsec_review.jobs.job_cpp_compiled_analysis import job
+    from tests.unit.job_cpp_compiled_analysis.test_job_pipeline import _make_unit
+
+    unit = _make_unit(tmp_path / "unit", "binary.projects", repository_root=tmp_path / "repo")
+    case = job._case_root(unit, "case")
+    case.mkdir(parents=True)
+    driver = _native_driver(case)
+    artifact = driver.BUILD / "unit.o"
+    artifact.write_bytes(b"fake object bytes")
+    monkeypatch.setattr(driver.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        returncode=exit_code, stdout=b"", stderr=b"file format not recognized" if exit_code else b""))
+    code = driver.symbols()
+    records_path = driver.OUT / "binary/records.json"
+    records = json.loads(records_path.read_text())
+    catalog = {"mapping": {"project_id": "project", "case_snapshot": "a" * 64},
+               "artifact_catalog": job._artifact(unit.job.run_root, artifact),
+               "outputs": [{"path": "build/unit.o", "sha256": job.file_sha256(artifact), "kind": "object"}]}
+    execution = {"execution": job._artifact(unit.job.run_root, records_path), "image_id": "fake", "exit_code": code}
+    result = job._binary_index(unit, "case", catalog, execution)
+    assert records[0]["tools"]["nm"]["exit_code"] == exit_code
+    assert records[0]["tools"]["readelf"]["exit_code"] == exit_code
+    assert result["symbol_count"] == 0
+    if exit_code:
+        assert code != 0
+        assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
+        assert any("nm" in gap and "file format" in gap for gap in result["gaps"])
+        assert result["checkpointable"] is False
+    else:
+        assert code == 0
+        assert result["terminal_status"] == "SUCCEEDED" and not result["gaps"]
+
+
+@pytest.mark.parametrize("project", [".", "app"])
+def test_normalized_context_uses_exact_recipe_paths_and_command_directory(tmp_path, project):
+    from appsec_review.jobs.cpp_index_scopes import container_compile_database
+    prefix = "" if project == "." else project + "/"
+    build_dir = prefix + "out"
+    (tmp_path / "build").mkdir()
+    commands = [{"directory": f"/workspace/{build_dir}/sub", "file": "../../src/a.cpp",
+                 "arguments": ["g++", "-I../../include", "-I../generated", "-include", "../config.h",
+                               "-I/workspace/app-other/inc", "-DNAME=/workspace/app",
+                               "-c", "../../src/a.cpp", "-o", "a.o"]}]
+    (tmp_path / "build/compile_commands.json").write_text(json.dumps(commands))
+    mapping = {"project_key": "p", "project_id": "p", "root": project, "source_dir": project,
+               "build_dir": build_dir, "case_snapshot": "a" * 64, "files": [{
+                   "scratch_path": "source/src/a.cpp", "target_path": prefix + "src/a.cpp", "sha256": "b" * 64}]}
+    rows = normalize_compile_db(tmp_path, mapping)
+    assert rows[0]["directory"] == "/scratch/build/sub"
+    assert rows[0]["file"] == "/scratch/source/src/a.cpp"
+    assert rows[0]["output_path"] == "build/sub/a.o"
+    assert "-I/scratch/source/include" in rows[0]["arguments"]
+    assert "-I/scratch/build/generated" in rows[0]["arguments"]
+    assert "/scratch/build/config.h" in rows[0]["arguments"]
+    assert "-DNAME=/workspace/app" in rows[0]["arguments"]
+    if project == "app":
+        assert "-I/workspace/app-other/inc" in rows[0]["arguments"]
+    mounted = container_compile_database(project, rows)[0]
+    assert mounted["directory"] == "/target/build/sub"
+    assert "-I/target/build/generated" in mounted["arguments"]
+    assert mounted["file"] == "/target/source/src/a.cpp"
+
+
+@pytest.mark.parametrize("directory", ["/unaccepted", "relative-unaccepted"],
+                         ids=["foreign-directory", "relative-directory"])
+def test_compile_source_with_matching_display_suffix_is_not_admitted(tmp_path, directory):
+    (tmp_path / "build").mkdir()
+    (tmp_path / "build/compile_commands.json").write_text(json.dumps([{
+        "directory": directory, "file": "/unaccepted/main.cpp", "arguments": ["cc", "-c", "main.cpp"]}]))
+    mapping = {"project_key": "p", "project_id": "p", "root": "app", "case_snapshot": "a" * 64,
+               "files": [{"scratch_path": "source/main.cpp", "target_path": "app/main.cpp", "sha256": "b" * 64}]}
+    with pytest.raises(ValueError, match="accepted"):
+        normalize_compile_db(tmp_path, mapping)
+
+
 def _project(target: Path, relative: str, *, library: bool) -> str:
     root = target / Path(*PurePosixPath(relative).parts)
     root.mkdir(parents=True)
@@ -329,7 +438,8 @@ def _replay(tmp_path: Path, scratch: Path, rows: list[dict], image: Path, mode: 
     wrapper.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{clang}" "{scratch}" "{image}" "$@"\n',
                        encoding="utf-8")
     wrapper.chmod(0o755)
-    replayed = [{**row, "arguments": [str(wrapper), *row["arguments"][1:]]} for row in rows]
+    replayed = [{**row, "arguments": [str(wrapper), *row["arguments"][1:]],
+                 "directory": str(scratch / Path(row["directory"]).relative_to("/scratch"))} for row in rows]
     (scratch / "normalized-compile-commands.json").write_text(json.dumps(replayed), encoding="utf-8")
     return driver.replay(mode)
 
@@ -343,7 +453,7 @@ def test_php_and_python_extension_include_paths_reach_the_replay_unchanged(tmp_p
     assert [value for value in php["arguments"] if value.startswith("-I/usr/include/")] == [
         f"-I{path}" for path in PHP_INCLUDES[:-1]]
     assert php["arguments"][php["arguments"].index("-isystem") + 1] == PHP_INCLUDES[-1]
-    assert "-I/scratch/source/include" in php["arguments"] and "-I." in php["arguments"]
+    assert "-I/scratch/source/include" in php["arguments"] and "-I/scratch/source" in php["arguments"]
     assert not any("/workspace/" in value for row in rows for value in row["arguments"])
     assert f"-I{PYTHON_INCLUDES[0]}" in python["arguments"]
     assert python["arguments"][-1] == "/scratch/source/src/fast.c"

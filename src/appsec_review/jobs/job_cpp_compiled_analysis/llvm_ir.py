@@ -15,6 +15,7 @@ template, operator or other mangling it does not cover keeps its linkage name an
 from __future__ import annotations
 
 import re
+import posixpath
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -77,6 +78,7 @@ class IrFunction:
     def_use: tuple[DefUse, ...]
     indirect_calls: int = 0
     truncated: tuple[str, ...] = ()
+    instruction_count: int = 0
 
     @property
     def key(self) -> str:
@@ -161,7 +163,7 @@ class _Metadata:
             full = name
         else:
             full = f"{directory.rstrip('/')}/{name}" if directory else name
-        return full
+        return posixpath.normpath(full) if full else ""
 
     def qualified_name(self, subprogram: str) -> str:
         parts = [_string(self.field(subprogram, "name")) or ""]
@@ -329,8 +331,18 @@ def parse_module(text: str, *, root: str = "/scratch/source", block_limit: int =
     unparsed: list[str] = []
     functions: list[IrFunction] = []
     undemangled = 0
+    # A declaration-only/empty clang module still has module-level syntax. Arbitrary text or a
+    # clipped definition is not an empty valid result.
+    definitions = _split_functions(lines)
+    if not definitions and not any(re.match(r"^(; ModuleID|source_filename\s*=|target\s+|declare\s+|@|!)", line)
+                                   for line in lines):
+        unparsed.append("missing LLVM module syntax")
+    if sum(line.startswith("define ") for line in lines) != len(definitions):
+        unparsed.append("unsupported function definition")
+    if sum(line.rstrip() == "}" for line in lines) < len(definitions):
+        unparsed.append("unterminated function definition")
     prefix = root.rstrip("/") + "/"
-    for name, header, body in _split_functions(lines):
+    for name, header, body in definitions:
         dbg = re.search(r"!dbg !(\d+)", header)
         if dbg is None or meta.kind(dbg.group(1)) != "DISubprogram":
             unparsed.append(f"{name}: no debug subprogram")
@@ -348,9 +360,11 @@ def parse_module(text: str, *, root: str = "/scratch/source", block_limit: int =
         truncated: list[str] = []
         calls: list[IrCall] = []
         indirect = 0
+        instructions = 0
         defs: dict[str, int | None] = {}
         uses: dict[str, list[int]] = {}
         use_counts: dict[str, int] = {}
+        source_lines: list[int] = []
         pending_switch: list[str] | None = None
         for raw in body:
             stripped = raw.strip()
@@ -371,19 +385,23 @@ def parse_module(text: str, *, root: str = "/scratch/source", block_limit: int =
             if current is None:
                 current = {"label": "entry", "lines": [], "succ": []}
                 blocks.append(current)
-            if len(blocks) > block_limit:
+            instructions += 1
+            detail = len(blocks) <= block_limit
+            if not detail:
                 if "blocks" not in truncated:
                     truncated.append("blocks")
-                continue
             dbg_match = _DBG.search(stripped)
             line, column = meta.location(dbg_match.group(1)) if dbg_match else (None, None)
             if line:
-                current["lines"].append(line)  # type: ignore[union-attr]
+                source_lines.append(line)
+                if detail:
+                    current["lines"].append(line)  # type: ignore[union-attr]
             assign = _ASSIGN.match(stripped)
             rest = stripped[assign.end():] if assign else stripped
-            if assign:
+            if assign and detail:
                 defs[assign.group(1)] = line
-            for ref in _VALUE_REF.findall(re.sub(r"label %[\w.$-]+", "", rest.split("!dbg", 1)[0])):
+            for ref in (_VALUE_REF.findall(re.sub(r"label %[\w.$-]+", "", rest.split("!dbg", 1)[0]))
+                        if detail else ()):
                 use_counts[ref] = use_counts.get(ref, 0) + 1
                 if line:
                     uses.setdefault(ref, []).append(line)
@@ -392,8 +410,10 @@ def parse_module(text: str, *, root: str = "/scratch/source", block_limit: int =
                 kind = term.group(1)
                 if kind == "switch" and "]" not in stripped:
                     pending_switch = [stripped]  # the case list continues on following lines
-                elif kind in {"br", "switch", "invoke", "callbr"}:
+                elif kind in {"br", "switch", "invoke", "callbr", "indirectbr", "cleanupret", "catchret"}:
                     current["succ"].extend(_LABEL_REF.findall(stripped))  # type: ignore[union-attr]
+            elif stripped.startswith(("to label ", "unwind label ")):
+                current["succ"].extend(_LABEL_REF.findall(stripped))  # type: ignore[union-attr]
             call = _CALL.search(stripped)
             if call:
                 linkage = call.group("callee").strip('"')
@@ -420,8 +440,7 @@ def parse_module(text: str, *, root: str = "/scratch/source", block_limit: int =
             for i, b in enumerate(blocks))
         fixed_calls = tuple(IrCall(c.callee, c.callee_linkage, c.line, c.column, ids[int(c.block_id)])
                             for c in calls)
-        all_lines = [line for b in blocks for line in b["lines"]]  # type: ignore[union-attr]
-        end = max([start, *all_lines]) if all_lines else start
+        end = max([start, *source_lines])
         doms = _dominators(ids, successors, ids[0]) if ids else {}
         pdoms = _post_dominators(ids, successors) if ids else {}
         def_use: list[DefUse] = []
@@ -436,6 +455,6 @@ def parse_module(text: str, *, root: str = "/scratch/source", block_limit: int =
             name=qualified, linkage_name=name, path=path, start_line=start, end_line=end,
             internal=internal, blocks=out_blocks, dominators=doms, post_dominators=pdoms,
             calls=fixed_calls, def_use=tuple(def_use), indirect_calls=indirect,
-            truncated=tuple(sorted(set(truncated)))))
+            truncated=tuple(sorted(set(truncated))), instruction_count=instructions))
     functions.sort(key=lambda f: (f.path, f.start_line, f.linkage_name))
     return IrModule(tuple(functions), dict(sorted(declared.items())), tuple(unparsed), undemangled)

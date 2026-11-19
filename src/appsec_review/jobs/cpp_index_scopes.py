@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import hashlib
 import json
+import posixpath
 from pathlib import Path, PurePosixPath
 import shutil
 from typing import Any, Mapping
@@ -96,25 +97,38 @@ def container_compile_database(root: str, compile_commands: Any,
                                source_mount: str = SOURCE_MOUNT) -> list[dict[str, Any]]:
     """Rewrite accepted compile commands to read-only container paths under ``source_mount``.
 
-    The driver is normalized to ``clang``/``clang++`` by source suffix; every other argument is
-    preserved, with build-time ``/scratch`` paths rebased onto the mounted case root.
+    Preserve the accepted working directory. Rebase path operands only; macro values containing
+    a similar prefix are compiler data, not mount paths.
     """
     prefix = project_prefix(root)
     mount_root = source_mount.rsplit("/", 1)[0]
+    def mounted(value: str) -> str:
+        for prefix, destination in (("/scratch/source", source_mount), ("/scratch/build", f"{mount_root}/build")):
+            if value == prefix or value.startswith(prefix + "/"):
+                return destination + value[len(prefix):]
+        return value
+
+    flags = ("--sysroot=", "-isystem", "-iquote", "-idirafter", "-include", "-imacros", "-I")
     rows = []
     for command in compile_commands:
         target_path = str(command["target_path"])
-        if not target_path.startswith(prefix) or target_path.startswith("/"):
+        if (not target_path.startswith(prefix) or target_path.startswith("/") or
+                posixpath.normpath(target_path) != target_path or ".." in PurePosixPath(target_path).parts):
             raise ValueError("compile unit is outside the accepted project root")
         relative = target_path[len(prefix):]
         arguments = []
         for index, value in enumerate(command["arguments"]):
-            rewritten = str(value).replace("/scratch/source", source_mount).replace(
-                "/scratch/build", f"{mount_root}/build")
+            value = str(value)
+            flag = next((flag for flag in flags if value.startswith(flag)), "")
+            rewritten = flag + mounted(value[len(flag):]) if flag else mounted(value)
             if index == 0:
                 rewritten = "clang++" if PurePosixPath(relative).suffix.lower() in _CXX_SUFFIXES else "clang"
             arguments.append(rewritten)
-        rows.append({"directory": source_mount, "file": f"{source_mount}/{relative}",
+        directory = mounted(str(command.get("directory", "/scratch/source")))
+        if not any(directory == mount or directory.startswith(mount + "/")
+                   for mount in (source_mount, f"{mount_root}/build")) or posixpath.normpath(directory) != directory:
+            raise ValueError("compile directory is outside accepted source/build context")
+        rows.append({"directory": directory, "file": f"{source_mount}/{relative}",
                      "arguments": arguments})
     return rows
 
@@ -169,6 +183,15 @@ def _scope(run_root: Path, case_id: str, catalog: Mapping[str, Any]) -> IndexSco
     path = (run_root / str(compile_database["path"])).resolve()
     if run_root.resolve() not in path.parents or file_sha256(path) != compile_database["sha256"]:
         raise ValueError(f"accepted compile database changed: {case_id}")
+    if json.loads(path.read_text(encoding="utf-8")) != catalog["compile_commands"]:
+        raise ValueError(f"accepted compile command context differs from its database: {case_id}")
+    for item in mapping.get("build_files", ()):
+        scratch = PurePosixPath(str(item["scratch_path"]))
+        source = case_root / Path(*scratch.parts)
+        if (scratch.is_absolute() or ".." in scratch.parts or scratch.parts[:1] != ("build",)
+                or source.is_symlink() or not source.resolve().is_relative_to(case_root)
+                or not source.is_file() or file_sha256(source) != item["sha256"]):
+            raise ValueError(f"materialized build context changed after acceptance: {case_id}")
     by_relative = {}
     for item in mapping["files"]:
         scratch = PurePosixPath(str(item["scratch_path"]))

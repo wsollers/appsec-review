@@ -50,6 +50,35 @@ def test_block_limit_truncates_with_a_named_marker_never_silently() -> None:
     # dropped and the function says so.
     assert flow["truncated"] == ["blocks"]
     assert [block["start_line"] for block in flow["blocks"][2:]] == [None, None]
+    complete = next(item for item in llvm_ir.parse_module(text).functions if item.name == "copy_field").flow()
+    assert [block["successors"] for block in flow["blocks"]] == [
+        block["successors"] for block in complete["blocks"]]
+    assert flow["dominators"] == complete["dominators"]
+    assert flow["post_dominators"] == complete["post_dominators"]
+
+
+def test_bounded_flow_keeps_multiline_switch_and_direct_calls():
+    text = """
+define i32 @f(i32 %x) !dbg !1 {
+entry:
+  br label %next
+next:
+  call void @sink(), !dbg !2
+  switch i32 %x, label %done [
+    i32 0, label %entry
+  ]
+done:
+  ret i32 0
+}
+!1 = distinct !DISubprogram(name: "f", file: !3, line: 1)
+!2 = !DILocation(line: 2, column: 1, scope: !1)
+!3 = !DIFile(filename: "f.cpp", directory: "/scratch/source")
+"""
+    complete = llvm_ir.parse_module(text).functions[0]
+    limited = llvm_ir.parse_module(text, block_limit=1).functions[0]
+    assert [b.successors for b in limited.blocks] == [("bb1",), ("bb2", "bb0"), ()]
+    assert limited.calls == complete.calls
+    assert limited.end_line == complete.end_line
 
 
 def test_parsing_is_deterministic() -> None:

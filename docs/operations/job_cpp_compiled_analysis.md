@@ -270,49 +270,67 @@ Source: [handler and branch normalizers](../../src/appsec_review/jobs/job_cpp_co
 
 ### `prepare`
 
-1. For each action recreate its run-owned case root. If an unsuccessful build has no workspace,
+1. For each action recreate mutable source/build/replay staging and local checkpoints, preserving
+   content-addressed evidence and ledgers. If an unsuccessful build has no workspace,
    retain a named blocked project instead of attempting analysis.
 2. Verify workspace location, manifest schema, complete file-set equality and every file/artifact
    hash. Missing or changed accepted bytes raises; it is not an ordinary parser gap.
-3. Copy the project's source and accepted build directory. For native and mixed-family captured
-   components, verify and install their accepted compile database. Write `source-mapping.json`
-   with target paths, scratch paths, source hashes, case snapshot and language-build provenance.
+3. Copy the project's source and exact accepted recipe build directory. Names such as
+   `src/build` and `src/target` do not exclude legitimate sources; only VCS metadata is ignored.
+   For native and mixed-family captured components, verify and install their accepted compile
+   database. The content-addressed `cpp-source-mapping/4` document binds source and retained build
+   hashes, recipe directories, case snapshot and language-build provenance.
 
 ### `catalog`
 
 1. Block unsuccessful or empty capture-backed native builds. Otherwise verify/reuse a catalog
-   checkpoint keyed by build fingerprint, mapping and link normalizer.
+   checkpoint keyed by build fingerprint, mapping, accepted compile/link identities and normalizer.
 2. Locate and normalize compile commands, source paths, arguments and output paths; write the
-   normalized database. Invalid/missing compile data yields `INVALID_COMPILE_DATABASE` and reasons.
+   normalized database. Relative paths resolve from the accepted command directory; the recipe's
+   exact source/build roots map to distinct scratch roots, including nonstandard build layouts.
+   A filename suffix is never source admission. Directory plus arguments define command identity.
+   Invalid/missing compile data yields `INVALID_COMPILE_DATABASE` and reasons.
 3. Catalog accepted build objects/libraries/executables and normalize bounded captured link
-   commands. Publish artifact/link catalogs and counts, then checkpoint the catalog.
+   commands from the receipt's hash-verified `link_database`, not a guessed workspace filename.
+   A valid empty link list is distinct from absent or malformed data. Publish immutable
+   artifact/link/compile catalogs and counts, then checkpoint an eligible catalog. Downstream
+   C++ scopes verify the database's embedded command context and retained build bytes, preserve
+   the working directory, and rebase path operands without changing macro values.
 
 ### `compiled`
 
 1. For a blocked project publish unavailable branch coverage without tool execution.
 2. Otherwise build project, build-action, source, compile-unit and output entities. Use explicit
    compile-output and captured link relationships for `COMPILES_TO` and `LINKS_INTO`.
-3. If no exact compile/link relationship resolves, mark the shard coverage partial. This reason
-   is currently in the coverage row, not the branch's top-level gap list.
+3. If no exact compile/link relationship resolves, mark shard coverage partial and propagate the
+   same reason through the branch, disposition and final summary.
 
 ### `ir`
 
 1. For each usable catalog, check the branch checkpoint; select admitted seeds in seeded mode,
    otherwise clear stale subset replay state before invoking `tool-native-cpp` IR analysis.
-2. Inspect per-translation-unit replay results. Exit 2 with explicit failed-unit receipts allows
-   unaffected units to survive; other failed executions produce unavailable branch coverage.
+2. Require usable per-translation-unit replay results in both modes. Exit 2 with explicit
+   failed-unit receipts allows unaffected units to survive; unusable receipts or other failed
+   executions produce unavailable branch coverage and cannot be checkpointed.
 3. Parse bounded LLVM IR and publish function/call/control-flow and def-use context with source
-   mappings. Name missing/oversized unit output and ambiguous cross-unit callees; do not invent
-   edges. Seeded mode retains its bounded neighborhood/ledger and incomplete scope.
+   mappings in both modes, using the same debug-aware parser and source CFG replay. Retain
+   TU/linkage identities, accepted source hashes and real debug positions, never exact TU line 1.
+   Instruction-detail bounds retain structural successors, dominance and bounded direct calls;
+   omitted detail is named. Name missing/malformed/oversized output and ambiguous cross-unit
+   callees; do not invent edges. Seeded mode retains its bounded neighborhood/ledger and
+   incomplete scope. Parse/CFG failures remain retryable, unlike intentional neighborhood bounds.
 
 ### `ast`
 
 1. Run after IR: seeded AST selection uses the IR-defined neighborhood and binds its handoff
    identity. Full mode clears stale seeded replay state.
-2. Invoke bounded Clang AST/source-CFG replay for selected or full compile units; preserve
-   per-unit failures rather than erasing successful siblings.
-3. Normalize bounded AST declarations/calls and supported source CFG facts; invalid/missing output
-   becomes a named unit gap. AST traversal limits are not whole-program semantic coverage.
+2. Invoke bounded Clang AST replay for selected or full compile units; preserve per-unit failures
+   rather than erasing successful siblings. Full mode uses no guessed source-name/namespace filter.
+3. Normalize bounded AST declarations/calls. Full-mode source admission uses accepted paths before
+   applying the node-detail limit; both source exclusions and detail truncation are named gaps.
+   Missing/malformed output is a failed unit, not an empty valid translation unit. Finalize seeded
+   resolution only after parsing and observing the requested linkage. A failed parse or absent
+   requested function cannot create a reusable resolved-seed result.
 
 Seeded IR joins and handoff keys use compile-unit plus compiler linkage identity, never an
 overload's display name. Local definitions take precedence; cross-TU matches require unique
@@ -339,12 +357,14 @@ retain raw metadata and compile-unit scope without normalized locations, with
 
 ### `binary`
 
-1. Invoke `tool-native-cpp` symbol inspection for usable projects; failed execution produces
-   unavailable coverage. Missing/invalid records produces a named binary-analysis reason.
+1. Invoke `tool-native-cpp` symbol inspection for usable projects. Per-artifact `nm`/`readelf`
+   receipts retain exit, timeout, bounded stderr and truncation. Exit 2 permits partial inspection
+   results; other failed execution produces unavailable coverage. Missing/invalid records,
+   missing subcommand receipts and omitted accepted artifacts produce named reasons.
 2. Index retained artifact metadata and bounded native symbol-table rows with containment edges.
    Do not assign original-source locations merely from symbol names.
-3. The normalizer slices records and symbol lists; it does not emit a separate reason for every
-   such cut. Compare native counts explicitly rather than treating complete coverage as unbounded.
+3. Record/symbol/output cuts are explicit gaps. Failed inspection is not reusable complete empty
+   symbol coverage; successful inspection with zero symbols remains valid.
 
 ### `acceptance`
 
@@ -362,8 +382,8 @@ flowchart LR
   plan --> prepare["prepare.projects: source mapping"]
   prepare --> catalog["catalog.projects: compile / link / artifact catalogs"]
   catalog --> compiled["compiled.projects: build facts"]
-  catalog --> ir["ir.projects: LLVM IR"]
-  ir --> ast["ast.projects: Clang AST / CFG"]
+  catalog --> ir["ir.projects: debug IR + source CFG"]
+  ir --> ast["ast.projects: Clang AST"]
   catalog --> infer["infer.projects: scanner observations"]
   catalog --> binary["binary.projects: compiled symbols"]
   compiled --> publish["acceptance.publish_handoff"]
@@ -392,8 +412,8 @@ default non-retryable metadata, not advisory status.
   binary or Infer reports, Infer capture-count absence/mismatch and unsupported output parsing.
 - Coverage missing: no exact compile/link relation, ambiguous cross-unit IR callee, unresolved
   Infer path and seeded selection/no-seed/neighborhood limits. Inspect branch coverage and seeded
-  ledgers as well as canonical outcomes: some local coverage reasons and bounded slices are not
-  promoted to top-level gaps in the current source.
+  ledgers as well as canonical outcomes. Named presentation limits do not establish completeness
+  outside the retained detail.
 - Workspace/artifact/source hash and custody violations raise. The execution-safety policy can
   stop a tool failure before fallback gap publication.
 
@@ -417,12 +437,31 @@ does not approve analysis loss.
 ## Resume and invalidation
 
 Catalog and branch checkpoints bind project/stage, tool pin and declared platform/validation/tool
-releases. Branch inputs include compile database and branch identity; non-Infer branches also
-bind artifact/link catalogs, seeded IR/AST bind seed policy and AST binds IR neighborhood identity.
-Only success or explicitly checkpointable results qualify; stale/invalid referenced artifacts
-cause a local checkpoint miss. Re-running `prepare.projects` deletes the case root, including
-these local checkpoints: selective branch reuse assumes its prepared case survives runtime unit
-reuse. See [runtime resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
+releases. Branch inputs include compile database, accepted mapping, mode/bounds and semantic
+branch/parser identity; non-Infer branches also bind artifact/link catalogs, seeded IR/AST bind
+seed policy and AST binds IR neighborhood identity. Physical index identity includes retained
+compiler-output bytes and final semantic outcomes, so a healthy retry cannot accidentally reuse a
+failed shard with an unchanged execution receipt. Compiler evidence and ledgers are
+content-addressed; prior published bytes are not overwritten.
+
+Only success or explicitly checkpointable intentional partial results qualify; explicit
+`checkpointable=false` always vetoes reuse, including apparently successful results. Parse, replay
+and missing-CFG failures are not checkpointed. Stale/invalid referenced artifacts cause a local
+checkpoint miss. Re-running `prepare.projects` clears local checkpoints but preserves retained
+evidence: selective branch reuse assumes its prepared staging survives runtime unit reuse.
+Historical catalogs cannot retroactively recover lost cwd/link context; regenerate them from
+accepted build receipts. See [runtime resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
+
+## Deployment boundary
+
+The Python job and scope normalizers are source-mounted; application-code deployment follows the
+existing signed-source reload procedure. However, the native tool Dockerfile **copies**
+`native.py` to `/opt/appsec/native.py`: unfiltered full AST replay, command-directory replay and
+binary subcommand receipts require an operator rebuild of `tool-native-cpp` and the normal
+verified image-pin/release rollout. A source reload alone cannot update that driver. These repairs
+do not change catalog versions, recipe tags, asset hashes, host pins or signing enforcement, and
+do not establish that any deployed image contains the repaired driver. No rebuild or live tool
+validation is implied by unit fixtures.
 
 The source's hard-coded compiler/tool labels and generated missing task bindings are not proof of
 the executed tool version. Verify execution receipts and [image pins](image-pin-verification.md);

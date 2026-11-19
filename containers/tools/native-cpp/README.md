@@ -72,6 +72,20 @@ indexing the units that did replay.
 
 ## Build
 
+`native.py` is image-baked by `COPY native.py /opt/appsec/native.py`, not supplied by the
+Dagster application source mount. Its compiled-reuse repairs (T-5094/T-5095/T-5096) require an
+operator rebuild and the normal verified image identity/pin/release rollout before deployment.
+The source repair alone does not update an existing `1.0.0` image. No catalog/recipe version,
+asset hash or host pin was changed by that repair; the asset closure is unchanged. Rebuilding,
+pinning and live validation remain outstanding operator work, not results of offline unit tests.
+
+Replay now uses each accepted normalized command's working directory. Whole-program AST replay
+does not guess a declaration filter from the source text; seeded filters remain explicit
+per-command inputs. Replay receipts name output truncation. Binary inspection retains
+per-artifact `nm` and `readelf` outcomes (including bounded stderr, timeouts and output cuts) and
+returns a partial-failure exit when either inspection fails. A successful empty symbol table is
+different from missing or failed inspection.
+
 Run from the repository root. The launcher verifies the locked asset, runs the build with
 networking disabled, and writes logs under `runs/container-builds/<run-id>/`:
 

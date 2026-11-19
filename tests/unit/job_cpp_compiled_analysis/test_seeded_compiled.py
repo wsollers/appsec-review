@@ -79,6 +79,182 @@ def _canned_ir(definitions, path="src/util.cpp"):
     return "\n".join([*lines, f'!200 = !DIFile(filename: "{path}", directory: "/scratch/source")'])
 
 
+class DamagedExecutor(sc.FixtureExecutor):
+    def __init__(self, staged, mode, damage):
+        super().__init__(staged.run_root)
+        self.mode, self.damage = mode, damage
+
+    def execute(self, request):
+        result = super().execute(request)
+        if request.argv[1] == self.mode:
+            destination = request.scratch_root / "analysis" / self.mode
+            if self.damage == "receipt":
+                (destination / "receipt.json").unlink()
+            else:
+                suffix = {"ir": "ll", "ast": "json", "cfg": "cfg.txt"}[self.mode]
+                for path in destination.glob(f"tu-*.{suffix}"):
+                    path.write_text(self.damage, encoding="utf-8")
+        return result
+
+
+@pytest.mark.parametrize("damage", ["{broken", "{}", "[]"])
+def test_ast_parse_failure_does_not_resolve_seeds_or_survive_retry(tmp_path, damage):
+    staged = sc.stage(tmp_path)
+    ir, _ = _run(staged, sc.FixtureExecutor(staged.run_root), "ir")
+    ast, _ = _run(staged, DamagedExecutor(staged, "ast", damage), "ast", ir=ir)
+    failed = ast["projects"][sc.CASE]
+    assert failed["seeded"]["resolved_seed_count"] == 0
+    assert failed["checkpointable"] is False
+    ledger_path = staged.run_root / failed["ledger"]["path"]
+    ledger_bytes = ledger_path.read_bytes()
+    ledger = json.loads(ledger_bytes)["seeded"]["seeds"]
+    assert {row["reason"] for row in ledger} == {"producer_failed"}
+    executor = sc.FixtureExecutor(staged.run_root)
+    repaired, _ = _run(staged, executor, "ast", ir=ir)
+    assert executor.calls and not repaired["projects"][sc.CASE].get("checkpoint_reused")
+    assert repaired["projects"][sc.CASE]["seeded"]["resolved_seed_count"] == 2
+    assert ledger_path.read_bytes() == ledger_bytes
+    assert repaired["projects"][sc.CASE]["artifact"] != failed["artifact"]
+    assert len(_rows(staged, repaired)) > 0
+
+
+@pytest.mark.parametrize("mode,damage", [
+    ("cfg", "receipt"), ("cfg", "malformed CFG"),
+    ("ir", "not LLVM IR"),
+    ("ir", "define void @missing_debug() {\nentry:\n  ret void\n}\n"),
+], ids=["cfg-receipt", "cfg-malformed", "ir-malformed", "ir-no-debug"])
+def test_failed_or_unparsed_replay_is_retried_without_reusing_old_shards(tmp_path, mode, damage):
+    staged = sc.stage(tmp_path)
+    first, _ = _run(staged, DamagedExecutor(staged, mode, damage), "ir")
+    failed = first["projects"][sc.CASE]
+    assert failed["checkpointable"] is False
+    assert failed["gaps"]
+    old_path = staged.run_root / failed["artifact"]["path"]
+    old_bytes = old_path.read_bytes()
+    executor = sc.FixtureExecutor(staged.run_root)
+    repaired, _ = _run(staged, executor, "ir")
+    assert executor.calls and not repaired["projects"][sc.CASE].get("checkpoint_reused")
+    assert repaired["projects"][sc.CASE]["source_cfg_count"] == 5
+    assert old_path.read_bytes() == old_bytes
+    assert repaired["projects"][sc.CASE]["artifact"] != failed["artifact"]
+
+
+@pytest.mark.parametrize("mode", ["ir", "ast"])
+def test_whole_program_requires_usable_replay_receipt_and_retries(tmp_path, mode):
+    staged = sc.stage(tmp_path)
+    first, _ = _run(staged, DamagedExecutor(staged, mode, "receipt"), mode, seeded_settings=None)
+    failed = first["projects"][sc.CASE]
+    assert failed["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any("receipt" in gap for gap in failed["gaps"])
+    assert not failed.get("checkpointable")
+    assert {status for _, status, _ in _coverage(staged, first)} == {"unavailable"}
+    executor = sc.FixtureExecutor(staged.run_root)
+    repaired, _ = _run(staged, executor, mode, seeded_settings=None)
+    assert executor.calls and not repaired["projects"][sc.CASE].get("checkpoint_reused")
+    assert repaired["projects"][sc.CASE]["entity_count"] > 0
+
+
+def test_whole_program_ir_publishes_flow_source_cfg_and_debug_location(tmp_path):
+    staged = sc.stage(tmp_path)
+    output, _ = _run(staged, sc.FixtureExecutor(staged.run_root), "ir", seeded_settings=None)
+    with _indexed(staged, output) as db:
+        rows = list(db.execute("select e.name, e.payload_json, l.path, l.start_line from entities e "
+                               "left join locations l on e.identity=l.entity_id"))
+    copy = next(row for row in rows if row["name"] == "copy_field")
+    payload = json.loads(copy["payload_json"])
+    assert payload["flow"]["blocks"] and payload["flow"]["dominators"]
+    assert payload["source_cfg"]["blocks"]
+    assert (copy["path"], copy["start_line"]) == ("proj/src/util.cpp", 11)
+    assert any("source_cfg_no_block_lines" in gap for gap in output["gaps"])
+
+
+@pytest.mark.parametrize("mode", ["ir", "ast"])
+def test_whole_program_valid_empty_output_is_not_a_parse_failure(tmp_path, mode):
+    class EmptyExecutor(sc.FixtureExecutor):
+        def execute(self, request):
+            result = super().execute(request)
+            kind = request.argv[1]
+            suffix, text = {
+                "ast": ("json", '{"kind":"TranslationUnitDecl","inner":[]}'),
+                "ir": ("ll", '; ModuleID = "empty"\nsource_filename = "empty.cpp"\n'),
+                "cfg": ("cfg.txt", ""),
+            }[kind]
+            for path in (request.scratch_root / "analysis" / kind).glob(f"tu-*.{suffix}"):
+                path.write_text(text)
+            return result
+    staged = sc.stage(tmp_path)
+    executor = EmptyExecutor(staged.run_root)
+    output, _ = _run(staged, executor, mode, seeded_settings=None)
+    result = output["projects"][sc.CASE]
+    assert result["entity_count"] == 0 and result["terminal_status"] == "SUCCEEDED"
+    assert result["gaps"] == [] and result["checkpointable"]
+    calls = len(executor.calls)
+    repeated, _ = _run(staged, executor, mode, seeded_settings=None)
+    assert repeated["projects"][sc.CASE]["checkpoint_reused"] and len(executor.calls) == calls
+
+
+def test_same_case_compile_context_change_replays_and_keeps_old_evidence(tmp_path):
+    from appsec_review.jobs.job_cpp_compiled_analysis import job
+    from appsec_review.storage import canonical_json
+    staged = sc.stage(tmp_path)
+    first, _ = _run(staged, sc.FixtureExecutor(staged.run_root), "ir")
+    old = first["projects"][sc.CASE]
+    saved = {item["path"]: (staged.run_root / item["path"]).read_bytes()
+             for item in [old["artifact"], old["ledger"], *old["evidence"]]}
+    for row in staged.rows:
+        row["directory"] = "/scratch/source/src"
+        row["command_sha256"] = hashlib.sha256(canonical_json({
+            "arguments": row["arguments"], "directory": row["directory"]})).hexdigest()
+        row["compile_unit_id"] = job._tu_identity(staged.mapping, row)
+    database = staged.case_root / "normalized-compile-commands.json"
+    database.write_text(json.dumps(staged.rows))
+    staged.cataloged["compile_database"] = job._artifact(staged.run_root, database)
+    executor = sc.FixtureExecutor(staged.run_root)
+    second, _ = _run(staged, executor, "ir")
+    assert executor.calls and not second["projects"][sc.CASE].get("checkpoint_reused")
+    assert old["artifact"] != second["projects"][sc.CASE]["artifact"]
+    assert all((staged.run_root / path).read_bytes() == data for path, data in saved.items())
+
+
+def test_ast_node_bound_names_the_lost_detail(tmp_path, monkeypatch):
+    from appsec_review.jobs.job_cpp_compiled_analysis import job
+    staged = sc.stage(tmp_path)
+    monkeypatch.setattr(job, "AST_NODE_LIMIT", 3)
+    output, _ = _run(staged, sc.FixtureExecutor(staged.run_root), "ast", seeded_settings=None)
+    assert output["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any("ast_truncated" in gap and "3" in gap for gap in output["gaps"])
+
+
+def test_whole_ast_source_admission_precedes_the_detail_limit(tmp_path, monkeypatch):
+    from appsec_review.jobs.job_cpp_compiled_analysis import job
+    staged = sc.stage(tmp_path)
+    monkeypatch.setattr(job, "AST_NODE_LIMIT", 2)
+    nodes = [{"kind": "FunctionDecl", "name": f"foreign{i}", "id": f"foreign{i}",
+              "loc": {"file": "/foreign/include/util.h", "line": 1, "col": 1}} for i in range(4)]
+    nodes += [{"kind": "FunctionDecl", "name": f"accepted{i}", "id": f"accepted{i}",
+               "loc": {"file": "/scratch/source/include/util.h", "line": 3, "col": 1}} for i in range(3)]
+    output, _ = _run(staged, DamagedExecutor(staged, "ast", json.dumps({
+        "kind": "TranslationUnitDecl", "inner": nodes})), "ast", seeded_settings=None)
+    with _indexed(staged, output) as db:
+        assert {row[0] for row in db.execute("select distinct name from entities")} == {"accepted0", "accepted1"}
+    assert any("ast_source_filtered" in gap for gap in output["gaps"])
+    assert any("ast_truncated" in gap for gap in output["gaps"])
+
+
+@pytest.mark.parametrize("mode", ["ir", "ast"])
+def test_whole_program_missing_or_malformed_payload_cannot_be_cached(tmp_path, mode):
+    staged = sc.stage(tmp_path)
+    output, _ = _run(staged, DamagedExecutor(staged, mode, "not a compiler document"),
+                     mode, seeded_settings=None)
+    result = output["projects"][sc.CASE]
+    assert result["checkpointable"] is False
+    assert result["terminal_status"] == "COMPLETED_WITH_GAPS" and result["gaps"]
+    assert result["entity_count"] == 0
+    executor = sc.FixtureExecutor(staged.run_root)
+    second, _ = _run(staged, executor, mode, seeded_settings=None)
+    assert executor.calls and not second["projects"][sc.CASE].get("checkpoint_reused")
+
+
 def _indexed(staged, output):
     path = staged.run_root / output["projects"][sc.CASE]["artifact"]["path"]
     connection = sqlite3.connect(path)
@@ -325,6 +501,11 @@ def test_a_failed_cfg_replay_keeps_the_ir_flow_and_names_the_gap(tmp_path: Path)
     assert "source_cfg" in payloads["handle_packet"]
     assert any(gap.startswith("source_cfg_unmatched") and "copy_field" in gap for gap in result["gaps"])
     assert {status for _, status, _ in _coverage(staged, ir)} == {"partial"}
+    assert result["checkpointable"] is False
+    healthy = sc.FixtureExecutor(staged.run_root)
+    repeated, _ = _run(staged, healthy, "ir")
+    assert healthy.calls and not repeated["projects"][sc.CASE].get("checkpoint_reused")
+    assert repeated["projects"][sc.CASE]["source_cfg_count"] == 5
 
 
 def test_zero_seeds_is_a_clean_skip_with_a_named_gap_and_partial_coverage(tmp_path: Path) -> None:
@@ -621,7 +802,8 @@ def test_seeded_ir_and_ast_unusual_replay_and_neighborhood_branches(tmp_path: Pa
     # Note: dup_callee is defined in two TUs without a local def in TU 2 -> test declared external + unparsed + unmatched CFG.
     ir_res, _ = _run(staged2, CustomIrExecutor(), "ir")
     ir_proj = ir_res["projects"][sc.CASE]
-    assert any("carry no debug subprogram" in g for g in ir_proj["gaps"])
+    assert any("no debug subprogram" in g for g in ir_proj["gaps"])
+    assert ir_proj["checkpointable"] is False
     assert any("source_cfg_unmatched" in g for g in ir_proj["gaps"])
     payloads = [json.loads(row[5]) for row in _rows(staged2, ir_res)]
     assert any(p.get("kind") == "declaration" for p in payloads)
