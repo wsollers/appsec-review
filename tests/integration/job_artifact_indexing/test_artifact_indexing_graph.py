@@ -26,16 +26,11 @@ import pytest
 from appsec_review.config import load_config
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_artifact_indexing import (
-    artifact_index_fingerprint,
     build_job,
     canonical_artifact_identity,
     load_accepted_artifact_index,
 )
-from appsec_review.jobs.job_artifact_indexing.job import (
-    _finish_shard,
-    _manifest_entries,
-    _shard_layout,
-)
+from appsec_review.jobs.job_artifact_indexing.job import _finish_shard
 from appsec_review.retrieval import (
     INDEX_SCHEMA,
     EntityKind,
@@ -577,19 +572,21 @@ def test_mixed_language_partition_resume_selective_invalidation_and_retrieval(tm
     assert outputs["index.members"]["reused_count"] == outputs["index.members"]["shard_count"]
     assert outputs["index.relationships"]["reused_count"] == outputs["index.relationships"]["shard_count"]
 
-    before = {item["shard_id"]: item["fingerprint"] for item in RetrievalCore(
-              config.runtime.runs_dir, RUN_ID).manifest["indexes"] if item["name"] == "artifacts"}
+    before_indexes = {item["shard_id"]: item for item in RetrievalCore(
+        config.runtime.runs_dir, RUN_ID).manifest["indexes"] if item["name"] == "artifacts"}
+    before = {shard_id: item["fingerprint"] for shard_id, item in before_indexes.items()}
     changed = receipts[0]["artifacts"][0]
     old_relation_shard = f"relations-{receipts[0]['build_unit_id']}-0000"
-    assert before[old_relation_shard] == artifact_index_fingerprint(
-        name="artifacts", target_snapshot=snapshot, receipt=receipts[0],
-        artifacts=receipts[0]["artifacts"],
-        upstream_manifests=_manifest_entries(receipts[0], receipts[0]["artifacts"]),
-        extractor_identity="none",
-        parser_identity=config.job("job_artifact_indexing").settings["relationship_parser_identity"],
-        normalizer_identity=config.job("job_artifact_indexing").settings["normalizer_identity"],
-        mapping_identity=config.job("job_artifact_indexing").settings["mapping_identity"],
-        shard_layout=_shard_layout())
+    old_relation_index = before_indexes[old_relation_shard]
+    old_relation_path = run_root / old_relation_index["relative_path"]
+    old_relation_bytes = old_relation_path.read_bytes()
+    assert file_sha256(old_relation_path) == old_relation_index["sha256"]
+    with sqlite3.connect(f"{old_relation_path.resolve().as_uri()}?mode=ro&immutable=1", uri=True) as database:
+        metadata = dict(database.execute("SELECT key, value FROM metadata"))
+    assert {key: metadata[key] for key in ("name", "schema", "fingerprint", "shard_id", "target_snapshot")} == {
+        "name": "artifacts", "schema": INDEX_SCHEMA, "fingerprint": old_relation_index["fingerprint"],
+        "shard_id": old_relation_shard, "target_snapshot": snapshot,
+    }
     changed_path = run_root / changed["path"]
     changed_path.write_bytes(b"object-two")
     changed["sha256"] = file_sha256(changed_path)
@@ -609,6 +606,8 @@ def test_mixed_language_partition_resume_selective_invalidation_and_retrieval(tm
         "catalog-build-unit-00000000000000000001-object_file",
         old_relation_shard,
     }
+    assert old_relation_path.read_bytes() == old_relation_bytes
+    assert file_sha256(old_relation_path) == old_relation_index["sha256"]
 
 
 def test_tamper_corruption_and_concurrent_reuse_stop_or_reuse_safely(tmp_path: Path) -> None:
