@@ -79,7 +79,7 @@ def test_default_settings_use_index_mode_and_validate_bounds() -> None:
         DependencyIntelligenceSettings.from_settings({"osv_version_matching": "bogus"})
 
 
-def test_indexed_osv_matching_and_four_reachability_classifications(tmp_path: Path) -> None:
+def test_indexed_osv_matching_keeps_unsupported_binding_as_context(tmp_path: Path) -> None:
     osv_root = tmp_path / "osv_snapshot"
     _build_osv_sqlite(
         osv_root / "index" / "osv.sqlite",
@@ -175,11 +175,15 @@ def test_indexed_osv_matching_and_four_reachability_classifications(tmp_path: Pa
     assert doc["osv_fallback_reason"] is None
     assert doc["telemetry"]["osv_matching_mode"] == "index"
     assert doc["telemetry"]["advisories_matched"] == 4
-    assert doc["telemetry"]["symbol_reachable_count"] == 1
+    assert doc["telemetry"]["symbol_reachable_count"] == 0
 
     by_id = {item["advisory_id"]: item for item in doc["advisories"]}
-    assert by_id["GHSA-sym-0001"]["reachability"] == REACHABILITY_SYMBOL
-    assert any(cs["path"] == "src/app.ts" and cs["symbol"] == "parseUnsafeRange" for cs in by_id["GHSA-sym-0001"]["call_sites"])
+    assert by_id["GHSA-sym-0001"]["reachability"] == REACHABILITY_IMPORTED
+    assert by_id["GHSA-sym-0001"]["call_sites"] == [{
+        "path": "src/app.ts", "line": 1, "symbol": "semver-parse", "kind": "package_import",
+        "ffi_mechanism": None, "file_sha256": file_sha256(target / "src/app.ts"),
+    }]
+    assert "reachability_symbol_binding_unsupported:src/app.ts" in doc["gaps"]
     assert by_id["GHSA-imp-0002"]["reachability"] == REACHABILITY_IMPORTED
     assert by_id["GHSA-trn-0003"]["reachability"] == REACHABILITY_TRANSITIVE
     assert by_id["GHSA-unr-0004"]["reachability"] == REACHABILITY_UNKNOWN
@@ -228,7 +232,7 @@ def test_missing_index_does_not_fallback_to_unverified_raw_directory(tmp_path: P
     assert doc["telemetry"]["advisories_matched"] == 0
 
 
-def test_eight_ecosystem_native_ffi_boundary_reachability(tmp_path: Path) -> None:
+def test_eight_ecosystem_native_ffi_context_does_not_prove_vulnerable_symbol_use(tmp_path: Path) -> None:
     target = tmp_path / "target"
     (target / "src").mkdir(parents=True)
     (target / "src" / "bridge.py").write_text(
@@ -279,7 +283,8 @@ def test_eight_ecosystem_native_ffi_boundary_reachability(tmp_path: Path) -> Non
         repository_root=ROOT,
         run_root=tmp_path / "run",
         target_root=target,
-        dependencies=[],
+        dependencies=[{"dependency_id": row["dependency_ids"][0], "name": row["name"],
+                       "version": row["version"], "purl": row["purl"]} for row in native_matches],
         native_advisory_matches=native_matches,
         partition_files=_files(target, [
             "src/bridge.py", "src/NativePin.cs", "src/JniBridge.java", "src/ffi_wrap.rb",
@@ -291,11 +296,13 @@ def test_eight_ecosystem_native_ffi_boundary_reachability(tmp_path: Path) -> Non
     jsonschema.validate(instance=doc, schema=schema)
     assert doc["telemetry"]["advisories_matched"] == 8
     assert doc["telemetry"]["ffi_boundary_matches"] == 8
-    assert doc["telemetry"]["symbol_reachable_count"] == 8
+    assert doc["telemetry"]["symbol_reachable_count"] == 0
     for adv in doc["advisories"]:
-        assert adv["reachability"] == REACHABILITY_SYMBOL
+        assert adv["reachability"] == REACHABILITY_IMPORTED
         assert adv["ffi_mechanisms"]
         assert adv["call_sites"]
+        assert all(site["kind"] == "ffi_boundary" for site in adv["call_sites"])
+        assert f"reachability_native_symbol_binding_not_established:{adv['advisory_id']}" in doc["gaps"]
 
 
 def test_empty_partition_never_walks_target_and_has_unknown_reachability(tmp_path, monkeypatch):
@@ -339,9 +346,12 @@ def test_source_and_callsite_caps_are_named_gaps(tmp_path):
     assert len(index["gaps"]) == 2 and not index["imports"]
     doc = evaluate_sca_reachability(
         source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
-        target_root=tmp_path, dependencies=[], partition_files=files,
+        target_root=tmp_path, partition_files=files,
+        dependencies=[{"dependency_id": "yaml", "name": "pyyaml", "version": "1.0",
+                       "purl": "pkg:pypi/pyyaml@1.0"}],
         scanner_advisories=[{"advisory": "CVE-2026-1111", "package": "pyyaml",
-                            "affected_symbols": ["load"]}],
+                            "version": "1.0", "purl": "pkg:pypi/pyyaml@1.0",
+                            "affected_symbols": ["load"], "affected_modules": ["pyyaml"]}],
         settings=DependencyIntelligenceSettings(max_call_sites_per_advisory=1),
     )
     assert any("call_sites_truncated" in gap for gap in doc["gaps"])
@@ -450,3 +460,275 @@ def test_malformed_pinned_osv_database_preserves_database_error(tmp_path):
             source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
             target_root=None, dependencies=[], osv_snapshot=pin,
         )
+
+
+def _python_advisory(
+    tmp_path: Path, source: str, *, cap: int = 32, additional_sources: dict[str, str] | None = None,
+) -> dict:
+    (tmp_path / "app.py").write_text(source, encoding="utf-8")
+    for path, text in (additional_sources or {}).items():
+        (tmp_path / path).write_text(text, encoding="utf-8")
+    database = tmp_path / "build.sqlite"
+    _build_osv_sqlite(database, [{
+        "id": "PYSEC-binding",
+        "affected": [{
+            "package": {"ecosystem": "PyPI", "name": "danger"},
+            "versions": ["1.0"],
+            "ecosystem_specific": {"imports": [{"path": "danger", "symbols": ["parse"]}]},
+        }],
+    }])
+    return evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=tmp_path, partition_files=_files(tmp_path, ["app.py", *sorted(additional_sources or {})]),
+        dependencies=[{"dependency_id": "danger-old", "name": "danger", "version": "1.0",
+                       "purl": "pkg:pypi/danger@1.0"}],
+        osv_snapshot=_pin(tmp_path / "feed", database),
+        settings=DependencyIntelligenceSettings(max_call_sites_per_advisory=cap),
+    )
+
+
+@pytest.mark.parametrize("source", [
+    "from danger import parse\n",
+    "import danger\ndef parse(x): return x\nparse(value)\n",
+    "from danger import parse\ndef wrapper(parse): return parse(value)\n",
+    "import danger\ndef wrapper(danger): return danger.parse(value)\n",
+    "from danger import parse\nparse = local\nparse(value)\n",
+    "from danger import parse\nother.parse(value)\n",
+    "import danger\n# danger.parse(value)\ntext = 'danger.parse(value)'\n",
+], ids=["import-only", "local-function", "shadowed-function", "shadowed-module",
+        "reassignment", "foreign-receiver", "comment-string"])
+def test_imports_and_unrelated_calls_do_not_establish_symbol_use(tmp_path, source):
+    doc = _python_advisory(tmp_path, source)
+    record = doc["advisories"][0]
+    assert record["reachability"] == REACHABILITY_IMPORTED
+    assert not any(site["kind"] == "symbol_call" for site in record["call_sites"])
+    assert doc["telemetry"]["symbol_reachable_count"] == 0
+
+
+@pytest.mark.parametrize("source", [
+    "from danger import parse as decode\ndecode(value)\n",
+    "import danger as parser\nparser.parse(value)\n",
+], ids=["symbol-alias", "module-alias"])
+def test_unambiguous_import_bound_calls_have_real_source_locations(tmp_path, source):
+    doc = _python_advisory(tmp_path, source)
+    record = doc["advisories"][0]
+    assert record["reachability"] == REACHABILITY_SYMBOL
+    assert record["call_sites"] == [{
+        "path": "app.py", "line": 2, "symbol": "parse", "kind": "symbol_call",
+        "ffi_mechanism": None, "file_sha256": file_sha256(tmp_path / "app.py"),
+    }]
+    jsonschema.validate(doc, json.loads(SCHEMA_PATH.read_text(encoding="utf-8")))
+
+
+@pytest.mark.parametrize("cap", [3, 32, 35, 64])
+def test_callsite_limit_counts_unique_locations_without_hidden_cap(tmp_path, cap):
+    doc = _python_advisory(tmp_path, "import danger\n" + "danger.parse(value)\n" * 40, cap=cap)
+    sites = doc["advisories"][0]["call_sites"]
+    assert [site["line"] for site in sites] == list(range(2, 2 + min(cap, 40)))
+    truncation = [gap for gap in doc["gaps"] if "reachability_call_sites_truncated:" in gap]
+    assert truncation == (
+        [f"reachability_call_sites_truncated:PYSEC-binding:pkg:pypi/danger@1.0:omitted={40 - cap}"]
+        if cap < 40 else []
+    )
+
+
+def test_native_library_load_does_not_bind_unrelated_print_call(tmp_path):
+    (tmp_path / "app.py").write_text(
+        'import ctypes\nz = ctypes.CDLL("libz.so.1")\nprint("hello")\n', encoding="utf-8")
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=tmp_path, partition_files=_files(tmp_path, ["app.py"]),
+        dependencies=[{"dependency_id": "z-old", "name": "z", "version": "1.0",
+                       "purl": "pkg:generic/z@1.0"}],
+        native_advisory_matches=[{"cve_id": "CVE-2026-1234", "name": "z", "version": "1.0",
+                                 "purl": "pkg:generic/z@1.0", "dependency_ids": ["z-old"]}],
+        settings=DependencyIntelligenceSettings(osv_version_matching="disabled"),
+    )
+    assert doc["advisories"][0]["reachability"] == REACHABILITY_IMPORTED
+    assert all(site["symbol"] != "print" for site in doc["advisories"][0]["call_sites"])
+
+
+def test_local_module_prevents_external_package_symbol_binding(tmp_path):
+    doc = _python_advisory(
+        tmp_path, "import danger\ndanger.parse(value)\n",
+        additional_sources={"danger.py": "def parse(value): return value\n"},
+    )
+    assert doc["advisories"][0]["reachability"] == REACHABILITY_UNKNOWN
+    assert "reachability_python_binding_ambiguous:app.py" in doc["gaps"]
+
+
+def test_invalid_python_remains_unknown_with_parse_gap(tmp_path):
+    doc = _python_advisory(tmp_path, "from danger import parse\nif (: parse(value)\n")
+    assert doc["advisories"][0]["reachability"] == REACHABILITY_UNKNOWN
+    assert "reachability_python_parse_failed:app.py" in doc["gaps"]
+
+
+@pytest.mark.parametrize("purl,version,expected", [
+    ("pkg:npm/same@1.0", "1.0", ["old"]),
+    ("pkg:npm/same@1.0", None, ["old"]),
+    ("pkg:npm/same@1.0", "2.0", []),
+    (None, "1.0", []),
+    ("pkg:npm/other/same@1.0", "1.0", []),
+], ids=["exact", "purl-version", "conflict", "unknown", "foreign-namespace"])
+def test_scanner_binding_uses_coordinates_not_display_name(tmp_path, purl, version, expected):
+    from appsec_review.indexing.links import advisory_pairs
+
+    observations = advisory_pairs({"payload": {"scanner_identity": "grype/fixture", "observation": {
+        "matches": [{"vulnerability": {"id": "CVE-2026-1234"},
+                     "artifact": {"name": "same", "version": version, "purl": purl}}],
+    }}})
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=None, dependencies=[
+            {"dependency_id": identifier, "name": "same", "version": release,
+             "purl": f"pkg:{eco}/same@{release}"}
+            for identifier, eco, release in [
+                ("old", "npm", "1.0"), ("fixed", "npm", "2.0"), ("foreign", "pypi", "1.0"),
+            ]
+        ], scanner_advisories=observations,
+        settings=DependencyIntelligenceSettings(osv_version_matching="disabled"),
+    )
+    record = doc["advisories"][0]
+    assert record["dependency_ids"] == expected
+    if not expected:
+        assert record["reachability"] == REACHABILITY_UNKNOWN
+        assert any("sca_dependency_binding_unresolved:" in gap for gap in doc["gaps"])
+
+
+def test_same_advisory_separates_ecosystems_and_osv_fixed_versions(tmp_path):
+    database = tmp_path / "build.sqlite"
+    _build_osv_sqlite(database, [{
+        "id": "CVE-2026-1234", "affected": [{
+            "package": {"ecosystem": "npm", "name": "same"},
+            "ranges": [{"type": "SEMVER", "events": [{"introduced": "1.0.0"}, {"fixed": "2.0.0"}]}],
+        }],
+    }])
+    dependencies = [
+        {"dependency_id": identifier, "name": "same", "version": release,
+         "purl": f"pkg:{eco}/same@{release}"}
+        for identifier, eco, release in [
+            ("old", "npm", "1.0.0"), ("fixed", "npm", "2.0.0"), ("foreign", "pypi", "1.0.0"),
+        ]
+    ]
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=None, dependencies=dependencies, osv_snapshot=_pin(tmp_path / "feed", database),
+        scanner_advisories=[{"advisory": "CVE-2026-1234", "package": "same", "version": "1.0.0",
+                             "purl": "pkg:pypi/same@1.0.0"}],
+    )
+    assert [(row["ecosystem"], row["dependency_ids"]) for row in doc["advisories"]] == [
+        ("PyPI", ["foreign"]), ("npm", ["old"]),
+    ]
+
+
+def test_scanner_binding_preserves_purl_qualifiers_and_explicit_instance_ids(tmp_path):
+    base = "pkg:generic/same@1.0"
+    dependencies = [
+        {"dependency_id": identifier, "name": "same", "version": "1.0", "purl": base + qualifier}
+        for identifier, qualifier in [("plain", ""), ("x86", "?arch=x86"), ("arm", "?arch=arm")]
+    ]
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=None, dependencies=dependencies,
+        scanner_advisories=[{"advisory": "CVE-2026-1234", "package": "same",
+                             "purl": base + "?arch=arm", "version": "1.0"}],
+        native_advisory_matches=[{"cve_id": "CVE-2026-1235", "name": "same",
+                                 "purl": base, "version": "1.0", "dependency_ids": ["arm"]}],
+        settings=DependencyIntelligenceSettings(osv_version_matching="disabled"),
+    )
+    by_id = {row["advisory_id"]: row for row in doc["advisories"]}
+    assert by_id["CVE-2026-1234"]["dependency_ids"] == ["arm"]
+    assert by_id["CVE-2026-1235"]["dependency_ids"] == []
+
+
+def test_osv_symbols_are_taken_only_from_the_version_matched_affected_entry(tmp_path):
+    database = tmp_path / "build.sqlite"
+    _build_osv_sqlite(database, [{
+        "id": "PYSEC-binding", "affected": [
+            {"package": {"ecosystem": "PyPI", "name": "danger"}, "versions": [version],
+             "ecosystem_specific": {"imports": [{"path": "danger", "symbols": [symbol]}]}}
+            for version, symbol in [("1.0", "other"), ("2.0", "parse")]
+        ],
+    }])
+    (tmp_path / "app.py").write_text("import danger\ndanger.parse(value)\n", encoding="utf-8")
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=tmp_path, partition_files=_files(tmp_path, ["app.py"]),
+        dependencies=[{"dependency_id": "old", "name": "danger", "purl": "pkg:pypi/danger@1.0"}],
+        osv_snapshot=_pin(tmp_path / "feed", database),
+    )
+    assert doc["advisories"][0]["affected_symbols"] == ["danger.other"]
+    assert doc["advisories"][0]["reachability"] == REACHABILITY_IMPORTED
+
+
+def test_multiple_installed_versions_do_not_select_a_source_import_instance(tmp_path):
+    (tmp_path / "app.py").write_text("import danger\ndanger.parse(value)\n", encoding="utf-8")
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=tmp_path, partition_files=_files(tmp_path, ["app.py"]),
+        dependencies=[{"dependency_id": version, "name": "danger", "purl": f"pkg:pypi/danger@{version}"}
+                      for version in ["1.0", "2.0"]],
+        scanner_advisories=[{"advisory": "PYSEC-binding", "package": "danger", "version": "1.0",
+                             "purl": "pkg:pypi/danger@1.0", "affected_symbols": ["parse"],
+                             "affected_modules": ["danger"]}],
+        settings=DependencyIntelligenceSettings(osv_version_matching="disabled"),
+    )
+    assert doc["advisories"][0]["dependency_ids"] == ["1.0"]
+    assert doc["advisories"][0]["reachability"] == REACHABILITY_IMPORTED
+    assert "reachability_package_binding_ambiguous:PYSEC-binding:danger" in doc["gaps"]
+
+
+@pytest.mark.parametrize("purl,modules,expected", [
+    ("pkg:npm/danger@1.0", ["danger"], REACHABILITY_UNKNOWN),
+    ("pkg:pypi/danger@1.0", [], REACHABILITY_IMPORTED),
+], ids=["foreign-source-ecosystem", "missing-module-map"])
+def test_source_name_alone_does_not_bind_package_symbols(tmp_path, purl, modules, expected):
+    (tmp_path / "app.py").write_text("import danger\ndanger.parse(value)\n", encoding="utf-8")
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=tmp_path, partition_files=_files(tmp_path, ["app.py"]),
+        dependencies=[{"dependency_id": "dep", "name": "danger", "purl": purl}],
+        scanner_advisories=[{"advisory": "ADV-binding", "package": "danger", "purl": purl,
+                             "affected_symbols": ["parse"], "affected_modules": modules}],
+        settings=DependencyIntelligenceSettings(osv_version_matching="disabled"),
+    )
+    assert doc["advisories"][0]["dependency_ids"] == ["dep"]
+    assert doc["advisories"][0]["reachability"] == expected
+    assert "reachability_symbol_binding_not_established:ADV-binding" in doc["gaps"]
+
+
+def test_merged_observations_do_not_invent_module_symbol_pairs(tmp_path):
+    (tmp_path / "app.py").write_text("import danger\ndanger.parse(value)\n", encoding="utf-8")
+    observation = {"advisory": "ADV-binding", "package": "danger", "purl": "pkg:pypi/danger@1.0"}
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=tmp_path, partition_files=_files(tmp_path, ["app.py"]),
+        dependencies=[{"dependency_id": "dep", "name": "danger", "purl": observation["purl"]}],
+        scanner_advisories=[
+            {**observation, "affected_symbols": ["parse"]},
+            {**observation, "affected_symbols": ["other"], "affected_modules": ["danger"]},
+        ],
+        settings=DependencyIntelligenceSettings(osv_version_matching="disabled"),
+    )
+    assert len(doc["advisories"]) == 1
+    assert doc["advisories"][0]["reachability"] == REACHABILITY_IMPORTED
+
+
+@pytest.mark.parametrize("defect", ["missing-instance-id", "incomplete-competing-release"])
+def test_incomplete_dependency_evidence_never_fabricates_symbol_binding(tmp_path, defect):
+    (tmp_path / "app.py").write_text("import danger\ndanger.parse(value)\n", encoding="utf-8")
+    dependencies = [{"name": "danger", "purl": "pkg:pypi/danger@1.0"}]
+    if defect == "incomplete-competing-release":
+        dependencies[0]["dependency_id"] = "old"
+        dependencies.append({"dependency_id": "other", "name": "danger"})
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT, repository_root=ROOT, run_root=tmp_path / "run",
+        target_root=tmp_path, partition_files=_files(tmp_path, ["app.py"]), dependencies=dependencies,
+        scanner_advisories=[{"advisory": "ADV-binding", "package": "danger", "purl": "pkg:pypi/danger@1.0",
+                             "affected_symbols": ["parse"], "affected_modules": ["danger"]}],
+        settings=DependencyIntelligenceSettings(osv_version_matching="disabled"),
+    )
+    assert doc["advisories"][0]["dependency_ids"] == (
+        [] if defect == "missing-instance-id" else ["old"])
+    assert doc["advisories"][0]["reachability"] == (
+        REACHABILITY_UNKNOWN if defect == "missing-instance-id" else REACHABILITY_IMPORTED)

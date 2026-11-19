@@ -108,10 +108,38 @@ the source hash. Static absence is `unknown`, never proof of `unreachable_in_tar
 `not_affected` determination. The document carries snapshot provenance and partial-coverage status,
 and its gaps propagate to the dependency-intelligence handoff.
 
+Scanner observations join accepted dependencies by ecosystem, full package coordinates (including
+namespace), exact installed version, and any PURL qualifiers/subpath, never display name alone.
+Conflicting versions, missing coordinates or missing/unmatched instance IDs retain an unbound advisory
+with empty `dependency_ids`, `unknown` reachability and a `sca_dependency_binding_unresolved`
+gap. An advisory for one version or ecosystem does not attach to fixed releases or same-named
+foreign packages. OSV symbols come only from the affected entry selected by the version matcher.
+
+`symbol_reachable` means **bounded static symbol-use evidence**, not proof of whole-program
+runtime reachability. Currently positive symbol evidence is limited to Python AST calls through
+unambiguous top-level imports/aliases, matched to an explicit affected module/symbol mapping.
+Imports, declarations, same-named local calls, strings and comments cannot establish that state.
+Shadowed/reassigned bindings, accepted local-module collisions, ambiguous/incomplete installed versions,
+parse failures and unsupported binding forms retain uncertainty with named gaps. No import-to-
+distribution mapping is guessed from a distribution's display name. Multiple scopes are handled
+conservatively: a shadow/reassignment can suppress otherwise valid calls elsewhere in the file.
+
+Other language imports and native FFI loader/declaration patterns remain contextual evidence only
+(`package_imported` when matched), not vulnerable-symbol calls. Native context is heuristic and
+does not identify the loaded binary or prove a call through it; an unrelated function elsewhere
+in a loader's file does not inherit that library's identity. Non-Python and native symbol binding,
+dynamic dispatch/reflection, inter-file alias flow and whole-program execution are not established
+by this artifact. Inspect its gaps rather than treating these limitations as clean coverage.
+
 The job's typed settings bound `max_source_files`, `max_bytes_per_file`,
 `max_call_sites_per_advisory`, `max_advisories`, and `max_osv_candidates_per_package`. Reaching a
-bound reports omitted coverage. These checks do not run scanners, refresh feeds or create a new
-pipeline stage.
+bound reports omitted coverage. Source extraction is bounded by the accepted file/byte limits,
+without an internal 32-entry call bucket. Matching locations are deduplicated by path, line and
+symbol before the configured per-advisory cap is applied; distinct calls to the same symbol on
+the same line share one location because this schema has no column. A truncation gap
+`reachability_call_sites_truncated:<advisory>:<package-coordinate>:omitted=<count>` reports the exact omitted unique
+locations within scanned coverage, not an estimate of unscanned code. These checks do not run
+scanners, refresh feeds or create a new pipeline stage.
 
 ### Native advisory lookup (NVD CPE ranges)
 

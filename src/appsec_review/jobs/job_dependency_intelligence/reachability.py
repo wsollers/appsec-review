@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from pathlib import Path, PurePosixPath
 import re
 import sqlite3
 from typing import Any
+from urllib.parse import parse_qsl, unquote
 
 from appsec_review import osv_matching
 from appsec_review.jobs.job_dependency_intelligence.native_advisories import purl_parts
@@ -73,13 +75,18 @@ _SOURCE_EXTENSIONS = frozenset({
     ".go", ".rs", ".rb", ".php", ".java", ".kt", ".cs",
     ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx",
 })
+_SOURCE_ECOSYSTEM = {
+    suffix: ecosystem
+    for ecosystem, suffixes in (
+        ("PyPI", (".py", ".pyi")), ("npm", (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx")),
+        ("Go", (".go",)), ("crates.io", (".rs",)), ("RubyGems", (".rb",)),
+        ("Packagist", (".php",)), ("Maven", (".java", ".kt")), ("NuGet", (".cs",)),
+        ("native", (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx")),
+    )
+    for suffix in suffixes
+}
 _CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,}\b", re.IGNORECASE)
-_CALL_TOKEN_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]{2,127})\s*\(")
-_MEMBER_CALL_RE = re.compile(r"(?:\.|::|->)\s*([A-Za-z_][A-Za-z0-9_]{1,127})\s*\(")
-
 # Language import extractors (line-oriented, bounded, deterministic)
-_PY_FROM_RE = re.compile(r"^\s*from\s+([A-Za-z_][A-Za-z0-9_.]*)\s+import\s+(.+)$")
-_PY_IMPORT_RE = re.compile(r"^\s*import\s+([A-Za-z_][A-Za-z0-9_.,\s]*)$")
 _JS_IMPORT_RE = re.compile(r"""(?:from|import)\s+['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)""")
 _GO_IMPORT_RE = re.compile(r"""^\s*(?:import\s+)?(?:[A-Za-z_][A-Za-z0-9_]*\s+)?["']([^"']+)["']""")
 _RUST_USE_RE = re.compile(r"^\s*(?:pub\s+)?(?:use|extern\s+crate)\s+([A-Za-z_][A-Za-z0-9_:]*)")
@@ -229,6 +236,92 @@ def _is_first_party_source(rel_path: str) -> bool:
     return posix.suffix.casefold() in _SOURCE_EXTENSIONS
 
 
+def _python_symbol_uses(
+    text: str, rel_path: str, local_modules: set[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """Resolve only immutable, top-level import bindings; ambiguous scopes fail closed."""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError, RecursionError):
+        return [], [], [f"reachability_python_parse_failed:{rel_path}"]
+    imports: list[dict[str, Any]] = []
+    bindings: dict[str, tuple[str, int]] = {}
+    invalid: set[str] = set()
+    uncertain = False
+    top_level_nodes = {id(node) for node in tree.body}
+
+    def root_name(node: ast.AST) -> str | None:
+        while isinstance(node, (ast.Attribute, ast.Subscript)):
+            node = node.value
+        return node.id if isinstance(node, ast.Name) else None
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            top_level = id(node) in top_level_nodes
+            relative = isinstance(node, ast.ImportFrom) and bool(node.level)
+            for alias in node.names:
+                module = (node.module or "") if isinstance(node, ast.ImportFrom) else alias.name
+                local_module = module.split(".")[0] in local_modules or relative
+                imports.append({
+                    "path": rel_path, "line": node.lineno, "module": module,
+                    "symbols": [alias.name] if isinstance(node, ast.ImportFrom) else [],
+                    "local_module": local_module,
+                })
+                local = alias.asname or (alias.name if isinstance(node, ast.ImportFrom)
+                                        else alias.name.split(".")[0])
+                if alias.name == "*":
+                    uncertain = True
+                    continue
+                qualified = f"{module}.{alias.name}" if isinstance(node, ast.ImportFrom) else (
+                    alias.name if alias.asname else local)
+                if not top_level or local_module or local in bindings:
+                    invalid.add(local)
+                bindings[local] = (qualified, node.lineno)
+        elif isinstance(node, (ast.Name, ast.Attribute, ast.Subscript)) and isinstance(
+            node.ctx, (ast.Store, ast.Del)
+        ):
+            name = root_name(node)
+            if name:
+                invalid.add(name)
+        elif isinstance(node, ast.arg):
+            invalid.add(node.arg)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            invalid.add(node.name)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            invalid.add(node.name)
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
+            invalid.add(node.name)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            invalid.add(node.rest)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            invalid.update(node.names)
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {
+            "exec", "eval", "globals", "locals", "vars", "setattr", "delattr",
+        }:
+            uncertain = True
+
+    calls: list[dict[str, Any]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or uncertain:
+            continue
+        func = node.func
+        members: list[str] = []
+        while isinstance(func, ast.Attribute):
+            members.append(func.attr)
+            func = func.value
+        if not isinstance(func, ast.Name) or func.id in invalid or func.id not in bindings:
+            continue
+        qualified, import_line = bindings[func.id]
+        if node.lineno <= import_line:
+            continue
+        name = ".".join([qualified, *reversed(members)])
+        calls.append({"path": rel_path, "line": node.lineno, "qualified_symbol": name})
+    gaps = []
+    if uncertain or invalid.intersection(bindings):
+        gaps.append(f"reachability_python_binding_ambiguous:{rel_path}")
+    return imports, calls, gaps
+
+
 def scan_target_reachability_index(
     *,
     target_root: Path | None,
@@ -239,13 +332,14 @@ def scan_target_reachability_index(
     """Scan bounded first-party target source files for imports, symbol calls, and native FFI boundaries."""
     imports: list[dict[str, Any]] = []
     ffi_sites: list[dict[str, Any]] = []
-    symbol_calls: dict[str, list[tuple[str, int]]] = {}
+    bound_calls: list[dict[str, Any]] = []
     gaps: list[str] = []
     source_hashes: dict[str, str] = {}
 
     if target_root is None or not target_root.is_dir():
-        return {"imports": imports, "ffi_sites": ffi_sites, "symbol_calls": symbol_calls,
-                "source_hashes": source_hashes, "gaps": ["reachability_target_unavailable"]}
+        return {"imports": imports, "ffi_sites": ffi_sites,
+                "bound_calls": bound_calls, "source_hashes": source_hashes,
+                "gaps": ["reachability_target_unavailable"]}
 
     candidates: dict[str, Mapping[str, Any]] = {}
     for entry in partition_files:
@@ -262,6 +356,11 @@ def scan_target_reachability_index(
     if len(candidates) > max_source_files:
         gaps.append(f"reachability_source_files_truncated: {len(candidates) - max_source_files} files not scanned")
 
+    local_modules = {
+        part
+        for path in candidates if PurePosixPath(path).suffix.casefold() in {".py", ".pyi"}
+        for part in (*PurePosixPath(path).parts[:-1], PurePosixPath(path).stem)
+    }
     for rel_path in sorted(candidates)[:max_source_files]:
         entry = candidates[rel_path]
         sha = entry.get("sha256")
@@ -285,7 +384,16 @@ def scan_target_reachability_index(
             continue
         source_hashes[rel_path] = sha
         suffix = PurePosixPath(rel_path).suffix.casefold()
-        active_ffi_libs: set[str] = set()
+        if suffix in {".py", ".pyi"}:
+            python_imports, python_calls, python_gaps = _python_symbol_uses(text, rel_path, local_modules)
+            imports.extend(python_imports)
+            if suffix == ".py":
+                bound_calls.extend(python_calls)
+            else:
+                gaps.append(f"reachability_symbol_binding_unsupported:{rel_path}")
+            gaps.extend(python_gaps)
+        else:
+            gaps.append(f"reachability_symbol_binding_unsupported:{rel_path}")
 
         lines = text.splitlines()
         for line_no, line in enumerate(lines, start=1):
@@ -301,45 +409,20 @@ def scan_target_reachability_index(
                     token = groups[0] if groups else ffi_kind
                     extra_sym = groups[1] if len(groups) > 1 else None
                     lib_stem = _clean_lib_stem(token)
-                    if ffi_kind in {"python_ctypes", "python_cffi", "csharp_pinvoke", "csharp_nativelibrary",
-                                    "java_jni", "ruby_ffi", "rust_extern", "go_cgo", "php_ffi", "cpp_extern_c"}:
-                        if lib_stem:
-                            active_ffi_libs.add(lib_stem)
                     ffi_sites.append({
                         "path": rel_path,
                         "line": line_no,
                         "ffi_mechanism": ffi_kind,
                         "library_stem": lib_stem,
                         "symbol": extra_sym or token,
-                        "has_explicit_symbol": bool(extra_sym) or ffi_kind in {
-                            "java_jni_method", "go_cgo",
-                        } or ("attach_function" in line) or ("extern \"C\"" in line and "fn " in line),
                     })
 
-            if suffix in {".py", ".pyi"}:
-                m_from = _PY_FROM_RE.match(line)
-                if m_from:
-                    mod = m_from.group(1)
-                    syms = [s.strip().split(" as ")[0].strip() for s in m_from.group(2).split(",")]
-                    imports.append({
-                        "path": rel_path, "line": line_no, "module": mod,
-                        "symbols": [s for s in syms if s and s != "*"],
-                    })
-                else:
-                    m_imp = _PY_IMPORT_RE.match(line)
-                    if m_imp:
-                        for part in m_imp.group(1).split(","):
-                            mod = part.strip().split(" as ")[0].strip()
-                            if mod:
-                                imports.append({"path": rel_path, "line": line_no, "module": mod, "symbols": []})
-            elif suffix in {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}:
+            if suffix in {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}:
                 for m_js in _JS_IMPORT_RE.finditer(line):
                     mod = m_js.group(1) or m_js.group(2)
                     if mod and not mod.startswith("."):
                         imports.append({"path": rel_path, "line": line_no, "module": mod, "symbols": []})
             elif suffix == ".go":
-                if stripped == 'import "C"':
-                    active_ffi_libs.add("cgo")
                 m_go = _GO_IMPORT_RE.match(line)
                 if m_go and m_go.group(1) != "C":
                     imports.append({"path": rel_path, "line": line_no, "module": m_go.group(1), "symbols": []})
@@ -389,29 +472,13 @@ def scan_target_reachability_index(
                         "module": _clean_lib_stem(hdr), "raw_header": hdr, "symbols": [],
                     })
 
-            for m_call in _CALL_TOKEN_RE.finditer(line):
-                sym_name = m_call.group(1)
-                bucket = symbol_calls.setdefault(sym_name, [])
-                if len(bucket) < 32:
-                    bucket.append((rel_path, line_no))
-            for m_mem in _MEMBER_CALL_RE.finditer(line):
-                sym_name = m_mem.group(1)
-                bucket = symbol_calls.setdefault(sym_name, [])
-                if len(bucket) < 32:
-                    bucket.append((rel_path, line_no))
-
-        if active_ffi_libs:
-            bound = sorted(active_ffi_libs)
-            for site in ffi_sites:
-                if site["path"] == rel_path:
-                    existing_bound = set(site.get("bound_libraries") or ())
-                    site["bound_libraries"] = sorted(existing_bound | set(bound))
-
-    return {"imports": imports, "ffi_sites": ffi_sites, "symbol_calls": symbol_calls,
-            "source_hashes": source_hashes, "gaps": gaps}
+    return {"imports": imports, "ffi_sites": ffi_sites,
+            "bound_calls": bound_calls, "source_hashes": source_hashes, "gaps": gaps}
 
 
-def _extract_osv_symbols_and_modules(raw_json: str, ecosystem: str, pkg_name: str) -> tuple[list[str], list[str], list[str], str | None]:
+def _extract_osv_symbols_and_modules(
+    raw_json: str, ecosystem: str, pkg_name: str, affected_index: int,
+) -> tuple[list[str], list[str], list[str], str | None]:
     """Extract affected symbols, module paths, CVE aliases, and severity from raw OSV JSON."""
     symbols: set[str] = set()
     modules: set[str] = set()
@@ -436,7 +503,9 @@ def _extract_osv_symbols_and_modules(raw_json: str, ecosystem: str, pkg_name: st
         severity_label = db_spec["severity"].upper()
 
     wanted = pkg_name.casefold()
-    for entry in doc.get("affected") or ():
+    for index, entry in enumerate(doc.get("affected") or ()):
+        if index != affected_index:
+            continue
         if not isinstance(entry, Mapping):
             continue
         pkg = entry.get("package")
@@ -454,10 +523,14 @@ def _extract_osv_symbols_and_modules(raw_json: str, ecosystem: str, pkg_name: st
                         modules.add(path_val.strip())
                     for sym in imp.get("symbols") or ():
                         if isinstance(sym, str) and sym.strip():
-                            symbols.add(sym.strip())
+                            symbol = sym.strip()
+                            if isinstance(path_val, str) and path_val.strip():
+                                module = path_val.strip()
+                                symbol = symbol if symbol.startswith(module + ".") else f"{module}.{symbol}"
+                            symbols.add(symbol)
             for func in eco_spec.get("functions") or eco_spec.get("symbols") or ():
                 if isinstance(func, str) and func.strip():
-                    symbols.add(func.strip().rsplit("::", 1)[-1].rsplit(".", 1)[-1])
+                    symbols.add(func.strip())
     return sorted(symbols), sorted(modules), sorted(cves), severity_label
 
 
@@ -527,19 +600,66 @@ def _resolve_osv_source(
     return path, {**identity, "index_sha256": record["sha256"]}, None
 
 
-def _dependency_ecosystem_and_name(dep: Mapping[str, Any]) -> tuple[str | None, str, str | None, str | None]:
+def _coordinate_name(ecosystem: str, name: str) -> str:
+    if ecosystem == "PyPI":
+        return re.sub(r"[-_.]+", "-", name).lower()
+    return name.lower() if ecosystem == "NuGet" else name
+
+
+def _package_coordinate(dep: Mapping[str, Any]) -> tuple[str, str, str, str] | None:
+    """Keep namespace, release and instance qualifiers; reject conflicting supplied identity."""
     purl = dep.get("purl") if isinstance(dep.get("purl"), str) else None
-    version = str(dep.get("version")).strip() if dep.get("version") else None
-    explicit_name = str(dep.get("name") or "").strip()
+    version = str(dep.get("version") or "").strip()
+    name = str(dep.get("name") or "").strip()
+    declared = str(dep.get("ecosystem") or "").strip().casefold()
+    eco = DECLARED_TO_OSV_ECOSYSTEM.get(declared)
+    if declared == "native":
+        eco = "native"
+    instance = ""
     if purl:
-        parsed = purl_parts(purl)
-        if parsed is not None:
-            purl_type, pkg_name, purl_ver = parsed
-            eco = PURL_TO_OSV_ECOSYSTEM.get(purl_type)
-            return eco, explicit_name or pkg_name, version or purl_ver, purl
-    raw_eco = str(dep.get("ecosystem") or "").strip().casefold()
-    eco = DECLARED_TO_OSV_ECOSYSTEM.get(raw_eco)
-    return eco, explicit_name, version, purl
+        if (not purl.startswith("pkg:") or len(purl) > 4096
+                or re.search(r"%(?![0-9a-fA-F]{2})", purl)):
+            return None
+        body, _, subpath = purl[4:].partition("#")
+        body, _, query = body.partition("?")
+        kind, slash, path = body.partition("/")
+        purl_eco = "native" if kind == "generic" else PURL_TO_OSV_ECOSYSTEM.get(kind)
+        if not slash or not purl_eco or (declared and eco != purl_eco):
+            return None
+        head, at, release = path.rpartition("@")
+        if at and head and "/" not in release:
+            path, release = head, unquote(release)
+            if not release or (version and version != release):
+                return None
+            version = release
+        parts = [unquote(part) for part in path.split("/")]
+        if any(not part or part in {".", ".."} or "/" in part for part in parts):
+            return None
+        full_name = ":".join(parts) if kind == "maven" else "/".join(parts)
+        if name and _coordinate_name(purl_eco, name) not in {
+            _coordinate_name(purl_eco, full_name), _coordinate_name(purl_eco, parts[-1]),
+        }:
+            return None
+        try:
+            qualifiers = parse_qsl(query, keep_blank_values=True, strict_parsing=True)
+        except ValueError:
+            return None
+        if (len(dict(qualifiers)) != len(qualifiers)
+                or any(not key or not value for key, value in qualifiers)):
+            return None
+        name, eco = full_name, purl_eco
+        instance = json.dumps([sorted(qualifiers), unquote(subpath)]) if query or subpath else ""
+    if not eco or not name or not version:
+        return None
+    return eco, _coordinate_name(eco, name), version, instance
+
+
+def _dependency_ecosystem_and_name(dep: Mapping[str, Any]) -> tuple[str | None, str, str | None, str | None]:
+    coordinate = _package_coordinate(dep)
+    purl = dep.get("purl") if isinstance(dep.get("purl"), str) else None
+    if coordinate is not None:
+        return *coordinate[:3], purl
+    return None, str(dep.get("name") or ""), str(dep.get("version") or "") or None, purl
 
 
 def _is_direct_dependency(dep: Mapping[str, Any]) -> bool:
@@ -582,7 +702,8 @@ def _match_osv_indexed(
                 adv_id = match["advisory_id"]
                 raw_json = conn.execute("SELECT raw_json FROM advisory WHERE id = ?", (adv_id,)).fetchone()[0]
                 symbols, modules, cves, sev = _extract_osv_symbols_and_modules(
-                    raw_json if isinstance(raw_json, str) else "", eco, pkg_name
+                    raw_json if isinstance(raw_json, str) else "", eco, pkg_name,
+                    match["evidence"]["affected_index"],
                 )
                 matched.append({
                     "advisory_id": str(adv_id),
@@ -596,38 +717,49 @@ def _match_osv_indexed(
                     "match_source": "osv-exact" if exact else "osv-index",
                     "affected_symbols": symbols,
                     "affected_modules": modules,
-                    "dependency_ids": [dep_id],
+                    "dependency_ids": [str(dep["dependency_id"])] if dep.get("dependency_id") else [],
                 })
     return matched, gaps
+
+
+def _qualified_advisory_symbols(advisory: Mapping[str, Any]) -> set[str]:
+    modules = [str(module) for module in advisory.get("affected_modules") or () if module]
+    symbols: set[str] = set()
+    for symbol in advisory.get("affected_symbols") or ():
+        if not isinstance(symbol, str) or not symbol:
+            continue
+        if any(symbol.startswith(module + ".") for module in modules):
+            symbols.add(symbol)
+        elif len(modules) == 1:
+            symbols.add(f"{modules[0]}.{symbol}")
+    return symbols
 
 
 def classify_advisory_reachability(
     advisory: Mapping[str, Any],
     target_index: Mapping[str, Any],
     *,
-    max_call_sites: int = 32,
+    max_call_sites: int | None = 32,
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
     """Classify one advisory against the scanned first-party target reachability index."""
     pkg_name = str(advisory.get("package_name") or "")
     purl = advisory.get("purl") if isinstance(advisory.get("purl"), str) else None
-    affected_symbols = [str(s) for s in (advisory.get("affected_symbols") or ()) if s]
     affected_modules = [str(m) for m in (advisory.get("affected_modules") or ()) if m]
     stems = _candidate_module_stems(pkg_name, purl, affected_modules)
 
     imports = target_index.get("imports") or ()
     ffi_sites = target_index.get("ffi_sites") or ()
-    symbol_calls: Mapping[str, Sequence[tuple[str, int]]] = target_index.get("symbol_calls") or {}
 
     matched_imports: list[dict[str, Any]] = []
-    imported_files: set[str] = set()
-    imported_symbols_at_site: list[dict[str, Any]] = []
 
     for imp in imports:
+        if (imp.get("local_module") or _SOURCE_ECOSYSTEM.get(PurePosixPath(str(imp["path"])).suffix.casefold())
+                != advisory.get("ecosystem")):
+            continue
         mod_raw = str(imp.get("module") or "").casefold()
         mod_norm = _normalize_pkg_token(mod_raw)
         mod_parts = {_normalize_pkg_token(p) for p in re.split(r"[./:\\]+", mod_raw) if p}
         if mod_raw in stems or mod_norm in stems or (mod_parts & stems):
-            imported_files.add(str(imp["path"]))
             matched_imports.append({
                 "path": str(imp["path"]),
                 "line": int(imp["line"]),
@@ -635,27 +767,15 @@ def classify_advisory_reachability(
                 "kind": "package_import",
                 "ffi_mechanism": None,
             })
-            for sym in imp.get("symbols") or ():
-                imported_symbols_at_site.append({
-                    "path": str(imp["path"]),
-                    "line": int(imp["line"]),
-                    "symbol": str(sym),
-                    "kind": "symbol_call",
-                    "ffi_mechanism": None,
-                })
 
-    ffi_call_sites: list[dict[str, Any]] = []
     ffi_import_sites: list[dict[str, Any]] = []
     ffi_mechanisms: set[str] = set()
 
     for site in ffi_sites:
         lib_stem = str(site.get("library_stem") or "").casefold()
-        bound_libs = {str(b).casefold() for b in (site.get("bound_libraries") or ())}
         sym = str(site.get("symbol") or "")
-        sym_match = bool(affected_symbols and sym in affected_symbols)
-        lib_match = bool((lib_stem and (lib_stem in stems or _normalize_pkg_token(lib_stem) in stems))
-                         or (bound_libs & stems))
-        if sym_match or lib_match:
+        lib_match = bool(lib_stem and (lib_stem in stems or _normalize_pkg_token(lib_stem) in stems))
+        if lib_match and advisory.get("ecosystem") == "native":
             mech = str(site["ffi_mechanism"])
             ffi_mechanisms.add(mech)
             entry = {
@@ -665,42 +785,22 @@ def classify_advisory_reachability(
                 "kind": "ffi_boundary",
                 "ffi_mechanism": mech,
             }
-            if sym_match or site.get("has_explicit_symbol"):
-                ffi_call_sites.append(entry)
-            else:
-                ffi_import_sites.append(entry)
-                imported_files.add(str(site["path"]))
+            ffi_import_sites.append(entry)
 
     symbol_hit_sites: list[dict[str, Any]] = []
-    if affected_symbols:
-        for sym in affected_symbols:
-            for call_path, call_line in symbol_calls.get(sym, ()):
-                if call_path in imported_files or not matched_imports:
-                    if matched_imports or ffi_import_sites or ffi_call_sites or (purl and purl.startswith("pkg:generic/")):
-                        symbol_hit_sites.append({
-                            "path": str(call_path),
-                            "line": int(call_line),
-                            "symbol": sym,
-                            "kind": "symbol_call",
-                            "ffi_mechanism": None,
-                        })
-            for imp_sym in imported_symbols_at_site:
-                if imp_sym["symbol"] == sym:
-                    symbol_hit_sites.append(imp_sym)
-    elif ffi_import_sites:
-        for sym_name, locs in symbol_calls.items():
-            for call_path, call_line in locs:
-                if call_path in imported_files and sym_name not in {
-                    "CDLL", "WinDLL", "LoadLibrary", "dlopen", "dlsym", "loadLibrary", "load", "cdef", "require",
-                }:
-                    ffi_mech = next(iter(sorted(ffi_mechanisms)), None)
-                    ffi_call_sites.append({
-                        "path": str(call_path),
-                        "line": int(call_line),
-                        "symbol": sym_name,
-                        "kind": "ffi_boundary",
-                        "ffi_mechanism": ffi_mech,
-                    })
+    if advisory.get("ecosystem") == "PyPI" and advisory.get("_symbol_binding_allowed", True):
+        qualified_symbols = (
+            advisory["_qualified_symbols"] if "_qualified_symbols" in advisory
+            else _qualified_advisory_symbols(advisory)
+        )
+        for call in target_index.get("bound_calls") or ():
+            qualified = str(call["qualified_symbol"])
+            if qualified in qualified_symbols:
+                symbol_hit_sites.append({
+                    "path": str(call["path"]), "line": int(call["line"]),
+                    "symbol": qualified.rsplit(".", 1)[-1], "kind": "symbol_call",
+                    "ffi_mechanism": None,
+                })
 
     def _dedupe_sites(sites: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
         seen: dict[tuple[str, int, str], dict[str, Any]] = {}
@@ -710,8 +810,8 @@ def classify_advisory_reachability(
                 seen[key] = item
         return [seen[k] for k in sorted(seen)][:max_call_sites]
 
-    if symbol_hit_sites or ffi_call_sites:
-        sites = _dedupe_sites([*symbol_hit_sites, *ffi_call_sites, *ffi_import_sites])
+    if symbol_hit_sites:
+        sites = _dedupe_sites(symbol_hit_sites)
         return REACHABILITY_SYMBOL, sites, sorted(ffi_mechanisms)
 
     if matched_imports or ffi_import_sites:
@@ -764,13 +864,16 @@ def evaluate_sca_reachability(
         actual_mode = "disabled"
         gaps.append("osv_matching_disabled")
 
-    deps_by_name: dict[str, list[Mapping[str, Any]]] = {}
+    deps_by_coordinate: dict[tuple[str, str, str, str], list[Mapping[str, Any]]] = {}
+    unresolved_names: set[str] = set()
     for dep in dependencies:
-        _, dname, _, _ = _dependency_ecosystem_and_name(dep)
-        if dname:
-            deps_by_name.setdefault(dname.casefold(), []).append(dep)
+        coordinate = _package_coordinate(dep)
+        if coordinate is not None:
+            deps_by_coordinate.setdefault(coordinate, []).append(dep)
+        else:
+            unresolved_names.add(_normalize_pkg_token(str(dep.get("name") or "")))
 
-    merged: dict[tuple[str, str, str], dict[str, Any]] = {}
+    merged: dict[tuple[str, ...], dict[str, Any]] = {}
 
     def _merge_candidate(cand: Mapping[str, Any]) -> None:
         adv_id = str(cand.get("advisory_id") or "").strip()
@@ -778,14 +881,38 @@ def evaluate_sca_reachability(
         pkg_ver = str(cand.get("package_version") or "").strip() or None
         if not adv_id or not pkg_name:
             return
-        key = (adv_id, pkg_name.casefold(), pkg_ver or "")
-        matching_deps = deps_by_name.get(pkg_name.casefold(), [])
+        coordinate = _package_coordinate({
+            "name": pkg_name, "version": pkg_ver, "purl": cand.get("purl"),
+            "ecosystem": cand.get("ecosystem"),
+        })
+        matching_deps = deps_by_coordinate.get(coordinate, []) if coordinate else []
+        matching_deps = [dep for dep in matching_deps if isinstance(dep.get("dependency_id"), str)
+                         and dep["dependency_id"]]
+        supplied_ids = cand.get("dependency_ids")
+        if supplied_ids:
+            matching_deps = [dep for dep in matching_deps
+                             if dep["dependency_id"] in supplied_ids]
+        resolved = bool(coordinate and matching_deps)
+        if coordinate:
+            eco, pkg_name, pkg_ver, _ = coordinate
+            key = (adv_id, *coordinate, "resolved" if resolved else "unresolved")
+        else:
+            eco = cand.get("ecosystem") if isinstance(cand.get("ecosystem"), str) else None
+            key = (adv_id, eco or "", pkg_name, pkg_ver or "", str(cand.get("purl") or ""), "unresolved")
+        if not resolved:
+            gaps.append(f"sca_dependency_binding_unresolved:{adv_id}:{pkg_name}")
+        competing = [coord for coord in deps_by_coordinate if coordinate and coord[:2] == coordinate[:2]]
+        symbol_binding_allowed = (
+            resolved and len(competing) == 1 and _normalize_pkg_token(pkg_name) not in unresolved_names
+        )
+        if resolved and not symbol_binding_allowed:
+            gaps.append(f"reachability_package_binding_ambiguous:{adv_id}:{pkg_name}")
         default_direct = (
             any(_is_direct_dependency(d) for d in matching_deps)
             if matching_deps
             else bool(cand.get("direct", True))
         )
-        default_dep_ids = [str(d.get("dependency_id")) for d in matching_deps if d.get("dependency_id")]
+        dep_ids = [str(d["dependency_id"]) for d in matching_deps]
         existing = merged.get(key)
         cves = set(cand.get("cve_ids") or ())
         if _CVE_RE.fullmatch(adv_id):
@@ -800,20 +927,25 @@ def evaluate_sca_reachability(
                 "package_name": pkg_name,
                 "package_version": pkg_ver,
                 "purl": cand.get("purl") if isinstance(cand.get("purl"), str) else None,
-                "ecosystem": cand.get("ecosystem") if isinstance(cand.get("ecosystem"), str) else None,
+                "ecosystem": eco,
                 "severity": cand.get("severity") if isinstance(cand.get("severity"), str) else None,
-                "direct": bool(cand.get("direct", default_direct)),
+                "direct": default_direct,
                 "match_sources": {str(cand.get("match_source") or "scanner")},
                 "affected_symbols": set(cand.get("affected_symbols") or ()),
                 "affected_modules": set(cand.get("affected_modules") or ()),
-                "dependency_ids": set(cand.get("dependency_ids") or default_dep_ids),
+                "dependency_ids": set(dep_ids),
+                "_binding_resolved": resolved,
+                "_symbol_binding_allowed": symbol_binding_allowed,
+                "_qualified_symbols": _qualified_advisory_symbols(cand),
             }
         else:
             existing["cve_ids"] = sorted(set(existing["cve_ids"]) | cves)
             existing["match_sources"].add(str(cand.get("match_source") or "scanner"))
             existing["affected_symbols"].update(cand.get("affected_symbols") or ())
             existing["affected_modules"].update(cand.get("affected_modules") or ())
-            existing["dependency_ids"].update(cand.get("dependency_ids") or default_dep_ids)
+            existing["_qualified_symbols"].update(_qualified_advisory_symbols(cand))
+            existing["dependency_ids"].update(dep_ids)
+            existing["direct"] = existing["direct"] or default_direct
             if not existing["severity"] and isinstance(cand.get("severity"), str):
                 existing["severity"] = cand["severity"]
             if not existing["purl"] and isinstance(cand.get("purl"), str):
@@ -826,13 +958,12 @@ def evaluate_sca_reachability(
 
     for obs in scanner_advisories:
         purl = obs.get("purl") if isinstance(obs.get("purl"), str) else None
-        eco = PURL_TO_OSV_ECOSYSTEM.get(purl_parts(purl)[0]) if purl and purl_parts(purl) else None
         _merge_candidate({
             "advisory_id": obs.get("advisory"),
             "package_name": obs.get("package"),
             "package_version": obs.get("version"),
             "purl": purl,
-            "ecosystem": eco,
+            "ecosystem": obs.get("ecosystem"),
             "severity": obs.get("severity"),
             "match_source": obs.get("scanner") or "scanner",
             "affected_symbols": obs.get("affected_symbols") or [],
@@ -861,12 +992,13 @@ def evaluate_sca_reachability(
             max_bytes_per_file=cfg.max_bytes_per_file,
         )
         if cfg.reachability_enabled
-        else {"imports": [], "ffi_sites": [], "symbol_calls": {}, "source_hashes": {},
+        else {"imports": [], "ffi_sites": [], "bound_calls": [], "source_hashes": {},
               "gaps": ["reachability_disabled"]}
     )
     gaps.extend(str(gap) for gap in partition_gaps)
     gaps.extend(target_index["gaps"])
-    gaps.append("static_reachability_only: import and call matching does not prove code unreachability")
+    gaps.append("static_reachability_only: bounded static symbol use proves neither whole-program runtime "
+                "reachability nor code unreachability")
 
     advisory_records: list[dict[str, Any]] = []
     symbol_reachable_count = 0
@@ -885,13 +1017,21 @@ def evaluate_sca_reachability(
             "affected_modules": sorted(item["affected_modules"]),
             "dependency_ids": sorted(d for d in item["dependency_ids"] if d),
         }
-        verdict, sites, ffi_mechs = classify_advisory_reachability(
-            prepared,
-            target_index,
-            max_call_sites=cfg.max_call_sites_per_advisory + 1,
-        )
+        if not prepared["_binding_resolved"]:
+            verdict, sites, ffi_mechs = REACHABILITY_UNKNOWN, [], []
+        else:
+            verdict, sites, ffi_mechs = classify_advisory_reachability(
+                prepared, target_index, max_call_sites=None,
+            )
+            if verdict != REACHABILITY_SYMBOL and prepared["affected_symbols"]:
+                gaps.append(f"reachability_symbol_binding_not_established:{prepared['advisory_id']}")
+            if ffi_mechs:
+                gaps.append(f"reachability_native_symbol_binding_not_established:{prepared['advisory_id']}")
         if len(sites) > cfg.max_call_sites_per_advisory:
-            gaps.append(f"reachability_call_sites_truncated:{prepared['advisory_id']}")
+            omitted = len(sites) - cfg.max_call_sites_per_advisory
+            subject = prepared["purl"] or (
+                f"{prepared['ecosystem']}:{prepared['package_name']}@{prepared['package_version']}")
+            gaps.append(f"reachability_call_sites_truncated:{prepared['advisory_id']}:{subject}:omitted={omitted}")
             sites = sites[:cfg.max_call_sites_per_advisory]
         sites = [{**site, "file_sha256": target_index["source_hashes"][site["path"]]} for site in sites]
         if verdict == REACHABILITY_SYMBOL:
