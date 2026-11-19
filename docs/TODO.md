@@ -3592,14 +3592,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Area:** testing
 - **Why:** failing on main before today's changes: `tests/test_scanner_normalization.py::test_parser_identities_are_bumped_and_distinct_per_scanner` (all five adapter parser identities are `undeclared`), `tests/unit/job_inference_security_review/test_handlers.py` (fixture sets `lead_admission=("high","unknown")`, refused by the validator: 2 failed, 4 errors), three secret-lead tests in `tests/review/test_lead_coverage.py` (`not enough values to unpack`), and `tests/test_media_asset_inputs.py::test_job_never_launches_catalogers_on_media_and_records_each_artifact`.
 - **Scope:** attribute each (stale fixture, runtime regression, environment), fix or re-pin, and keep each under 10 s.
-  Additional reported baseline lead, not a confirmed new defect:
+  Additional baseline test case:
   `tests/review/test_package_view.py::test_hunt_view_labels_the_unit_leads_sinks_and_entries`
   raises “too many values to unpack” where the fixture expects one `native-main` hunt.
   CBMC peer `5107d2b3-93c5-40ce-8509-e937f656e1e4` reports 35 CBMC cases passing and an affected
   sweep of 209 passes/1 failure; selectively restoring the `b9aad27b` versions of `packages.py`
-  and `package_view.py` still failed. That is not a full exact-base reproduction. Attribution
-  remains unresolved; do not label it a fixture defect, infer a CBMC regression, or expand
-  CBMC scope. The priority-scale owner was informed because it owns `review/units.py`.
+  and `package_view.py` still failed. That initial experiment was not a full exact-base
+  reproduction. The priority-scale owner subsequently confirmed the failure on unchanged
+  `d492b21b0d7736441a1cb41ca728a6f534235d62`: 1 failed in 4.14 s, with eight hunts (seven
+  operation hunts and one fallback). The singleton expectation is stale; no test change has
+  been made. Correct that bounded expectation without suppressing valid hunts, inferring a
+  CBMC regression or expanding CBMC scope.
   Possible overlap with T-5060's differently located historical label failure is unconfirmed.
 - **Done when:** the named node ids pass shuffled with `-n 4`.
 - **Refs:** the files above, T-5043, T-5032.
@@ -3889,6 +3892,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Scope:** `src/appsec_review/reporting/dossiers.py`
   One coordinator-owned assignment with T-5087, based on
   `d492b21b0d7736441a1cb41ca728a6f534235d62`; do not assign their shared renderer concurrently.
+  Ready commit `7ccbafbb4f72604498c25750f74fd9d3d5a34043` has 92 passing units in 9.16 s
+  (owner-reported). It awaits coordinator review/integration and is not closed here.
 - **Done when:** Missing taint/guard/verification evidence generates no invented claims, and Markdown retains available counterevidence, qualifications and provenance. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dossier_publication.md`; follow-up to closed T-176 (not reopened).
 
@@ -3899,6 +3904,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** Archived audit/feedback cases: DP-02, RV-F05. Remediation projection cannot render the actual accepted patch format; Dossier labels a statically failed, rejected patch `static_checked`.
 - **Scope:** `src/appsec_review/jobs/job_dossier_publication/inputs.py`, `src/appsec_review/reporting/dossiers.py`
   Owned with T-5086 as one assignment at `d492b21b0d7736441a1cb41ca728a6f534235d62`.
+  Shares ready commit `7ccbafbb4f72604498c25750f74fd9d3d5a34043` and its owner-reported
+  92-pass validation with T-5086; awaiting coordinator review/integration, not yet closed.
 - **Done when:** Real exact-patch and rejected/static/build validation projections retain patch contents and never imply stronger assurance than accepted status. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dossier_publication.md`, `audit-results/job-audit-job_remediation_validation.md`; follow-up to closed T-176 (not reopened).
 
@@ -3910,12 +3917,11 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Scope:** `src/appsec_review/jobs/job_final_report_publication/report.py`, `src/appsec_review/reporting/dimensions.py`
   Coordinator-owned `report-coverage` assignment, based on
   `d492b21b0d7736441a1cb41ca728a6f534235d62`.
-  The owner reports red producer/projection/gate/report regressions for FR-F01/FR-F03 and an
-  outstanding representation decision: the closed numeric radar fields have no unknown value.
-  Any schema/consumer change needs coordinator authorization; this ledger does not invent zero
-  or safe coverage. The chain correction is reported ready in the worktree without a received
-  commit SHA, not integrated or closed here.
-- **Done when:** Withheld or uninspected work cannot become verified-no-findings; gate-shaped chain memberships produce correct dimension counts. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  User decision, 2026-11-19: versioned schemas/readers represent an unknown metric as `null`
+  with a gap reason, rendered as N/A; a measured zero stays `0`. The report-coverage owner
+  `b6fd8094-6d6a-4970-8d06-18ddd7ecb588` has resumed bounded schema, reader, renderer and test
+  work. This resolves this representation question, not unrelated schema-policy decisions.
+- **Done when:** Withheld or uninspected work cannot become verified-no-findings; gate-shaped chain memberships produce correct dimension counts. Paired versioned-schema/reader/rendering regressions distinguish unknown (`null` plus gap reason, N/A) from measured zero (`0`). Each cited case passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
 
 ### T-5089 — Preserve certified chain severity and dossier availability in executive output
