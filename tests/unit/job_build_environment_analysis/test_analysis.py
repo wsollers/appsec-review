@@ -235,6 +235,93 @@ def test_source_depth_bound_still_taints_previously_inspected_target():
     assert "a.sh: source_depth_or_script_bound" in value["gaps"]
 
 
+@pytest.mark.parametrize("command", ["call", "@call", "@CALL"], ids=["call", "at-call", "at-CALL"])
+@pytest.mark.parametrize("child", ["env.cmd", "z-env.cmd"], ids=["seen", "pending"])
+def test_batch_call_taints_selected_scripts_at_count_bound(command, child):
+    files = {child: "set CC=clang\nset API_TOKEN=sentinel\n", "setup.cmd": f"{command} {child}\n"}
+    reads = []
+    value = _static(files, reads=reads, max_scripts=2)
+    declarations = [d for d in value["declarations"] if d["path"] == child]
+    assert [(d["name"], d["status"], d["value"]) for d in declarations] == [
+        ("CC", "unknown", None), ("[REDACTED]", "redacted", None),
+    ]
+    assert declarations[0]["sha256"] == hashlib.sha256(files[child].encode()).hexdigest()
+    assert sorted(reads) == sorted(files)
+    assert value["bounds"]["inspected_scripts"] == 2
+    assert f"{child}: unresolved_script_context_or_condition" in value["gaps"]
+    assert not any("source_depth_or_script_bound" in gap for gap in value["gaps"])
+    assert "sentinel" not in json.dumps(value)
+
+
+def test_batch_call_taints_known_target_at_source_depth_bound():
+    reads = []
+    value = _static({
+        "env.cmd": "set CC=clang\n",
+        "setup.cmd": "@call child.cmd\n",
+        "child.cmd": "@CALL env.cmd\n@call unread.cmd\n",
+        "unread.cmd": "set UNREAD=1\n",
+    }, reads=reads, max_scripts=3, max_depth=1)
+    assert reads == ["env.cmd", "setup.cmd", "child.cmd"]
+    assert [(d["name"], d["status"], d["value"]) for d in value["declarations"]] == [
+        ("CC", "unknown", None),
+    ]
+    assert "env.cmd: unresolved_script_context_or_condition" in value["gaps"]
+    assert "child.cmd: source_depth_or_script_bound" in value["gaps"]
+
+
+def test_batch_call_new_reads_still_obey_script_count_bound():
+    reads = []
+    value = _static({
+        "setup.cmd": "@call child.cmd\n@CALL child.cmd\n@call unread.cmd\n",
+        "child.cmd": "set CC=clang\n", "unread.cmd": "set UNREAD=1\n",
+    }, reads=reads, max_scripts=2)
+    assert reads == ["setup.cmd", "child.cmd"]
+    assert value["bounds"]["inspected_scripts"] == 2
+    assert [(d["name"], d["status"], d["value"]) for d in value["declarations"]] == [
+        ("CC", "unknown", None),
+    ]
+    assert "setup.cmd: source_depth_or_script_bound" in value["gaps"]
+    assert not any("unsupported_script_statement" in gap for gap in value["gaps"])
+
+
+@pytest.mark.parametrize(
+    "suffix,command",
+    [
+        (".sh", "call"), (".sh", "@call"), (".bash", "@CALL"),
+        (".sh", "SOURCE"), (".sh", "@source"),
+        (".cmd", "source"), (".cmd", "."), (".cmd", "@source"),
+    ],
+    ids=["shell-call", "shell-at-call", "shell-at-CALL", "shell-SOURCE", "shell-at-source",
+         "batch-source", "batch-dot", "batch-at-source"],
+)
+def test_unsupported_source_commands_do_not_read_or_taint_targets(suffix, command):
+    child, selected, root = "child" + suffix, "env" + suffix, "setup" + suffix
+    assignment = "set CC=clang\n" if suffix == ".cmd" else "CC=clang\n"
+    reads = []
+    value = _static({
+        root: f"{command} {selected}\n{command} {child}\n",
+        selected: assignment, child: assignment,
+    }, reads=reads, max_scripts=3)
+    assert sorted(reads) == sorted([selected, root])
+    assert [(d["path"], d["status"], d["value"]) for d in value["declarations"]] == [
+        (selected, "declared", "clang"),
+    ]
+    assert f"{root}: unsupported_script_statement" in value["gaps"]
+    assert not any(gap.startswith(f"{selected}:") for gap in value["gaps"])
+
+
+@pytest.mark.parametrize("command", ["source", "."], ids=["source", "dot"])
+def test_supported_shell_source_commands_retain_bounded_reads(command):
+    reads = []
+    value = _static({"setup.bash": f"{command} child.sh\n", "child.sh": "CC=clang\n"},
+                    reads=reads, max_scripts=2)
+    assert reads == ["setup.bash", "child.sh"]
+    assert [(d["path"], d["status"], d["value"]) for d in value["declarations"]] == [
+        ("child.sh", "unknown", None),
+    ]
+    assert not any("unsupported_script_statement" in gap for gap in value["gaps"])
+
+
 def test_repeated_source_edges_do_not_consume_script_slots():
     reads = []
     files = {

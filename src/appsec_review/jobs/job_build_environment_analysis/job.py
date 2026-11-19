@@ -306,6 +306,7 @@ def analyze_environment(catalog, read_document, settings, *, clock=time.monotoni
             gaps.append(f"{path}: unsupported_script_encoding")
             continue
         batch = PurePosixPath(path).suffix.lower() in {".bat", ".cmd"}
+        source_command = r"(?i:@?call)" if batch else r"(?:source|\.)"
         lines = text.splitlines()
         continuation_marker = "^" if batch else "\\"
         # Relative sourcing and $0 depend on invocation context, not the defining file's location.
@@ -325,7 +326,7 @@ def analyze_environment(catalog, read_document, settings, *, clock=time.monotoni
             if was_continued:
                 gaps.append(f"{path}: unsupported_script_statement")
                 continue
-            source = re.match(r"(?i)^\s*(?:source|\.|call)\s+([A-Za-z0-9_./-]+)\s*$", line)
+            source = re.fullmatch(rf"\s*{source_command}\s+([A-Za-z0-9_./-]+)\s*", line)
             if source:
                 target = source[1]
                 if (target in inventory and PurePosixPath(target).suffix.lower() in SUPPORTED

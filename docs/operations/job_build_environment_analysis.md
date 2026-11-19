@@ -145,7 +145,9 @@ modes; [input contracts](../architecture/job-input-contracts.md) govern actual a
 2. Load the accepted catalog and require its source fingerprint to match the claim. Require
    target custody; select sorted accepted `.sh`, `.bash`, `.bat` and `.cmd` paths with
    environment/setup/setvars/bootstrap stems.
-3. Traverse only bounded literal source/call references to accepted script paths. Enforce
+3. Traverse only bounded literal source references to accepted script paths: shell `source`/`.`
+   are case-sensitive; batch `call`/`@call` are case-insensitive. Unsupported cross-dialect
+   commands produce statement gaps, not source edges. Enforce
    script count, bytes, source depth, assignment count and internal deadline. Never execute
    scripts or discover new paths outside the accepted inventory.
 4. Verify each read against its accepted hash. Recognize shell bare/`export` assignments with

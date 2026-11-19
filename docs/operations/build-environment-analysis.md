@@ -28,6 +28,9 @@ control flow, including `until` and `@if`, retains whole-script uncertainty. She
 batch caret continuations also retain uncertainty; their following lines are not parsed as
 independent assignments or source references. None of these bounded recognizers certifies full
 script syntax or execution behavior.
+Literal source edges also follow the caller's dialect: shell accepts lowercase `source` or `.`;
+batch accepts case-insensitive `call` or `@call`. Unsupported command forms produce statement
+gaps without reading or tainting another inventory member.
 
 `[jobs.job_build_environment_analysis.settings]` centrally bounds 64 scripts, 256 KiB/file,
 4096 assignments, source depth four and a 30-second internal deadline. Settings may tighten,
