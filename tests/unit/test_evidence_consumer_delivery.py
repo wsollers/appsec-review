@@ -242,6 +242,7 @@ def test_document_producer_publishes_queryable_late_input(tmp_path):
 def test_indexing_reads_domain_dispositions_not_stripped_assembly_fields(tmp_path, missing):
     from appsec_review.jobs.job_review_data_indexing import job as indexing
     from appsec_review.jobs.job_review_data_indexing.datasets import CONTRACT as INDEX_CONTRACT, DATASETS as INDEX_DATASETS
+    from appsec_review.retrieval.index import load_verified_manifest
     context, _consumer, published, handoff, _corr = scanner_publication(
         tmp_path, partial=True, observation=True, missing_domain=missing)
     assert "dispositions" not in handoff["outputs"]["evidence_publication.assemble_manifest"]
@@ -252,7 +253,7 @@ def test_indexing_reads_domain_dispositions_not_stripped_assembly_fields(tmp_pat
         manifest_sha=published["index_manifest"]["sha256"])
     attempt = context.run_root / "data/jobs" / indexing.JOB_ID / "attempts/attempt_0001"
     pin = file_sha256(context.attempt_root / "handoff.json")
-    consumer = replace(base, config=config, contract=INDEX_CONTRACT, attempt_root=attempt,
+    consumer = replace(base, config=config, contract=INDEX_CONTRACT, attempt_root=attempt, repository_root=tmp_path,
                        upstream_handoffs={"job_evidence_collection": pin})
     atomic_json(attempt / "claim.json", {
         "schema": "appsec-review/attempt-claim/1", "run_id": consumer.run_id,
@@ -262,21 +263,38 @@ def test_indexing_reads_domain_dispositions_not_stripped_assembly_fields(tmp_pat
         "dataset_contract": dataset_contract(indexing.JOB_ID, tuple(config.steps), INDEX_DATASETS),
     })
     job = indexing.build_job()
-    outputs = {}
+    manifest, _ = load_verified_manifest(
+        context.run_root, context.run_root / published["index_manifest"]["path"],
+        published["index_manifest"]["sha256"])
+    inputs = attempt / "steps/load/tasks/accepted_inputs/accepted-inputs.json"
+    atomic_json(inputs, {
+        "schema": "appsec-review/review-data-indexing-inputs/2",
+        "target_snapshot": manifest["target_snapshot"], "accepted_manifest": published["index_manifest"],
+        "shards": manifest["indexes"], "restored_shards": [], "feeds": {}, "owasp": {},
+    })
+    # Scanner correlation needs these verified observations, not repository-wide feed discovery or link products.
+    outputs = {"load.accepted_inputs": {"artifact": reference(context.run_root, inputs)},
+               "links.cross_domain": {"links": []}}
+    unit_id = "precompute.scanner_correlation"
+    unit = UnitContext(consumer, unit_id, "precompute", "scanner_correlation",
+                       attempt / "steps/precompute/tasks/scanner_correlation", outputs)
     with input_read_scope(consumer) as reads:
-        for unit_id in ("load.accepted_inputs", "links.cross_domain", "precompute.scanner_correlation"):
-            step, task = unit_id.split(".")
-            unit = UnitContext(consumer, unit_id, step, task, attempt / "steps" / step / "tasks" / task, outputs)
-            outputs[unit_id] = next(item for item in job.units if item.unit_id == unit_id).handler(unit)
-    output = outputs["precompute.scanner_correlation"]
+        output = next(item for item in job.units if item.unit_id == unit_id).handler(unit)
     assert output["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert output["counts"]["source_sast_observations"] == output["counts"]["lead_facts"] == 1
+    receipts = reads.document()["reads"]
+    assert any(row["output_kind"] == "static_tool_observations" and row["read"]
+               and row["sha256"] == manifest["indexes"][0]["sha256"]
+               and row["handoff_sha256"] == pin for row in receipts)
     if missing:
         assert any("scanner dispositions are unknown" in gap for gap in output["gaps"])
+        assert not any(row["output_kind"] == "static_tool_evidence" for row in receipts)
     else:
         assert any("scanner tool-semgrep: PARTIAL" in gap for gap in output["gaps"])
         assert "native scanner coverage incomplete" in output["gaps"]
         assert any(row["output_kind"] == "static_tool_evidence"
-                   and row["sha256"] == published["artifact"]["sha256"] for row in reads.document()["reads"])
+                   and row["sha256"] == published["artifact"]["sha256"]
+                   and row["read"] and row["handoff_sha256"] == pin for row in receipts)
 
 
 def test_document_context_without_drift_is_an_explicit_coverage_gap(tmp_path):
