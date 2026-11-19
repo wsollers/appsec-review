@@ -473,10 +473,27 @@ See the [handler](../../src/appsec_review/jobs/job_remediation_planning/job.py),
 ### `load`
 
 1. In `load.verify_inputs`, verify the accepted review and bounded package set.
-2. Select exactly the confirmed partition, sort by claim/package identity and reject state/
-   partition disagreement. Record confirmed, bounded-admission and supported-excluded counts.
-3. Write an immutable input snapshot; a missing required review is admission failure, not empty
-   remediation success.
+2. Select exactly the confirmed partition and reject state/partition disagreement. Rank before
+   applying the candidate cap: accepted critical, high, medium/low attack-chain participants,
+   remaining medium, low, informational, then unknown severity. Ties in accepted findings use
+   ascending finding-package identity, then claim identity. Record confirmed, bounded-admission
+   and supported-excluded counts.
+3. Write the immutable input snapshot and `priority-ranking.json`; a missing required review is
+   admission failure, not empty remediation success.
+
+The ranker reads the production accepted-finding projection (RMP-01): severity comes from
+`ship_block.technical_severity`, not a top-level alias or a different provider's score. An absent
+or unrecognized rating stays `unknown`; severity bounds do not become an asserted rating.
+`attack_chains` membership elevates the planning priority of medium/low findings, not their
+accepted technical severity. Membership does not establish a composed severity or reachability.
+The current accepted projection supplies neither, so the ranking retains `composed_severity: null`
+and `reachable: null`, with `reachability_not_established` recorded.
+
+The four dimensions in accepted `scores` retain their provider/scale identities in the input
+snapshot; they are not summed, maximized, clamped or substituted for one another. There is no
+cross-provider scalar-priority policy, so the ranking's numeric `score` is a neutral tie weight
+of `0.0` for accepted projections, **not** a measured zero-risk score. Unknown severity also records
+`severity_missing_or_unrated`. The ranking does not change adjudication or ship-block decisions.
 
 ### `assess`
 

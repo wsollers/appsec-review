@@ -15,6 +15,11 @@ _VALID_SEVERITIES = frozenset({"critical", "high", "medium", "low", "information
 
 
 def _normalized_severity(finding: Mapping[str, Any]) -> str:
+    if "ship_block" in finding:
+        block = finding["ship_block"]
+        raw = block.get("technical_severity") if isinstance(block, Mapping) else None
+        # The accepted policy rating is authoritative, including when it is unrated.
+        return raw.strip().lower() if isinstance(raw, str) and raw.strip().lower() in _VALID_SEVERITIES else "unknown"
     for key in ("technical_severity", "severity", "standalone_severity"):
         raw = finding.get(key)
         if isinstance(raw, str) and raw.strip().lower() in _VALID_SEVERITIES:
@@ -35,7 +40,7 @@ def _is_chain_elevated(finding: Mapping[str, Any], standalone: str, composed: st
     if composed in {"critical", "high"} and standalone not in {"critical"}:
         if composed == "critical" or standalone != "high":
             return True
-    chain_ids = finding.get("chain_ids")
+    chain_ids = finding.get("attack_chains", finding.get("chain_ids"))
     if isinstance(chain_ids, Sequence) and not isinstance(chain_ids, (str, bytes)) and len(chain_ids) > 0:
         if standalone in {"medium", "low"}:
             return True
@@ -55,6 +60,10 @@ def _is_reachable(finding: Mapping[str, Any]) -> bool | None:
 
 
 def _numeric_score(finding: Mapping[str, Any]) -> float:
+    if "scores" in finding:
+        # Accepted scores have independent, provider-labelled scales, not a scalar risk score.
+        # Zero is the neutral tie weight, not a measured score or a substitute for missing evidence.
+        return 0.0
     for key in ("score", "risk_score", "priority_score", "cvss_score"):
         val = finding.get(key)
         if isinstance(val, (int, float)) and not isinstance(val, bool):
@@ -79,15 +88,16 @@ def _finding_identifier(finding: Mapping[str, Any]) -> str:
 def finding_risk_sort_key(finding: Mapping[str, Any]) -> tuple[int, float, str, str]:
     """Compute deterministic risk-first sort key:
 
-    0: critical (standalone or chain-composed critical)
+    0: critical (standalone)
     1: high (standalone)
-    2: chain-elevated (e.g. medium+medium -> high/critical chain participant)
+    2: chain-elevated priority (including accepted medium/low chain participants)
     3: reachable medium
     4: medium without explicit confirmed reachability
     5: low
     6: informational
     7: unknown severity (unrated, not informational)
-    Within each tier: descending numeric score, then ascending ``finding_id`` and ``claim_id``.
+    Within each tier: descending scalar score if supplied, then ascending finding and claim identity.
+    Accepted projections carry no scalar score: their separate score dimensions remain uncombined.
     """
     standalone = _normalized_severity(finding)
     composed = _composed_severity(finding)
