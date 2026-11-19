@@ -321,6 +321,8 @@
         "tests/unit/job_evidence_collection/test_cppcheck_profile.py",
         "tests/unit/job_evidence_collection/test_rulepacks_and_checkpoints.py",
         "tests/unit/job_evidence_collection/test_job_graph.py",
+        "tests/unit/job_evidence_collection/test_taint_and_corroboration.py",
+        "tests/unit/job_evidence_collection/test_scanner_semantics.py",
         "tests/unit/runtime/test_wave5_contracts.py"
       ],
       "integration": [

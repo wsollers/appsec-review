@@ -363,9 +363,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5129 | [Read real catalog documents once with custody and parse gaps](#t-5129-read-real-catalog-documents-once-with-custody-and-parse-gaps) | evidence | open |
 | T-5130 | [Preserve route-local guards authentication methods and operation context](#t-5130-preserve-route-local-guards-authentication-methods-and-operation-context) | evidence | open |
 | T-5131 | [Deliver document drift through the actual inference retrieval path](#t-5131-deliver-document-drift-through-the-actual-inference-retrieval-path) | review | open |
-| T-5132 | [Treat parseable scanner error documents as coverage failures](#t-5132-treat-parseable-scanner-error-documents-as-coverage-failures) | scanners | open |
-| T-5133 | [Corroborate before caps with order-independent evidence clustering](#t-5133-corroborate-before-caps-with-order-independent-evidence-clustering) | scanners | open |
-| T-5134 | [Keep scanner submission scope and full coverage counts truthful](#t-5134-keep-scanner-submission-scope-and-full-coverage-counts-truthful) | scanners | open |
+| T-5132 | [Treat parseable scanner error documents as coverage failures](#t-5132-treat-parseable-scanner-error-documents-as-coverage-failures) | scanners | done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad) |
+| T-5133 | [Corroborate before caps with order-independent evidence clustering](#t-5133-corroborate-before-caps-with-order-independent-evidence-clustering) | scanners | done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad) |
+| T-5134 | [Keep scanner submission scope and full coverage counts truthful](#t-5134-keep-scanner-submission-scope-and-full-coverage-counts-truthful) | scanners | done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad) |
 | T-5135 | [Read retained corroboration payloads rather than stripped control fields](#t-5135-read-retained-corroboration-payloads-rather-than-stripped-control-fields) | review | open |
 | T-5136 | [Bind every verified unit context into the durable publication snapshot](#t-5136-bind-every-verified-unit-context-into-the-durable-publication-snapshot) | evidence | open |
 | T-5137 | [Reject contradictory certified buckets and counts](#t-5137-reject-contradictory-certified-buckets-and-counts) | evidence | open |
@@ -4455,29 +4455,39 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5132 — Treat parseable scanner error documents as coverage failures
 
-- **State:** open
+- **State:** done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad)
 - **Area:** scanners
 - **Why:** Archived audit/feedback cases: EC-01. Malformed/error-shaped native reports become successful zero-result scans.
 - **Scope:** `src/appsec_review/jobs/job_evidence_collection/adapters.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Verified on main: 179 affected units passed in 11.21 s, two workers, seed 9132, none over
+  10 s and no skips. Unknown native shapes fail with retained raw evidence; usable reports
+  with engine diagnostics remain partial, with resolving native selectors.
+  Native scanners, integration, acceptance and live validation were not run.
 - **Refs:** `audit-results/job-audit-job_evidence_collection.md`; follow-up to closed T-170 (not reopened).
 
 ### T-5133 — Corroborate before caps with order-independent evidence clustering
 
-- **State:** open
+- **State:** done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad)
 - **Area:** scanners
 - **Why:** Archived audit/feedback cases: EC-02, EC-03. Cross-scanner “pre-cap” corroboration receives already capped per-tool evidence; Greedy CWE clustering is order-dependent, changing counts and identities.
 - **Scope:** `src/appsec_review/jobs/job_evidence_collection/evidence.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5132's 179-case main selection. Verified retained reports feed deterministic
+  connected-span clustering before final ranking/caps; failed retry outputs never add
+  agreement. Native receipts, source hashes and original omission gaps remain bound.
 - **Refs:** `audit-results/job-audit-job_evidence_collection.md`; follow-up to closed T-170 (not reopened).
 
 ### T-5134 — Keep scanner submission scope and full coverage counts truthful
 
-- **State:** open
+- **State:** done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad)
 - **Area:** scanners
 - **Why:** Archived audit/feedback cases: EC-04, EC-05, EC-07. Final not-applicable totals are recomputed from truncated detail samples; Directory scanners do not enforce the accepted path selection.
 - **Scope:** `src/appsec_review/jobs/job_evidence_collection/adapters.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5132's 179-case main selection. Directory scans receive the exact hash-checked
+  selection; Cppcheck reports only submitted compile-database inputs and names lost build
+  context. Complete per-tool counts survive bounded explanatory samples.
 - **Refs:** `audit-results/job-audit-job_evidence_collection.md`; follow-up to closed T-170 (not reopened).
 
 ### T-5135 — Read retained corroboration payloads rather than stripped control fields

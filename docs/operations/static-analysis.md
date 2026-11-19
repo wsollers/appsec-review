@@ -92,7 +92,7 @@ Tool observations remain evidence/leads and the envelope deliberately contains n
 
 The [interchange provenance upgrade](../architecture/job-interchange.md) introduces shared
 observation metadata and native-result references for this lane while preserving scanner-specific
-fields. The implementation uses evidence schema `/2` and normalizer `static-evidence/4`; an older
+fields. The implementation uses evidence schema `/2` and normalizer `static-evidence/5`; an older
 `/1` envelope must not be relabeled as upgraded evidence. Each reference identifies retained original bytes,
 selector, parser, completeness, and available execution/retention receipts. For partitioned OSV
 launches, the provenance must name the original invocation result, not only
