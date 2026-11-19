@@ -237,8 +237,8 @@ def test_receipt_context_indexes_actions_invocations_rows_and_artifacts_once() -
     assert index == 3 and invocation["tool"] == "ld"
     first = receipt["validated_artifacts"][0]
     assert [row["command_id"] for row in context.relationship_rows_by_sha[first["sha256"]]] == ["compile"]
-    assert context.artifacts_by_path[first["workspace_path"]] is first
-    assert context.artifacts_by_hash[first["sha256"]] is first
+    assert context.artifacts_by_path[first["workspace_path"]] == [first]
+    assert context.artifacts_by_hash[first["sha256"]] == [first]
     # invocations are walked once for the output index and once for the receipt-wide fingerprint parts
     assert (receipt["tool_invocations"].passes, receipt["relationships"].passes) == (2, 1)
     action = context.action_identity("compile")
@@ -295,11 +295,14 @@ def test_fingerprint_parts_pin_actions_invocations_dependencies_and_toolchain() 
     }
 
 
-def test_sorted_artifacts_break_equal_path_ties_by_hash_without_mutating_the_input() -> None:
-    rows = [{"workspace_path": "z", "sha256": "a"}, {"workspace_path": "a", "sha256": "b"},
-            {"workspace_path": "a", "sha256": "a"}]
-    assert _sorted_artifacts(iter(rows)) == [rows[2], rows[1], rows[0]]
-    assert [row["sha256"] for row in rows] == ["a", "b", "a"]
+def test_sorted_artifacts_break_path_and_hash_ties_by_format_without_mutating_the_input() -> None:
+    rows = [{"workspace_path": "z", "sha256": "a", "kind": "object"},
+            {"workspace_path": "a", "sha256": "b", "kind": "object"},
+            {"workspace_path": "a", "sha256": "a", "kind": "object"},
+            {"workspace_path": "a", "sha256": "a", "kind": "library"}]
+    assert _sorted_artifacts(iter(rows)) == [rows[3], rows[2], rows[1], rows[0]]
+    assert _sorted_artifacts(reversed(rows)) == _sorted_artifacts(rows)
+    assert [row["sha256"] for row in rows] == ["a", "b", "a", "a"]
 
 
 def test_artifact_reference_binds_actual_bytes_size_and_run_relative_path(tmp_path: Path) -> None:

@@ -12,6 +12,8 @@ import json
 from pathlib import Path
 import sqlite3
 
+import pytest
+
 from appsec_review.jobs.job_artifact_indexing import artifact_index_fingerprint, canonical_artifact_identity
 from appsec_review.jobs.job_artifact_indexing.job import _catalogs, _manifest_entries, canonical_target_artifact_identity
 from appsec_review.retrieval import INDEX_SCHEMA, index_fingerprint
@@ -47,11 +49,13 @@ def test_one_shard_per_build_unit_and_family_in_family_order_with_bound_fingerpr
         assert index["producer"] == {"job": "job_artifact_indexing", "unit": "index.catalogs", "family": family}
         assert index["name"] == "artifacts" and index["schema"] == INDEX_SCHEMA and index["gaps"] == ()
         assert index["relative_path"] == f"data/indices/artifacts/{index['fingerprint']}.sqlite"
-        assert index["fingerprint"] == artifact_index_fingerprint(
+        dependencies = artifact_index_fingerprint(
             name="artifacts", target_snapshot=SNAPSHOT, receipt=receipt, artifacts=by_family[family],
             upstream_manifests=_manifest_entries(receipt, by_family[family]), extractor_identity="none",
             parser_identity=SETTINGS["catalog_parser_identity"], normalizer_identity=SETTINGS["normalizer_identity"],
             mapping_identity=SETTINGS["mapping_identity"])
+        assert index["fingerprint"] != dependencies, "the dependency fingerprint alone does not bind emitted content"
+        assert _rows(tmp_path, index, "SELECT value FROM metadata WHERE key='fingerprint'") == [(index["fingerprint"],)]
         assert _rows(tmp_path, index, "SELECT area, status, gap FROM coverage") == [(f"{UNIT}:{family}", "complete", None)]
         assert _rows(tmp_path, index, "SELECT count(*) FROM entities") == [(len(by_family[family]),)]
 
@@ -93,6 +97,51 @@ def test_rerun_reuses_every_completed_shard_and_producer_gaps_drive_the_terminal
         (item["shard_id"], item["sha256"], item["fingerprint"]) for item in first["indexes"]]
 
 
+@pytest.mark.parametrize("field,before,after", [
+    ("delivery_status", "unknown", "delivered"),
+    ("source_map", {"sources": ["old.ts"]}, {"sources": ["new.ts"]}),
+    ("package_metadata", {"version": "1"}, {"version": "2"}),
+], ids=["delivery", "source-map", "package-metadata"])
+def test_retry_indexes_changed_catalog_payload_without_replacing_old_bytes(
+        tmp_path: Path, field: str, before, after) -> None:
+    receipt = validated_receipt(0)
+    artifact = receipt["validated_artifacts"][0]
+    artifact[field] = before
+    unit = _unit(tmp_path, [receipt])
+    first, = _catalogs(unit)["indexes"]
+    old_bytes = (tmp_path / first["relative_path"]).read_bytes()
+    artifact[field] = after
+    result = _catalogs(unit)
+    second, = result["indexes"]
+    assert result["reused_count"] == 0
+    assert first["fingerprint"] != second["fingerprint"]
+    for index, value in ((first, before), (second, after)):
+        identity, payload = _rows(tmp_path, index, "SELECT identity, payload_json FROM entities")[0]
+        assert identity == artifact["canonical_identity"]
+        assert json.loads(payload)[field] == value
+    assert (tmp_path / first["relative_path"]).read_bytes() == old_bytes
+    retry = _catalogs(unit)
+    assert retry["reused_count"] == 1 and retry["indexes"] == result["indexes"]
+
+
+def test_retry_binds_the_bounded_payload_actually_written_not_only_sorted_raw_keys(tmp_path: Path) -> None:
+    receipt = validated_receipt(0)
+    artifact = receipt["validated_artifacts"][0]
+    metadata = {f"field-{index:03d}": index for index in range(201)}
+    artifact["package_metadata"] = metadata
+    unit = _unit(tmp_path, [receipt])
+    first, = _catalogs(unit)["indexes"]
+    artifact["package_metadata"] = dict(reversed(list(metadata.items())))
+    result = _catalogs(unit)
+    second, = result["indexes"]
+    assert result["reused_count"] == 0 and first["fingerprint"] != second["fingerprint"]
+    payloads = [json.loads(_rows(tmp_path, index, "SELECT payload_json FROM entities")[0][0])["package_metadata"]
+                for index in (first, second)]
+    assert len(payloads[0]) == len(payloads[1]) == 200
+    assert "field-000" in payloads[0] and "field-200" not in payloads[0]
+    assert "field-200" in payloads[1] and "field-000" not in payloads[1]
+
+
 def test_no_receipts_and_no_target_artifacts_is_not_applicable(tmp_path: Path) -> None:
     assert _catalogs(_unit(tmp_path, [])) == {"indexes": [], "shard_count": 0, "reused_count": 0, "gaps": [],
                                                "terminal_status": "NOT_APPLICABLE"}
@@ -113,10 +162,12 @@ def test_target_intake_artifacts_get_their_own_partial_shard_with_delivery_gaps(
     assert index["gaps"] == ("prebuilt/module.wasm: target artifact delivery status is unknown",)
     assert_published_gaps(tmp_path, "index.catalogs", index["gaps"],
                           ["prebuilt/module.wasm: target artifact delivery status is unknown"])
-    assert index["fingerprint"] == index_fingerprint(
+    dependencies = index_fingerprint(
         name="artifacts", target_snapshot=SNAPSHOT, producer_artifacts=[target], tool_identity={"producer": "target-intake"},
         parser_identity=SETTINGS["catalog_parser_identity"], normalizer_identity=SETTINGS["normalizer_identity"],
         mapping_identity="exact-target-path/1")
+    assert index["fingerprint"] != dependencies
+    assert _rows(tmp_path, index, "SELECT value FROM metadata WHERE key='fingerprint'") == [(index["fingerprint"],)]
     assert _rows(tmp_path, index, "SELECT area, status, gap FROM coverage") == [
         ("target-artifact-intake", "partial", "prebuilt/module.wasm: target artifact delivery status is unknown")]
     (identity, native_id, name, text, payload_json), = _rows(

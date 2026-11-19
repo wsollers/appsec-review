@@ -4,7 +4,7 @@ from appsec_review.runtime.inputs import decode_consumed_handoff as decode_hando
 
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -28,7 +28,7 @@ from appsec_review.retrieval import (
     write_manifest,
 )
 from appsec_review.retrieval.index import load_verified_manifest
-from appsec_review.retrieval.model import canonical_json, normalize_relative_path
+from appsec_review.retrieval.model import canonical_json, normalize_relative_path, sanitize_producer_data
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, LockUnavailable, atomic_json, file_sha256
 from appsec_review.storage.shared import OBJECTS, verify_reference
@@ -43,7 +43,7 @@ MAPPING_IDENTITY = "appsec-review/receipt-workspace-mapping/1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MAX_LINK_OBSERVATIONS = 500  # Retrieval payload sanitization keeps at most 500 list items.
 # Relations and member shards are persisted per build unit in deterministic bounded batches:
-# artifacts sorted by (workspace_path, sha256) are packed greedily until either limit would be
+# artifacts sorted by (workspace_path, sha256, kind) are packed greedily until either limit would be
 # exceeded. A single artifact over the row limit gets its own shard. Both limits are bound into
 # the shard fingerprint.
 SHARD_LAYOUT = "build-unit-batch/1"
@@ -245,8 +245,8 @@ class _ReceiptContext:
     actions_by_argv: dict[str, list[str]]
     invocations_by_output: dict[tuple[str, str], list[tuple[int, Mapping[str, Any]]]]
     relationship_rows_by_sha: dict[str, list[Mapping[str, Any]]]
-    artifacts_by_path: dict[str, Mapping[str, Any]]
-    artifacts_by_hash: dict[str, Mapping[str, Any]]
+    artifacts_by_path: dict[str, list[Mapping[str, Any]]]
+    artifacts_by_hash: dict[str, list[Mapping[str, Any]]]
     fingerprint_parts: Mapping[str, Any]
     _action_identities: dict[str, LogicalIdentity] = field(default_factory=dict)
 
@@ -274,13 +274,29 @@ class _ReceiptContext:
         for row in receipt.get("relationships", ()):
             if isinstance(row, Mapping) and isinstance(row.get("artifact_sha256"), str):
                 rows_by_sha[row["artifact_sha256"]].append(row)
+        artifacts_by_path: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        artifacts_by_hash: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        for artifact in validated:
+            artifacts_by_path[str(artifact["workspace_path"])].append(artifact)
+            artifacts_by_hash[str(artifact["sha256"])].append(artifact)
         return cls(
             receipt, target_snapshot, actions, dict(actions_by_argv), dict(invocations_by_output),
-            dict(rows_by_sha),
-            {str(item["workspace_path"]): item for item in validated},
-            {str(item["sha256"]): item for item in validated},
+            dict(rows_by_sha), dict(artifacts_by_path), dict(artifacts_by_hash),
             _fingerprint_parts(receipt),
         )
+
+    def link_input(self, value: Mapping[str, Any]) -> tuple[Mapping[str, Any] | None, str | None]:
+        candidates = self.artifacts_by_path.get(str(value.get("workspace_path", "")), [])
+        digest = value.get("sha256")
+        if candidates and digest is not None:
+            candidates = [item for item in candidates if item["sha256"] == digest]
+            if not candidates:
+                return None, "identity conflicts with retained artifact"
+        elif not candidates and digest is not None:
+            candidates = self.artifacts_by_hash.get(str(digest), [])
+        if len(candidates) > 1:
+            return None, "mapping is ambiguous"
+        return (candidates[0], None) if candidates else (None, None)
 
     def action_identity(self, command_id: str) -> LogicalIdentity:
         identity = self._action_identities.get(command_id)
@@ -310,10 +326,11 @@ def artifact_index_fingerprint(
     receipt_context: _ReceiptContext | None = None,
     shard_layout: Mapping[str, Any] | None = None,
 ) -> str:
-    """Fingerprint one artifact shard.
+    """Fingerprint the dependencies of one artifact shard.
 
     ``receipt_context`` only reuses receipt-wide inputs already derived from ``receipt``; the
     result is identical with or without it. ``shard_layout`` is bound for batched shards only.
+    Publication additionally binds the complete emitted records and physical shard identity.
     """
     if receipt_context is not None and receipt_context.receipt is not receipt:
         raise ArtifactIndexIntegrityError("receipt context belongs to another receipt")
@@ -327,7 +344,8 @@ def artifact_index_fingerprint(
         "build_unit_id": receipt.get("build_unit_id"),
         "artifact_family": sorted({artifact_family(str(item["format"])).value
                                     for item in artifact_values}),
-        "artifacts": sorted(artifact_values, key=lambda item: (item["workspace_path"], item["sha256"])),
+        "artifacts": sorted(artifact_values, key=lambda item: (
+            item["workspace_path"], item["sha256"], item["format"])),
         "producing_actions": parts["producing_actions"],
         "producing_invocations": parts["producing_invocations"],
         "dependency_identities": parts["dependency_identities"],
@@ -568,16 +586,38 @@ def _finish_shard(builder: IndexBuilder, path: Path) -> tuple[str, bool]:
             time.sleep(0.01)
 
 
-def _index_identity(unit: UnitContext, builder: IndexBuilder, path: Path,
+def _record_content(record: EntityRecord | RelationRecord) -> dict[str, Any]:
+    # Match the writer's payload sanitization before canonicalizing: key order can affect bounded
+    # payloads, so hashing only the unsanitized mapping would miss a change in retained fields.
+    record = replace(record, payload=sanitize_producer_data(record.payload or {}))
+    if isinstance(record, EntityRecord) and record.location is not None:
+        record = replace(record, location=replace(
+            record.location, producer_location=sanitize_producer_data(record.location.producer_location)))
+    return asdict(record)
+
+
+def _index_identity(unit: UnitContext, builder: IndexBuilder,
                     gaps: Iterable[str], family: str,
                     producer_extra: Mapping[str, Any] | None = None) -> tuple[dict[str, Any], bool]:
+    gaps = tuple(dict.fromkeys(str(gap) for gap in gaps))
+    # Bind complete records before coalescing, including duplicate observations and coverage.
+    # The ordinal is part of shard_id: moving a batch must never open the old path with new metadata.
+    builder.fingerprint = hashlib.sha256(canonical_json({
+        "schema": "appsec-review/artifact-shard-content/1",
+        "dependencies": builder.fingerprint, "shard_id": builder.shard_id,
+        "entities": sorted((_record_content(row) for row in builder.entities), key=canonical_json),
+        "relations": sorted((_record_content(row) for row in builder.relations), key=canonical_json),
+        "coverage": sorted(builder.coverage, key=canonical_json),
+        "gaps": sorted(gaps),
+    })).hexdigest()
+    path = builder.path = _shard_path(unit, builder.fingerprint, builder.shard_id)
     sha, reused = _finish_shard(builder, path)
     identity = IndexIdentity(
         "artifacts", INDEX_SCHEMA, sha, builder.fingerprint,
         path.relative_to(unit.job.run_root).as_posix(),
         {"job": "job_artifact_indexing", "unit": unit.unit_id, "family": family,
          **(producer_extra or {})},
-        tuple(dict.fromkeys(str(gap) for gap in gaps)), builder.shard_id,
+        gaps, builder.shard_id,
     )
     return asdict(identity), reused
 
@@ -631,7 +671,7 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
                     f"{artifact['kind']} {artifact['workspace_path']}", payload))
                 count_work("artifacts_processed")
             builder.add_coverage(f"{receipt['build_unit_id']}:{family.value}", "complete")
-            identity, was_reused = _index_identity(unit, builder, path, (), family.value)
+            identity, was_reused = _index_identity(unit, builder, (), family.value)
             identities.append(identity)
             reused += int(was_reused)
     target_artifacts = loaded.get("target_artifacts", [])
@@ -657,7 +697,7 @@ def _catalogs(unit: UnitContext) -> Mapping[str, Any]:
         gaps = [f"{item['target_relative_path']}: target artifact delivery status is unknown"
                 for item in target_artifacts]
         builder.add_coverage("target-artifact-intake", "partial", gaps[0])
-        identity, was_reused = _index_identity(unit, builder, path, gaps, "target-intake")
+        identity, was_reused = _index_identity(unit, builder, gaps, "target-intake")
         identities.append(identity)
         reused += int(was_reused)
     return {"indexes": identities, "shard_count": len(identities), "reused_count": reused,
@@ -681,7 +721,8 @@ class _ArtifactRows:
 
 
 def _sorted_artifacts(artifacts: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-    return sorted(artifacts, key=lambda item: (str(item["workspace_path"]), str(item["sha256"])))
+    return sorted(artifacts, key=lambda item: (
+        str(item["workspace_path"]), str(item["sha256"]), str(item["kind"])))
 
 
 def _pack(rows: Iterable[_ArtifactRows]) -> Iterator[list[_ArtifactRows]]:
@@ -749,7 +790,7 @@ def _write_batches(unit: UnitContext, context: _ReceiptContext, *, prefix: str, 
                                  item.gaps[0] if item.gaps else None)
             shard_gaps.extend(item.gaps)
         identity, was_reused = _index_identity(
-            unit, builder, path, shard_gaps, family,
+            unit, builder, shard_gaps, family,
             {"build_unit_id": build_unit_id, "batch": batch_index})
         identities.append(identity)
         reused += int(was_reused)
@@ -857,9 +898,10 @@ def _artifact_relations(context: _ReceiptContext, artifact: Mapping[str, Any]) -
             for input_index, raw_input in enumerate(invocation.get("inputs", ())):
                 if not isinstance(raw_input, Mapping):
                     continue
-                source = context.artifacts_by_path.get(str(raw_input.get("workspace_path", "")))
-                if source is None and raw_input.get("sha256"):
-                    source = context.artifacts_by_hash.get(str(raw_input["sha256"]))
+                source, gap = context.link_input(raw_input)
+                if gap is not None:
+                    label = str(raw_input.get("workspace_path") or raw_input.get("sha256", ""))
+                    artifact_gaps.append(f"{artifact['workspace_path']}: link input {label!r} {gap}")
                 if source is not None:
                     exact = raw_input.get("mapping_confidence") == 1.0
                     relation = RelationRecord(RelationKind.LINKS_INTO,

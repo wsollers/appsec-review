@@ -19,7 +19,7 @@ from appsec_review.jobs.job_artifact_indexing.job import (
 from appsec_review.retrieval import INDEX_SCHEMA, IndexBuilder
 from appsec_review.storage import FileLock, LockUnavailable, file_sha256
 from tests.unit.job_artifact_indexing.support import (
-    SETTINGS, SNAPSHOT, assert_published_gaps, unit_context, validated_artifact, validated_receipt,
+    SETTINGS, SNAPSHOT, assert_published_gaps, loaded_output, unit_context, validated_artifact, validated_receipt,
 )
 
 
@@ -84,14 +84,19 @@ def test_index_identity_records_the_shard_its_producer_and_deduplicated_gaps(tmp
     unit = unit_context(tmp_path, "index.members")
     path = _shard_path(unit, "f" * 64, "members-unit-0000")
     assert path == tmp_path / "data/indices/artifacts" / ("f" * 64 + ".sqlite")
-    identity, reused = _index_identity(unit, _builder(path, shard_id="members-unit-0000"), path,
+    identity, reused = _index_identity(unit, _builder(path, shard_id="members-unit-0000"),
                                        ["a: gap", "b: gap", "a: gap"], "members", {"build_unit_id": "unit", "batch": 0})
+    fingerprint = identity["fingerprint"]
+    assert fingerprint != "f" * 64
+    path = tmp_path / identity["relative_path"]
     assert reused is False
-    assert identity == {"name": "artifacts", "schema": INDEX_SCHEMA, "sha256": file_sha256(path), "fingerprint": "f" * 64,
-                        "relative_path": "data/indices/artifacts/" + "f" * 64 + ".sqlite",
+    assert identity == {"name": "artifacts", "schema": INDEX_SCHEMA, "sha256": file_sha256(path), "fingerprint": fingerprint,
+                        "relative_path": f"data/indices/artifacts/{fingerprint}.sqlite",
                         "producer": {"job": "job_artifact_indexing", "unit": "index.members", "family": "members",
                                      "build_unit_id": "unit", "batch": 0},
                         "gaps": ("a: gap", "b: gap"), "shard_id": "members-unit-0000"}
+    assert _verify_shard(path, name="artifacts", fingerprint=fingerprint,
+                         shard_id=identity["shard_id"], target_snapshot=SNAPSHOT) == identity["sha256"]
     assert_published_gaps(tmp_path, unit.unit_id, identity["gaps"], ["a: gap", "b: gap"])
 
 
@@ -172,3 +177,61 @@ def test_write_batches_persists_entities_relations_coverage_and_reuse_counts(
     again, reused = _write_batches(unit, context, rows=iter(rows), **kwargs)
     assert reused == 2 and again == indexes
     assert _write_batches(unit, context, rows=iter(()), **kwargs) == ([], 0)
+
+
+@pytest.mark.parametrize("branch", ["members", "relationships"])
+def test_earlier_batch_insertion_and_removal_preserve_existing_shards(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, branch: str) -> None:
+    monkeypatch.setattr(job_module, "MAX_ARTIFACTS_PER_SHARD", 1)
+    receipt = validated_receipt(0)
+    receipt["validated_artifacts"] = [validated_artifact("z.whl", "wheel", "z")]
+    receipt["package_members"] = [{"package_path": "z.whl", "member": "z.py", "size_bytes": 1}]
+    unit = unit_context(tmp_path, f"index.{branch}", {
+        "load.accepted_builds": loaded_output([receipt]),
+    })
+    handler = getattr(job_module, f"_{branch}")
+    first = handler(unit)
+    original, = first["indexes"]
+    old_bytes = (tmp_path / original["relative_path"]).read_bytes()
+    receipt["validated_artifacts"].insert(0, validated_artifact("a.whl", "wheel", "a"))
+    receipt["package_members"].append({"package_path": "a.whl", "member": "a.py", "size_bytes": 1})
+    inserted = handler(unit)
+    assert inserted["shard_count"] == 2 and inserted["reused_count"] == 0
+    assert inserted["indexes"][1]["shard_id"].endswith("-0001")
+    assert inserted["indexes"][1]["relative_path"] != original["relative_path"]
+    assert (tmp_path / original["relative_path"]).read_bytes() == old_bytes
+    assert handler(unit)["reused_count"] == 2
+    receipt["validated_artifacts"].pop(0)
+    restored = handler(unit)
+    assert restored["reused_count"] == 1 and restored["indexes"] == first["indexes"]
+    receipt["validated_artifacts"].append(validated_artifact("zz.whl", "wheel", "zz"))
+    receipt["package_members"].append({"package_path": "zz.whl", "member": "zz.py", "size_bytes": 1})
+    appended = handler(unit)
+    assert appended["shard_count"] == 2 and appended["reused_count"] == 1
+    for key in ("shard_id", "fingerprint", "relative_path", "sha256"):
+        assert appended["indexes"][0][key] == original[key]
+
+
+@pytest.mark.parametrize("change", ["status", "reason", "gap"])
+def test_content_identity_binds_coverage_and_all_published_gap_reasons(tmp_path: Path, change: str) -> None:
+    unit = unit_context(tmp_path, "index.members")
+
+    def publish(status: str, reason: str, gaps: list[str]):
+        builder = IndexBuilder(tmp_path / "unused.sqlite", name="artifacts", fingerprint="f" * 64,
+                               target_snapshot=SNAPSHOT, shard_id="members-unit-0000")
+        builder.add_coverage("sample.whl", status, reason)
+        return _index_identity(unit, builder, gaps, "members")
+
+    first, reused = publish("partial", "manifest absent", ["manifest absent"])
+    assert not reused
+    old_bytes = (tmp_path / first["relative_path"]).read_bytes()
+    status = "unavailable" if change == "status" else "partial"
+    reason = "manifest unreadable" if change == "reason" else "manifest absent"
+    gaps = ["manifest absent", "identity unresolved"] if change == "gap" else ["manifest absent"]
+    second, reused = publish(status, reason, gaps)
+    assert not reused and first["fingerprint"] != second["fingerprint"]
+    with sqlite3.connect(tmp_path / second["relative_path"]) as database:
+        assert database.execute("SELECT status, gap FROM coverage").fetchall() == [(status, reason)]
+    assert list(second["gaps"]) == gaps
+    assert (tmp_path / first["relative_path"]).read_bytes() == old_bytes
+    assert publish(status, reason, gaps) == (second, True)

@@ -206,13 +206,19 @@ member manifests; it does not unpack archives or invoke a scanner. Generated too
    Validate member paths/size/identity, reject duplicate members and create `CONTAINS` edges.
    Missing member manifests remain coverage gaps.
 3. In `index.relationships`, join artifacts to recorded actions and output invocations. Preserve
-   exact versus heuristic attribution. Prefer exact link inputs, deduplicate link edges and retain
+   exact versus heuristic attribution. A retained input path and supplied hash must agree; path
+   and hash lookups retain all candidates. A unique path/hash match may disambiguate duplicate
+   paths or equal bytes. Hash fallback is allowed only when the path is not retained and the hash
+   identifies one artifact. Conflicts or multiple remaining candidates emit a named gap and no
+   link edge, regardless of captured confidence. Deduplicate resolved link edges and retain
    only bounded provenance observations. If no action maps but actions exist, relate to every
    candidate with low confidence and an ambiguity reason; if none exist, record missing provenance.
-4. Greedily pack sorted member/relationship rows into deterministic build-unit batches bounded by
+4. Sort artifacts by workspace path, hash and format, then greedily pack their member/relationship
+   rows into deterministic build-unit batches bounded by
    artifact and row counts. A single oversized artifact occupies its own batch: the packing target
-   is not a hard per-artifact row cap. Under a shard lock, verify metadata and SQLite integrity
-   before reusing a completed shard, otherwise build it.
+   is not a hard per-artifact row cap. Bind complete canonical records, coverage, gap reasons and
+   the physical shard ID into each fingerprint before selecting its immutable path. Under a shard
+   lock, verify metadata and SQLite integrity before reusing a completed shard, otherwise build it.
 
 ### `acceptance`
 
@@ -232,12 +238,14 @@ flowchart LR
   load --> catalogs["index.catalogs: artifact_catalog"]
   load --> members["index.members: archive_members"]
   load --> relations["index.relationships: artifact_relationships"]
-  catalogs --> publish["acceptance.publish_handoff: artifact_index_summary"]
-  members --> publish
-  relations --> publish
+  catalogs --> bind["bind dependencies + emitted content + shard ID"]
+  members --> bind
+  relations --> bind
+  bind --> shards["verify/reuse or build immutable shards"]
+  shards --> publish["acceptance.publish_handoff: artifact_index_summary"]
   load -. "absent receipts / unknown delivery" .-> gaps["legacy reasons"]
   members -. "member manifest absent" .-> gaps
-  relations -. "missing / ambiguous / capped provenance" .-> gaps
+  relations -. "missing / conflicting / ambiguous / capped provenance" .-> gaps
   gaps --> publish
   load -. "identity or custody violation" .-> stop["integrity exception"]
 ```
@@ -251,7 +259,8 @@ wraps them as `producer_reported_gap`, normally non-retryable. That bit does not
   target intake, legacy catalog without target inventory, inherited build/catalog reasons and
   missing archive-member manifest.
 - Coverage missing: unknown target-artifact delivery, ambiguous producing-action mapping, no
-  producing-action receipt and link provenance exceeding its observation bound.
+  producing-action receipt, conflicting or ambiguous retained link-input identity and link
+  provenance exceeding its observation bound.
 - Invalid schema, duplicate unit/artifact/member, escaping path, missing/changed artifact or
   workspace manifest, invalid Node integrity metadata and corrupt existing shards raise
   `ArtifactIndexIntegrityError`. Lock exhaustion is an execution failure, not a clean empty index.
@@ -274,11 +283,21 @@ does not imply approval by the current walk.
 
 ## Resume and invalidation
 
-Catalog fingerprints bind snapshot, artifact path/hash/size/family, producing actions and
-invocations, dependencies, toolchain/image and parser/extractor/normalizer/mapping identities.
-Member/relationship batches also bind layout and row content; target-intake fingerprints bind its
-accepted records. Unchanged batches reuse verified immutable SQLite shards; changed membership
-can repartition later batches without invalidating unrelated build units. See
+All shard fingerprints bind the dependency fingerprint plus complete entity/relation records
+before duplicate coalescing, with the writer's bounded payload sanitization applied, coverage,
+published gap reasons and physical shard ID. Canonical row ordering preserves reuse for reordered
+equivalent inputs. The dependency fingerprint retains snapshot, artifact path/hash/size/family,
+producing actions/invocations, dependencies, toolchain/image and parser/extractor/normalizer/mapping
+identities; member/relationship batches also bind packing limits and target-intake shards bind
+accepted intake records.
+
+Changed metadata, member manifests, relationship observations or coverage therefore select a new
+path even when row counts and artifact bytes stay equal. A batch moving to another ordinal gets a
+new fingerprint rather than opening valid old bytes with mismatched shard metadata. An unchanged
+batch at the same ordinal still reuses its verified shard when later batches are added or removed.
+Old shards remain untouched; neither accepted bytes nor custody/hash verification is bypassed.
+Pre-content-binding shards remain readable by their accepted manifests but are not reused under
+the new fingerprint. See
 [accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets) and
 [input read receipts](../architecture/job-input-contracts.md#admission-and-read-receipts) for the
 shared boundaries.

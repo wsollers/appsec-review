@@ -20,7 +20,7 @@ from appsec_review.jobs.job_artifact_indexing import job as job_module
 from appsec_review.jobs.job_artifact_indexing.job import _MAX_LINK_OBSERVATIONS, _artifact_relations, _ReceiptContext, _relationships
 from appsec_review.retrieval import IndexBuilder, RelationKind
 from tests.unit.job_artifact_indexing.support import (
-    SNAPSHOT, UNIT, assert_published_gaps, loaded_output, unit_context, validated_receipt,
+    SNAPSHOT, UNIT, assert_published_gaps, loaded_output, unit_context, validated_artifact, validated_receipt,
 )
 
 
@@ -202,6 +202,99 @@ def test_non_linker_invocations_never_produce_link_relations(tmp_path: Path) -> 
     assert [relation for relation in _artifact_relations(context, output).relations if relation.kind is RelationKind.LINKS_INTO] == []
     assert_published_gaps(tmp_path, "index.relationships", _artifact_relations(context, output).gaps,
                           ["build/app: producing action mapping is ambiguous"])
+
+
+@pytest.mark.parametrize("case", ["hash-conflict", "ambiguous-hash", "ambiguous-path", "ambiguous-path-hash"])
+def test_conflicting_or_ambiguous_link_inputs_never_pick_an_artifact(tmp_path: Path, case: str) -> None:
+    receipt = validated_receipt(1)
+    source, output = receipt["validated_artifacts"]
+    link_input = receipt["tool_invocations"][-1]["inputs"][0]
+    if case == "hash-conflict":
+        other = validated_artifact("build/other.o", "object", "different")
+        link_input["sha256"] = other["sha256"]
+        receipt["validated_artifacts"].append(other)
+        reason = "identity conflicts with retained artifact"
+    elif case == "ambiguous-hash":
+        receipt["validated_artifacts"].append(validated_artifact("build/copy.o", "object", "object-0"))
+        link_input["workspace_path"] = "unknown.o"
+        reason = "mapping is ambiguous"
+    elif case == "ambiguous-path":
+        receipt["validated_artifacts"].append(validated_artifact(source["workspace_path"], "object", "different"))
+        del link_input["sha256"]
+        reason = "mapping is ambiguous"
+    else:
+        receipt["validated_artifacts"].append(validated_artifact(source["workspace_path"], "library", "object-0"))
+        reason = "mapping is ambiguous"
+    expected_gap = f"build/app: link input {link_input['workspace_path']!r} {reason}"
+    for order in (list(receipt["validated_artifacts"]), list(reversed(receipt["validated_artifacts"]))):
+        receipt["validated_artifacts"] = order
+        rows = _artifact_relations(_ReceiptContext.build(receipt, SNAPSHOT), output)
+        assert not [relation for relation in rows.relations if relation.kind is RelationKind.LINKS_INTO]
+        assert rows.gaps == [expected_gap]
+    result = _relationships(_unit(tmp_path, receipt))
+    expected_gaps = [expected_gap]
+    if case == "hash-conflict":
+        expected_gaps.append("build/other.o: producing action mapping is ambiguous")
+    elif case == "ambiguous-path":
+        expected_gaps.append(f"{source['workspace_path']}: producing action mapping is ambiguous")
+    assert result["gaps"] == expected_gaps and result["terminal_status"] == "COMPLETED_WITH_GAPS"
+    index, = result["indexes"]
+    with sqlite3.connect(tmp_path / index["relative_path"]) as database:
+        assert database.execute("SELECT COUNT(*) FROM relations WHERE kind='LINKS_INTO'").fetchone()[0] == 0
+        assert database.execute("SELECT status, gap FROM coverage WHERE area='build/app'").fetchone() == (
+            "partial", expected_gap)
+    assert_published_gaps(tmp_path, "index.relationships", result["gaps"], expected_gaps)
+    receipt["validated_artifacts"].reverse()
+    retry = _relationships(_unit(tmp_path, receipt))
+    assert retry["reused_count"] == 1 and retry["indexes"] == result["indexes"]
+
+
+@pytest.mark.parametrize("duplicate", ["path", "hash"])
+def test_both_identity_fields_disambiguate_link_inputs(duplicate: str) -> None:
+    receipt = validated_receipt(1)
+    source, output = receipt["validated_artifacts"]
+    receipt["validated_artifacts"].append(validated_artifact(
+        source["workspace_path"] if duplicate == "path" else "build/copy.o",
+        "object", "different" if duplicate == "path" else "object-0"))
+    for order in (list(receipt["validated_artifacts"]), list(reversed(receipt["validated_artifacts"]))):
+        receipt["validated_artifacts"] = order
+        context = _ReceiptContext.build(receipt, SNAPSHOT)
+        assert _relations(context, output, RelationKind.LINKS_INTO) == [
+            (source["canonical_identity"], output["canonical_identity"], True, 1.0, None)]
+        assert _artifact_relations(context, output).gaps == []
+
+
+@pytest.mark.parametrize("change", ["link-source", "link-origin", "receipt-attribution", "remove-link"])
+def test_retry_indexes_changed_relations_without_replacing_old_bytes(tmp_path: Path, change: str) -> None:
+    receipt = validated_receipt(2, link_inputs=1)
+    unit = _unit(tmp_path, receipt)
+    first, = _relationships(unit)["indexes"]
+    old_bytes = (tmp_path / first["relative_path"]).read_bytes()
+    link = receipt["tool_invocations"][-1]
+    if change == "link-source":
+        source = receipt["validated_artifacts"][1]
+        link["inputs"][0].update(workspace_path=source["workspace_path"], sha256=source["sha256"])
+    elif change == "link-origin":
+        link["origin"] = "capture:replacement"
+    elif change == "receipt-attribution":
+        receipt["relationships"][0].update(confidence=0.4, mapping="changed")
+    else:
+        link["inputs"] = []
+    result = _relationships(unit)
+    second, = result["indexes"]
+    assert result["reused_count"] == 0 and first["fingerprint"] != second["fingerprint"]
+    context = _ReceiptContext.build(receipt, SNAPSHOT)
+    expected = [relation for artifact in receipt["validated_artifacts"]
+                for relation in _artifact_relations(context, artifact).relations]
+    with sqlite3.connect(tmp_path / second["relative_path"]) as database:
+        rows = database.execute(
+            "SELECT kind, source_id, target_id, confidence, payload_json FROM relations ORDER BY relation_id").fetchall()
+    assert rows == [(relation.kind.value, relation.source_id, relation.target_id, relation.confidence,
+                     json.dumps(relation.payload or {}, sort_keys=True))
+                    for relation in sorted(expected, key=lambda relation: relation.relation_id)]
+    assert (tmp_path / first["relative_path"]).read_bytes() == old_bytes
+    retry = _relationships(unit)
+    assert retry["reused_count"] == 1 and retry["indexes"] == result["indexes"]
 
 
 @pytest.mark.parametrize("confidences", [(0.4, 0.8), (0.8, 0.4)], ids=["stronger-last", "stronger-first"])

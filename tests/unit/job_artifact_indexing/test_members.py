@@ -89,6 +89,30 @@ def test_each_build_unit_gets_its_own_member_batches_and_a_rerun_reuses_them(tmp
         item["sha256"] for item in first["indexes"]]
 
 
+@pytest.mark.parametrize("field,value", [
+    ("member", "new.py"), ("size_bytes", 2), ("sha256", "9" * 64),
+], ids=["path", "size", "hash"])
+def test_retry_indexes_changed_member_rows_without_replacing_old_bytes(tmp_path: Path, field: str, value) -> None:
+    row = {"package_path": "dist/sample.whl", "member": "old.py", "size_bytes": 1, "sha256": "8" * 64}
+    receipt = _package_receipt([row])
+    unit = _unit(tmp_path, [receipt])
+    first, = _members(unit)["indexes"]
+    old_bytes = (tmp_path / first["relative_path"]).read_bytes()
+    old_members = _rows(tmp_path, first, "SELECT identity FROM entities")
+    row[field] = value
+    result = _members(unit)
+    second, = result["indexes"]
+    assert result["reused_count"] == 0 and first["fingerprint"] != second["fingerprint"]
+    parent = receipt["validated_artifacts"][-1]["canonical_identity"]
+    expected = canonical_archive_member_identity(SNAPSHOT, parent, row).value
+    assert _rows(tmp_path, second, "SELECT identity FROM entities") == [(expected,)]
+    assert _rows(tmp_path, second, "SELECT source_id, target_id FROM relations") == [(parent, expected)]
+    assert old_members != [(expected,)]
+    assert (tmp_path / first["relative_path"]).read_bytes() == old_bytes
+    retry = _members(unit)
+    assert retry["reused_count"] == 1 and retry["indexes"] == result["indexes"]
+
+
 def test_invalid_or_duplicate_member_rows_are_refused(tmp_path: Path) -> None:
     with pytest.raises(ArtifactIndexIntegrityError, match="manifest row is invalid"):
         _members(_unit(tmp_path, [_package_receipt(["not-a-row"])]))
