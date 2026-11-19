@@ -402,8 +402,12 @@ def prerequisite_binding(primary: Mapping[str, Any], context: Mapping[str, Any])
         if (record.get("category") != "source" or source.get("language") != c_subjects.LANGUAGE
                 or source.get("kind") != "function" or not source.get("complete")):
             raise ValueError("prerequisite context requires complete C/C++ source functions")
+        name = source.get("name")
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            raise ValueError("qualified source subjects require a semantic prerequisite adapter")
         scan = c_subjects.scan(record["excerpt"])
-        if scan.gaps or len(scan.functions) != 1 or scan.functions[0].kind != "function":
+        if (scan.gaps or len(scan.functions) != 1 or scan.functions[0].kind != "function"
+                or scan.functions[0].name != name):
             raise ValueError("prerequisite context has ambiguous or unresolved source definitions")
         functions.append(scan.functions[0])
     for caller_index, callee_index, kind in ((1, 0, "caller"), (0, 1, "callee")):
@@ -422,6 +426,8 @@ def prerequisite_binding(primary: Mapping[str, Any], context: Mapping[str, Any])
         body = caller_text[body_start:]
         call = re.search(r"(?<![\w.>:])\b" + re.escape(callee.name) + r"\s*\(", body)
         if call is None:
+            continue
+        if body[:call.start()].rstrip().endswith((".", "->", "::")):
             continue
         # A local declaration of that name would make even this contextual link ambiguous.
         shadow = re.compile(r"\b" + re.escape(callee.name) + r"\b")

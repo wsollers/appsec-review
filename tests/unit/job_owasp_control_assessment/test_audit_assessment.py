@@ -286,8 +286,7 @@ def test_admitted_expansion_callee_can_supply_prerequisite_context(accepted, set
     assert check["prerequisite_binding"]["call_line"] == 3
 
 
-def test_prerequisite_custody_survives_blinded_review_join_and_gap_projection(accepted, settings, tmp_path):
-    boundary, primary, context, package = prerequisite_fixture(accepted, settings)
+def project_prerequisites(boundary, primary, context, package, settings, tmp_path):
     calls = []
 
     def infer(request, **_):
@@ -307,14 +306,68 @@ def test_prerequisite_custody_survives_blinded_review_join_and_gap_projection(ac
     joined = deterministic_join([applicability], assessed["results"])
     [row] = joined["results"]
     assert [request.role for request in calls] == ["control_assessor", "independent_reviewer"]
-    assert row["control_status"] == "not_satisfied" and row["verification_status"] == "independently_assessed"
     assert not calls[1].transcript and "worker" not in calls[1].task_input
     projection = extract_verified_control_gaps(boundary.scope.run_id, "assessment", [row],
                                                resolver=boundary.resolver)
+    return row, projection
+
+
+def test_prerequisite_custody_survives_blinded_review_join_and_gap_projection(accepted, settings, tmp_path):
+    boundary, primary, context, package = prerequisite_fixture(accepted, settings)
+    row, projection = project_prerequisites(boundary, primary, context, package, settings, tmp_path)
+    assert row["control_status"] == "not_satisfied" and row["verification_status"] == "independently_assessed"
     assert projection["verified_gaps_indexed"] == 1 and not projection["coverage_gaps"]
     assert {span["path"] for span in projection["control_gaps"][0]["subject_spans"]} == {"copy.c", "caller.c"}
     assert {ref["source_identity"] for ref in row["evidence_used"]} == {
         primary["reference"]["source_identity"], context["reference"]["source_identity"]}
+
+
+@pytest.mark.parametrize("call", [
+    "object.copy(in)", "object. copy(in)", "object-> copy(in)", "other:: copy(in)",
+    "object./* separator */copy(in)", "object->/* separator */copy(in)",
+    "other::/* separator */copy(in)", "object.\n copy(in)",
+], ids=["member", "member-space", "pointer-space", "qualified-space",
+        "member-comment", "pointer-comment", "qualified-comment", "member-newline"])
+def test_member_and_qualified_calls_never_project_a_free_function_gap(accepted, settings, tmp_path, call):
+    boundary, primary, context, package = prerequisite_fixture(
+        accepted, settings, caller=CALLER.replace("copy(in)", call))
+    row, projection = project_prerequisites(boundary, primary, context, package, settings, tmp_path)
+    assert row["control_status"] == "cannot_verify" and row["gaps"]
+    assert projection["verified_gaps_indexed"] == 0 and not projection["control_gaps"]
+    checks = row["obligations"][0]["citation_checks"]
+    assert not any(check.get("prerequisite_binding") for check in checks)
+
+
+@pytest.mark.parametrize("call", ["/* separator */copy(in)", "return /* separator */copy(in)"],
+                         ids=["statement", "return"])
+def test_comments_before_free_calls_preserve_valid_projection(accepted, settings, tmp_path, call):
+    boundary, primary, context, package = prerequisite_fixture(
+        accepted, settings, caller=CALLER.replace("copy(in)", call))
+    row, projection = project_prerequisites(boundary, primary, context, package, settings, tmp_path)
+    assert row["control_status"] == "not_satisfied" and row["verification_status"] == "independently_assessed"
+    assert projection["verified_gaps_indexed"] == 1 and not projection["coverage_gaps"]
+
+
+def test_inline_qualified_subject_cannot_bind_a_separate_free_function_caller(accepted, settings, tmp_path):
+    inline = "struct Buffer {\n" + COPY + "};\n"
+    boundary = accepted({"buffer.cpp": inline, "free.cpp": COPY, "caller.cpp": CALLER},
+                        languages={"buffer.cpp": "C++", "free.cpp": "C++", "caller.cpp": "C++"})
+    evidence, _ = component_evidence(boundary.resolver, "api", boundary.files, settings)
+    primary = next(item for item in evidence if item["reference"]["locator"]["path"] == "buffer.cpp")
+    free = next(item for item in evidence if item["reference"]["locator"]["path"] == "free.cpp")
+    context = next(item for item in evidence if item["reference"]["locator"]["path"] == "caller.cpp")
+    assert primary["source_subject"]["name"] == "Buffer::copy"
+    assert free["source_subject"]["name"] == "copy"
+    assert boundary.resolver.resolve(primary["reference"], component_id="api")["source_subject"][
+        "name"] == "Buffer::copy"
+    package = assessment_package(primary, RULE)
+    package["evidence_references"].extend((free, context))
+    package["expansion_identities"].extend(
+        item["reference"]["source_identity"] for item in (free, context))
+    row, projection = project_prerequisites(boundary, primary, context, package, settings, tmp_path)
+    assert row["control_status"] == "cannot_verify" and row["gaps"]
+    assert projection["verified_gaps_indexed"] == 0 and not projection["control_gaps"]
+    assert not any(check.get("prerequisite_binding") for check in row["obligations"][0]["citation_checks"])
 
 
 @pytest.mark.parametrize("fault", ["unrelated", "not-admitted", "foreign", "unresolved", "no-primary",

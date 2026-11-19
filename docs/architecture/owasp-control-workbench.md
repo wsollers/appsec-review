@@ -193,7 +193,10 @@ scope matches the primary, and re-resolved complete source functions exhibit the
 Citation checks distinguish `subject_binding` from `prerequisite_binding`, retaining both original
 references and the call line. This is source-call context, not a resolved executable call graph:
 indirect/member dispatch, shadowed names, incompatible static linkage and unresolved definitions are
-not admitted by this adapter. Assumed semantics and requested prerequisites still prevent a decisive
+not admitted by this adapter. Member/qualification operators remain disqualifying across whitespace
+or comments, and the original re-resolved qualified subject name cannot be replaced with a bare name
+obtained by rescanning an inline excerpt outside its class.
+Assumed semantics and requested prerequisites still prevent a decisive
 outcome; Python authorization retains its complete-module prerequisite gate.
 An authentic but unrelated reference fails binding. Semantic predicate
 entailment remains **analyst-assessed**, not an extractor-proven fact. Documents, declarations and
