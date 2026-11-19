@@ -361,28 +361,41 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
         ))
 
     from appsec_review.jobs.job_code_graph_index.alternate_cpg import publish_alternate_cpg
+    from appsec_review.jobs.job_tree_sitter_ast.cfg import CFG_SCHEMA, synthesize_file_cfg
 
-    cfg_nodes = [
-        {"node_id": "n-entry", "kind": "entry", "start_line": 1, "end_line": 1, "statement_text": "def check(x):", "guard_dominators": []},
-        {"node_id": "n-sink", "kind": "call", "start_line": 3, "end_line": 3, "statement_text": "return sink(x)",
-         "guard_dominators": [{"guard_node_id": "n-if", "guard_kind": "null_check", "guard_polarity": "null_check",
-                               "condition_text": "x is not None", "branch_taken": "true", "start_line": 2, "end_line": 2}]},
+    source_bytes = src_file.read_bytes()
+
+    def cst(ordinal, kind, fragment, field=None):
+        data = fragment.encode("utf-8")
+        start = source_bytes.index(data)
+        end = start + len(data)
+        return {"ordinal_path": ordinal, "type": kind, "field": field, "named": True,
+                "start_byte": start, "end_byte": end,
+                "start_line": source_bytes.count(b"\n", 0, start) + 1,
+                "end_line": source_bytes.count(b"\n", 0, end) + 1}
+
+    body = "if x is not None:\n        return sink(x)"
+    syntax = [
+        cst([], "module", source_bytes.decode()),
+        cst([0], "function_definition", source_bytes.decode().rstrip()),
+        cst([0, 0], "identifier", "check", "name"),
+        cst([0, 1], "parameters", "(x)", "parameters"),
+        cst([0, 2], "block", body, "body"),
+        cst([0, 2, 0], "if_statement", body),
+        cst([0, 2, 0, 0], "comparison_operator", "x is not None", "condition"),
+        cst([0, 2, 0, 1], "block", "return sink(x)", "consequence"),
+        cst([0, 2, 0, 1, 0], "return_statement", "return sink(x)"),
+        cst([0, 2, 0, 1, 0, 0], "call", "sink(x)"),
+        cst([0, 2, 0, 1, 0, 0, 0], "identifier", "sink", "function"),
     ]
-    cfg_edges = [{"edge_id": "e-1", "source_id": "n-entry", "target_id": "n-sink", "edge_kind": "true_branch"}]
+    function, = synthesize_file_cfg(
+        syntax, source_bytes, language="python", path="src/auth.py",
+        file_sha256=src_sha, source_identity=src_id, ast_identities={(0,): ast_fn_id}).functions
     cfg_payload = {
         "node_type": "function_definition",
-        "cfg": {
-            "schema": "appsec-review/tree-sitter-cfg/1",
-            "function_id": "cfg:check",
-            "function_name": "check",
-            "language": "python",
-            "source_identity": src_id,
-            "start_line": 1,
-            "end_line": 3,
-            "guard_count": 1,
-        },
-        "cfg_nodes": cfg_nodes,
-        "cfg_edges": cfg_edges,
+        "cfg": {"schema": CFG_SCHEMA, **function.to_summary()},
+        "cfg_nodes": [node.to_jsonl_record() for node in function.nodes],
+        "cfg_edges": [edge.to_jsonl_record() for edge in function.edges],
     }
     add_shard("analysis", [
         EntityRecord(LogicalIdentity.parse(ast_fn_id), "fn:check", "check", "function check", cfg_payload, loc)
