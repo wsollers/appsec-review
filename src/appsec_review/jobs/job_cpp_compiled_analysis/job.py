@@ -34,7 +34,7 @@ from appsec_review.jobs.job_cpp_compiled_analysis import seeded
 SCHEMA = "appsec-review/cpp-compiled-analysis/2"
 PROJECT_TASKS = ("projects",)
 BRANCHES = ("compiled", "ast", "ir", "infer", "binary")
-BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/2", "ast": "clang-ast/2",
+BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/2", "ast": "clang-ast/3",
                    "ir": "llvm-ir/2",
                    "infer": "infer-cpp-adapter/2",
                    "binary": "elf-symbols/2"}
@@ -416,7 +416,8 @@ def _new_builder(unit: UnitContext, name: str, case_id: str, branch: str,
                  artifacts: list[Mapping[str, Any]], gaps: list[str], tool: Mapping[str, Any],
                  scope_snapshot: str):
     fingerprint = index_fingerprint(name=name, target_snapshot=scope_snapshot,
-        producer_artifacts=artifacts, tool_identity=tool, parser_identity=f"cpp-{branch}-parser/2",
+        producer_artifacts=artifacts, tool_identity=tool,
+        parser_identity=f"cpp-{branch}-parser/{3 if branch == 'ast' else 2}",
         normalizer_identity=f"cpp-{branch}-normalizer/3", mapping_identity="cpp-source-mapping/2")
     shard = f"cpp-{case_id}-{branch}"
     physical_shard = hashlib.sha256(shard.encode()).hexdigest()[:16]
@@ -579,6 +580,103 @@ def _callee_decl(node: Mapping[str, Any]) -> Any:
     return None
 
 
+class _AstLocations:
+    """Resolve Clang's dump-order file elision, never ``includedFrom`` or a TU fallback.
+
+    Offsets and columns are byte positions in the original accepted file, not decoded text.
+    Macro spelling/expansion alternatives remain raw evidence rather than one invented location.
+    """
+
+    def __init__(self, unit: UnitContext, mapping: Mapping[str, Any], command: Mapping[str, Any]):
+        self.snapshot = unit.job.source_fingerprint
+        self.target = unit.job.target_root or Path()
+        self.command = command
+        self.files = mapping["files"]
+        self.current_file: str | None = None
+        self.cache: dict[str, tuple[Mapping[str, Any], bytes] | None] = {}
+
+    def _source(self, raw: str) -> tuple[Mapping[str, Any], bytes] | None:
+        path = posixpath.normpath(raw if raw.startswith("/") else
+                                 posixpath.join(str(self.command["directory"]), raw))
+        if path not in self.cache:
+            matches = [row for row in self.files if path == "/scratch/" + row["scratch_path"]]
+            result = None
+            if len(matches) == 1:
+                row = matches[0]
+                source = self.target / row["target_path"]
+                try:
+                    if not source.is_symlink() and source.resolve().is_relative_to(self.target.resolve()):
+                        data = source.read_bytes()
+                        if hashlib.sha256(data).hexdigest() == row["sha256"]:
+                            result = (row, data)
+                except OSError:
+                    pass
+            self.cache[path] = result
+        return self.cache[path]
+
+    def resolve(self, node: Mapping[str, Any]) -> tuple[SourceLocation | None, str | None]:
+        loc = node.get("loc") if isinstance(node.get("loc"), Mapping) else {}
+        span = node.get("range") if isinstance(node.get("range"), Mapping) else {}
+        begin = span.get("begin") if isinstance(span.get("begin"), Mapping) else {}
+        end = span.get("end") if isinstance(span.get("end"), Mapping) else {}
+        points = [loc, begin, end]
+        selected = loc or begin
+        selected_file = None
+        macro = False
+        for point in points:
+            if "spellingLoc" in point or "expansionLoc" in point:
+                self.current_file = None
+                macro = True
+            elif isinstance(point.get("file"), str):
+                self.current_file = point["file"]
+            if point is selected:
+                selected_file = self.current_file
+        if macro:
+            self.current_file = None
+            return None, "macro spelling/expansion location is ambiguous"
+        if not selected or not selected_file:
+            return None, "source file or position is absent"
+        source = self._source(selected_file)
+        if source is None:
+            return None, "source file is unmapped, ambiguous or its accepted bytes changed"
+        row, data = source
+
+        def integer(key: str, minimum: int) -> int | None:
+            value = selected.get(key)
+            return value if type(value) is int and value >= minimum else None
+
+        offset, line, column = integer("offset", 0), integer("line", 1), integer("col", 1)
+        if any(key in selected and value is None for key, value in
+               (("offset", offset), ("line", line), ("col", column))):
+            return None, "invalid source coordinates"
+        if offset is None:
+            if line is None or column is None:
+                return None, "source line/column and byte offset are incomplete"
+            lines = data.splitlines(keepends=True)
+            if not 1 <= line <= len(lines) or column > len(lines[line - 1].rstrip(b"\r\n")) + 1:
+                return None, "source line/column lies outside accepted bytes"
+            offset = sum(map(len, lines[:line - 1])) + column - 1
+        if offset > len(data):
+            return None, "source byte offset lies outside accepted bytes"
+        actual_line = data.count(b"\n", 0, offset) + 1
+        actual_column = offset - data.rfind(b"\n", 0, offset)
+        if (line is not None and line != actual_line) or (column is not None and column != actual_column):
+            return None, "source line/column conflicts with byte offset"
+        token = integer("tokLen", 0)
+        if "tokLen" in selected and token is None:
+            return None, "invalid source token length"
+        stop = offset + (token or 0)
+        if stop > len(data):
+            return None, "source token lies outside accepted bytes"
+        last = max(offset, stop - 1)
+        producer = {"loc": dict(loc), "range": dict(span), "resolved_file": selected_file,
+                    "compile_unit_id": self.command["compile_unit_id"]}
+        return SourceLocation(self.snapshot, row["target_path"], row["sha256"], offset, stop,
+                              actual_line, data.count(b"\n", 0, last) + 1, actual_column,
+                              last - data.rfind(b"\n", 0, last), producer,
+                              "clang-source-position", 1.0), None
+
+
 def _ast_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], execution: Mapping[str, Any],
                failures: Mapping[int, str] | None = None) -> Mapping[str, Any]:
     gaps: list[str] = []
@@ -613,16 +711,31 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
             safety.fail("Clang AST output is unavailable or malformed", action="cpp.ast")
             gaps.append(f"{command['target_path']}: Clang AST output unavailable or invalid")
             continue
+        locations = _AstLocations(unit, catalog["mapping"], command)
+        admitted = set(command.get("ast_linkages", ()))
+        excluded: set[int] = set()
+        location_gaps: set[str] = set()
         for node in _walk_ast(document):
+            location, location_gap = locations.resolve(node)
+            if id(node) in excluded:
+                continue
+            if admitted and node.get("kind") in {"FunctionDecl", "CXXMethodDecl"}:
+                linkage = node.get("mangledName")
+                if linkage and linkage not in admitted:
+                    excluded.update(id(child) for child in _walk_ast(node))
+                    continue
+                elif not linkage:
+                    location_gaps.add("function linkage is absent; neighborhood membership is unresolved")
             kind = str(node.get("kind", ""))
             if kind not in {"FunctionDecl", "CXXMethodDecl", "VarDecl", "RecordDecl", "CallExpr",
                             "DeclRefExpr", "FieldDecl", "ParmVarDecl", "TypedefDecl"}:
                 continue
             declared = _callee_decl(node)
             name = str(node.get("name") or (declared.get("name") if isinstance(declared, Mapping) else None) or kind)
-            loc = node.get("loc", {}) if isinstance(node.get("loc"), Mapping) else {}
-            line = int(loc.get("line", 1)) if str(loc.get("line", "1")).isdigit() else 1
-            column = int(loc.get("col", 1)) if str(loc.get("col", "1")).isdigit() else 1
+            if location_gap:
+                location_gaps.add(location_gap)
+            line = location.start_line if location else None
+            column = location.start_column if location else None
             native = str(node.get("id") or hashlib.sha256(canonical_json({
                 "tu": command["compile_unit_id"], "ordinal": count, "kind": kind,
                 "line": line, "column": column, "node": node,
@@ -635,11 +748,15 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
             seen_entities.add(identity.value)
             builder.add_entity(EntityRecord(identity, native, name, f"{kind} {name}",
                 {"kind": kind, "type": node.get("type"), "referenced_decl": _callee_decl(node),
+                 "mangled_name": node.get("mangledName"),
+                 "clang_location": {"loc": node.get("loc"), "range": node.get("range")},
+                 "location_gap": location_gap,
                  "project_id": catalog["mapping"]["project_id"],
                  "compile_unit_id": command["compile_unit_id"], "shard_id": shard},
-                _location(unit.job.source_fingerprint, unit.job.target_root or Path(),
-                          command["target_path"], line, column)))
+                location))
             count += 1
+        gaps.extend(f"ast_location_unresolved: {command['target_path']} "
+                    f"({command['compile_unit_id']}): {message}" for message in sorted(location_gaps))
     return count
 
 

@@ -132,6 +132,27 @@ is `COMPLETED_WITH_GAPS`; a failed replay is a gap on the seeds that unit carrie
 keeps the previous behavior. The `native.py` change alters the `tool-native-cpp` image identity: rebuild
 and re-pin it. Contract: `docs/architecture/seeded-neighborhoods.md`.
 
+Seeded IR neighborhood, seed-ledger, range and unit-handoff keys are opaque
+`<compile_unit_id>:<linkage_name>` identities, not display names. The handoff's `functions`
+map retains display names and compiler linkage separately. Direct calls use `callee_linkage`:
+the definition in the calling TU wins; otherwise only a unique external-linkage definition in
+the project is eligible. Multiple external definitions remain a named ambiguity and a TU-scoped
+declaration, never an arbitrarily selected definition. Internal-linkage definitions cannot bind
+calls from another TU. Equal innermost source ranges leave the seed unresolved. Missing debug
+definition lines produce unlocated IR entities and no range entry, not exact line-one locations.
+AST name filters are only compiler queries; reported `mangledName` values exclude unrelated
+overloads. A declaration without linkage metadata retains a named membership uncertainty rather
+than a display-name identity join.
+
+AST locations use Clang `loc` or `range.begin`, including file elision in dump order. They resolve
+only through a unique accepted source mapping whose original bytes still match its hash.
+Byte offsets (or validated line/column positions) locate the reported token; UTF-8 bytes and CRLF
+are not normalized. Header nodes retain header provenance, not the including TU's path.
+Missing, conflicting, unmapped or macro spelling/expansion locations retain raw Clang metadata
+and TU identity with an `ast_location_unresolved` gap and no fabricated normalized location.
+These repairs invalidate prior seeded checkpoints and AST index/checkpoint identities; they
+require no tooling image rebuild.
+
 ## Evidence and recovery
 
 Bulk products live under ignored `runs/<run-id>/`. Accepted `build`, `compiled`, `analysis`, and

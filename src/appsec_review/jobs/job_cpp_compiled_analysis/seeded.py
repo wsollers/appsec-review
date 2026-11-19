@@ -9,8 +9,8 @@ Seeded mode runs from the findings outward (``docs/architecture/seeded-neighborh
   neighborhood of the seed functions; only that neighborhood is published;
 * the same units are replayed once more for Clang's source-level CFG (``debug.DumpCFG``), attached to the
   IR function of the same name as ``source_cfg``; a failed or ambiguous match is a named gap, never a guess;
-* AST is replayed for the units that define neighborhood functions, filtered to their names, so it
-  depends on the IR result.
+* AST is replayed for the units that define neighborhood functions, using name filters for the
+  compiler and linkage identities for admission, so it depends on the IR result.
 
 Every unresolved seed keeps the reason it stayed unresolved; neither a failed replay nor a missing
 unit ever raises coverage. Callers in translation units that were not replayed are not visible; that
@@ -40,7 +40,7 @@ from appsec_review.storage import canonical_json, tool_input_json
 from .clang_cfg import NO_BLOCK_LINES_GAP, SourceCfg, parse_cfgs
 from .llvm_ir import IrFunction, parse_module
 
-SEEDED_IMPL = "cpp-seeded-compiled/2"
+SEEDED_IMPL = "cpp-seeded-compiled/3"
 MAX_IR_BYTES = 64 * 1024 * 1024
 MAX_CFG_BYTES = 16 * 1024 * 1024
 REPLAY = {"ir": "replay-ir.json", "ast": "replay-ast.json", "cfg": "replay-cfg.json"}
@@ -139,11 +139,18 @@ def _function_path(root: str, function: IrFunction) -> str | None:
 
 def _seed_function(functions: Sequence[IrFunction], seed: seeding.Seed) -> IrFunction | None:
     """The innermost function whose body overlaps the seed's line range in the seed's file."""
-    inside = [fn for fn in functions if fn.path == seed.path and fn.start_line <= seed.end_line and
+    inside = [fn for fn in functions if fn.path == seed.path and 0 < fn.start_line <= seed.end_line and
               seed.start_line <= max(fn.end_line, fn.start_line)]
     if not inside:
         return None
-    return min(inside, key=lambda fn: (fn.end_line - fn.start_line, fn.name, fn.linkage_name))
+    width = min(fn.end_line - fn.start_line for fn in inside)
+    closest = [fn for fn in inside if fn.end_line - fn.start_line == width]
+    return closest[0] if len(closest) == 1 else None
+
+
+def _function_key(command: Mapping[str, Any], linkage: str) -> str:
+    """Opaque walk/handoff key: display names are not overload or translation-unit identities."""
+    return f"{command['compile_unit_id']}:{linkage}"
 
 
 def _tail(name: str) -> str:
@@ -184,14 +191,14 @@ def _source_cfgs(unit: UnitContext, case_id: str, root: Path, subset: Sequence[M
     return found, replay, execution
 
 
-def _match_cfgs(local: Sequence[tuple[int, IrFunction]], members: Mapping[str, int],
+def _match_cfgs(local: Sequence[tuple[int, IrFunction]], members: set[tuple[int, str]],
                 cfgs: Mapping[int, Sequence[SourceCfg]]) -> tuple[dict[tuple[int, str], SourceCfg], list[str], list[str]]:
     """(cfg per (unit position, IR linkage name), ambiguous names, names without a CFG) for neighborhood functions."""
     matched: dict[tuple[int, str], SourceCfg] = {}
     ambiguous: set[str] = set()
     missing: set[str] = set()
     for pos, fn in local:
-        if fn.name not in members:
+        if (pos, fn.linkage_name) not in members:
             continue
         if pos not in cfgs:
             missing.add(fn.name)
@@ -267,7 +274,6 @@ def ir_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], set
                       coverage="unavailable", extras={"entity_count": 0}, checkpointable=False)
     failures = failures or {}
     parsed: list[tuple[int, IrFunction]] = []
-    external_calls: dict[str, list[tuple[str, int | None]]] = {}
     for position, command in enumerate(subset):
         if position in failures:
             gaps.append(failures[position])
@@ -285,34 +291,61 @@ def ir_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], set
             gaps.append(f"{command['target_path']}: {len(module.unparsed)} function(s) carry no debug "
                         "subprogram and were not parsed (compile with -g)")
     local = [(pos, fn) for pos, fn in parsed if _function_path(mapping["root"], fn) is not None]
-    defs: dict[str, list[tuple[int, IrFunction]]] = {}
+    defs = {_function_key(subset[pos], fn.linkage_name): (pos, fn) for pos, fn in local}
+    external_defs: dict[str, list[str]] = {}
+    for key, (_, fn) in defs.items():
+        if not fn.internal:
+            external_defs.setdefault(fn.linkage_name, []).append(key)
+    unresolved: dict[str, tuple[int, str, str]] = {}
+    ambiguous: dict[str, str] = {}
+
+    def call_target(pos: int, linkage: str, display: str) -> str:
+        key = _function_key(subset[pos], linkage)
+        if key in defs:
+            return key
+        candidates = external_defs.get(linkage, ())
+        if len(candidates) == 1:
+            return candidates[0]
+        if candidates:
+            ambiguous[key] = linkage
+        unresolved[key] = (pos, linkage, display)
+        return key
+
     callees: dict[str, set[str]] = {}
     callers: dict[str, set[str]] = {}
     for pos, fn in local:
-        defs.setdefault(fn.name, []).append((pos, fn))
+        caller = _function_key(subset[pos], fn.linkage_name)
         for call in fn.calls:
-            callees.setdefault(fn.name, set()).add(call.callee)
-            callers.setdefault(call.callee, set()).add(fn.name)
-    functions = [fn for _, fn in local]
-    seed_functions: dict[tuple[str, int, int], IrFunction] = {}
+            callee = call_target(pos, call.callee_linkage, call.callee)
+            callees.setdefault(caller, set()).add(callee)
+            callers.setdefault(callee, set()).add(caller)
+    seed_functions: dict[tuple[str, int, int], list[str]] = {}
     for seed in scope_seeds.seeds:
-        found = _seed_function(functions, seed)
-        if found is not None:
-            seed_functions[seed.key] = found
+        for pos in range(len(subset)):
+            functions = [fn for fn_pos, fn in local if fn_pos == pos]
+            found = _seed_function(functions, seed)
+            if found is not None:
+                seed_functions.setdefault(seed.key, []).append(_function_key(subset[pos], found.linkage_name))
+            elif any(fn.path == seed.path and fn.start_line <= seed.end_line and
+                     seed.start_line <= fn.end_line for fn in functions):
+                gaps.append(f"seed_function_ambiguous: {seed.path}:{seed.start_line} in "
+                            f"{subset[pos]['compile_unit_id']} has no unique innermost definition")
     for key, indexes in selection.by_seed.items():
         positions = {selection.selected.index(index) for index in indexes}
         if key not in seed_functions and positions <= set(failures):
             reasons[key] = record.REASON_RUN_FAILED
-    walked = walk.expand({fn.name for fn in seed_functions.values()}, callers, callees,
+    walked = walk.expand({key for keys in seed_functions.values() for key in keys}, callers, callees,
                          depth=settings.depth, function_limit=settings.function_limit, observed=defs)
     members = walked.distance
     gaps.extend(gap for gap in walked.gaps if gap not in gaps)
     cfg_gaps: list[str] = []
     cfgs, cfg_replay, cfg_execution = _source_cfgs(unit, case_id, root, subset, settings, executor_factory, cfg_gaps)
-    source_cfg, cfg_ambiguous, cfg_missing = _match_cfgs(local, members, cfgs)
+    selected_defs = {key: defs[key] for key in walked.functions if key in defs}
+    source_cfg, cfg_ambiguous, cfg_missing = _match_cfgs(
+        local, {(pos, fn.linkage_name) for pos, fn in selected_defs.values()}, cfgs)
     if cfg_execution is not None:
         artifacts.extend(item for item in (cfg_execution["execution"], cfg_replay) if item is not None)
-    external = sorted({fn.name for name in members for _, fn in defs.get(name, ()) if not fn.internal})
+    external = sorted({fn.name for _, fn in selected_defs.values() if not fn.internal})
     if external:
         gaps.append(STANDING_FRONTIER.format(units=len(subset)))
     gaps.extend(cfg_gaps)
@@ -322,16 +355,16 @@ def ir_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], set
         gaps.append("source_cfg_ambiguous: overloaded definitions were not given a CFG: " + ", ".join(cfg_ambiguous[:20]))
     if cfg_missing and cfgs:
         gaps.append("source_cfg_unmatched: no CFG matched the neighborhood function(s): " + ", ".join(cfg_missing[:20]))
-    for pos, fn in local:
-        if fn.name in members and fn.truncated:
+    for pos, fn in selected_defs.values():
+        if fn.truncated:
             gaps.append(f"{walk.EXPORT_TRUNCATED}: {fn.name} flow was cut at {', '.join(fn.truncated)}")
     document = {"columns": ["seed_path", "seed_start_line", "seed_end_line", "function_name", "function_path",
                             "function_start_line", "function_start_column"],
-                "rows": [[key[0], key[1], key[2], fn.name, fn.path, fn.start_line, 1]
-                         for key, fn in sorted(seed_functions.items())]}
+                "rows": [[*seed_key, key, defs[key][1].path, defs[key][1].start_line, 1]
+                         for seed_key, keys in sorted(seed_functions.items()) for key in sorted(keys)]}
     hood = {"columns": ["function_name", "function_path", "function_start_line", "function_start_column", "depth"],
-            "rows": [[name, defs[name][0][1].path if name in defs else "",
-                      defs[name][0][1].start_line if name in defs else 0, 1, members[name]]
+            "rows": [[name, defs[name][1].path if name in defs else "",
+                      defs[name][1].start_line if name in defs else 0, 1, members[name]]
                      for name in walked.functions]}
     section = record.with_reasons(seeding.ledger.seeded_section(
         depth=settings.depth, seed_limit=settings.seed_limit, scope_seeds=scope_seeds, plan=plan,
@@ -342,76 +375,80 @@ def ir_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], set
     snapshot = unit.job.source_fingerprint
     target = unit.job.target_root or Path()
     entity_ids: dict[str, str] = {}
-    for name in walked.functions:
-        for pos, fn in sorted(defs.get(name, ()), key=lambda item: (item[1].linkage_name, item[0])):
-            target_path = _function_path(mapping["root"], fn)
-            if target_path is None or not (target / target_path).is_file():
-                continue
-            compile_unit = subset[pos]["compile_unit_id"]
-            identity_value = LogicalIdentity.derive(EntityKind.IR_ENTITY, mapping["case_snapshot"],
-                {"compile_unit_id": compile_unit, "function": fn.linkage_name,
-                 "definition_line": fn.start_line})
-            builder.add_entity(EntityRecord(identity_value, f"{pos}:{fn.linkage_name}", fn.name,
-                f"define {fn.linkage_name}",
-                {"kind": "function", "linkage_name": fn.linkage_name, "internal": fn.internal,
-                 "distance": members[name], "flow": fn.flow(), "seeded": True,
-                 **({"source_cfg": source_cfg[(pos, fn.linkage_name)].to_payload()}
-                    if (pos, fn.linkage_name) in source_cfg else {}),
-                 "project_id": mapping["project_id"], "compile_unit_id": compile_unit, "shard_id": shard},
-                base._location(snapshot, target, target_path, fn.start_line, 1, method="ir-debug-info")))
-            entity_ids.setdefault(f"{pos}:{fn.name}", identity_value.value)
-            if len(defs[name]) == 1:
-                entity_ids[fn.name] = identity_value.value
+    for name, (pos, fn) in selected_defs.items():
+        target_path = _function_path(mapping["root"], fn)
+        if target_path is None or not (target / target_path).is_file():
+            continue
+        compile_unit = subset[pos]["compile_unit_id"]
+        identity_value = LogicalIdentity.derive(EntityKind.IR_ENTITY, mapping["case_snapshot"],
+            {"compile_unit_id": compile_unit, "function": fn.linkage_name,
+             "definition_line": fn.start_line})
+        location = None
+        if fn.start_line > 0:
+            location = base._location(snapshot, target, target_path, fn.start_line, 1, method="ir-debug-info")
+        else:
+            gaps.append(f"ir_location_unresolved: {name} has no debug definition line")
+        builder.add_entity(EntityRecord(identity_value, f"{pos}:{fn.linkage_name}", fn.name,
+            f"define {fn.linkage_name}",
+            {"kind": "function", "linkage_name": fn.linkage_name, "internal": fn.internal,
+             "distance": members[name], "flow": fn.flow(), "seeded": True,
+             **({"source_cfg": source_cfg[(pos, fn.linkage_name)].to_payload()}
+                if (pos, fn.linkage_name) in source_cfg else {}),
+             "project_id": mapping["project_id"], "compile_unit_id": compile_unit, "shard_id": shard},
+            location))
+        entity_ids[name] = identity_value.value
     declarations: dict[str, str] = {}
     for name in walked.functions:
         if name in defs:
             continue
+        pos, linkage, display = unresolved[name]
         site = min(((_function_path(mapping["root"], fn), call.line or 1, fn.linkage_name)
                     for caller in callers.get(name, ()) if caller in members
-                    for _, fn in defs.get(caller, ()) for call in fn.calls if call.callee == name
+                    for fn in (defs[caller][1],) for call in fn.calls if call.callee_linkage == linkage
                     if _function_path(mapping["root"], fn) is not None), default=None)
         if site is None or not (target / site[0]).is_file():
             continue
         identity_value = LogicalIdentity.derive(EntityKind.IR_ENTITY, mapping["case_snapshot"],
             {"project_id": mapping["project_id"], "declared": name, "site": [site[0], site[1]]})
-        builder.add_entity(EntityRecord(identity_value, f"declared:{name}", name, f"declare {name}",
-            {"kind": "declaration", "distance": members[name], "seeded": True,
+        builder.add_entity(EntityRecord(identity_value, f"declared:{name}", display, f"declare {linkage}",
+            {"kind": "declaration", "linkage_name": linkage, "compile_unit_id": subset[pos]["compile_unit_id"],
+             "distance": members[name], "seeded": True,
              "project_id": mapping["project_id"], "shard_id": shard},
             base._location(snapshot, target, site[0], site[1], 1, ambiguous=True, method="ir-call-site")))
         declarations[name] = identity_value.value
     edges = 0
     seen: set[tuple[str, str]] = set()
-    ambiguous: set[str] = set()
-    for pos, fn in local:
-        source = entity_ids.get(f"{pos}:{fn.name}")
-        if fn.name not in members or source is None:
+    for name, (pos, fn) in selected_defs.items():
+        source = entity_ids.get(name)
+        if source is None:
             continue
         for call in fn.calls:
-            if call.callee not in members:
+            callee = call_target(pos, call.callee_linkage, call.callee)
+            if callee not in members:
                 continue
-            target_id = (entity_ids.get(f"{pos}:{call.callee}") or entity_ids.get(call.callee) or
-                         declarations.get(call.callee))
-            if target_id is None and len(defs.get(call.callee, ())) > 1:
-                ambiguous.add(call.callee)
+            target_id = entity_ids.get(callee) or declarations.get(callee)
             if target_id is None or (source, target_id) in seen:
                 continue
             seen.add((source, target_id))
             builder.add_relation(RelationRecord(RelationKind.CALLS, source, target_id, True, 1.0,
-                                                payload={"mapping": "ir-direct-call", "line": call.line}))
+                                                payload={"mapping": "ir-direct-call", "line": call.line,
+                                                         "callee_linkage": call.callee_linkage}))
             edges += 1
-    if ambiguous:
+    ambiguous_members = sorted({linkage for key, linkage in ambiguous.items() if key in members})
+    if ambiguous_members:
         gaps.append("ambiguous cross-translation-unit IR callees were not related: " +
-                    ", ".join(sorted(ambiguous)[:20]))
-    blocks = sum(len(fn.blocks) for _, fn in local if fn.name in members)
+                    ", ".join(ambiguous_members[:20]))
+    blocks = sum(len(fn.blocks) for _, fn in selected_defs.values())
     handoff = {"neighborhood": {name: members[name] for name in walked.functions},
-               "function_units": {name: sorted({selection.selected[pos] for pos, _ in defs[name]})
-                                  for name in walked.functions if name in defs},
+               "functions": {key: {"name": fn.name, "linkage_name": fn.linkage_name,
+                                   "compile_unit_id": subset[pos]["compile_unit_id"]}
+                             for key, (pos, fn) in selected_defs.items()},
+               "function_units": {key: [selection.selected[pos]] for key, (pos, _) in selected_defs.items()},
                "seed_functions": [row[:4] for row in document["rows"]],
                # project-relative [path, first line, last line] of each neighborhood function: lets a
                # line-located producer (Clang-Tidy, the Static Analyzer) label what is inside it.
-               "ranges": {name: [defs[name][0][1].path, defs[name][0][1].start_line,
-                                 max(defs[name][0][1].end_line, defs[name][0][1].start_line)]
-                          for name in walked.functions if name in defs}}
+               "ranges": {key: [fn.path, fn.start_line, max(fn.end_line, fn.start_line)]
+                          for key, (_, fn) in selected_defs.items() if fn.start_line > 0}}
     return finish(section, builder=builder, path=path, fingerprint=fingerprint, shard=shard,
                   checkpointable=not failures,
                   extras={"entity_count": len(builder.entities), "basic_block_count": blocks,
@@ -448,14 +485,19 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
                         shard=shard, gaps=gaps, section=section, coverage="partial",
                         extras={"entity_count": 0}, checkpointable=False)
     names_by_row: dict[int, list[str]] = {}
+    linkages_by_row: dict[int, list[str]] = {}
     for name, rows in handoff["function_units"].items():
+        function = handoff.get("functions", {}).get(name, {})
         for index in rows:
-            names_by_row.setdefault(int(index), []).append(name)
+            names_by_row.setdefault(int(index), []).append(function.get("name", name))
+            if function.get("linkage_name"):
+                linkages_by_row.setdefault(int(index), []).append(function["linkage_name"])
     selected = sorted(names_by_row)[:settings.unit_limit]
     if len(names_by_row) > len(selected):
         gaps.append(f"{unit_selection.UNIT_LIMIT_REACHED}: unit_limit {settings.unit_limit} reached; "
                     f"{len(names_by_row) - len(selected)} translation unit(s) were not replayed for the AST")
-    subset = [{**commands[index], "ast_filters": sorted(names_by_row[index])[:400]} for index in selected]
+    subset = [{**commands[index], "ast_filters": sorted(set(names_by_row[index]))[:400],
+               "ast_linkages": sorted(set(linkages_by_row.get(index, ())))} for index in selected]
     replay = _write_replay(unit, case_id, "ast", subset)
     execution = base._run_tool(unit, case_id, ("ast",), executor_factory)
     from appsec_review.runtime import execution_safety as safety
@@ -478,18 +520,18 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
     failed_rows = {selected[pos] for pos in failures}
     resolved_rows = set(selected) if not tool_gap else set()
     # A seed is resolved for the AST when its function was dumped by a unit that replayed cleanly.
-    functions = {tuple(row[:3]): row[3] for row in handoff["seed_functions"]}
+    functions: dict[tuple[str, int, int], list[str]] = {}
+    for row in handoff["seed_functions"]:
+        functions.setdefault(tuple(row[:3]), []).append(row[3])
     document = {"columns": ["seed_path", "seed_start_line", "seed_end_line", "function_name"],
                 "rows": []}
     for seed in scope_seeds.seeds:
-        name = functions.get(seed.key)
-        if name is None:
-            continue
-        rows = set(handoff["function_units"].get(name, ()))
-        if rows & resolved_rows - failed_rows:
-            document["rows"].append([*seed.key, name])
-        else:
-            reasons[seed.key] = record.REASON_RUN_FAILED
+        for name in functions.get(seed.key, ()):
+            rows = set(handoff["function_units"].get(name, ()))
+            if rows & resolved_rows - failed_rows:
+                document["rows"].append([*seed.key, name])
+            else:
+                reasons[seed.key] = record.REASON_RUN_FAILED
     hood = {"columns": ["function_name", "function_path", "function_start_line", "function_start_column", "depth"],
             "rows": [[name, "", 0, 1, depth] for name, depth in sorted(handoff["neighborhood"].items(),
                                                                        key=lambda item: (item[1], item[0]))

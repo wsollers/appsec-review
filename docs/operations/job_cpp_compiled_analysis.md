@@ -314,6 +314,19 @@ Source: [handler and branch normalizers](../../src/appsec_review/jobs/job_cpp_co
 3. Normalize bounded AST declarations/calls and supported source CFG facts; invalid/missing output
    becomes a named unit gap. AST traversal limits are not whole-program semantic coverage.
 
+Seeded IR joins and handoff keys use compile-unit plus compiler linkage identity, never an
+overload's display name. Local definitions take precedence; cross-TU matches require unique
+external linkage. Ambiguous callees remain scoped declarations with a gap. The handoff retains
+display names separately, and AST output is filtered by its mangled identity after the compiler's
+broader name query; absent linkage metadata retains a membership-uncertainty gap. Equal innermost
+seed ranges are unresolved, not arbitrary overload choices.
+
+AST `loc`/`range.begin` positions and dump-order file elision resolve against accepted source
+records and their unchanged bytes. Header tokens retain header hashes and byte positions.
+Missing/conflicting positions, ambiguous mappings and macro spelling/expansion alternatives
+retain raw metadata and compile-unit scope without normalized locations, with
+`ast_location_unresolved` gaps. No absent position becomes exact TU line 1.
+
 ### `infer`
 
 1. For a usable project, invoke `tool-infer` using the accepted normalized compile database, not
