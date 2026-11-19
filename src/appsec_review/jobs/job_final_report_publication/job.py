@@ -2,7 +2,8 @@
 
 Units: ``load.accepted_gate`` re-verifies the accepted ``job_final_publication_gate`` handoff, the
 gate document and every artifact the gate binds, ``report.assemble`` writes the schema-validated
-``final-report.json``, ``report.render`` renders ``final-report.md`` from that JSON and
+``final-report.json``, ``report.render`` renders ``final-report.md`` from that JSON and certified
+format references, and
 ``final-report.html`` from that JSON plus gate-bound dossier summaries. ``report.render_pdf``
 renders the executive ``final-report.pdf`` (with its ``final-report.tex``
 and a receipt) from that JSON plus the gate-bound dossier documents, and ``acceptance.publish_handoff``
@@ -170,8 +171,11 @@ def build_job(*, repository_root: Path | None = None,
         report = read_bound_json(root, unit.output("report.assemble")["artifact"])
         gate = read_bound_json(root, unit.output("load.accepted_gate")["gate_document"])
         dossiers = bind_dossiers(root, report, gate["bindings"])
-        text = render_markdown(report, evidence_ids=settings.markdown_evidence_ids, gap_ids=settings.markdown_gap_ids)
-        if text != render_markdown(report, evidence_ids=settings.markdown_evidence_ids, gap_ids=settings.markdown_gap_ids):
+        formats = {row.dossier_id: row.additional_formats for row in dossiers}
+        text = render_markdown(report, evidence_ids=settings.markdown_evidence_ids, gap_ids=settings.markdown_gap_ids,
+                               dossier_formats=formats)
+        if text != render_markdown(report, evidence_ids=settings.markdown_evidence_ids,
+                                   gap_ids=settings.markdown_gap_ids, dossier_formats=formats):
             raise IntegrityError("report rendering is not deterministic")
         html_text = render_executive_html(report, dossiers)
         if html_text != render_executive_html(report, dossiers):
@@ -230,13 +234,14 @@ def build_job(*, repository_root: Path | None = None,
         if (read_bound(run_root, assembled["sarif"]) != sarif.sarif_bytes
                 or read_bound_json(run_root, assembled["sarif_result"]) != sarif.result):
             raise IntegrityError("SARIF does not match the accepted gate projection")
+        dossiers = bind_dossiers(run_root, report, gate["bindings"])
+        formats = {row.dossier_id: row.additional_formats for row in dossiers}
         expected = render_markdown(report, evidence_ids=settings.markdown_evidence_ids,
-                                   gap_ids=settings.markdown_gap_ids).encode("utf-8")
+                                   gap_ids=settings.markdown_gap_ids, dossier_formats=formats).encode("utf-8")
         if read_bound(run_root, rendered["artifact"]) != expected:
             raise IntegrityError("final-report.md is not the rendering of final-report.json")
         if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
             raise IntegrityError("final report is not bound to the accepted gate handoff")
-        dossiers = bind_dossiers(run_root, report, gate["bindings"])
         expected_html = render_executive_html(report, dossiers).encode("utf-8")
         if read_bound(run_root, rendered["html"]) != expected_html:
             raise IntegrityError("final-report.html is not the rendering of final-report.json")

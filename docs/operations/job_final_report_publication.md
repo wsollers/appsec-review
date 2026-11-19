@@ -123,8 +123,8 @@ The [handler](../../src/appsec_review/jobs/job_final_report_publication/job.py) 
    independence, shipment or nonexecution assurance.
 2. Validate the report schema and write attempt-owned `final-report.json`. Keep publishable
    findings, verification backlog and withheld records in separate sections.
-3. In `report.render`, render Markdown from that JSON using configured evidence/gap display
-   bounds. Load only the gate-certified dossier JSON for executive HTML's bounded narratives,
+3. In `report.render`, render Markdown from that JSON and the gate-certified private format
+   references using configured evidence/gap display bounds. Load only the gate-certified dossier JSON for executive HTML's bounded narratives,
    using the same projection as executive LaTeX. Require repeat rendering to produce identical text.
 4. In `report.render_pdf`, render the executive LaTeX source with gate-bound dossiers and, when
    configured, invoke the pinned PDF tool. Unknown metrics remain N/A in the source; the receipt
@@ -150,10 +150,16 @@ changed, missing, malformed or identity-mismatched claimed dossiers. A pure rend
 dossiers retains the certified reference count and names the not-loaded narrative gap.
 This does not expose protected source excerpts, patch text or generated payloads.
 
+Private rendering receipt `/2` adds exact Markdown/HTML references without expanding the public
+four-key dossier map. Both the receipt and every additional reference must belong to the
+accepted gate binding set. Legacy `/1` is read without certifying absent formats or guessing
+sidecar paths. JSON keeps the receipt link; Markdown/HTML/LaTeX list only verified references.
+See [private format custody](dossier-publication.md#private-format-custody).
+
 ### `acceptance`
 
 1. In `acceptance.publish_handoff`, reverify the gate snapshot and report schema.
-2. Re-render Markdown from JSON and HTML/LaTeX from JSON plus the same bound dossier projection;
+2. Re-render Markdown from JSON plus its certified format references and HTML/LaTeX from JSON plus the same bound dossier projection;
    require byte equality and require report provenance to name the loaded accepted gate handoff.
 3. Publish hash-bound references with unchanged statuses, counts and limitations. The handoff
    item count is publishable plus backlog, not the total including withheld.
@@ -169,9 +175,12 @@ flowchart LR
   json --> render["report.render"]
   render --> md["final-report.md"]
   load --> dossier["Hash- and identity-checked dossier JSON"]
+  load --> formats["Certified private receipt + format refs"]
   dossier --> render
+  formats --> render
   render --> html["final-report.html"]
   dossier --> pdf["report.render_pdf"]
+  formats --> pdf
   json --> pdf
   pdf --> tex["final-report.tex / PDF outcome receipt"]
   json --> accept["acceptance.publish_handoff"]

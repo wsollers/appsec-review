@@ -66,7 +66,7 @@ checkout, determines an older run's configuration.
 
 | Setting | Default / meaning |
 | --- | --- |
-| `enabled`, `render_pdf` | Both `true` for new configurations. Disabling PDF retains JSON/LaTeX with `latex_only` and a policy gap. |
+| `enabled`, `render_pdf` | Both `true` for new configurations. Disabling PDF retains JSON/Markdown/HTML/LaTeX with `latex_only` and a policy gap. |
 | `max_packages`, `max_dossiers` | 10000 verified packages / 20000 dossier candidates. Overflow remains in `omitted` with exact finding binding and `max_dossiers` reason. |
 | `max_artifact_bytes` | 16777216 bytes per bounded input or rendered artifact. |
 | `max_source_excerpts`, `max_evidence_rows` | 4 excerpts / 24 citation rows. Cited accepted identities only; source retrieval uses two context lines. |
@@ -117,13 +117,14 @@ neither an applicable patch nor a build check proves a fix or runtime regression
 | Accepted input references | Review/job/ledger/manifest and exact claim/finding package/hash bindings; accepted optional producer handoffs, frozen settings and tool/guidance identities. No later `latest.json` discovery after certification. |
 | Dossier JSON | Deterministic bounded developer projection, preserving evidence/adjudication/score/independence/shipment provenance, applicable attachments, coverage and unavailable dimensions. |
 | LaTeX source | Deterministic escaped rendering input; retain it even when rendering cannot complete. |
+| Markdown and HTML | Protected, deterministic views of the same bounded dossier document. Their exact hashes are certified in the private rendering receipt, not added to the public file map. |
 | PDF | Publish only real rendered bytes with a hash-bound success receipt. Missing image, timeout, failure or cap is a named render gap, never a placeholder called a PDF. |
-| Rendering receipt | `appsec-review/dossier-rendering-receipt/1`: dossier/run/status/visibility, file refs, renderer, `source_date_epoch`, template file/tree hashes, tool/image/policy identities, settings hash, optional retained execution receipt and gaps. |
+| Rendering receipt | New `appsec-review/dossier-rendering-receipt/2`: the existing dossier/run/status/visibility, file/tool/template/policy identities and gaps, plus required `additional_formats.markdown` and `.html` references. The new [closed private schema](../schemas/dossier/dossier-rendering-receipt-v2.schema.json) leaves the legacy `/1` read path unchanged. |
 | Producer manifest/handoff | Exact accounting of eligible dossiers and every terminal rendering outcome, immutable attempt-owned paths/hashes, and explicit gaps. |
 
 Outputs are new immutable directories under the attempt's
 `steps/dossiers/tasks/create/items/<kind-and-finding-hash>/`: `dossier.json`, `dossier.tex`,
-`dossier.pdf` only when rendered, and `receipt.json`. Available container execution/stream and
+`dossier.md`, `dossier.html`, `dossier.pdf` only when rendered, and `receipt.json`. Available container execution/stream and
 `report.log`, `report.pdfinfo.txt`, `report.txt` diagnostics are retained as protected artifacts.
 The renderer removes its newly created `input` and `scratch` staging directories in `finally`;
 the rendering receipt is not a fabricated separate successful-cleanup assertion.
@@ -131,12 +132,30 @@ the rendering receipt is not a fabricated separate successful-cleanup assertion.
 [`reporting/dossier_render.py`](../../src/appsec_review/reporting/dossier_render.py) reuses the
 existing catalog/runtime executor and template/palette, not a second container runner.
 The hardened image uses no network, read-only inputs/template, no shell escape and
-`SOURCE_DATE_EPOCH=0`. JSON and LaTeX are written before the render attempt. `rendered` requires
+`SOURCE_DATE_EPOCH=0`. JSON, Markdown, HTML and LaTeX are written before the render attempt. `rendered` requires
 successful bounded execution and retained PDF bytes; ordinary failure gives `render_failed` with
-no PDF ref, while policy-disabled rendering gives `latex_only`. Both keep JSON/LaTeX/receipt.
+no PDF ref, while policy-disabled rendering gives `latex_only`. Both keep the four text formats and receipt.
 Integrity failures stop publication. The image pin is source-verified here; the owner smoked that
 image and retained the real seeded sample below. Template fix `e9a8333a` checksum-checks `.toc`
 changes so LaTeX reruns even when `LastPage` is unchanged; it does not change the image pin.
+
+### Private format custody
+
+The public dossier map stays exactly `json`, `latex`, `pdf`, `receipt`. The `/2` receipt keeps
+its original three-entry `files` map and carries the additional two references privately.
+The writer pins their bytes before any external renderer boundary and checks the same pins
+before sealing the receipt. Publication and the final gate verify the references and exact
+Markdown/HTML renderings; changed bytes are not rehashed into a new success.
+The gate's existing recursive binding list includes both format references. The final report
+reads only its certified receipt, checks every format reference against that list, and exposes
+paths/hashes in its listings—not raw protected contents.
+
+Legacy `/1` receipts remain readable and certify **no Markdown/HTML references**. Report
+listings explicitly say these formats were not certified, even if similarly named files happen
+to exist. An unloaded receipt has unknown format certification. Unknown versions, incomplete
+or additional `/2` format keys, or `/1` receipts claiming the new field are rejected.
+No existing schema file or public gate/report schema ID changed, and historical receipt bytes
+are never rewritten to acquire newer coverage.
 
 ## Verified seeded sample
 
@@ -215,7 +234,7 @@ See the [completion telemetry contract](../architecture/telemetry.md#evidence-co
 
 ## Visibility and assurance
 
-Dossier JSON, source excerpts, inert PoC source, LaTeX and PDF are **protected developer material**,
+Dossier JSON, source excerpts, inert PoC source, Markdown, HTML, LaTeX and PDF are **protected developer material**,
 not public report content. Resolve only bounded accepted source/artifacts; preserve file/shard/
 manifest hashes and omission counts. Exclude credentials, literal secret matches, raw prompts and
 arbitrary model transcripts even from developer dossiers. Existing broad diagnostic report

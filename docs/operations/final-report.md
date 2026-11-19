@@ -247,8 +247,8 @@ validator from the document's declared version and reject unsupported versions; 
 accepted bytes. Legacy charts retain recorded estimates with an explicit legacy-estimate notice,
 not a retrospective assertion that exposure or inspection was measured.
 
-`report.render` renders `final-report.md` from that JSON with a pure function: the same
-`final-report.json` and display bounds give byte-identical Markdown, with no clock, locale or
+`report.render` renders `final-report.md` from that JSON and certified dossier-format references
+with a pure function: the same inputs and display bounds give byte-identical Markdown, with no clock, locale or
 environment input (`final-report-markdown/2`). Text that came from review artifacts is shown in code spans or escaped, so it
 cannot become Markdown or HTML structure.
 
@@ -259,6 +259,14 @@ severity comes from `attack_chain_cards` in every format, never the maximum memb
 Only historical reports without cards use the legacy fallback, which leaves missing composed
 severity unrated. An explicitly empty card list remains empty.
 
+The public dossier file map stays `json`, `latex`, `pdf`, `receipt`. Markdown/HTML file listings
+come only from the private rendering receipt `/2` referenced by that map and verified against
+the gate's existing binding set. JSON retains the receipt as the indirect machine-readable route.
+Legacy `/1` receipts explicitly lack certification for these formats; no adjacent files are
+discovered or retrospectively certified. An unloaded receipt is labelled unknown. A protected
+format reference exposes only its path/hash, not its raw contents; see
+[private format custody](dossier-publication.md#private-format-custody).
+
 `report.render_pdf` renders the executive PDF (next section) from `final-report.json` and the dossier
 JSON the gate binds, through the pinned `tool-report-latex` image, and writes `final-report.tex`,
 `final-report.pdf` when the renderer produced a valid PDF, the retained renderer logs and a
@@ -266,7 +274,8 @@ JSON the gate binds, through the pinned `tool-report-latex` image, and writes `f
 [`../schemas/final-report/final-report-pdf-receipt.schema.json`](../schemas/final-report/final-report-pdf-receipt.schema.json)).
 
 `acceptance.publish_handoff` re-validates the JSON, proves `final-report.md` is exactly the rendering
-of `final-report.json`, re-renders HTML from the same JSON and certified dossiers, and re-proves the executive PDF files
+of `final-report.json` and its certified format references, re-renders HTML from the same JSON and certified dossiers,
+and re-proves the executive PDF files
 (the LaTeX is exactly the rendering of the JSON
 plus the gate-bound dossiers, the receipt hashes those bytes, and a rendered PDF is the valid file the
 receipt names), and publishes the handoff. The handoff's `artifact` is `final-report.json`, the

@@ -225,6 +225,7 @@ def _dossiers(run_root: Path, document: Mapping[str, Any], findings: Mapping[str
                 and dossier.get("finding") == finding and dossier.get("dossier_id") == row["dossier_id"],
                 "dossier artifact identity disagrees with its manifest")
         receipt = read_bound_json(run_root, files["receipt"])
+        # Versioned private format refs are verified above, then bound without widening the public file map.
         bind_tree(run_root, receipt, bindings)
         bind_tree(run_root, files, bindings)
         result.append({"dossier_id": row["dossier_id"], "kind": row["kind"], "finding": finding,

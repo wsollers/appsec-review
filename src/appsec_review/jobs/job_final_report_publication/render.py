@@ -1,7 +1,8 @@
 """Render ``final-report.md`` from ``final-report.json``, deterministically.
 
-The renderer is a pure function of the report document and two display bounds: the same input gives
-byte-identical output. It reads no clock, locale, environment or file. Every string that came from a
+The renderer is a pure function of the report, verified private-format references and two display
+bounds: the same input gives byte-identical output. It reads no clock, locale, environment or file.
+Every string that came from a
 review artifact is shown inside a code span after control characters and backticks are removed, so
 document text can never become Markdown structure or HTML.
 """
@@ -11,6 +12,7 @@ import re
 from typing import Any, Iterable, Mapping, Sequence
 
 from appsec_review.reporting.dimensions import build_radar_tracker
+from appsec_review.reporting.dossier_receipts import FORMAT_LEGACY, FORMAT_UNLOADED
 from appsec_review.reporting.text import metric_text
 from appsec_review.reporting.executive_posture import (
     build_attack_chain_cards,
@@ -197,7 +199,8 @@ def _roadmap(report: Mapping[str, Any]) -> list[str]:
     return lines
 
 
-def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: int) -> str:
+def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: int,
+                    dossier_formats: Mapping[str, Mapping[str, Mapping[str, str]] | None] | None = None) -> str:
     settings = {"evidence": evidence_ids, "gaps": gap_ids}
     status, summary = report["status"], report["summary"]
     counts, accounting = summary["package_counts"], summary["accounting"]
@@ -283,6 +286,12 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
     for item in report["dossiers"]["items"]:
         lines.append(f"- {code(item['dossier_id'])} ({code(item['kind'])}): {code(item['status'])}; "
                      + ", ".join(f"{key} {code(ref['path'])}" for key, ref in item["files"].items() if ref is not None))
+        formats = (dossier_formats or {}).get(item["dossier_id"])
+        if formats:
+            lines.extend(f"  - certified protected {name} {code(ref['path'])}; SHA-256 {code(ref['sha256'])}"
+                         for name, ref in sorted(formats.items()))
+        else:
+            lines.append("  - " + plain(FORMAT_UNLOADED if formats is None else FORMAT_LEGACY))
     lines += ["", "Dossier contents are protected developer artifacts, not embedded public report content.", ""]
     lines += ["## Capability accounting", ""]
     lines += [f"- {code(name)}: {code(record['disposition'])}; outcomes {record['item_count']}, "

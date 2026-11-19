@@ -13,6 +13,7 @@ from appsec_review.jobs.completion_contracts import (
 from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
 from appsec_review.reporting.dossiers import DossierLimits, audit_relation_ids, build_dossier
 from appsec_review.reporting.dossier_render import render_dossier
+from appsec_review.reporting.dossier_receipts import verify_additional_formats
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json
@@ -326,6 +327,7 @@ def verify_publication(root: Path, summary: Mapping[str, Any]) -> None:
                 or receipt["status"] != item["status"] or receipt["files"] != {
                     name: files[name] for name in ("json", "latex", "pdf")}):
             raise IntegrityError("dossier receipt/model disagrees with publication")
+        verify_additional_formats(root, receipt, dossier=model)
         if receipt.get("execution") is not None:
             resolve_bound(root, receipt["execution"])
 

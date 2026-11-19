@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/dossier/dossier-rendering-receipt-v2.schema.json",
+  "title": "Protected dossier rendering receipt with complete Markdown and HTML bindings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "dossier_id", "run_id", "status", "visibility", "files", "additional_formats",
+               "renderer", "source_date_epoch", "template", "tool", "settings_sha256", "execution", "gaps", "policy"],
+  "properties": {
+    "schema": {"const": "appsec-review/dossier-rendering-receipt/2"},
+    "dossier_id": {"type": "string", "pattern": "^dossier-[0-9a-f]{64}$"},
+    "run_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["rendered", "render_failed", "latex_only"]},
+    "visibility": {"const": "protected_developer"},
+    "files": {
+      "type": "object", "additionalProperties": false, "required": ["json", "latex", "pdf"],
+      "properties": {
+        "json": {"$ref": "#/$defs/artifact_ref"},
+        "latex": {"$ref": "#/$defs/artifact_ref"},
+        "pdf": {"$ref": "#/$defs/ref_or_null"}
+      }
+    },
+    "additional_formats": {
+      "type": "object", "additionalProperties": false, "required": ["markdown", "html"],
+      "properties": {
+        "markdown": {"$ref": "#/$defs/artifact_ref"},
+        "html": {"$ref": "#/$defs/artifact_ref"}
+      }
+    },
+    "renderer": {"const": "appsec-review/dossier-renderer/1"},
+    "source_date_epoch": {"const": 0},
+    "template": {
+      "type": "object", "additionalProperties": false, "required": ["files", "sha256"],
+      "properties": {
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "files": {
+          "type": "array", "minItems": 3, "maxItems": 3, "uniqueItems": true,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["name", "sha256"],
+            "properties": {
+              "name": {"enum": ["appsec-report.cls", "appsec-palette.tex", "report-skeleton.tex"]},
+              "sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        }
+      }
+    },
+    "tool": {
+      "type": "object", "additionalProperties": false, "required": ["id", "tag", "image_id"],
+      "properties": {
+        "id": {"const": "tool-report-latex"},
+        "tag": {"type": "string", "minLength": 1},
+        "image_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "version": {"type": "string", "minLength": 1},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "runtime_policy_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "settings_sha256": {"$ref": "#/$defs/sha256"},
+    "execution": {"$ref": "#/$defs/ref_or_null"},
+    "gaps": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["network", "shell_escape", "input_read_only", "template_read_only", "generated_code_execution"],
+      "properties": {
+        "network": {"const": "none"},
+        "shell_escape": {"const": false},
+        "input_read_only": {"const": true},
+        "template_read_only": {"const": true},
+        "generated_code_execution": {"const": "not_performed_by_policy"}
+      }
+    }
+  },
+  "if": {"properties": {"status": {"const": "rendered"}}},
+  "then": {"properties": {"files": {"properties": {"pdf": {"$ref": "#/$defs/artifact_ref"}}}}},
+  "else": {"properties": {"files": {"properties": {"pdf": {"type": "null"}}}}},
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "artifact_ref": {
+      "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "ref_or_null": {"oneOf": [{"$ref": "#/$defs/artifact_ref"}, {"type": "null"}]}
+  }
+}

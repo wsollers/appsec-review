@@ -24,6 +24,7 @@ from appsec_review.container_runtime.executor import ContainerExecutor, Executio
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound_json
 from appsec_review.jobs.completion_contracts import DOSSIER_SCHEMA
 from appsec_review.reporting.dossier_render import TOOL_ID, template_identity
+from appsec_review.reporting.dossier_receipts import verify_additional_formats
 from appsec_review.reporting.executive_report import RENDERER, BoundDossier, executive_document
 from appsec_review.reporting.latex import render_latex
 from appsec_review.review.models import IntegrityError
@@ -71,7 +72,17 @@ def bind_dossiers(run_root: Path, report: Mapping[str, Any],
                 or document.get("kind") != item["kind"] or document.get("run_id") != report["run_id"]
                 or document.get("visibility") != "protected_developer"):
             raise IntegrityError(f"executive dossier {item['dossier_id']} disagrees with its certified identity")
-        result.append(BoundDossier(item["dossier_id"], item["kind"], dict(item["finding"]), document))
+        receipt_ref = item["files"]["receipt"]
+        if bound is not None and (receipt_ref["path"], receipt_ref["sha256"]) not in bound:
+            raise IntegrityError(f"dossier receipt {item['dossier_id']} is not bound by the accepted gate")
+        receipt = read_bound_json(run_root, receipt_ref)
+        formats = verify_additional_formats(run_root, receipt, bound=bound)
+        if (receipt.get("dossier_id") != item["dossier_id"] or receipt.get("run_id") != report["run_id"]
+                or receipt.get("status") != item["status"]
+                or receipt.get("files") != {name: item["files"][name] for name in ("json", "latex", "pdf")}):
+            raise IntegrityError(f"dossier receipt {item['dossier_id']} disagrees with its certified identity")
+        result.append(BoundDossier(item["dossier_id"], item["kind"], dict(item["finding"]), document,
+                                   additional_formats=formats))
     return tuple(sorted(result, key=lambda row: row.dossier_id))
 
 

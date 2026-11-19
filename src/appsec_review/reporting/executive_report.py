@@ -25,6 +25,7 @@ from .executive_posture import (
     build_remediation_roadmap,
 )
 from .digest import bullets, field, table
+from .dossier_receipts import FORMAT_LEGACY, FORMAT_UNLOADED
 from .dimensions import DIMENSIONS, build_radar_tracker
 from .html import render_html
 from .model import (
@@ -135,6 +136,7 @@ class BoundDossier:
     finding: Mapping[str, Any]
     document: Mapping[str, Any] | None
     gap: str | None = None
+    additional_formats: Mapping[str, Mapping[str, str]] | None = None
 
 
 def words(value: Any) -> str:
@@ -719,20 +721,33 @@ def _appendix_blocks(report: Mapping[str, Any], dossiers: Sequence[BoundDossier]
         rows.append(("runtime profile " + clean(profile.get("name")), "", clean(profile.get("sha256")) or "none"))
     refs = {entry["dossier_id"]: entry for entry in report["dossiers"]["items"]}
     dossier_rows = []
+    format_rows = []
+    format_notices = []
     for row in dossiers:
         pdf = ((refs.get(row.dossier_id) or {}).get("files") or {}).get("pdf")
         dossier_rows.append((row.dossier_id, words(row.kind), "read" if row.document else "unavailable",
                              clean(pdf.get("path")) if isinstance(pdf, Mapping) else "no PDF"))
+        if row.additional_formats:
+            format_rows.extend((row.dossier_id, name, ref["path"], ref["sha256"])
+                               for name, ref in sorted(row.additional_formats.items()))
+        else:
+            reason = FORMAT_UNLOADED if row.additional_formats is None else FORMAT_LEGACY
+            format_notices.append(f"{row.dossier_id}: {reason}")
     blocks: list[Any] = [Heading(1, "Appendix: provenance", "provenance", new_page=True),
                          Box(BoxKind.PROVENANCE, "Accepted artifact bindings", items=(
                              table(("Artifact", "Run-relative path", "SHA-256"), rows, LIMITS,
                                    widths=(.22, .40, .34), mono=(False, True, True)),))]
     if dossier_rows:
         blocks.append(Box(BoxKind.PROVENANCE, "Protected dossier references", items=(
-            Para("Dossiers are protected developer artifacts. This report read their JSON through the gate's hashes; "
+            Para("Dossiers are protected developer artifacts. Only loaded JSON was read through the gate's hashes; "
                  "their source excerpts and generated code stay in the dossiers."),
             table(("Dossier", "Kind", "Read", "PDF"), dossier_rows, LIMITS, widths=(.36, .16, .12, .32),
                   mono=(True, False, False, True)))))
+        blocks.append(Box(BoxKind.PROVENANCE, "Certified protected dossier formats", items=(
+            Para("References only; certifying a protected file does not make its contents public."),
+            *((table(("Dossier", "Format", "Run-relative path", "SHA-256"), format_rows, LIMITS,
+                     widths=(.20, .10, .42, .24), mono=(True, False, True, True)),) if format_rows else ()),
+            *((_bullets(format_notices),) if format_notices else ()))))
     blocks.append(Box(BoxKind.PROVENANCE, "Renderers", items=(Fields((
         field("Executive report", RENDERER, LIMITS, mono=True),
         field("Markdown report", (report["renderers"]["markdown"] or {}).get("renderer"), LIMITS, mono=True),

@@ -17,6 +17,7 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.review.secret_redaction import redact_message
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, platform_file_sha256
 from .dossiers import dossier_document
+from .dossier_receipts import RECEIPT_SCHEMA, verify_additional_formats
 from .html import render_html
 from .latex import render_latex
 from .model import Box, Bullets, Code, Fields, Heading, Para, Stats, Table, Truncation
@@ -25,7 +26,6 @@ if TYPE_CHECKING:
     from appsec_review.jobs.job_dossier_publication.settings import DossierPublicationSettings
 
 TOOL_ID = "tool-report-latex"
-RECEIPT_SCHEMA = "appsec-review/dossier-rendering-receipt/1"
 ExecutorFactory = Callable[..., ContainerExecutor]
 
 
@@ -144,6 +144,7 @@ def render_dossier(run_root: Path, output_dir: Path, dossier: Mapping[str, Any],
     atomic_bytes(md_path, md_bytes)
     atomic_bytes(html_path, html_bytes)
     files: dict[str, Any] = {"json": artifact_ref(root, json_path), "latex": artifact_ref(root, latex_path), "pdf": None}
+    formats = {"markdown": artifact_ref(root, md_path), "html": artifact_ref(root, html_path)}
     status, gaps = "latex_only", []
     execution_ref = None
     tool_identity: dict[str, Any] = {"id": TOOL_ID, "tag": settings.image_tag, "image_id": settings.image_id}
@@ -213,11 +214,13 @@ def render_dossier(run_root: Path, output_dir: Path, dossier: Mapping[str, Any],
     receipt = {
         "schema": RECEIPT_SCHEMA, "dossier_id": dossier["dossier_id"], "run_id": dossier["run_id"],
         "status": status, "visibility": "protected_developer", "files": files,
+        "additional_formats": formats,
         "renderer": dossier["renderer"], "source_date_epoch": 0, "template": identity, "tool": tool_identity,
         "settings_sha256": settings.settings_sha256(), "execution": execution_ref, "gaps": gaps,
         "policy": {"network": "none", "shell_escape": False, "input_read_only": True, "template_read_only": True,
                    "generated_code_execution": "not_performed_by_policy"},
     }
+    verify_additional_formats(root, receipt)
     atomic_json(receipt_path, receipt)
     return {"dossier_id": dossier["dossier_id"], "kind": dossier["kind"], "finding": dossier["finding"],
             "status": status, "files": {**files, "receipt": artifact_ref(root, receipt_path)},

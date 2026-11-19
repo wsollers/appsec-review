@@ -572,16 +572,25 @@ The [handler](../../src/appsec_review/jobs/job_dossier_publication/job.py),
 4. If PDF is commissioned, run the pinned LaTeX renderer and retain its execution receipt.
    Publish a PDF only for successful real output; otherwise retain `render_failed` or
    `latex_only` with a reason. A pin/integrity failure is not downgraded into rendering success.
+   The private rendering receipt `/2` requires both Markdown/HTML references, pinned before
+   the external boundary and rechecked before sealing. The public file map remains
+   `json`, `latex`, `pdf`, `receipt`.
 5. Write the dossier summary with admitted, rendered/failed/LaTeX-only and omitted counts.
 
 ### `acceptance`
 
 1. In `acceptance.publish_handoff`, reverify accepted pointers, all bound inputs and dossier
-   JSON/LaTeX/PDF/receipt references.
+   JSON/LaTeX/PDF/receipt references and the `/2` receipt's exact Markdown/HTML bytes.
+   Check these bytes against the real deterministic renderers, not replacement hashes.
 2. Require items plus omissions to partition the exact expected kind/finding pairs, without
    duplicates. Require PDF presence to agree with `rendered` and receipt/model identities to agree.
 3. Publish the immutable summary reference and aggregate gaps; a partition or reference mismatch
    rejects publication.
+
+The gate includes the private format references in its existing accepted binding list.
+Report listings verify this membership and expose references only. Legacy receipt `/1`
+keeps its existing read path and explicitly lacks Markdown/HTML certification; no sidecar
+is discovered from a guessed path. See [private format custody](dossier-publication.md#private-format-custody).
 
 ## Dataflow
 
@@ -594,10 +603,15 @@ flowchart LR
   remediation["job_remediation_planning / remediation_planning_summary"] --> load
   validation["job_remediation_validation / remediation_validation_summary"] --> load
   load --> create["dossiers.create"]
+  create --> formats["Protected Markdown / HTML bytes"]
+  formats --> receipt["Private rendering receipt /2: exact refs"]
+  receipt --> accept
   create --> accept["acceptance.publish_handoff"]
   create -. "source / render / dossier cap" .-> gaps["gaps and omitted"]
   gaps --> accept
   accept --> out["dossier_publications"]
+  out --> gate["Final gate: receipt + format bindings"]
+  gate --> report["Report: reference-only listings"]
   accept -. "identity or partition mismatch" .-> reject["reject publication"]
 ```
 
