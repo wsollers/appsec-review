@@ -141,7 +141,9 @@ the catalog supplies the retrieval manifest, not the binary's authority.
    library and symbol-within-library pair, not by an external address's numeric offset. Older
    publications without the library field resolve a qualified or bare spelling only when it
    identifies one import across the full import table, including rows omitted by index bounds.
-   Missing or ambiguous external targets remain unresolved. For native functions with pseudo-C,
+   An exact, unambiguous admitted thunk can disambiguate a legacy bare name when both identify
+   the same import. Conflicting library/name/thunk identities remain unresolved; import bounds
+   cannot hide a conflicting thunk owner. For native functions with pseudo-C,
    recheck bytes, detach immutable run-owned backing, and bind locations under
    `@binary/<sha256>/<address>.c`. Preserve decompile/truncation metadata. Managed routing suppresses
    pseudo-C locations and points to the appropriate managed decompiler without running it.
@@ -149,6 +151,9 @@ the catalog supplies the retrieval manifest, not the binary's authority.
    to an expression inside a pseudo-C body, excluding comments, literals, declarations and
    unevaluated operands. One expression is located; several (even on one line) retain
    `line_match: ambiguous` without a source location; no reliable expression is unlocated.
+   Unevaluated unary operands such as `sizeof sink()` are excluded without suppressing a later
+   evaluated call in `sizeof(int) + sink()`. Backslash-continued comments are masked with either
+   LF or CRLF line endings; accepted source bytes and their location offsets are not rewritten.
    This is a conservative derived-text anchor, not an instruction-to-source map.
    Relate callers/sites/callees when resolved; record unresolved computed calls.
 4. Create unlocated string entities and bounded function-reference edges. Value clipping by

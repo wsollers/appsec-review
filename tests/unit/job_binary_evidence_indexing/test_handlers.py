@@ -308,20 +308,38 @@ def _small_publication(
     calls: list[dict[str, Any]] | None = None,
     imports: list[dict[str, Any]] | None = None,
     strings: list[dict[str, Any]] | None = None,
+    extra_functions: list[dict[str, Any]] | None = None,
+    stored_text: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     def export(root: Path, sha: str) -> None:
         write_export(root, sha)
         _write_raw_tables(root, {
-            "functions": [{"address": "0x100", "name": "f", "decompile_status": "ok"}],
+            "functions": [{"address": "0x100", "name": "f", "decompile_status": "ok"}, *(extra_functions or [])],
             "decompiled": [{"address": "0x100", "c": text, "truncated": False}],
             "pcode": [], "exports": [], "gaps": [],
             "calls": calls or [], "imports": imports or [], "strings": strings or [],
         })
         complete = json.loads((root / "complete.json").read_text())
-        complete["counts"].update(functions=1, strings=len(strings or []))
+        complete["counts"].update(functions=1 + len(extra_functions or []), strings=len(strings or []))
         atomic_json(root / "complete.json", complete)
 
     _, document, entry = _publish_fixture_binary(base, export=export)
+    if stored_text is not None:
+        # Exercise accepted publications retaining CRLF, not just today's export normalizer,
+        # which removes CRLF. Re-pin the inert fixture before intake freezes it.
+        root, manifest = verified_publication(document, entry)
+        functions_path = root / "functions.jsonl"
+        functions = [json.loads(line) for line in functions_path.read_text().splitlines()]
+        pseudo = functions[0]["pseudo_c"]
+        data = stored_text.encode("utf-8")
+        (root / pseudo["path"]).write_bytes(data)
+        pseudo.update(sha256=hashlib.sha256(data).hexdigest(), bytes=len(data), lines=data.count(b"\n"))
+        _write_raw_tables(root, {"functions": functions})
+        manifest["datasets"]["functions"].update(sha256=file_sha256(functions_path),
+                                                bytes=functions_path.stat().st_size)
+        manifest["coverage"]["pseudo_c_bytes"] = len(data)
+        atomic_json(root / "manifest.json", manifest)
+        entry["manifest_sha256"] = file_sha256(root / "manifest.json")
     return document, entry
 
 
@@ -392,6 +410,69 @@ def test_external_names_remain_ambiguous_when_imports_are_bounded(tmp_path: Path
     site, = core.find(kind="binary_call_site", indexes=("binary",))["results"]
     assert core.trace(identity=site["identity"], relations=("CALLS",), depth=1)["results"] == []
     assert result["gaps"] == ["vendor: imports_truncated: indexed 1 of 2", "vendor: unresolved_call: 0x110"]
+
+
+@pytest.mark.parametrize(("resolution", "second_thunk", "expected"), [
+    ({}, "0x190", "A.DLL"),
+    ({"resolved_name": "A.DLL::sink"}, "0x190", "A.DLL"),
+    ({"resolved_name": "B.DLL::sink"}, "0x190", None),
+    ({"resolved_library": "B.DLL"}, "0x190", None),
+    ({}, "0x180", None),
+    ({"to": None}, "0x190", None),
+], ids=["ambiguous-name-exact-thunk", "matching-name", "conflicting-name", "conflicting-library",
+        "conflicting-thunks", "bare-name-only"])
+def test_legacy_external_calls_reconcile_thunk_and_symbol_identity(
+    tmp_path: Path, resolution: dict[str, Any], second_thunk: str, expected: str | None,
+) -> None:
+    document, _ = _small_publication(
+        tmp_path, calls=[{"from_function": "0x100", "call_site": "0x110", "to": "0x180",
+                         "resolved_external": True, "resolved_name": "sink", "kind": "call", **resolution}],
+        imports=[{"library": name, "name": "sink", "kind": "function", "thunks": [thunk]}
+                 for name, thunk in (("A.DLL", "0x180"), ("B.DLL", second_thunk))],
+        extra_functions=[{"address": "0x180", "name": "sink", "is_thunk": True,
+                          "decompile_status": "skipped_thunk"}])
+    core, result, _ = _published_core(tmp_path, document)
+    site, = core.find(kind="binary_call_site", indexes=("binary",))["results"]
+    edges = core.trace(identity=site["identity"], relations=("CALLS",), depth=1)["results"]
+    if expected is None:
+        assert edges == []
+        assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
+        assert result["gaps"] == ["vendor: unresolved_call: 0x110"]
+    else:
+        edge, = edges
+        imported, = core.find(identity=edge["target_id"])["results"]
+        assert imported["payload"]["library"] == expected
+        assert imported.get("location") is None
+        assert result["terminal_status"] == "SUCCEEDED"
+
+
+@pytest.mark.parametrize(("text", "located"), [
+    ("int caller(void) { int n = sizeof sink(); return n; }\n", False),
+    ("int caller(void) { int n = sizeof *sink(); return n; }\n", False),
+    ("int caller(void) { int n = sizeof other(sink()); return n; }\n", False),
+    ("int caller(void) { return sizeof(int) + sink(); }\n", True),
+    ('int caller(void) { return sizeof "text" + sink(); }\n', True),
+    ("int caller(void) { // continued \\\r\n sink();\r\n return 0; }\r\n", False),
+    ("int caller(void) { // ordinary\r\n sink();\r\n return 0; }\r\n", True),
+], ids=["bare-sizeof", "unary-sizeof", "nested-sizeof", "evaluated-after-type", "evaluated-after-literal",
+        "crlf-continued-comment", "crlf-evaluated-call"])
+def test_unevaluated_and_crlf_text_never_becomes_a_call_excerpt(
+    tmp_path: Path, text: str, located: bool,
+) -> None:
+    document, _ = _small_publication(
+        tmp_path, text=text, stored_text=text if "\r" in text else None,
+        imports=[{"library": "A.DLL", "name": "sink", "kind": "function"}],
+        calls=[{"from_function": "0x100", "call_site": "0x110", "to": None,
+                "resolved_external": True, "resolved_name": "sink", "kind": "call"}])
+    core, result, _ = _published_core(tmp_path, document)
+    site, = core.find(kind="binary_call_site", indexes=("binary",))["results"]
+    assert site["payload"]["line_match"] == ("unique" if located else "unlocated")
+    assert bool(site.get("location")) is located
+    assert result["counts"]["located_call_sites"] == int(located)
+    excerpts = core.read_excerpt(identity=site["identity"], context_lines=0)["results"]
+    assert bool(excerpts) is located
+    function, = core.find(kind="binary_function", indexes=("binary",))["results"]
+    assert function["location"]["file_sha256"] == hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def test_external_symbol_identity_does_not_alias_program_offsets_or_other_libraries(tmp_path: Path) -> None:

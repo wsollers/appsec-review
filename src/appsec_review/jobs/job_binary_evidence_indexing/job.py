@@ -47,8 +47,8 @@ from appsec_review.jobs.job_binary_evidence_indexing.call_locations import call_
 JOB_ID = "job_binary_evidence_indexing"
 SCHEMA = "appsec-review/binary-evidence-index/1"
 INTAKE_SCHEMA = "appsec-review/binary-evidence-intake/1"
-NORMALIZER = "binary-evidence-normalizer/2"
-MAPPING = "ghidra-pseudo-c-lines/2"
+NORMALIZER = "binary-evidence-normalizer/3"
+MAPPING = "ghidra-pseudo-c-lines/3"
 TOPOLOGY = {"load": ("accepted_publications",), "index": ("binaries",), "acceptance": ("publish_handoff",)}
 SETTINGS = ("max_functions_per_binary", "max_call_sites_per_binary", "max_imports_per_binary",
             "max_strings_per_binary", "max_string_xrefs", "max_entity_text_bytes", "max_string_chars")
@@ -155,6 +155,7 @@ class _Binary:
         self.locations: dict[str, SourceLocation] = {}
         self.imports: dict[tuple[str, str], str] = {}
         self.import_names: dict[str, set[tuple[str, str]]] = {}
+        self.thunk_candidates: dict[str, set[tuple[str, str]]] = {}
         self.thunk_imports: dict[str, str] = {}
 
     def _identity(self, kind: EntityKind, native: Mapping[str, Any]) -> str:
@@ -208,6 +209,9 @@ class _Binary:
             key = (str(row.get("library", "")), str(row.get("name", "")))
             for name in (key[1], "::".join(key)):
                 self.import_names.setdefault(name, set()).add(key)
+            for thunk in row.get("thunks") or ():
+                if isinstance(thunk, str) and _ADDRESS.fullmatch(thunk):
+                    self.thunk_candidates.setdefault(thunk, set()).add(key)
         for row in self._bounded("imports", self.tables["imports"], "max_imports_per_binary"):
             name, library = str(row.get("name", "")), str(row.get("library", ""))
             identity = self._identity(EntityKind.BINARY_IMPORT, {"library": library, "name": name})
@@ -216,9 +220,10 @@ class _Binary:
                 LogicalIdentity.parse(identity), f"{self.sha}:{library}::{name}", name, f"{library} {name}",
                 {**self._common(), "name": name, "library": library, "kind": row.get("kind"), "thunks": thunks}))
             self.imports[library, name] = identity
-            for thunk in thunks:
-                self.thunk_imports[thunk] = identity
             self.counts["imports"] += 1
+        for thunk, candidates in self.thunk_candidates.items():
+            if len(candidates) == 1 and (identity := self.imports.get(next(iter(candidates)))) is not None:
+                self.thunk_imports[thunk] = identity
 
     def _function(self, row: Mapping[str, Any], *, located: bool) -> None:
         address = str(row["address"])
@@ -263,19 +268,25 @@ class _Binary:
 
     def _callee(self, row: Mapping[str, Any]) -> str | None:
         target = row.get("to")
+        known_thunk = isinstance(target, str) and target in self.thunk_candidates
+        thunk = self.thunk_imports.get(target) if isinstance(target, str) else None
         if row.get("resolved_external"):
             name = str(row.get("resolved_name", ""))
             if "resolved_library" in row:
-                return self.imports.get((str(row["resolved_library"]), name))
-            candidates = self.import_names.get(name, set())
+                candidates = {(str(row["resolved_library"]), name)}
+            else:
+                candidates = self.import_names.get(name, set())
+            if known_thunk:
+                if not name and "resolved_library" not in row:
+                    return thunk
+                return thunk if thunk is not None and any(
+                    self.imports.get(key) == thunk for key in candidates
+                ) else None
             if len(candidates) == 1:
                 return self.imports.get(next(iter(candidates)))
-            if candidates:
-                return None
-        if isinstance(target, str) and target in self.thunk_imports:
-            return self.thunk_imports[target]
-        if row.get("resolved_external"):
             return None
+        if known_thunk:
+            return thunk
         return self.functions.get(target) if isinstance(target, str) else None
 
     def _calls(self) -> None:
