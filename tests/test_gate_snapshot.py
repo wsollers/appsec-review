@@ -23,8 +23,10 @@ def snapshot(tmp_path: Path, monkeypatch):
     reference = artifact_ref(root, evidence)
     gate = {
         "schema": FINAL_PUBLICATION_GATE_SCHEMA, "run_id": root.name, "status": "COMPLETED",
-        "review": {"status": "DEGRADED"}, "package_counts": {"total": 1},
-        "packages": [{"finding_package_id": "finding-unit"}],
+        "review": {"status": "DEGRADED"},
+        "package_counts": {"total": 1, "publishable": 1, "verification_backlog": 0, "withheld": 0, "exact": True},
+        "packages": [{"finding_package_id": "finding-unit", "state": "confirmed", "bucket": "publishable",
+                      "withheld_reasons": [], "poc": None, "attack_chains": []}],
         "buckets": {"publishable": ["finding-unit"], "verification_backlog": [], "withheld": []},
         "bindings": [reference], "inputs": {"review": reference},
         "capabilities": {"unit": {"artifact": reference}}, "attachments": {"unit": [reference]},
@@ -100,6 +102,29 @@ def test_snapshot_reader_keeps_schema_and_claimed_handoff_authorities(snapshot):
     schemas = SimpleNamespace(errors=lambda _name, _document: ["schema authority rejected document"])
     with pytest.raises(IntegrityError, match="schema authority rejected"):
         verify.load_accepted_gate(snapshot.root, schemas)
+
+
+@pytest.mark.parametrize("kind", ["supported", "withheld", "empty"])
+def test_snapshot_reader_preserves_supported_withheld_and_empty_partitions(snapshot, kind):
+    gate = snapshot.gate
+    row = gate["packages"][0]
+    gate["buckets"]["publishable"] = []
+    gate["package_counts"]["publishable"] = 0
+    if kind == "empty":
+        gate["packages"] = []
+        gate["package_counts"]["total"] = snapshot.published["item_count"] = 0
+    else:
+        bucket = "verification_backlog" if kind == "supported" else "withheld"
+        row["bucket"] = bucket
+        gate["buckets"][bucket] = [row["finding_package_id"]]
+        gate["package_counts"][bucket] = 1
+        if kind == "supported":
+            row["state"] = "supported"
+        else:
+            row["poc"] = {"status": "compile_verified", "result_id": None}
+            row["withheld_reasons"] = ["poc_outcome_unavailable"]
+    snapshot.write()
+    assert verify.load_accepted_gate(snapshot.root, snapshot.schemas)[1] == gate
 
 
 def test_report_load_delegates_to_shared_snapshot_authority_and_remains_gate_only(snapshot, monkeypatch):

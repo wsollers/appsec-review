@@ -132,6 +132,8 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         run_root = unit.job.run_root
         verified = read_bound_json(run_root, unit.output("load.verify_review")["artifact"])
         classification = read_bound_json(run_root, unit.output("gate.classify")["artifact"])
+        if classification != classifier.classify(verified):
+            raise IntegrityError("gate classification disagrees with the verified review")
         document = classifier.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, verified, classification)
         reverify_snapshot(run_root, verified)
         schemas = SchemaSet(repo(unit) / SCHEMA_ROOT)

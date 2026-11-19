@@ -15,6 +15,8 @@ from appsec_review.jobs.engineering_contracts import (
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review.models import IntegrityError
 
+from .classify import bucket_packages, package_counts
+
 __all__ = [
     "REVIEW_JOB", "VerifiedReview", "load_accepted_review", "project_finding", "project_score",
     "load_accepted_gate", "verify_gate_snapshot",
@@ -44,6 +46,23 @@ def verify_gate_snapshot(run_root: Path, gate: Mapping[str, Any]) -> None:
     included(gate["attachments"])
 
 
+def _verify_package_accounting(gate: Mapping[str, Any]) -> None:
+    packages = gate["packages"]
+    identities = [row["finding_package_id"] for row in packages]
+    if len(identities) != len(set(identities)):
+        raise IntegrityError("gate package identities are not unique")
+    partition = {state: [row["finding_package_id"] for row in packages if row["state"] == state]
+                 for state in ("confirmed", "supported")}
+    expected = bucket_packages(packages, partition, gate["attachments"])
+    if sorted(packages, key=lambda row: row["finding_package_id"]) != expected:
+        raise IntegrityError("gate package buckets or withholding reasons disagree with certified state")
+    buckets = {bucket: [row["finding_package_id"] for row in expected if row["bucket"] == bucket]
+               for bucket in ("publishable", "verification_backlog", "withheld")}
+    if ({bucket: sorted(ids) for bucket, ids in gate["buckets"].items()} != buckets
+            or gate["package_counts"] != package_counts(expected)):
+        raise IntegrityError("gate package accounting is not exact")
+
+
 def load_accepted_gate(run_root: Path, schemas: SchemaSet, *,
                        expected_handoff_sha256: str | None = None) -> tuple[AcceptedHandoff, dict[str, Any]]:
     """Verify the accepted gate and its complete certified snapshot, never live optional heads."""
@@ -67,10 +86,6 @@ def load_accepted_gate(run_root: Path, schemas: SchemaSet, *,
         raise IntegrityError("gate document is not a JSON object")
     if gate["schema"] != FINAL_PUBLICATION_GATE_SCHEMA or published.get("item_count") != gate["package_counts"]["total"]:
         raise IntegrityError("gate document disagrees with its accepted handoff")
-    counts = gate["package_counts"]
-    if counts["total"] != len(gate["packages"]) or sorted(
-            item["finding_package_id"] for item in gate["packages"]) != sorted(
-            identity for ids in gate["buckets"].values() for identity in ids):
-        raise IntegrityError("gate package accounting is not exact")
+    _verify_package_accounting(gate)
     verify_gate_snapshot(run_root, gate)
     return accepted, gate

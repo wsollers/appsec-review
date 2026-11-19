@@ -358,6 +358,8 @@ See the [handler](../../src/appsec_review/jobs/job_final_publication_gate/job.py
 
 1. In `load.verify_review`, reverify the accepted review from bound bytes, including ledger,
    projection, packages, scores, evidence and coverage; enforce the package bound.
+   Retain each verified package-manifest unit context as a run-relative path/hash binding,
+   including contexts shared across packages; do not inline its protected contents.
    Explicitly verify the protected decision audit and its declared original scanner/control
    sources, retaining all certified read pins. Historical declaration absence is
    `legacy_unrecorded` through `when_output_declared`; a present wrong schema/authority fails.
@@ -384,8 +386,12 @@ See the [handler](../../src/appsec_review/jobs/job_final_publication_gate/job.py
 
 ### `acceptance`
 
-1. In `acceptance.publish_handoff`, rebuild the gate document and reverify the loaded snapshot.
-2. Validate its schema and require bucket totals to equal the package count.
+1. In `acceptance.publish_handoff`, recompute classification from the verified review and require
+   exact equality with the stored classification, including packages, buckets, counts and limitations.
+   Rebuild the gate document and reverify the loaded snapshot.
+2. Validate its schema and require bucket totals to equal the package count. The shared certificate
+   reader also requires unique package IDs, exact per-bucket membership/counts, and buckets and
+   withholding reasons consistent with certified package states and attachments.
 3. Publish the immutable `publication_gate_decisions` artifact. Only limitations of kind `gap`
    enter the handler's gap list; notices do not turn into execution claims or clean-target proof.
 
@@ -395,6 +401,7 @@ See the [handler](../../src/appsec_review/jobs/job_final_publication_gate/job.py
 flowchart LR
   job["job_final_publication_gate"] --> load["load.verify_review"]
   review["job_inference_security_review / scores_and_findings"] --> load
+  contexts["Package-manifest unit contexts / exact byte pins"] --> load
   audit["Protected audit + declared original source pins"] --> load
   artifacts["job_dossier_publication / dossier_publications"] --> load
   load --> classify["gate.classify"]
@@ -459,6 +466,10 @@ Changing review evidence, commissioned producer identity or enablement requires 
 unchanged upstream computation need not be rerun just to rebuild this projection. The publication
 unit rechecks the snapshot rather than trusting its earlier classification. Artifact-bearing
 results are not portable failed-attempt checkpoints.
+Snapshot consumers rehash the retained unit contexts along with the other certified bindings.
+Later removal or changed bytes invalidate the certificate without consulting current review or
+optional-producer pointers or reloading live configuration. These checks preserve declared
+unavailability and coverage limitations; they do not upgrade assurance.
 The public gate remains `/2`; the [current report `/3`](final-report.md#domain-coverage-and-unknown-measurements-t-5088)
 changes metric representation, not gate certification. Audit data adds certified bindings and
 sanitized limitations, not a new finding state or a public audit-record endpoint.

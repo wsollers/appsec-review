@@ -159,6 +159,11 @@ def _verify_package_manifests(run_root: Path, outputs: Mapping[str, Any], review
                  f"{lane} package manifest does not match its lane document")
         contents[lane] = manifest["content_sha256"]
         bindings.extend((set_ref, reference))
+        for context in manifest["unit_contexts"]:
+            context_ref = {"path": (PurePosixPath(reference["path"]).parent / context["path"]).as_posix(),
+                           "sha256": context["sha256"]}
+            resolve_bound(run_root, context_ref)
+            bindings.append(context_ref)
         if manifest.get("behavior_model") is not None:
             model = manifest["behavior_model"]
             bindings.append(_ref(model["handoff"], "generated-model handoff"))
