@@ -596,9 +596,9 @@ def run_planner(brief: Brief, *, settings: HuntingSettings, profile: Any, infer:
     execution = Execution(timeout_seconds=profile.timeout_seconds, max_calls=policy.attempts)
     current, prior = build_request(brief, guidance=guidance, profile=profile, settings=settings, cell_id=cell_id), None
     plan: ValidatedPlan | None = None
-    gap: str | None = None
+    gap: str | None = None if profile.enabled else f"{FALLBACK_GAP}:model_profile_disabled"
     turn = 0
-    for turn in range(1, policy.attempts + 1):
+    for turn in range(1, policy.attempts + 1) if profile.enabled else ():
         attempt: dict[str, Any] = {"turn": turn, "request_sha256": request_sha256(current)}
         attempts.append(attempt)
         try:

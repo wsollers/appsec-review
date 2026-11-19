@@ -1047,7 +1047,15 @@ snapshot, not the review handoff independently. See [remediation](remediation.md
 - Within a run, a later round's blue cell for the same claim and round-free request reuses the earlier blue
   result through the [blue result memo](#blue-result-memo). An unavailable memo store only costs model calls; it is
   never a gap or a failure.
-- A judge that fails, times out or returns an invalid answer is an ordinary cell gap with one terminal record; the
-  claim is still adjudicated by R5 and published without a `judge_verdict`, and is never a PoC candidate. A missing
-  verdict is not a `neither` and not agreement with either side. `accounting.judge_verdicts` in the handoff counts
-  the verdicts that were recorded, and the cell counts under `lanes[].cells_by_status` include every judge cell.
+- A selected judge that fails, times out, returns an invalid answer, fails its blindness check or cannot launch
+  under the budget remains a terminal cell with a named gap. R5 still adjudicates the claim; publication retains
+  any admitted verdicts and the judge gap ids. The claim is never a PoC candidate, even if another judge succeeded.
+  A null verdict alone does not mean `not_convened`: that fallback requires no selected judge cells. The accepted
+  reader rechecks this distinction against the ledger. `accounting.judge_verdicts` counts only admitted verdicts,
+  while `lanes[].cells_by_status` includes every judge cell.
+- An explicitly disabled model profile dispatches no team, triage or planner model calls. Team cells are
+  `not_launched` with `model_profile_disabled` coverage gaps; a disabled judge profile is intentionally not
+  selected and is recorded as such. Triage retains deterministic assessments and verified cached results; remaining
+  unknown leads carry `triage_failed:model_profile_disabled`. Hunting falls back to deterministic rank selection
+  with `hunt_plan_unavailable:model_profile_disabled`. An enabled profile with `max_queries = 0` is different:
+  it may still make its bounded final-only model call, but cannot retrieve.

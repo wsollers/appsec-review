@@ -22,8 +22,8 @@ from appsec_review.review.ledger import (
     EVENT_SCHEMA, LedgerWriter, MergedLedger, Projection, gap_from_json, merge_shards, project,
 )
 from appsec_review.review.models import (
-    Admissibility, Claim, ClaimState, Gap, GapClass, IntegrityError, JudgeVerdict, JudgeVerdictValue, Lane,
-    RelationKind, Role, make_gap,
+    Admissibility, CellRecord, CellStatus, Claim, ClaimState, Gap, GapClass, IntegrityError, JudgeVerdict,
+    JudgeVerdictValue, Lane, RelationKind, Role, make_gap,
 )
 from appsec_review.review.scoring import (
     DERIVATION_RULE, UNAVAILABLE_CATALOG, ImpactCatalog, consumed_factors, default_factor_registry, default_registry,
@@ -634,6 +634,21 @@ def finding_judge(verdicts: Sequence[JudgeVerdict]) -> dict[str, Any] | None:
                        for item in ordered[:8]]}
 
 
+def judge_cells_by_claim(projection: Projection) -> dict[str, list[CellRecord]]:
+    """Selected judges, including failed, untrusted and budget-not-launched cells."""
+    found: dict[str, list[CellRecord]] = defaultdict(list)
+    for records in projection.cells.values():
+        for cell in records:
+            if cell.role is Role.ADJUDICATION_JUDGE and cell.claim_id is not None:
+                found[cell.claim_id].append(cell)
+    return dict(found)
+
+
+def judge_review_complete(cells: Sequence[CellRecord], verdict_cell_ids: Collection[str]) -> bool:
+    """Every selected judge must have succeeded and supplied an admitted verdict."""
+    return all(cell.status is CellStatus.SUCCEEDED and cell.cell_id in verdict_cell_ids for cell in cells)
+
+
 def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str, Any]],
                      merged: Mapping[str, Any], scores: Sequence[Mapping[str, Any]], *, manifest_sha256: str,
                      out_dir: Path, schemas: SchemaSet, references: Mapping[str, Mapping[str, Any]] | None = None,
@@ -654,6 +669,9 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
     claim_gaps: dict[str, list[str]] = defaultdict(list)
     for gap in projection.gaps:
         claim_gaps[gap.subject_id].append(gap.gap_id)
+    judge_cells = judge_cells_by_claim(projection)
+    for claim_id, cells in judge_cells.items():
+        claim_gaps[claim_id].extend(gap_id for cell in cells for gap_id in cell.gap_ids)
     written = []
     for record in adjudications:
         state = ClaimState(record["state"])
@@ -723,6 +741,9 @@ def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str
                       "gaps": package["gaps"], "file": path.name,
                       # Inputs of poc_candidates; not part of the handoff\'s finding_packages list.
                       "judge_verdict": judge["verdict"] if judge else None,
+                      "judge_convened": bool(judge_cells.get(claim.claim_id)),
+                      "judge_complete": judge_review_complete(judge_cells.get(claim.claim_id, ()),
+                                                              {item.cell_id for item in judged}),
                       "technical_severity": inputs.technical_severity, "direct_evidence": list(supporting[:256])}
         if active_chains and chain_sev is not None and chain_sev.composed_severity is not None:
             entry_meta["composed_severity"] = chain_sev.composed_severity
@@ -744,7 +765,8 @@ def poc_candidates(findings: Sequence[Mapping[str, Any]], briefs: Iterable[Mappi
     for the claim (the judge is an escalation, review protocol v3 D9; the entry then carries ``not_convened``); one
     of its red cells gave a ``poc_basis`` whose ``entry`` and ``path`` resolved (non-empty after label resolution);
     and its risk-matrix technical severity is one of ``settings.risk_ratings``. Nothing else about the claim is
-    copied. Run 2026-11-16-0003 ran with the judge disabled and listed no candidate for five confirmed claims.
+    copied. A selected judge without an admitted verdict blocks the candidate, even if another judge succeeded.
+    Absence of a verdict alone is not proof that no judge was convened.
     """
     accepted = {JudgeVerdictValue.RED_CORRECT.value} | (
         {JudgeVerdictValue.PARTLY.value} if settings.accept_partly else set())
@@ -757,7 +779,11 @@ def poc_candidates(findings: Sequence[Mapping[str, Any]], briefs: Iterable[Mappi
     for finding in sorted(findings, key=lambda item: item["claim_id"]):
         claim_id = finding["claim_id"]
         verdict = finding.get("judge_verdict")
+        if finding.get("judge_complete") is False:
+            continue
         if verdict is None:
+            if finding.get("judge_convened") is not False:
+                continue
             verdict = JUDGE_NOT_CONVENED
         elif verdict not in accepted:
             continue

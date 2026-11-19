@@ -19,7 +19,7 @@ from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review import ship_block
 from appsec_review.review.decision_audit.reader import AcceptedAudit, verify_decision_audit
 from appsec_review.review.ledger import project
-from appsec_review.review.models import IntegrityError
+from appsec_review.review.models import CellRecord, IntegrityError
 from appsec_review.review.packages import verify_package_manifest
 from appsec_review.storage import canonical_json
 
@@ -175,14 +175,14 @@ def _verify_package_manifests(run_root: Path, outputs: Mapping[str, Any], review
 
 
 def poc_candidate_agrees(candidate: Mapping[str, Any], package: Mapping[str, Any] | None,
-                         listed_sha256: str | None) -> bool:
+                         listed_sha256: str | None, *, judge_cells: Sequence[CellRecord]) -> bool:
     """Whether a ``poc_candidates`` row restates its finding package exactly.
 
     The candidate must name its package by identity and accepted digest and repeat the package's claim,
     state and judge verdict. A package no judge saw carries ``judge_verdict`` null (the judge is an
     escalation, review protocol v3 D9) and agrees only with a candidate marked ``not_convened``; a judged
-    package agrees only with a candidate carrying that judge's verdict. Run 2026-11-17-0006 failed here
-    because a null package verdict was treated as disagreement regardless of the candidate.
+    package agrees only with a candidate carrying that judge's verdict. The accepted loader supplies
+    the claim's terminal judge cells: a selected judge without an admitted verdict is not nonselection.
     """
     if package is None or listed_sha256 is None or listed_sha256 != candidate["finding_package"]["sha256"]:
         return False
@@ -190,8 +190,9 @@ def poc_candidate_agrees(candidate: Mapping[str, Any], package: Mapping[str, Any
         return False
     judged = package["judge_verdict"]
     if judged is None:
-        return candidate["judge_verdict"] == stages.JUDGE_NOT_CONVENED
-    return judged["verdict"] == candidate["judge_verdict"]
+        return not judge_cells and candidate["judge_verdict"] == stages.JUDGE_NOT_CONVENED
+    return (stages.judge_review_complete(judge_cells, {item["cell_id"] for item in judged["judges"]})
+            and judged["verdict"] == candidate["judge_verdict"])
 
 
 def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: int,
@@ -281,13 +282,15 @@ def load_accepted_review(run_root: Path, schemas: SchemaSet, *, max_packages: in
     listed = {item["finding_package_id"]: item["sha256"] for item in review["finding_packages"]}
     _require(len(listed) == len(findings) and len({package["claim_id"] for _, package in findings}) == len(findings),
              "finding packages contain duplicate identities or claims")
+    judge_cells = stages.judge_cells_by_claim(ledger)
     for candidate in review["poc_candidates"]:
         _require(candidate["poc_basis"]["sha256"] == hashlib.sha256(
             canonical_json(candidate["poc_basis"]["brief"])).hexdigest(), "PoC candidate basis digest is invalid")
         reference = candidate["finding_package"]
         package = next((value for _ref, value in findings if value["finding_package_id"] == reference["finding_package_id"]),
                        None)
-        _require(poc_candidate_agrees(candidate, package, listed.get(reference["finding_package_id"])),
+        _require(poc_candidate_agrees(candidate, package, listed.get(reference["finding_package_id"]),
+                                     judge_cells=judge_cells.get(candidate["claim_id"], ())),
                  f"proof-of-concept candidate disagrees with its finding package: {candidate['claim_id']}")
     intake = {item["finding_package_id"]: item for item in review["remediation_intake"]}
     backlog = {item["finding_package_id"]: item for item in review["verification_backlog"]}

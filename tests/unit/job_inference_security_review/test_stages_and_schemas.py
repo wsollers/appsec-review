@@ -418,7 +418,8 @@ def test_stages_scoring_findings_poc_candidates_and_completeness_helpers(tmp_pat
     assert len(cands) == 1 and cands[0]["judge_verdict"] == "partly"
     # Run 2026-11-16-0003: the judge was disabled, so every confirmed claim had judge_verdict None and no candidate
     # was listed. A claim no judge saw is eligible on the verifier's confirmation and says so.
-    unjudged = stages.poc_candidates([{**finding, "state": "confirmed", "judge_verdict": None}], [brief],
+    unjudged = stages.poc_candidates([{**finding, "state": "confirmed", "judge_verdict": None,
+                                       "judge_convened": False, "judge_complete": True}], [brief],
                                      PocCandidateSettings(accept_partly=False))
     assert len(unjudged) == 1 and unjudged[0]["judge_verdict"] == "not_convened"
     assert stages.poc_candidates([{**finding, "judge_verdict": "blue_correct"}], [brief],

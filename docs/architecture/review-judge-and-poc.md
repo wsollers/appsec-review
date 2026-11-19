@@ -142,6 +142,12 @@ After adjudication, the inference handoff lists `poc_candidates`: every claim th
 Each entry carries `claim_id`, `package_id`, `state`, `judge_verdict`, `poc_basis` (hash and bounded copy),
 `finding_package` (ref) and the evidence refs the claim rests on. Nothing else about the claim is copied.
 
+`not_convened` requires no selected judge cells, not merely a null finding verdict. A failed, timed-out,
+invalid, untrusted or budget-not-launched judge excludes the claim from PoC candidates, including when
+another judge supplied an eligible verdict. Terminal judge cells and their gaps remain in the ledger;
+their gap ids are included in the finding. The accepted-review reader checks candidate eligibility
+against those terminal cells as well as the finding's verdict. R5 state is unchanged.
+
 ## 5. `job_poc_generation`
 
 Position: after the accepted inference review and native build, before dossier publication and

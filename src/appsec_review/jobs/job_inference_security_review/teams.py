@@ -669,8 +669,14 @@ def _run(ctx: ReviewContext, cell: _Cell, validate: Callable[[Mapping[str, Any]]
                 "gap_count": len(outcome.gaps),
                 "duration_ms": max(0, int((time.monotonic() - started) * 1000))})
 
+    profile = ctx.profile(cell.spec.role)
+    if not profile.enabled:
+        cell.record, gap = _not_launched(cell, "model_profile_disabled", GapClass.COVERAGE_GAP)
+        cell.outcome = CellOutcome(cell.record, None, (gap,), (), (), False, {})
+        completed(cell.outcome, 0)
+        return
     retry = ctx.settings.retry
-    guard = _Guard(ctx, cell, ctx.profile(cell.spec.role), capture=capture)
+    guard = _Guard(ctx, cell, profile, capture=capture)
     try:
         outcome = reuse_or_run(cell.spec, infer=guard.dispatch, core=ctx.core, capability=cell.capability,
                                receipts_root=ctx.receipts_root, validate_final=validate, memo=_memo(ctx, cell),
@@ -1404,6 +1410,11 @@ def _plan_judges(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, An
     profile = ctx.profile(Role.ADJUDICATION_JUDGE)
     for group, blues, _verifier in reviews:
         claim: Claim = group["claim"]
+        if not profile.enabled:
+            result.judging[claim.claim_id] = {"selected": False, "reason": "model_profile_disabled"}
+            result.gaps.append(make_gap(GapClass.COVERAGE_GAP, claim.claim_id,
+                                        "judge_not_convened:model_profile_disabled"))
+            continue
         red = red_side((proposal, red_result) for _cell_, proposal, red_result, _seen_ in group["items"])
         blue, dispositions = blue_side(
             cell.outcome.result if cell.record is not None and cell.record.status is CellStatus.SUCCEEDED else None

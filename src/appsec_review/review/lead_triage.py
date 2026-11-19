@@ -696,6 +696,8 @@ def _converse(request: Any, group: Sequence[_Pending], *, infer: Callable[..., A
               schemas: Any, batch_id: str) -> tuple[list[dict[str, Any]] | None, list[dict[str, Any]], str | None, int]:
     """One model turn, then at most one repair turn carrying the validation errors."""
     attempts: list[dict[str, Any]] = []
+    if not profile.enabled:
+        return None, attempts, "triage_failed:model_profile_disabled", 0
     expected = [entry.lead.observation_id for entry in group]
     current, prior = request, None
     policy = RetryPolicy(2, on_invalid_output=True)
