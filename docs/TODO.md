@@ -339,14 +339,14 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5105 | [Bind artifact scan indexes to immutable result content](#t-5105-bind-artifact-scan-indexes-to-immutable-result-content) | evidence | done (2026-11-19, 0d1be7b45444d50fe0f274611e695094e2668a03) |
 | T-5106 | [Resolve binary external references and real pseudo-C call sites](#t-5106-resolve-binary-external-references-and-real-pseudo-c-call-sites) | binary | done (2026-11-19, 89485b4c9578aba7a9895ac33a0569c1e17509a9) |
 | T-5107 | [Report stored binary relationships and truncated evidence accurately](#t-5107-report-stored-binary-relationships-and-truncated-evidence-accurately) | binary | done (2026-11-19, 89485b4c9578aba7a9895ac33a0569c1e17509a9) |
-| T-5108 | [Preserve shell dialect and uncertainty under environment bounds](#t-5108-preserve-shell-dialect-and-uncertainty-under-environment-bounds) | build | in-progress |
-| T-5109 | [Reconstruct build iterations and preserve current failure context](#t-5109-reconstruct-build-iterations-and-preserve-current-failure-context) | build | in-progress |
-| T-5110 | [Read manual build transaction requests before unrelated checkout requirements](#t-5110-read-manual-build-transaction-requests-before-unrelated-checkout-requirements) | build | in-progress |
-| T-5111 | [Validate native product bytes against declared product kind](#t-5111-validate-native-product-bytes-against-declared-product-kind) | build | in-progress |
+| T-5108 | [Preserve shell dialect and uncertainty under environment bounds](#t-5108-preserve-shell-dialect-and-uncertainty-under-environment-bounds) | build | done (2026-11-19, 49a9d98df10f1da14bb47e705c80ade48838999a) |
+| T-5109 | [Reconstruct build iterations and preserve current failure context](#t-5109-reconstruct-build-iterations-and-preserve-current-failure-context) | build | done (2026-11-19, 083f216e12b0eed9aa0e9cb86548bf7002545416) |
+| T-5110 | [Read manual build transaction requests before unrelated checkout requirements](#t-5110-read-manual-build-transaction-requests-before-unrelated-checkout-requirements) | build | done (2026-11-19, 083f216e12b0eed9aa0e9cb86548bf7002545416) |
+| T-5111 | [Validate native product bytes against declared product kind](#t-5111-validate-native-product-bytes-against-declared-product-kind) | build | done (2026-11-19, 083f216e12b0eed9aa0e9cb86548bf7002545416) |
 | T-5112 | [Retain unknown review state bounded hunks and unique change churn](#t-5112-retain-unknown-review-state-bounded-hunks-and-unique-change-churn) | history | open |
 | T-5113 | [Preserve function identity through change-priority consumption](#t-5113-preserve-function-identity-through-change-priority-consumption) | review | open |
-| T-5114 | [Reject incomplete CI scanner output and bound reads before execution](#t-5114-reject-incomplete-ci-scanner-output-and-bound-reads-before-execution) | scanners | open |
-| T-5115 | [Honor CI provider tool framework and identity settings](#t-5115-honor-ci-provider-tool-framework-and-identity-settings) | scanners | open |
+| T-5114 | [Reject incomplete CI scanner output and bound reads before execution](#t-5114-reject-incomplete-ci-scanner-output-and-bound-reads-before-execution) | scanners | done (2026-11-19, fb969549b24fb7d733622a9031d5038a1cd874be) |
+| T-5115 | [Honor CI provider tool framework and identity settings](#t-5115-honor-ci-provider-tool-framework-and-identity-settings) | scanners | done (2026-11-19, fb969549b24fb7d733622a9031d5038a1cd874be) |
 | T-5116 | [Preserve exact CI locations and real job hierarchy](#t-5116-preserve-exact-ci-locations-and-real-job-hierarchy) | scanners | open |
 | T-5117 | [Replay static analysis in the accepted compile working directory](#t-5117-replay-static-analysis-in-the-accepted-compile-working-directory) | graph | open |
 | T-5118 | [Preserve bounded resolving Clang diagnostic traces and valid spans](#t-5118-preserve-bounded-resolving-clang-diagnostic-traces-and-valid-spans) | graph | open |
@@ -417,9 +417,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5183 | [Classify only eligible first-party components from real producer shapes](#t-5183-classify-only-eligible-first-party-components-from-real-producer-shapes) | review | open |
 | T-5184 | [Contain malformed and optional security-tagging inference failures](#t-5184-contain-malformed-and-optional-security-tagging-inference-failures) | review | open |
 | T-5185 | [Express tagging evidence columns in the required UTF-16 units](#t-5185-express-tagging-evidence-columns-in-the-required-utf-16-units) | evidence | open |
-| T-5186 | [Preserve history boundaries rename identities and empty-ranking precedence](#t-5186-preserve-history-boundaries-rename-identities-and-empty-ranking-precedence) | history | in-progress |
-| T-5187 | [Contain optional GitHub enrichment transport failures](#t-5187-contain-optional-github-enrichment-transport-failures) | history | in-progress |
-| T-5188 | [Publish schema-consistent proportional hotspot counts](#t-5188-publish-schema-consistent-proportional-hotspot-counts) | history | in-progress |
+| T-5186 | [Preserve history boundaries rename identities and empty-ranking precedence](#t-5186-preserve-history-boundaries-rename-identities-and-empty-ranking-precedence) | history | done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170) |
+| T-5187 | [Contain optional GitHub enrichment transport failures](#t-5187-contain-optional-github-enrichment-transport-failures) | history | done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170) |
+| T-5188 | [Publish schema-consistent proportional hotspot counts](#t-5188-publish-schema-consistent-proportional-hotspot-counts) | history | done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170) |
 | T-5189 | [Preserve incomplete SVF operands before alias contradiction decisions](#t-5189-preserve-incomplete-svf-operands-before-alias-contradiction-decisions) | graph | open |
 | T-5190 | [Preserve SVF resource bounds nested validation and partial outcomes](#t-5190-preserve-svf-resource-bounds-nested-validation-and-partial-outcomes) | graph | open |
 | T-5191 | [Bound Gerrit and bundle reviews without assigning current facts to old patchsets](#t-5191-bound-gerrit-and-bundle-reviews-without-assigning-current-facts-to-old-patchsets) | history | open |
@@ -4195,39 +4195,58 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5108 — Preserve shell dialect and uncertainty under environment bounds
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 49a9d98df10f1da14bb47e705c80ade48838999a)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: BE-01, BE-02, BE-03, BE-04. Shell and batch assignment grammars are conflated; Script/depth bounds suppress required taint of already inventoried scripts.
 - **Scope:** `src/appsec_review/jobs/job_build_environment_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_build_environment_analysis.md`.
+  Shell/batch assignments and source references now follow their dialect. Valid batch
+  `@call` preserves seen/pending-script uncertainty without extra traversal slots; unsupported
+  control/continuations retain gaps, original path case and redaction. Main: 82 passed/5.48 s,
+  two workers, seed 5108, no skips or slow cases. Scripts were not executed.
 
 ### T-5109 — Reconstruct build iterations and preserve current failure context
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 083f216e12b0eed9aa0e9cb86548bf7002545416)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: BI-F01, BI-F02, BI-F03. changed accepted recipes are blocked before the controller can invalidate and rebuild; successful production of a promoted recipe prevents subsequent controller reconstruction.
 - **Scope:** `src/appsec_review/jobs/build_iterations.py`, `src/appsec_review/jobs/build_recipe_replay.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_build_iteration.md`.
+  Immutable historical custody is verified before selected binding changes invalidate their
+  dependency closures. Compatible production progress preserves selected promotions, while new
+  trials retain failed-generation admission. Product rejection retains current transaction failure
+  evidence without rewriting the original success receipt. Main combined selection: 132 passed/17.35 s,
+  two workers, seed 5109, no skips or slow cases; native builds/live validation not run.
 
 ### T-5110 — Read manual build transaction requests before unrelated checkout requirements
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 083f216e12b0eed9aa0e9cb86548bf7002545416)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: BI-F04. manual transaction CLI requires an unrelated configured checkout before reading its request.
 - **Scope:** `src/appsec_review/cli.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_build_iteration.md`.
+  Shares the 132-case main verification with T-5109. The audited manual CLI branch reads its
+  immutable request without an unrelated checkout gate; request/configuration validation and
+  registered target admission remain in place.
 
 ### T-5111 — Validate native product bytes against declared product kind
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 083f216e12b0eed9aa0e9cb86548bf7002545416)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: BI-F05. explicit native product contracts can accept executable bytes as a static library.
-- **Scope:** `src/appsec_review/jobs/build_recipe_replay.py`
+- **Scope:** `src/appsec_review/jobs/build_recipe_replay.py`,
+  `src/appsec_review/jobs/build_workspace.py`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_build_iteration.md`.
+  Shares the 132-case main verification with T-5109. Native roles use bounded byte evidence,
+  including complete ELF program/dynamic metadata, rather than a declared filename.
+  Late interpreter headers and static PIE flags cannot pass as shared libraries. The first
+  combined run had 120 passes and 12 failures because success fixtures emitted shared-object
+  bytes while declaring executables. Two fixture calls now provide real interpreter markers;
+  no production gate or assertion was weakened.
 
 ### T-5112 — Retain unknown review state bounded hunks and unique change churn
 
@@ -4250,21 +4269,28 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5114 — Reject incomplete CI scanner output and bound reads before execution
 
-- **State:** open
+- **State:** done (2026-11-19, fb969549b24fb7d733622a9031d5038a1cd874be)
 - **Area:** scanners
 - **Why:** Archived audit/feedback cases: CI-01, CI-03. malformed/truncated generic scanner output becomes a successful clean or incomplete scan; max_file_bytes is not an effective pre-read/pre-launch bound.
 - **Scope:** `src/appsec_review/jobs/job_ci_configuration_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_ci_configuration_analysis.md`.
+  Native report decoding is atomic; missing, malformed, error-shaped and truncated outputs
+  retain named gaps rather than clean coverage. Source/report reads use their wired byte bounds
+  before materialization or dispatch, and source-location hashes bind the same bytes.
+  Main: 200 passed/8.10 s, two workers, seed 5114, no skips or slow cases. Native tools/live not run.
 
 ### T-5115 — Honor CI provider tool framework and identity settings
 
-- **State:** open
+- **State:** done (2026-11-19, fb969549b24fb7d733622a9031d5038a1cd874be)
 - **Area:** scanners
 - **Why:** Archived audit/feedback cases: CI-02. advertised provider/tool/framework and identity settings do not control execution.
 - **Scope:** `src/appsec_review/jobs/job_ci_configuration_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_ci_configuration_analysis.md`.
+  Shares the 200-case main verification with T-5114. Configured tool subsets and empty lists
+  drive the declared tasks and retain configured-disabled coverage. Unsupported providers,
+  frameworks, tools, identities and non-integer bounds fail admission rather than being ignored.
 
 ### T-5116 — Preserve exact CI locations and real job hierarchy
 
@@ -4922,30 +4948,43 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5186 — Preserve history boundaries rename identities and empty-ranking precedence
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170)
 - **Area:** history
 - **Why:** Archived audit/feedback cases: SH-01, SH-03, SH-05. the extra history-bound commit contaminates the last retained commit's message; empty Git rankings incorrectly make change-log history a supplement.
-- **Scope:** `src/appsec_review/jobs/job_source_history_analysis/git.py`, `src/appsec_review/jobs/job_source_history_analysis/job.py`
+- **Scope:** `src/appsec_review/jobs/job_source_history_analysis/git.py`,
+  `src/appsec_review/jobs/job_source_history_analysis/signals.py`,
+  `src/appsec_review/jobs/job_source_history_analysis/job.py`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_source_history_analysis.md`.
+  Message boundaries exclude the extra unretained commit; rename aliases rewind from one
+  commit snapshot. Change-log precedence reflects actual ranked Git population. Main selections:
+  184 passed/7.57 s and 42 passed/4.09 s, two workers, seed 5186, no skips or slow cases.
 
 ### T-5187 — Contain optional GitHub enrichment transport failures
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170)
 - **Area:** history
 - **Why:** Archived audit/feedback cases: SH-02. an optional GitHub head-timestamp transport failure aborts otherwise usable Git analysis.
 - **Scope:** `src/appsec_review/jobs/job_source_history_analysis/github.py`, `src/appsec_review/jobs/job_source_history_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_source_history_analysis.md`.
+  Shares the main selections with T-5186. Optional head transport failures retain scoped,
+  retriable gaps and indeterminate review facts while local history remains publishable;
+  private error details are not emitted. Network enrichment and live validation were not run.
 
 ### T-5188 — Publish schema-consistent proportional hotspot counts
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170)
 - **Area:** history
 - **Why:** Archived audit/feedback cases: SH-04. valid proportional hotspot settings produce schema-invalid, contradictory publication.
-- **Scope:** `src/appsec_review/jobs/job_source_history_analysis/job.py`
+- **Scope:** `src/appsec_review/jobs/job_source_history_analysis/job.py`,
+  `docs/schemas/history-hotspots-v2.schema.json`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_source_history_analysis.md`; follow-up to closed T-171 (not reopened).
+  Shares the main selections with T-5186. Hotspot `/2` separates configured policy, effective
+  file/symbol caps and actual selected counts, including source-local aggregate metadata and
+  empty populations. Accepted proportional bounds remain unchanged; legacy `/1` is untouched
+  and remains readable. Fixed and proportional outputs are checked against their closed schemas.
 
 ### T-5189 — Preserve incomplete SVF operands before alias contradiction decisions
 

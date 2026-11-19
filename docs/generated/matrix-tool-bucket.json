@@ -172,7 +172,7 @@
         {
           "job": "job_ci_configuration_analysis",
           "job_enabled": true,
-          "line": 745,
+          "line": 872,
           "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
           "task": "ci_analysis.github_actionlint_scan"
         }
@@ -369,35 +369,35 @@
         {
           "job": "job_ci_configuration_analysis",
           "job_enabled": true,
-          "line": 745,
+          "line": 872,
           "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
           "task": "ci_analysis.azure_checkov_scan"
         },
         {
           "job": "job_ci_configuration_analysis",
           "job_enabled": true,
-          "line": 745,
+          "line": 872,
           "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
           "task": "ci_analysis.bitbucket_checkov_scan"
         },
         {
           "job": "job_ci_configuration_analysis",
           "job_enabled": true,
-          "line": 745,
+          "line": 872,
           "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
           "task": "ci_analysis.circleci_checkov_scan"
         },
         {
           "job": "job_ci_configuration_analysis",
           "job_enabled": true,
-          "line": 745,
+          "line": 872,
           "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
           "task": "ci_analysis.github_checkov_scan"
         },
         {
           "job": "job_ci_configuration_analysis",
           "job_enabled": true,
-          "line": 745,
+          "line": 872,
           "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
           "task": "ci_analysis.gitlab_checkov_scan"
         },
@@ -2101,7 +2101,7 @@
         {
           "job": "job_ci_configuration_analysis",
           "job_enabled": true,
-          "line": 745,
+          "line": 872,
           "source": "src/appsec_review/jobs/job_ci_configuration_analysis/job.py",
           "task": "ci_analysis.github_zizmor_scan"
         },

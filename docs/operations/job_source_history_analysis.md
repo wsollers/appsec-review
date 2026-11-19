@@ -30,7 +30,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acquire` | `acquire.changelog_history` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_source_history_analysis/job.py#L1173) |
+| `acquire` | `acquire.changelog_history` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_source_history_analysis/job.py#L1193) |
 | `acquire` | `acquire.git_history` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `acquire` | `acquire.github_enrichment` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `acquire` | `acquire.normalize_changes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
@@ -46,7 +46,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `publish` | `publish.index_history` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `publish` | `publish.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `resolve_sources` | `resolve_sources.bind_snapshot` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
-| `resolve_sources` | `resolve_sources.resolve_history_source` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_source_history_analysis/job.py#L447) |
+| `resolve_sources` | `resolve_sources.resolve_history_source` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_source_history_analysis/job.py#L464) |
 
 ### Accepted input declarations
 
@@ -87,7 +87,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_source_history_analysis/test_analysis.py`<br>`tests/integration/job_source_history_analysis/test_changelog_projection.py`<br>`tests/integration/job_source_history_analysis/test_components.py`<br>`tests/integration/job_source_history_analysis/test_hotspots.py` |
 | live | None declared |
-| unit | `tests/unit/job_source_history_analysis/test_algorithms.py`<br>`tests/unit/job_source_history_analysis/test_artifacts.py`<br>`tests/unit/job_source_history_analysis/test_changelog.py`<br>`tests/unit/job_source_history_analysis/test_contract.py`<br>`tests/unit/job_source_history_analysis/test_edge_cases.py`<br>`tests/unit/job_source_history_analysis/test_fingerprint.py`<br>`tests/unit/job_source_history_analysis/test_git.py`<br>`tests/unit/job_source_history_analysis/test_github.py`<br>`tests/unit/job_source_history_analysis/test_handlers.py`<br>`tests/unit/job_source_history_analysis/test_legacy_hotspots.py`<br>`tests/unit/job_source_history_analysis/test_publication.py`<br>`tests/unit/job_source_history_analysis/test_settings.py`<br>`tests/unit/job_source_history_analysis/test_sources.py`<br>`tests/unit/job_source_history_analysis/test_symbols_handler.py` |
+| unit | `tests/unit/job_source_history_analysis/test_algorithms.py`<br>`tests/unit/job_source_history_analysis/test_artifacts.py`<br>`tests/unit/job_source_history_analysis/test_changelog.py`<br>`tests/unit/job_source_history_analysis/test_contract.py`<br>`tests/unit/job_source_history_analysis/test_edge_cases.py`<br>`tests/unit/job_source_history_analysis/test_fingerprint.py`<br>`tests/unit/job_source_history_analysis/test_git.py`<br>`tests/unit/job_source_history_analysis/test_github.py`<br>`tests/unit/job_source_history_analysis/test_handlers.py`<br>`tests/unit/job_source_history_analysis/test_legacy_hotspots.py`<br>`tests/unit/job_source_history_analysis/test_publication.py`<br>`tests/unit/job_source_history_analysis/test_proportional_hotspots.py`<br>`tests/unit/job_source_history_analysis/test_settings.py`<br>`tests/unit/job_source_history_analysis/test_sources.py`<br>`tests/unit/job_source_history_analysis/test_symbols_handler.py` |
 
 ### Dagster placement
 

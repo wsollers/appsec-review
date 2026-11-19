@@ -78,6 +78,9 @@
       "unit": [
         "tests/unit/job_build_iteration/test_admission.py",
         "tests/unit/job_build_iteration/test_contract.py",
+        "tests/unit/job_build_iteration/test_continuity.py",
+        "tests/unit/job_build_iteration/test_manual_dispatch.py",
+        "tests/unit/job_build_iteration/test_native_products.py",
         "tests/unit/job_build_iteration/test_job_graph.py",
         "tests/unit/job_build_iteration/test_controller.py",
         "tests/unit/job_build_iteration/test_executor_capture.py",
@@ -110,6 +113,7 @@
     "job_ci_configuration_analysis": {
       "unit": [
         "tests/unit/job_ci_configuration_analysis/test_contract.py",
+        "tests/unit/job_ci_configuration_analysis/test_native_contracts.py",
         "tests/unit/job_ci_configuration_analysis/test_discovery_and_static_rules.py",
         "tests/unit/job_ci_configuration_analysis/test_checkov_locations.py",
         "tests/unit/job_ci_configuration_analysis/test_zizmor_output.py",
@@ -728,6 +732,7 @@
         "tests/unit/job_source_history_analysis/test_handlers.py",
         "tests/unit/job_source_history_analysis/test_legacy_hotspots.py",
         "tests/unit/job_source_history_analysis/test_publication.py",
+        "tests/unit/job_source_history_analysis/test_proportional_hotspots.py",
         "tests/unit/job_source_history_analysis/test_settings.py",
         "tests/unit/job_source_history_analysis/test_sources.py",
         "tests/unit/job_source_history_analysis/test_symbols_handler.py"
