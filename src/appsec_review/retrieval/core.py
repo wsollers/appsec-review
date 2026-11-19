@@ -2100,7 +2100,8 @@ class RetrievalCore:
                             continue
                         pkg = str(res.get("package_name") or res.get("package") or res.get("name") or payload.get("name") or "")
                         adv = str(res.get("advisory") or res.get("advisory_id") or payload.get("advisory_id") or "")
-                        rc = str(res.get("reachability_class") or payload.get("reachability_class") or "")
+                        rc = str(res.get("reachability") or res.get("reachability_class")
+                                 or payload.get("reachability") or payload.get("reachability_class") or "")
                         if package is not None and package not in {pkg, str(res.get("purl") or "")}:
                             continue
                         if advisory_id is not None and adv != advisory_id:

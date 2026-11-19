@@ -16,7 +16,7 @@ indexing, and evidence collection. Its central configuration must declare this t
    `resolution.investigate_components`, `resolution.infer_repositories`
 3. `repositories.deduplicate`
 4. `scorecards.fetch`
-5. `publication.publish_sbom`, `publication.publish_context`
+5. `publication.publish_sbom`, `publication.native_advisory_lookup`, `publication.publish_context`
 6. `acceptance.publish_handoff`
 
 The SPDX 2.3 native enrichment and its telemetry have a separate
@@ -110,10 +110,24 @@ and its gaps propagate to the dependency-intelligence handoff.
 
 Scanner observations join accepted dependencies by ecosystem, full package coordinates (including
 namespace), exact installed version, and any PURL qualifiers/subpath, never display name alone.
+Normalization retains ecosystem, explicit direct/transitive scope, version claims and their grades,
+and domain/root/package-root identity in both dependency records and observation provenance.
+Versions remain case-sensitive; Maven group IDs, npm scopes and Go module paths survive PURL
+decoding. A nested corroborated version contributes its scalar value, never a stringified record.
+Inferred, conflicted or unknown versions and manifest constraints cannot become installed versions
+through a PURL fallback. Distinct ecosystems and roots do not merge merely because names match.
 Conflicting versions, missing coordinates or missing/unmatched instance IDs retain an unbound advisory
 with empty `dependency_ids`, `unknown` reachability and a `sca_dependency_binding_unresolved`
 gap. An advisory for one version or ecosystem does not attach to fixed releases or same-named
 foreign packages. OSV symbols come only from the affected entry selected by the version matcher.
+
+The bounded `query_sca_reachability` API keeps the argument name `reachability_class`, but filters
+the producer's `reachability` field exactly. Prioritization reads `package_name` and uses only that
+advisory's `ffi_mechanisms` and matching `ffi_boundary` call sites for the native-FFI modifier.
+Promoted lead identity includes ecosystem, version, PURL and dependency IDs; its existing `subject`
+field retains the package coordinate. These remain static review leads, not certified execution
+paths, and do not change the normalized priority scale or promotion threshold. Accepted handoff,
+SCA artifact and query-shard reads retain their consumption receipts.
 
 `symbol_reachable` means **bounded static symbol-use evidence**, not proof of whole-program
 runtime reachability. Currently positive symbol evidence is limited to Python AST calls through
@@ -200,7 +214,7 @@ as alternate-vendor leads, four `davegamble/cjson` ranges.
 Focused verification:
 
 ```text
-python -m pytest tests/test_dependency_intelligence.py -q --basetemp=test/tmp/dependency-intelligence
+scripts/run-tests.sh --expect-tests 16 --parallel --test-workers 2 --shuffle-seed 5126 -- tests/unit/job_dependency_intelligence/test_coordinate_consumers.py
 ```
 
 Mocked tests verify parser, inference, HTTP, gap, and publication contracts. They do not prove live

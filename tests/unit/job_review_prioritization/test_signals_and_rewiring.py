@@ -549,23 +549,24 @@ def test_end_to_end_engineering_signal_rewiring_and_sast_silence_hunt(tmp_path: 
         },
     })
 
-    # 6. Seed job_dependency_intelligence with symbol_reachable advisory
+    # 6. Native FFI is package context, not proof of vulnerable-symbol execution.
     sca_ref = _artifact_ref(run_root, run_root / "fixture" / "sca-reachability.json", {
         "schema": "appsec-review/sca-reachability/1",
         "osv_matching_mode": "index",
-        "ffi_boundaries": [{"path": "rust/src/lib.rs", "line": 3, "ecosystem": "crates.io", "mechanism": "rust_extern", "library": "crypto"}],
         "advisories": [
             {
                 "advisory_id": "GHSA-xxxx-1111",
-                "package": "openssl-sys",
+                "package_name": "openssl-sys",
                 "ecosystem": "crates.io",
                 "severity": "critical",
-                "reachability": "symbol_reachable",
-                "call_sites": [{"path": "rust/src/lib.rs", "line": 10, "symbol": "SSL_CTX_new"}],
+                "reachability": "package_imported",
+                "ffi_mechanisms": ["rust_extern"],
+                "call_sites": [{"path": "rust/src/lib.rs", "line": 10, "symbol": "crypto",
+                               "kind": "ffi_boundary", "ffi_mechanism": "rust_extern"}],
             },
             {
                 "advisory_id": "GHSA-yyyy-2222",
-                "package": "unused-transitive",
+                "package_name": "unused-transitive",
                 "ecosystem": "crates.io",
                 "severity": "low",
                 "reachability": "transitive_only",
@@ -784,7 +785,7 @@ def test_composite_maximum_matches_attainable_factor_bounds(tmp_path: Path, weig
         }),
         ("job_dependency_intelligence", "acceptance.publish_handoff", "sca_reachability", {
             "schema": "appsec-review/sca-reachability/1",
-            "advisories": [{"advisory_id": "test", "package": "parser", "reachability": "symbol_reachable",
+            "advisories": [{"advisory_id": "test", "package_name": "parser", "reachability": "symbol_reachable",
                            "call_sites": [{"path": path, "line": 1}]}],
         }),
     )

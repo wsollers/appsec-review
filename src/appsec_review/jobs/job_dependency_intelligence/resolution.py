@@ -40,6 +40,21 @@ _EXPOSURE_TERMS = {
     }),
 }
 _RUNTIME_OBSERVATION_KINDS = frozenset({"loader_needed", "soname"})
+_EXACT_VERSION_KINDS = frozenset({"exact", "observed", "installed", "resolved", "corroborated"})
+
+
+def _version_claim(value: object, kind: object = None) -> tuple[str | None, str | None]:
+    """Decode a version without upgrading a graded claim or stringifying a record."""
+    grade = kind if isinstance(kind, str) else None
+    if grade is not None and grade not in _EXACT_VERSION_KINDS:
+        return None, grade
+    if isinstance(value, Mapping):
+        grade = value.get("status", value.get("kind", kind))
+        return _version_claim(value.get("value"), grade or "unknown")
+    if value is not None and not isinstance(value, str):
+        return None, grade or "unknown"
+    version = value.strip() or None if isinstance(value, str) else None
+    return version, grade
 
 
 def repository_identity(value: object, *, supported_hosts: Sequence[str]) -> dict[str, str] | None:
@@ -207,33 +222,41 @@ def normalize_dependencies(
     ]
     grouped: dict[str, dict[str, Any]] = {}
     gaps: list[str] = []
-    for source, raw in observations:
+    for source, raw in sorted(observations, key=lambda row: (row[0], canonical_json(row[1]))):
         name = str(raw.get("name") or raw.get("package") or raw.get("native_name") or "").strip()
         purl = str(raw.get("purl") or "").strip() or None
         metadata = raw.get("metadata") if isinstance(raw.get("metadata"), Mapping) else {}
         release = raw.get("release")
-        scoped_native = source == "native" and "package_root" in raw and "root_id" in raw
         if source == "native" and isinstance(release, Mapping):
-            version = (str(release["value"]) if release.get("status") == "corroborated"
-                       and release.get("value") else None)
+            version, version_kind = _version_claim(release)
         else:
-            version = str(raw.get("version") or raw.get("constraint") or
-                          (metadata.get("version") if source == "native" else "") or "").strip() or None
+            raw_version = raw.get("version")
+            if raw_version is None and source == "native":
+                raw_version = metadata.get("version")
+            version, version_kind = _version_claim(raw_version, raw.get("version_kind"))
+            if raw.get("version") is None and raw.get("constraint") is not None:
+                # Retain declarations for inventory, but not as installed OSV versions.
+                version = raw["constraint"] if isinstance(raw["constraint"], str) else None
+                version_kind = "constraint"
+        ecosystem = raw.get("ecosystem") if isinstance(raw.get("ecosystem"), str) else None
+        scope = {field: raw[field] for field in ("domain", "root_id", "package_root")
+                 if raw.get(field) is not None}
         repository_record = raw.get("repository")
         repo_value = (raw.get("repository_url") or
                       (repository_record.get("url") if isinstance(repository_record, Mapping) else repository_record) or
                       metadata.get("repository_url"))
         repo = repository_identity(repo_value, supported_hosts=supported_hosts)
-        key = ("purl:" + purl if purl else
-               f"name:{name.casefold()}@{(version or '').casefold()}")
-        if scoped_native:
-            key = "native:" + hashlib.sha256(canonical_json(
-                (raw["root_id"], raw["package_root"], key))).hexdigest()
-        if not name or key == "name:@":
+        key = canonical_json({
+            "purl": purl, "name": None if purl else name, "version": version,
+            "ecosystem": ecosystem, **scope,
+            "unresolved_version_kind": version_kind if version is None else None,
+        }).decode()
+        if not name:
             gaps.append(f"{source} dependency observation has no usable identity")
             continue
         entry = grouped.setdefault(key, {
             "name": name, "version": version, "purl": purl, "repository": repo,
+            "version_kind": version_kind, **scope,
             "resolution_basis": (ResolutionBasis.PACKAGE_METADATA.value if repo else
                                  ResolutionBasis.DECLARED.value if source == "declared" else
                                  ResolutionBasis.LINKER_EVIDENCE.value if source == "native" else
@@ -243,6 +266,17 @@ def normalize_dependencies(
             "_exposure_evidence": [],
         })
         entry["aliases"] = sorted(set([*entry["aliases"], name]))
+        for field in ("ecosystem", "relationship", "scope", "constraint", "release"):
+            if raw.get(field) is not None:
+                entry.setdefault(field, raw[field])
+        direct = raw.get("direct")
+        if not isinstance(direct, bool):
+            relation = raw.get("relationship") or raw.get("scope")
+            direct = False if isinstance(relation, str) and relation in {"transitive", "indirect"} else None
+        if isinstance(direct, bool):
+            entry["direct"] = entry.get("direct", False) or direct
+        if version and version_kind != "constraint" and entry["version_kind"] == "constraint":
+            entry["version_kind"] = version_kind
         if entry["version"] is None and version:
             entry["version"] = version
         if entry["purl"] is None and purl:
@@ -255,7 +289,9 @@ def normalize_dependencies(
         observation = {"source": source, "evidence_id": _observation_id(raw, source)}
         entry["_exposure_evidence"].extend(
             infer_maximal_exposure(raw, source, evidence_id=observation["evidence_id"]))
-        for key_name in ("source", "location", "path", "component_id", "candidate_id"):
+        for key_name in ("source", "location", "path", "component_id", "candidate_id",
+                         "ecosystem", "direct", "relationship", "scope", "version", "version_kind",
+                         "constraint", "release", "domain", "root_id", "package_root", "purl"):
             if raw.get(key_name) is not None:
                 observation[key_name] = raw[key_name]
         if observation not in entry["observations"]:

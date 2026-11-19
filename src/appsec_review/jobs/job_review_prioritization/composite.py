@@ -520,24 +520,24 @@ def _load_sca_reachability(
         return "DISABLED", [], {}, []
     if not has_handoff(run_root, "job_dependency_intelligence"):
         return "UNAVAILABLE", [], {}, []
+    from appsec_review.runtime.inputs import observe_output
+
     handoff, _ = accepted_handoff(run_root, "job_dependency_intelligence")
     status = str(handoff.get("terminal_status") or "UNAVAILABLE")
     out = handoff.get("outputs", {}).get("acceptance.publish_handoff") or {}
     art = out.get("sca_reachability") or out.get("sca_reachability_artifact")
     if not isinstance(art, Mapping) and isinstance(out.get("artifact"), Mapping):
+        observe_output(run_root, "job_dependency_intelligence",
+                       "dependency_intelligence_handoff", out["artifact"])
         hdoc = read_json(run_root, out["artifact"])
         art = hdoc.get("sca_reachability")
     if not isinstance(art, Mapping):
         return status, [], {}, []
+    observe_output(run_root, "job_dependency_intelligence", "sca_reachability", art)
     doc = read_json(run_root, art)
     if doc.get("schema") != "appsec-review/sca-reachability/1":
         return "UNAVAILABLE", [], {}, []
 
-    ffi_paths = {
-        _norm_path(fb.get("path"))
-        for fb in (doc.get("ffi_boundaries") or ())
-        if isinstance(fb, Mapping) and _norm_path(fb.get("path"))
-    }
     leads: dict[str, dict[str, Any]] = {}
     file_reach: dict[str, float] = {}
     site_reach: list[tuple[str, int, float]] = []
@@ -549,6 +549,11 @@ def _load_sca_reachability(
             continue
         base_factor = 1.0 if state == "symbol_reachable" else 0.55
         call_sites = [cs for cs in (adv.get("call_sites") or ()) if isinstance(cs, Mapping)]
+        ffi_mechanisms = set(adv.get("ffi_mechanisms") or ())
+        ffi_paths = {
+            _norm_path(cs.get("path")) for cs in call_sites
+            if cs.get("kind") == "ffi_boundary" and cs.get("ffi_mechanism") in ffi_mechanisms
+        }
         first_path: str | None = None
         first_line: int | None = None
         for cs in call_sites:
@@ -565,11 +570,14 @@ def _load_sca_reachability(
             elif first_path is None:
                 first_path = cpath
         adv_id = str(adv.get("advisory_id") or "OSV-UNKNOWN")
-        pkg = str(adv.get("package") or "unknown-package")
+        pkg = str(adv.get("package_name") or "unknown-package")
         sev_default = "high" if state == "symbol_reachable" else "medium"
         sev = _norm_severity(adv.get("severity"), default=sev_default)
-        attack_class = "native_ffi_vulnerable_dependency" if (first_path and first_path in ffi_paths) else "vulnerable_dependency_reachability"
-        lid = _lead_id("sca_reachable", adv_id, pkg, state, first_path, first_line)
+        attack_class = "native_ffi_vulnerable_dependency" if ffi_paths else "vulnerable_dependency_reachability"
+        dependency_ids = sorted(adv.get("dependency_ids") or ())
+        lid = _lead_id("sca_reachable", adv_id, pkg, adv.get("ecosystem"), adv.get("package_version"),
+                       adv.get("purl"), dependency_ids, state, first_path, first_line)
+        subject = adv.get("purl") or f"{adv.get('ecosystem') or 'unknown'}:{pkg}@{adv.get('package_version') or 'unknown'}"
         leads[lid] = {
             "lead_id": lid,
             "lead_source": "sca_reachable",
@@ -581,7 +589,8 @@ def _load_sca_reachability(
             "start_line": first_line,
             "end_line": first_line,
             "rule_id": adv_id,
-            "summary": f"{adv_id} in {pkg} ({state})",
+            "summary": f"{adv_id} in {subject} ({state}; static evidence only)",
+            "subject": subject,
             "package_name": pkg,
             "ecosystem": str(adv["ecosystem"]) if adv.get("ecosystem") else None,
             "reachability": state,

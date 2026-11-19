@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import parse_qsl, unquote
 
 from appsec_review import osv_matching
+from appsec_review.jobs.job_dependency_intelligence.resolution import _version_claim
 from appsec_review.jobs.job_dependency_intelligence.native_advisories import purl_parts
 from appsec_review.storage import file_sha256
 from appsec_review.storage.shared import safe_path
@@ -609,7 +610,16 @@ def _coordinate_name(ecosystem: str, name: str) -> str:
 def _package_coordinate(dep: Mapping[str, Any]) -> tuple[str, str, str, str] | None:
     """Keep namespace, release and instance qualifiers; reject conflicting supplied identity."""
     purl = dep.get("purl") if isinstance(dep.get("purl"), str) else None
-    version = str(dep.get("version") or "").strip()
+    version, grade = _version_claim(dep.get("version"), dep.get("version_kind"))
+    release = dep.get("release")
+    if isinstance(release, Mapping):
+        claimed, release_grade = _version_claim(release)
+        if claimed is None or (version is not None and version != claimed):
+            return None
+        version, grade = claimed, release_grade
+    if grade is not None and version is None:
+        return None
+    version = version or ""
     name = str(dep.get("name") or "").strip()
     declared = str(dep.get("ecosystem") or "").strip().casefold()
     eco = DECLARED_TO_OSV_ECOSYSTEM.get(declared)
@@ -903,7 +913,8 @@ def evaluate_sca_reachability(
             gaps.append(f"sca_dependency_binding_unresolved:{adv_id}:{pkg_name}")
         competing = [coord for coord in deps_by_coordinate if coordinate and coord[:2] == coordinate[:2]]
         symbol_binding_allowed = (
-            resolved and len(competing) == 1 and _normalize_pkg_token(pkg_name) not in unresolved_names
+            resolved and len(competing) == 1 and len(deps_by_coordinate[coordinate]) == 1
+            and _normalize_pkg_token(pkg_name) not in unresolved_names
         )
         if resolved and not symbol_binding_allowed:
             gaps.append(f"reachability_package_binding_ambiguous:{adv_id}:{pkg_name}")
