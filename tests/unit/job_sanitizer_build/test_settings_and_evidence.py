@@ -170,6 +170,26 @@ def test_command_lines_that_mask_the_environment_flags_are_conflicts(argv) -> No
     assert len(argument_conflicts([["true"], argv])) == 1
 
 
+@pytest.mark.parametrize(("assignment", "conflicting"), [
+    ("CMAKE_CXX_FLAGS:STRING=-O0 -Wall", True),
+    ("CMAKE_EXE_LINKER_FLAGS=-static", True),
+    ("CMAKE_C_FLAGS=-fno-sanitize=address", True),
+    ("CMAKE_BUILD_TYPE=RelWithDebInfo", False),
+    ("CMAKE_CXX_FLAGS_DEBUG=-O0", False),
+    ("FEATURE_LABEL=CMAKE_CXX_FLAGS=-O0", False),
+], ids=["typed-compiler", "linker", "sanitizer", "build-type", "debug-flags", "ordinary-value"])
+def test_split_cmake_definitions_match_joined_policy_without_mutating_argv(assignment, conflicting) -> None:
+    prefix = ["/usr/bin/cmake", "-S", ".", "-B", "build"]
+    split, joined = [*prefix, "-D", assignment], [*prefix, "-D" + assignment]
+    original = deepcopy(split)
+    expected = argument_conflicts([["make", "-j2"], joined])
+    assert bool(expected) == conflicting
+    assert argument_conflicts([["make", "-j2"], split]) == expected
+    assert split == original
+    if conflicting:
+        assert expected[0].startswith("command 2 ")
+
+
 @pytest.mark.parametrize(
     "argv",
     [

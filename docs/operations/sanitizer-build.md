@@ -42,10 +42,18 @@ For every receipt of the accepted language build whose family is `native`, the j
 2. reads the exact configure and build commands the accepted build ran from their hash-verified
    protected argv documents (the same replay set `job_codeql_analysis` uses). A command the secret
    scan redacted, or a missing or incomplete command set, cannot be replayed and is a gap;
-3. copies the accepted source into a fresh workspace, `data/sanitizer/<build-unit-id>/workspace`.
+3. copies the accepted source and declared dependency files into a fresh workspace,
+   `data/sanitizer/attempts/<attempt-id>/<build-unit-id>/workspace`.
    The normal workspace identified by the accepted receipt is neither reused nor altered;
-   it may be a project-owned attempt or the shared iteration workspace. The sanitizer source-copy
-   helper excludes build directories, so CMake configures from scratch;
+   it may be a project-owned attempt or the shared iteration workspace. Previous sanitizer
+   attempts also retain their bytes. An existing directory in the current attempt is a gap,
+   not permission to erase evidence or resume a half-built tree.
+   For CMake, preparation clears `CMakeCache.txt`, `CMakeFiles/`, `.ninja_deps` and `.ninja_log`
+   only inside the accepted recipe's `build_dir`, recording the removed paths in
+   `reset_cache_paths`. This includes in-source builds without removing the source directory.
+   Other source and dependency files remain intact, including legitimate source under a
+   directory named `build`; no directory-name exclusion is applied to source copies.
+   An unavailable CMake build-directory identity is a gap, never a guessed cleanup location;
 4. replays the commands in the accepted build image through `BuildContainerExecutor`, the container
    policy the normal build uses (non-root, all capabilities dropped, `no-new-privileges`, read-only
    root and a PID bound). Ordinary Docker argv has no fixed CPU/memory flags; runtime resource
@@ -59,7 +67,8 @@ For every receipt of the accepted language build whose family is `native`, the j
    | `ASAN_OPTIONS` | `detect_leaks=0` |
 
    CMake takes `CFLAGS`/`CXXFLAGS`/`LDFLAGS` on the first configure of a fresh build directory,
-   which is why a fresh workspace needs no build-directory rewrite. The flags are
+   which is why preparation resets its copied cache state without rewriting the accepted commands.
+   The flags are
    `-fsanitize=<settings.sanitizers>` plus `settings.extra_flags`. `ASAN_OPTIONS` comes from
    `settings.build_environment`; it keeps LeakSanitizer, which needs `ptrace`, from failing a helper
    program the build itself runs inside the capability-dropped container;
@@ -110,12 +119,17 @@ code has no fallback.
 | `build_environment` | `{ASAN_OPTIONS = "detect_leaks=0"}` | extra environment for every replayed command; may not set the three flag variables or secret-like names |
 | `command_timeout_seconds` | 1800 | per replayed command |
 | `output_bytes` | 8388608 | retained bytes of each command's stdout and stderr log; longer output is truncated and marked `truncated` (the total is recorded) |
-| `artifact_count_limit` | 10000 | catalogued outputs per unit (and the workspace manifest bound) |
+| `artifact_count_limit` | 10000 | retained catalog outputs per unit; pre/post workspace snapshots have a file bound of ten times this value |
 | `max_units` | 32 | native units rebuilt per run; the rest are a named gap |
 
 `UBSan` is recorded per output but is not in `required_evidence`: a translation unit with nothing
 for UBSan to check references no `__ubsan_*` handler, and treating that as a failed build would be a
 false gap.
+
+Exactly reaching the artifact count limit is not truncation. Discovery stops with a truncation
+gap only after finding an additional eligible changed output; unchanged inputs, bookkeeping and
+excluded/dependency content do not provide that evidence. The summary counts retained outputs,
+not an invented total of undiscovered outputs.
 
 ## Output layout
 
@@ -125,10 +139,10 @@ with `unaccounted_file`.
 
 | Path | Dataset | Disposition |
 | --- | --- | --- |
-| `data/sanitizer/<build-unit-id>/workspace/` | `sanitizer_build_workspaces` | protected: the instrumented source copy and build tree, including the binaries |
-| `data/sanitizer/<build-unit-id>/protected-commands/replay.json` | `sanitizer_build_workspaces` | protected: the exact argv and environment replayed |
-| `data/sanitizer/<build-unit-id>/logs/NNN.stdout`, `NNN.stderr` | `sanitizer_build_workspaces` | protected: full command streams |
-| `data/sanitizer/<build-unit-id>/workspace-manifest.json` | `sanitizer_build_workspaces` | protected: SHA-256 of every file after the build |
+| `data/sanitizer/attempts/<attempt-id>/<build-unit-id>/workspace/` | `sanitizer_build_workspaces` | protected: the instrumented source copy and build tree, including the binaries |
+| `data/sanitizer/attempts/<attempt-id>/<build-unit-id>/protected-commands/replay.json` | `sanitizer_build_workspaces` | protected: the exact argv and environment replayed |
+| `data/sanitizer/attempts/<attempt-id>/<build-unit-id>/logs/NNN.stdout`, `NNN.stderr` | `sanitizer_build_workspaces` | protected: bounded command streams |
+| `data/sanitizer/attempts/<attempt-id>/<build-unit-id>/workspace-manifest.json` | `sanitizer_build_workspaces` | protected: SHA-256 of every file after the build |
 | `data/jobs/job_sanitizer_build/attempts/*/steps/acceptance/tasks/publish_handoff/sanitizer-build-summary.json` | `sanitizer_build_summary` | artifact only: the sanitized handoff |
 
 Instrumented binaries are protected artifact-only evidence, never indexed text, and no existing job
@@ -169,7 +183,8 @@ the reason:
 | `the accepted native build did not succeed, so there is no recipe to instrument` | the normal build failed; there is nothing to replay |
 | `build system '<x>' is not enabled for sanitizer rebuilds` | the unit's build system is not in `build_systems` |
 | `not replayable: ...` | the protected argv is missing, redacted or incomplete |
-| `sanitizer flags cannot be injected through the environment: ...` | the recipe pins flags on its command line (`-DCMAKE_CXX_FLAGS=`, `-DCMAKE_EXE_LINKER_FLAGS=`, `CXXFLAGS=...`, Meson `-Dc_args=`, any `-fsanitize`) or in its environment (a `-fsanitize` in `CFLAGS`/`CXXFLAGS`/`LDFLAGS`); the environment would be masked or contradicted, so nothing is built |
+| `sanitizer flags cannot be injected through the environment: ...` | the recipe pins flags on its command line (`-DCMAKE_CXX_FLAGS=`, `-DCMAKE_EXE_LINKER_FLAGS=`, their equivalent split `-D CMAKE_...=` forms, `CXXFLAGS=...`, Meson `-Dc_args=`, any `-fsanitize`) or in its environment (a `-fsanitize` in `CFLAGS`/`CXXFLAGS`/`LDFLAGS`); the environment would be masked or contradicted, so nothing is built |
+| `this sanitizer attempt's build-unit directory already exists; ...` | existing evidence is retained; fresh computation needs a new framework attempt |
 | `the accepted build image is unavailable or changed` | the pinned build image no longer resolves to the accepted image id |
 | `instrumented build command N exited C` / `timed out` | the instrumented build failed; the unit is `FAILED` and no outputs are catalogued |
 | `...; the build image lacks the sanitizer runtime libclang_rt.asan-x86_64.a` | the linker could not find a sanitizer runtime in the build image |
@@ -211,7 +226,7 @@ not extend to a stage that is authorized to run code.
 Offline tests (fake Docker CLI under the real `BuildContainerExecutor`):
 
 ```bash
-python -m pytest --basetemp=test/tmp/<session> tests/test_sanitizer_build.py
+scripts/run-tests.sh --parallel --test-workers 2 --shuffle-seed 5181 -- tests/unit/job_sanitizer_build
 ```
 
 The live tier skips unless Docker and `audit-buildenv-cpp:local` are present. It builds

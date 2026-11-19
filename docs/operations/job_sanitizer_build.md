@@ -142,15 +142,20 @@ reads follow the [input contract](../architecture/job-input-contracts.md).
 
 1. Re-read accepted language-build authority and require the same handoff hash. Rebuild only
    the selected receipts through the configured bounded worker pool.
-2. For each native unit, require prior `SUCCEEDED` status and an enabled build system. Resolve
+2. For each native unit, require a successful accepted build outcome and an enabled build system
+   (a built receipt can still have provenance gaps). Resolve
    the complete configure/build replay set and hash-check protected argv documents, working
    directories, image IDs and argv hashes. Missing/redacted/invalid commands are unreplayable;
    changed accepted command identity raises `FrameworkIntegrityError`.
 3. Detect command-line or recorded-environment flags that would mask or conflict with
    sanitizer injection. On conflict, report the reason without building. Otherwise prepend
    configured sanitizer flags to `CFLAGS`, `CXXFLAGS` and `LDFLAGS` and apply the configured
-   compatible build environment.
-4. Remove the prior per-unit sanitizer workspace if present and copy source into a fresh one.
+   compatible build environment. Joined and split CMake `-D` definitions receive the same checks
+   without changing the accepted argv or its hash.
+4. Create a new per-attempt, per-build-unit sanitizer directory; never replace an existing one.
+   Copy accepted source and declared dependency files, then reset only CMake cache/generator
+   bookkeeping at the accepted recipe's build directory, including in-source builds. Keep other
+   source files even when their containing directory is named `build`.
    Record the protected replay plan and bounded pre-build file snapshot. Do not reuse the
    ordinary build tree as the instrumented workspace.
 5. Resolve the accepted build image and replay its commands with bounded time/output through
@@ -158,7 +163,8 @@ reads follow the [input contract](../architecture/job-input-contracts.md).
    including a recognized missing sanitizer runtime. Never invoke a produced file afterward.
 6. Recheck target identity. For a nonfailed rebuild, replay accepted output-tree classifications,
    prune dependency/excluded/bookkeeping content and catalog newly changed native objects,
-   executables and shared libraries up to the artifact bound.
+   executables and shared libraries up to the artifact bound. Equality is complete: truncation
+   requires observing one more eligible changed output, not an unchanged input or probe.
 7. Read ELF symbol tables and linked runtime names using the bounded in-repository reader.
    Mark each output instrumented only when all configured `required_evidence` references are
    established. Compare the normal-build artifact at the same path/kind as a control when
@@ -209,7 +215,7 @@ count. These are real coverage losses, not automatically advisory.
 | --- | --- |
 | Selection/replay | Native unit bound reached; ordinary build did not succeed; unsupported configured build system; missing recipe/image/replay set; missing, invalid or secret-redacted protected command. |
 | Flag preparation | Accepted arguments mask flag variables or already select sanitizers; recorded environment selects sanitizers or contradicts configured build environment. |
-| Workspace/image | Previous workspace cannot be removed; source cannot be copied; source/workspace file bound reached; accepted image unavailable or changed. |
+| Workspace/image | Current attempt directory already exists or cannot be created; source cannot be copied/prepared; accepted CMake build directory unavailable; source/workspace file bound reached; accepted image unavailable or changed. |
 | Command execution | Command cannot run, times out or exits unsuccessfully; diagnostics can specifically identify a missing sanitizer runtime. |
 | Output/evidence | Artifact-count truncation; no native output; no linked output and no instrumented object; malformed ELF; absent symbol tables; missing required runtime references; incomplete workspace manifest. |
 
@@ -245,6 +251,8 @@ implementation/schema/validation and retained artifact identities through
 [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability). The summary also
 records receipt fingerprints, sanitizer settings identity and output-policy identity.
 Changing flags, required evidence, selection bounds, upstream recipes/images or source requires
-new computation under the appropriate frozen configuration. A fresh execution replaces its
-per-unit sanitizer workspace and replays commands; it does not resume a half-instrumented tree.
+new computation under the appropriate frozen configuration. A fresh execution uses
+`data/sanitizer/attempts/<attempt-id>/<build-unit-id>/` and replays commands; it neither replaces
+an earlier attempt's bytes (including the historical non-attempt-qualified layout) nor resumes a
+half-instrumented tree. Existing current-attempt directories are refused rather than reused.
 An accepted partial result is not automatically retried solely because its nested rebuild failed.

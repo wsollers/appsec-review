@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 import re
 from typing import Any
 
@@ -103,7 +104,10 @@ def argument_conflicts(commands: Sequence[Sequence[str]]) -> list[str]:
     """Reasons the accepted command lines would mask or contradict the environment's sanitizer flags."""
     reasons: list[str] = []
     for ordinal, argv in enumerate(commands, 1):
-        for argument in argv[1:]:
+        arguments = iter(argv[1:])
+        for argument in arguments:
+            if argument == "-D" and PurePosixPath(argv[0]).name == "cmake":
+                argument += next(arguments, "")
             label = next((text for pattern, text in _MASKING_ARGUMENTS if pattern.match(argument)), None)
             if argument.startswith("-") and "sanitize" in argument:
                 reasons.append(f"command {ordinal} already selects sanitizer flags")

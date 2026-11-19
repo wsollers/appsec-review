@@ -36,6 +36,7 @@ from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.jobs.job_language_build.job import _build_output_policy, _copy_source, _kind, _snapshot
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json, file_sha256, protected_json
+from appsec_review.storage.shared import safe_path
 from .datasets import CONTRACT, DATASETS
 from .evidence import (
     CATALOGED_KINDS, LINKED_KINDS, any_referenced, referenced, runtime_evidence,
@@ -184,6 +185,9 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], receipt
         if reason is not None:
             dispositions.record_bookkeeping(reason, relative)
             continue
+        if len(outputs) == settings.artifact_count_limit:
+            gaps.append("instrumented output catalog truncated at the configured count bound")
+            break
         evidence = runtime_evidence(path, kind)
         outputs.append({
             "path": path.relative_to(run_root).as_posix(), "workspace_path": relative, "sha256": digest,
@@ -191,9 +195,6 @@ def _catalog(run_root: Path, workspace: Path, before: Mapping[str, str], receipt
             "evidence": evidence if kind in LINKED_KINDS else _compact(evidence),
             "baseline": _baseline(run_root, receipt, relative, kind),
         })
-        if len(outputs) >= settings.artifact_count_limit:
-            gaps.append("instrumented output catalog truncated at the configured count bound")
-            break
     return outputs, dispositions, gaps
 
 
@@ -237,13 +238,38 @@ def _runtime_reason(stderr: bytes) -> str | None:
             if match else None)
 
 
+def _prepare_source(unit: UnitContext, receipt: Mapping[str, Any], workspace: Path) -> list[str]:
+    """Reset only CMake's cache state at the accepted build directory, never a directory named build."""
+    _copy_source(unit, receipt, workspace)
+    if receipt.get("build_system") != "cmake":
+        return []
+    recipe = receipt.get("recipe", {})
+    build_dir = recipe.get("build_dir")
+    if not isinstance(build_dir, str) or not build_dir:
+        raise ValueError("the accepted CMake build directory is unavailable")
+    build = workspace if build_dir == "." else safe_path(workspace, build_dir)
+    removed = []
+    # These caches also need resetting for in-source builds. Keep all other accepted source
+    # and dependency bytes, including source files that happen to live in the build directory.
+    for name in ("CMakeCache.txt", "CMakeFiles", ".ninja_deps", ".ninja_log"):
+        path = safe_path(workspace, (build / name).relative_to(workspace).as_posix())
+        if not path.exists():
+            continue
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+        removed.append(path.relative_to(workspace).as_posix())
+    return removed
+
+
 def _build_unit(unit: UnitContext, receipt: Mapping[str, Any], settings: SanitizerBuildSettings,
                 executor_factory: Callable[[UnitContext, BuildProfile], Any] | None) -> dict[str, Any]:
     run_root = unit.job.run_root
     build_unit_id = str(receipt["build_unit_id"])
     recipe = receipt.get("recipe") if isinstance(receipt.get("recipe"), Mapping) else {}
     image = receipt.get("image") if isinstance(receipt.get("image"), Mapping) else {}
-    root = run_root.joinpath(*OUTPUT_ROOT, build_unit_id)
+    root = safe_path(run_root, "/".join((*OUTPUT_ROOT, "attempts", unit.job.attempt_id, build_unit_id)))
     result: dict[str, Any] = {
         "schema": UNIT_SCHEMA, "build_unit_id": build_unit_id, "family": receipt.get("family"),
         "root": receipt.get("root"), "build_system": receipt.get("build_system"),
@@ -280,14 +306,16 @@ def _build_unit(unit: UnitContext, receipt: Mapping[str, Any], settings: Sanitiz
         return gap("sanitizer flags cannot be injected through the environment: " +
                    "; ".join(dict.fromkeys(conflicts)))
 
-    if root.exists():
-        try:
-            shutil.rmtree(root)
-        except OSError as exc:
-            return gap(f"a previous sanitizer workspace could not be removed ({type(exc).__name__})")
+    try:
+        root.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        return gap("this sanitizer attempt's build-unit directory already exists; "
+                   "retain its evidence and use a fresh attempt")
+    except OSError as exc:
+        return gap(f"a fresh sanitizer attempt directory could not be created ({type(exc).__name__})")
     workspace = root / "workspace"
     try:
-        _copy_source(unit, receipt, workspace)
+        result["reset_cache_paths"] = _prepare_source(unit, receipt, workspace)
     except (ValueError, OSError) as exc:
         return gap(f"the accepted source could not be copied into a fresh workspace: {exc}")
     result["workspace"] = workspace.relative_to(run_root).as_posix()

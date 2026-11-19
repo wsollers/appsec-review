@@ -113,6 +113,8 @@ def _synthetic_fixture(base: Path, *, settings_override: dict | None = None):
         "terminal_status": "SUCCEEDED",
         "image": image,
         "recipe": {
+            "source_dir": "native",
+            "build_dir": "native/build",
             "network_required": False,
             "configure_commands": [raw_cmds[0][1]],
             "build_commands": [raw_cmds[1][1]],
@@ -424,21 +426,23 @@ def test_build_unit_conflicts_unsupported_and_failure_guards(tmp_path: Path, mon
         ctx, env_conf, _settings(), _never_started
     )["gaps"][0]
 
-    # Existing sanitizer output directory cleanup + OSError on rmtree
-    existing = run_root / "data" / "sanitizer" / receipt["build_unit_id"]
+    # An existing attempt directory is never cleared, even before a compiler starts.
+    existing = run_root / "data" / "sanitizer" / "attempts" / ctx.job.attempt_id / receipt["build_unit_id"]
     existing.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(sanitizer_job.shutil, "rmtree", lambda _p: (_ for _ in ()).throw(OSError("busy")))
-    assert "previous sanitizer workspace could not be removed" in sanitizer_job._build_unit(
+    (existing / "retained").write_bytes(b"old evidence")
+    assert "already exists" in sanitizer_job._build_unit(
         ctx, receipt, _settings(), _never_started
     )["gaps"][0]
-    monkeypatch.undo()
+    assert (existing / "retained").read_bytes() == b"old evidence"
 
     # _copy_source failure
+    ctx.job.attempt_id = "attempt_0002"
     monkeypatch.setattr(sanitizer_job, "_copy_source", lambda *_a: (_ for _ in ()).throw(ValueError("bad symlink")))
     assert "could not be copied" in sanitizer_job._build_unit(ctx, receipt, _settings(), _never_started)["gaps"][0]
     monkeypatch.undo()
 
     # Pre-build _snapshot bound failure
+    ctx.job.attempt_id = "attempt_0003"
     monkeypatch.setattr(sanitizer_job, "_snapshot", lambda *_a: (_ for _ in ()).throw(ValueError("too many files")))
     assert "accepted source exceeds the workspace file bound" in sanitizer_job._build_unit(
         ctx, receipt, _settings(), _never_started
@@ -446,6 +450,7 @@ def test_build_unit_conflicts_unsupported_and_failure_guards(tmp_path: Path, mon
     monkeypatch.undo()
 
     # Image resolve failure
+    ctx.job.attempt_id = "attempt_0004"
     class BrokenResolveExecutor:
         def resolve(self):
             raise RuntimeError("image missing")
@@ -454,6 +459,7 @@ def test_build_unit_conflicts_unsupported_and_failure_guards(tmp_path: Path, mon
     assert res_img["terminal_status"] == "FAILED" and "image is unavailable" in res_img["gaps"][0]
 
     # Command execute exception
+    ctx.job.attempt_id = "attempt_0005"
     class BrokenExecExecutor:
         def resolve(self):
             return None
@@ -465,6 +471,7 @@ def test_build_unit_conflicts_unsupported_and_failure_guards(tmp_path: Path, mon
     assert res_exec["terminal_status"] == "FAILED" and "could not run (OSError)" in res_exec["gaps"][0]
 
     # Command timed out
+    ctx.job.attempt_id = "attempt_0006"
     class TimeoutExecutor:
         def resolve(self):
             return None
@@ -486,6 +493,7 @@ def test_build_unit_conflicts_unsupported_and_failure_guards(tmp_path: Path, mon
     assert res_to["terminal_status"] == "FAILED" and "timed out" in res_to["gaps"][0]
 
     # Post-build snapshot bound failure -> COMPLETED_WITH_GAPS without workspace_manifest
+    ctx.job.attempt_id = "attempt_0007"
     real_snapshot = sanitizer_job._snapshot
     calls = []
 
@@ -503,6 +511,7 @@ def test_build_unit_conflicts_unsupported_and_failure_guards(tmp_path: Path, mon
     monkeypatch.undo()
 
     # Target changed mid-build -> FrameworkIntegrityError
+    ctx.job.attempt_id = "attempt_0008"
     class MutateTargetExecutor:
         def resolve(self):
             return None
