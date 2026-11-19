@@ -147,14 +147,13 @@ def test_external_decoders_cover_generic_jsonl_diagnostics_checkov_and_zizmor_di
     assert _generic_external_records(spec_a, b"   ", wf) == []
     assert _generic_external_records(spec_a, b"{}", wf) == []
 
-    # JSONL stream with invalid line skipped, diagnostics envelope, and direct finding object.
+    # Valid JSONL diagnostics envelope and direct finding object; malformed streams are rejected
+    # atomically by the regression cases in test_native_contracts.
     jsonl_payload = "\n".join(
         [
-            "not-json-banner",
             json.dumps(
                 {
                     "diagnostics": [
-                        "bad",
                         {
                             "message": "diag msg",
                             "kind": "syntax-check",
@@ -380,7 +379,7 @@ def test_scan_covers_not_applicable_skipped_na_discovery_static_and_external_err
     assert res_inj["terminal_status"] == "FAILED"
     assert "injected bounded failure" in res_inj["gaps"][0]["reason"]
 
-    # 7. External scan: malformed zizmor JSON -> PARSER_ERROR (FAILED), and Checkov oversized source -> PARSER_ERROR.
+    # 7. Malformed Zizmor output is a parser gap; oversized Checkov input is rejected before launch.
     u_parse, parse_files, _ = make_unit_context(
         tmp_path / "parse_err",
         unit_id="ci_analysis.github_zizmor_scan",

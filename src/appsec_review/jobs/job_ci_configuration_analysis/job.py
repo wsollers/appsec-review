@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+from types import MappingProxyType
 from typing import Any
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
@@ -122,13 +123,62 @@ def _read(run_root: Path, identity: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def analysis_bounds(settings: Mapping[str, Any]) -> tuple[int, int, int]:
     """``(max_files, max_file_bytes, max_observations_per_tool)`` from the job settings, range-checked."""
-    values = (int(settings.get("max_files", 128)), int(settings.get("max_file_bytes", 1_048_576)),
-              int(settings.get("max_observations_per_tool", 5_000)))
+    values = (settings.get("max_files", 128), settings.get("max_file_bytes", 1_048_576),
+              settings.get("max_observations_per_tool", 5_000))
+    if any(type(value) is not int for value in values):
+        raise ValueError("CI analysis bounds must be integers")
     if values[0] < 1 or values[0] > 5_000 or values[1] < 1 or values[1] > 16 * 1024 * 1024:
         raise ValueError("CI analysis bounds are outside the supported range")
     if values[2] < 1 or values[2] > 100_000:
         raise ValueError("CI observation bound is outside the supported range")
     return values
+
+
+@dataclass(frozen=True, slots=True)
+class _ProviderSettings:
+    tools: tuple[str, ...]
+    framework: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CiSettings:
+    providers: Mapping[str, _ProviderSettings]
+    ruleset: str
+    correlation: str
+
+
+def _ci_settings(settings: Mapping[str, Any]) -> _CiSettings:
+    """Resolve the existing recipe without allowing settings to name unwired adapters."""
+    allowed = {"enabled", "max_files", "max_file_bytes", "max_observations_per_tool",
+               "providers", "ruleset", "correlation"}
+    if set(settings) - allowed:
+        raise ValueError("unknown CI analysis setting")
+    analysis_bounds(settings)
+    if "enabled" in settings and type(settings["enabled"]) is not bool:
+        raise ValueError("CI enabled must be boolean")
+    ruleset = settings.get("ruleset", RULESET_IDENTITY)
+    correlation = settings.get("correlation", "exact-only/1")
+    if ruleset != RULESET_IDENTITY or correlation != "exact-only/1":
+        raise ValueError("unsupported CI ruleset or correlation identity")
+    raw = settings.get("providers", {})
+    if not isinstance(raw, Mapping) or set(raw) - set(PROVIDERS):
+        raise ValueError("unsupported CI provider settings")
+    providers = {}
+    for provider in PROVIDERS:
+        value = raw.get(provider, {})
+        if not isinstance(value, Mapping) or set(value) - {"tools", "framework"}:
+            raise ValueError(f"unsupported CI provider settings: {provider}")
+        specs = [spec for spec in SPECS if spec.provider == provider]
+        supported = tuple(spec.tool_id if spec.mode == "discovery" else spec.name for spec in specs)
+        tools = value.get("tools", supported)
+        if (not isinstance(tools, (list, tuple)) or any(not isinstance(tool, str) for tool in tools)
+                or set(tools) - set(supported) or len(tools) != len(set(tools))):
+            raise ValueError(f"unsupported CI tools: {provider}")
+        framework = next((spec.framework for spec in specs if spec.framework), None)
+        if value.get("framework", framework) != framework:
+            raise ValueError(f"unsupported CI framework: {provider}")
+        providers[provider] = _ProviderSettings(tuple(tools), framework)
+    return _CiSettings(MappingProxyType(providers), ruleset, correlation)
 
 
 def _bounds(unit: UnitContext) -> tuple[int, int, int]:
@@ -156,13 +206,25 @@ def _argv(spec: ToolSpec, executable: str, path: str) -> tuple[str, ...]:
     raise CiConfigurationAnalysisFailed(f"no external CI argv for {spec.tool_id}")
 
 
-_FINDING_FIELDS = frozenset({"check_id", "rule_id", "kind", "code", "message", "check_name", "description",
-                             "details", "line", "location", "file_line_range"})
 _SOURCE_MAPPING_FIELDS = ("producer_location", "mapping_method", "confidence", "ambiguous")
 
 
 class _CiOutputParseError(ValueError):
     """Native linter output cannot be represented as source-bound observations."""
+
+
+class _CiReadLimitExceeded(ValueError):
+    """The actual input exceeded its admitted byte bound."""
+
+
+def _bounded_bytes(path: Path, limit: int, name: str) -> bytes:
+    if path.stat().st_size > limit:
+        raise _CiReadLimitExceeded(f"configured {name} exceeded")
+    with path.open("rb") as stream:
+        data = stream.read(limit + 1)
+    if len(data) > limit:
+        raise _CiReadLimitExceeded(f"configured {name} exceeded")
+    return data
 
 
 def _zizmor_records(spec: ToolSpec, payload: bytes, path: str) -> list[dict[str, Any]]:
@@ -269,50 +331,78 @@ def _external_records(spec: ToolSpec, payload: bytes, path: str) -> list[dict[st
 
 
 def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list[dict[str, Any]]:
-    text = payload.decode("utf-8", "replace").strip()
+    try:
+        text = payload.decode("utf-8", "strict").strip()
+    except UnicodeError as exc:
+        raise _CiOutputParseError(f"{spec.name} output is not UTF-8") from exc
     if not text:
         return []
-    values: list[Any] = []
     try:
         decoded = json.loads(text)
+        if decoded == {}:
+            return []
         values = decoded if isinstance(decoded, list) else [decoded]
-    except json.JSONDecodeError:
-        for line in text.splitlines():
-            try:
-                values.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+    except json.JSONDecodeError as exc:
+        if spec.tool_id != "tool-actionlint":
+            raise _CiOutputParseError(f"{spec.name} output is not JSON") from exc
+        try:
+            values = [json.loads(line) for line in text.splitlines() if line.strip()]
+        except json.JSONDecodeError as exc:
+            raise _CiOutputParseError("actionlint output contains an invalid JSON line") from exc
+
+    def reject_errors(document: Mapping[str, Any]) -> None:
+        if any(document.get(key) for key in ("error", "errors", "parsing_errors")):
+            raise _CiOutputParseError(f"{spec.name} report contains errors")
+
     records: list[dict[str, Any]] = []
     for document in values:
-        candidates: list[Any]
-        if isinstance(document, Mapping) and isinstance(document.get("results"), Mapping):
-            candidates = list(document["results"].get("failed_checks", []))
-        elif isinstance(document, Mapping) and isinstance(document.get("diagnostics"), list):
-            candidates = list(document["diagnostics"])
+        if not isinstance(document, Mapping) or not document:
+            raise _CiOutputParseError(f"{spec.name} report contains an invalid document")
+        reject_errors(document)
+        if spec.tool_id == "tool-checkov":
+            results = document.get("results")
+            if not isinstance(results, Mapping) or not isinstance(results.get("failed_checks"), list):
+                raise _CiOutputParseError("Checkov report requires results.failed_checks")
+            reject_errors(results)
+            if "summary" in document:
+                if not isinstance(document["summary"], Mapping):
+                    raise _CiOutputParseError("Checkov report has an invalid summary")
+                reject_errors(document["summary"])
+            candidates = results["failed_checks"]
+        elif "diagnostics" in document:
+            if not isinstance(document["diagnostics"], list):
+                raise _CiOutputParseError("actionlint diagnostics must be an array")
+            candidates = document["diagnostics"]
         else:
             candidates = [document]
         for item in candidates:
-            # A record is an observation only when it names a rule, a message or a location. An
-            # empty document (``{}``: the linter ran and found nothing) is not one.
-            if not isinstance(item, Mapping) or not (_FINDING_FIELDS & set(item)):
-                continue
+            if not isinstance(item, Mapping):
+                raise _CiOutputParseError(f"{spec.name} report contains an invalid finding")
+            reject_errors(item)
+            rule = (item.get("check_id") if spec.tool_id == "tool-checkov" else
+                    item.get("rule_id") or item.get("kind") or item.get("code"))
+            message = (item.get("check_name") if spec.tool_id == "tool-checkov" else
+                       item.get("message") or item.get("description") or item.get("details"))
+            if any(not isinstance(value, str) or not value.strip() for value in (rule, message)):
+                raise _CiOutputParseError(f"{spec.name} finding requires a rule and message")
             location = item.get("location") if isinstance(item.get("location"), Mapping) else {}
             lines = item.get("file_line_range") if isinstance(item.get("file_line_range"), list) else []
-            start_line = int(location.get("line") or item.get("line") or (lines[0] if lines else 1) or 1)
-            end_line = int(location.get("end_line") or (lines[-1] if lines else start_line) or start_line)
-            message = str(item.get("message") or item.get("check_name") or item.get("description") or
-                          item.get("details") or "CI linter observation")[:4096]
+            try:
+                start_line = int(location.get("line") or item.get("line") or (lines[0] if lines else 1) or 1)
+                end_line = int(location.get("end_line") or (lines[-1] if lines else start_line) or start_line)
+                start_column = int(location.get("column") or 1)
+                end_column = int(location.get("end_column") or location.get("column") or 1)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise _CiOutputParseError(f"{spec.name} finding has invalid coordinates") from exc
             severity = item.get("severity")
             severity = severity.strip().lower() if isinstance(severity, str) and severity.strip() else None
             record = {
                 "provider": spec.provider, "tool_id": spec.tool_id,
-                "native_rule_id": str(item.get("check_id") or item.get("rule_id") or item.get("kind") or
-                                      item.get("code") or spec.name),
+                "native_rule_id": rule,
                 "category": "dangerous-defaults-and-uncaught-static-misconfiguration",
-                "message": message, "severity": severity,
+                "message": message[:4096], "severity": severity,
                 "path": path, "start_line": max(1, start_line), "end_line": max(start_line, end_line),
-                "start_column": int(location.get("column") or 1),
-                "end_column": int(location.get("end_column") or location.get("column") or 1),
+                "start_column": start_column, "end_column": end_column,
             }
             if severity is None:
                 record["gaps"] = ["severity_missing_or_unrated"]
@@ -340,18 +430,29 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
     ``producer_reported_gap`` scoped to the definition, a hit observation bound is ``truncated``. A
     provider with no definitions is ``NOT_APPLICABLE`` and no gap. The raw artifact keeps the reasons.
     """
+    settings = _ci_settings(unit.job.config.settings)
+    configured_name = spec.tool_id if spec.mode == "discovery" else spec.name
+    disabled = configured_name not in settings.providers[spec.provider].tools
     definitions = _selected(unit, spec.provider)
     _, max_bytes, max_observations = _bounds(unit)
     gaps: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
     executions: list[dict[str, Any]] = []
+    observations_truncated = False
 
-    def finish(terminal: str, *, image_id=None, not_applicable=(), tool_name=True) -> Mapping[str, Any]:
+    def retain(parsed: list[dict[str, Any]]) -> None:
+        nonlocal observations_truncated
+        remaining = max_observations - len(records)
+        observations_truncated |= len(parsed) > remaining
+        records.extend(parsed[:remaining])
+
+    def finish(terminal: str, *, image_id=None, not_applicable=()) -> Mapping[str, Any]:
         raw = {"schema": "appsec-review/ci-raw-observations/1", "provider": spec.provider,
                "tool_id": spec.tool_id, "tool_name": spec.name, "framework": spec.framework,
                "definitions": definitions, "records": records, "gaps": _reasons(gaps),
                "executions": executions, "image_id": image_id if spec.mode == "external" else None,
-               "ruleset_identity": RULESET_IDENTITY if spec.mode == "static" else None,
+               "ruleset_identity": settings.ruleset if spec.mode == "static" else None,
+               "disabled_by_configuration": disabled,
                "not_applicable_inputs": not_applicable_summary(not_applicable),
                "terminal_status": terminal}
         artifact = _write(unit, "raw-observations.json", raw)
@@ -360,11 +461,16 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
                               record_count=len(records), gap_count=len(gaps), execution_count=len(executions))
         result = {"provider": spec.provider, "tool_id": spec.tool_id, "terminal_status": terminal,
                   "raw_artifact": artifact, "record_count": len(records), "gaps": gaps,
-                  "executions": executions, "not_applicable_inputs": raw["not_applicable_inputs"]}
+                  "executions": executions, "not_applicable_inputs": raw["not_applicable_inputs"],
+                  "disabled_by_configuration": disabled}
+        if disabled:
+            result["coverage_disposition"] = "CONFIGURED_DISABLED"
         if terminal == "NOT_APPLICABLE" and not_applicable:
             result["coverage_disposition"] = "SKIPPED_NA"
         return result
 
+    if disabled:
+        return finish("CONFIGURED_DISABLED")
     if not definitions:
         return finish("NOT_APPLICABLE")
     not_applicable = ()
@@ -385,68 +491,85 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
         for definition in definitions:
             source = (unit.job.target_root or Path()) / definition["path"]
             try:
-                data = source.read_bytes()
-                if len(data) > max_bytes:
-                    gaps.append(_gap(GapCode.PRODUCER_REPORTED_GAP, f"{definition['path']}: configured max_file_bytes exceeded",
-                                     unit.unit_id, scope=definition["path"]))
-                    continue
+                data = _bounded_bytes(source, max_bytes, "max_file_bytes")
                 text = data.decode("utf-8", "strict")
+            except _CiReadLimitExceeded as exc:
+                gaps.append(_gap(GapCode.PRODUCER_REPORTED_GAP, f"{definition['path']}: {exc}",
+                                 unit.unit_id, scope=definition["path"]))
+                continue
             except (OSError, UnicodeError) as exc:
                 gaps.append(_gap(GapCode.PARSER_ERROR, f"{definition['path']}: static parse unavailable ({type(exc).__name__})",
                                  unit.unit_id, scope=definition["path"]))
                 continue
-            records.extend(scan_text(spec.provider, definition["path"], text, tool_id=spec.tool_id))
+            retain(scan_text(spec.provider, definition["path"], text, tool_id=spec.tool_id))
     image_id = None
     if spec.mode == "external":
         from appsec_review.runtime import execution_safety as safety
-        try:
-            executor = executor_factory(unit)
-            tool = executor.catalog.tool(spec.tool_id)
-            image_id = executor.resolve_image(tool)
-        except (KeyError, RuntimeError, ValueError) as exc:
-            safety.fail(f"{spec.tool_id} image resolution failed: {exc}", action="ci.image")
-            gaps.append(_gap(GapCode.PRODUCER_BLOCKED,
-                             f"{spec.tool_id}: pinned offline image unavailable ({type(exc).__name__}: {exc})",
-                             unit.unit_id, retryable=True))
-            tool = None
-        if tool is not None:
-            for index, definition in enumerate(definitions, 1):
-                scratch = unit.unit_root / "scratch" / f"file_{index:04d}"
+        executor = None
+        for index, definition in enumerate(definitions, 1):
+            source = (unit.job.target_root or Path()) / definition["path"]
+            try:
+                data = _bounded_bytes(source, max_bytes, "max_file_bytes")
+            except _CiReadLimitExceeded as exc:
+                gaps.append(_gap(GapCode.PRODUCER_REPORTED_GAP, f"{definition['path']}: {exc}",
+                                 unit.unit_id, scope=definition["path"]))
+                continue
+            except OSError as exc:
+                gaps.append(_gap(GapCode.PARSER_ERROR,
+                                 f"{definition['path']}: source unavailable ({type(exc).__name__})",
+                                 unit.unit_id, scope=definition["path"]))
+                continue
+            if executor is None:
                 try:
-                    if fail_tool in {spec.tool_id, spec.key}:
-                        raise RuntimeError(f"injected bounded failure: {fail_tool}")
-                    result = executor.execute(ExecutionRequest(
-                        tool_id=spec.tool_id, argv=_argv(spec, tool.executable, definition["path"]),
-                        target_root=unit.job.target_root or Path(), scratch_root=scratch,
-                        accepted_exit_codes=frozenset({0, 1}),
-                    ))
-                    executions.append(asdict(result))
-                    stdout = unit.job.run_root / result.stdout_path
-                    if result.timed_out or result.oom_killed or result.exit_code not in {0, 1}:
-                        safety.fail(f"{spec.tool_id} execution failed", action="ci.scan")
-                        gaps.append(_gap(GapCode.PRODUCER_FAILED,
-                                         f"{definition['path']}: {spec.tool_id} failed with exit={result.exit_code}",
-                                         unit.unit_id, scope=definition["path"]))
-                        continue
-                    parsed = _external_records(spec, stdout.read_bytes(), definition["path"])
-                    if spec.tool_id == "tool-checkov" and parsed:
-                        source = (unit.job.target_root or Path()) / definition["path"]
-                        with source.open("rb") as stream:
-                            data = stream.read(max_bytes + 1)
-                        if len(data) > max_bytes:
-                            raise _CiOutputParseError("Checkov source range exceeds configured max_file_bytes")
-                        parsed = _checkov_source_records(parsed, definition["path"], data)
-                    records.extend(parsed)
-                except _CiOutputParseError as exc:
-                    gaps.append(_gap(GapCode.PARSER_ERROR, f"{definition['path']}: {exc}",
-                                     unit.unit_id, scope=definition["path"]))
-                except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
-                    safety.fail(f"{spec.tool_id} failed: {exc}", action="ci.scan")
+                    executor = executor_factory(unit)
+                    tool = executor.catalog.tool(spec.tool_id)
+                    image_id = executor.resolve_image(tool)
+                except (KeyError, RuntimeError, ValueError) as exc:
+                    safety.fail(f"{spec.tool_id} image resolution failed: {exc}", action="ci.image")
+                    gaps.append(_gap(GapCode.PRODUCER_BLOCKED,
+                                     f"{spec.tool_id}: pinned offline image unavailable ({type(exc).__name__}: {exc})",
+                                     unit.unit_id, retryable=True))
+                    break
+            scratch = unit.unit_root / "scratch" / f"file_{index:04d}"
+            try:
+                if fail_tool in {spec.tool_id, spec.key}:
+                    raise RuntimeError(f"injected bounded failure: {fail_tool}")
+                result = executor.execute(ExecutionRequest(
+                    tool_id=spec.tool_id, argv=_argv(spec, tool.executable, definition["path"]),
+                    target_root=unit.job.target_root or Path(), scratch_root=scratch,
+                    accepted_exit_codes=frozenset({0, 1}),
+                ))
+                executions.append(asdict(result))
+                if result.timed_out or result.oom_killed or result.exit_code not in {0, 1}:
+                    safety.fail(f"{spec.tool_id} execution failed", action="ci.scan")
                     gaps.append(_gap(GapCode.PRODUCER_FAILED,
-                                     f"{definition['path']}: {spec.tool_id} unavailable ({type(exc).__name__}: {exc})",
+                                     f"{definition['path']}: {spec.tool_id} failed with exit={result.exit_code}",
                                      unit.unit_id, scope=definition["path"]))
-    if len(records) > max_observations:
-        records = records[:max_observations]
+                    continue
+                if result.stdout_truncated or result.stderr_truncated:
+                    raise _CiReadLimitExceeded("scanner stdout or stderr was truncated")
+                try:
+                    payload = _bounded_bytes(unit.job.run_root / result.stdout_path, tool.output_bytes, "output_bytes")
+                except OSError as exc:
+                    raise _CiOutputParseError(f"{spec.name} report unavailable ({type(exc).__name__})") from exc
+                parsed = _external_records(spec, payload, definition["path"])
+                if result.exit_code == 1 and not parsed and spec.tool_id in {"tool-checkov", "tool-actionlint"}:
+                    raise _CiOutputParseError(f"{spec.name} reported failure without findings")
+                if spec.tool_id == "tool-checkov" and parsed:
+                    parsed = _checkov_source_records(parsed, definition["path"], data)
+                retain(parsed)
+            except _CiReadLimitExceeded as exc:
+                gaps.append(_gap(GapCode.TRUNCATED, f"{definition['path']}: {exc}",
+                                 unit.unit_id, scope=definition["path"]))
+            except _CiOutputParseError as exc:
+                gaps.append(_gap(GapCode.PARSER_ERROR, f"{definition['path']}: {exc}",
+                                 unit.unit_id, scope=definition["path"]))
+            except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+                safety.fail(f"{spec.tool_id} failed: {exc}", action="ci.scan")
+                gaps.append(_gap(GapCode.PRODUCER_FAILED,
+                                 f"{definition['path']}: {spec.tool_id} unavailable ({type(exc).__name__}: {exc})",
+                                 unit.unit_id, scope=definition["path"]))
+    if observations_truncated:
         gaps.append(_gap(GapCode.TRUNCATED, f"observation bound reached at {max_observations}", unit.unit_id))
     for record in records:
         for reason in record.get("gaps", ()):
@@ -504,12 +627,11 @@ def _hierarchy(unit: UnitContext) -> Mapping[str, Any]:
     for definition in definitions:
         source = (unit.job.target_root or Path()) / definition["path"]
         try:
-            data = source.read_bytes()
-            if len(data) > max_bytes:
-                gaps.append(_gap(GapCode.PRODUCER_REPORTED_GAP, f"{definition['path']}: hierarchy max_file_bytes exceeded",
-                                 unit.unit_id, scope=definition["path"]))
-                continue
+            data = _bounded_bytes(source, max_bytes, "max_file_bytes")
             nodes.extend(hierarchy(definition["provider"], definition["path"], data.decode("utf-8", "strict")))
+        except _CiReadLimitExceeded as exc:
+            gaps.append(_gap(GapCode.PRODUCER_REPORTED_GAP, f"{definition['path']}: hierarchy {exc}",
+                             unit.unit_id, scope=definition["path"]))
         except (OSError, UnicodeError) as exc:
             gaps.append(_gap(GapCode.PARSER_ERROR, f"{definition['path']}: hierarchy unavailable ({type(exc).__name__})",
                              unit.unit_id, scope=definition["path"]))
@@ -533,7 +655,8 @@ def _source_location(unit: UnitContext, record: Mapping[str, Any]) -> SourceLoca
     source = (unit.job.target_root or Path()) / str(record["path"])
     if not source.is_file():
         return None
-    data = source.read_bytes()
+    _, max_bytes, _ = _bounds(unit)
+    data = _bounded_bytes(source, max_bytes, "max_file_bytes")
     offsets = [0, *(match.end() for match in re.finditer(b"\n", data))]
     start_line, end_line = int(record["start_line"]), int(record["end_line"])
     start_byte = int(record["start_byte"] if record.get("start_byte") is not None
@@ -541,7 +664,7 @@ def _source_location(unit: UnitContext, record: Mapping[str, Any]) -> SourceLoca
     end_byte = int(record["end_byte"] if record.get("end_byte") is not None
                    else (offsets[end_line] if end_line < len(offsets) else len(data)))
     return SourceLocation(
-        target_snapshot=unit.job.source_fingerprint, path=str(record["path"]), file_sha256=file_sha256(source),
+        target_snapshot=unit.job.source_fingerprint, path=str(record["path"]), file_sha256=hashlib.sha256(data).hexdigest(),
         start_byte=min(start_byte, len(data)), end_byte=min(max(start_byte, end_byte), len(data)),
         start_line=start_line, end_line=end_line, start_column=int(record["start_column"]),
         end_column=int(record["end_column"]),
@@ -552,6 +675,7 @@ def _source_location(unit: UnitContext, record: Mapping[str, Any]) -> SourceLoca
 
 
 def _index(unit: UnitContext, spec: ToolSpec, normalize_id: str) -> Mapping[str, Any]:
+    settings = _ci_settings(unit.job.config.settings)
     output = dict(unit.output(normalize_id))
     normalized = _read(unit.job.run_root, output["normalized_artifact"])
     hierarchy_doc = _read(unit.job.run_root, unit.output("ci_enrichment.build_hierarchy")["artifact"])
@@ -561,7 +685,7 @@ def _index(unit: UnitContext, spec: ToolSpec, normalize_id: str) -> Mapping[str,
         name="observations", target_snapshot=unit.job.source_fingerprint,
         producer_artifacts=[output["normalized_artifact"], unit.output("ci_enrichment.build_hierarchy")["artifact"]],
         tool_identity={"tool_id": spec.tool_id, "provider": spec.provider, "framework": spec.framework,
-                       "ruleset": RULESET_IDENTITY, "config": config_identity},
+                       "ruleset": settings.ruleset, "config": config_identity},
         parser_identity="ci-provider-parser/1", normalizer_identity="ci-normalizer/1",
         mapping_identity="ci-static-source-span/1",
     )
@@ -578,7 +702,7 @@ def _index(unit: UnitContext, spec: ToolSpec, normalize_id: str) -> Mapping[str,
                                          record, _source_location(unit, record)))
     scan_status = output["scan_terminal_status"]
     status = "complete" if scan_status == "SUCCEEDED" else (
-        "unavailable" if scan_status in {"FAILED", "NOT_APPLICABLE"} else "partial")
+        "unavailable" if scan_status in {"FAILED", "NOT_APPLICABLE", "CONFIGURED_DISABLED"} else "partial")
     reasons = _reasons(output["scan_gap_records"])
     gap = "; ".join(reasons[:10]) or None
     builder.add_coverage(f"{spec.provider}:{spec.name}", status, gap)
@@ -594,10 +718,12 @@ def _index(unit: UnitContext, spec: ToolSpec, normalize_id: str) -> Mapping[str,
             "artifact": _artifact(unit.job.run_root, path), "index_identity": asdict(identity),
             "normalized_artifact": output["normalized_artifact"], "record_count": len(records),
             "gaps": [], "records": records,
+            "disabled_by_configuration": output.get("disabled_by_configuration", False),
             "not_applicable_inputs": output.get("not_applicable_inputs") or not_applicable_summary(())}
 
 
 def _correlate(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, Any]:
+    settings = _ci_settings(unit.job.config.settings)
     grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
     for unit_id in index_ids:
         for record in unit.output(unit_id)["records"]:
@@ -628,12 +754,12 @@ def _correlate(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, An
             finding.update({field: observations[0][field]
                             for field in (*_SOURCE_MAPPING_FIELDS, "start_byte", "end_byte")})
         findings.append(finding)
-    document = {"schema": "appsec-review/canonical-ci-findings/1", "correlation": "exact-only/1",
+    document = {"schema": "appsec-review/canonical-ci-findings/1", "correlation": settings.correlation,
                 "findings": findings, "finding_count": len(findings)}
     artifact = _write(unit, "canonical-findings.json", document)
     fingerprint = index_fingerprint(
         name="evidence", target_snapshot=unit.job.source_fingerprint,
-        producer_artifacts=[artifact], tool_identity={"correlator": "ci-exact-only/1"},
+        producer_artifacts=[artifact], tool_identity={"correlator": f"ci-{settings.correlation}"},
         parser_identity="canonical-ci-findings/1", normalizer_identity="ci-normalizer/1",
         mapping_identity="ci-static-source-span/1",
     )
@@ -678,6 +804,7 @@ def _coverage(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, Any
         tools.append({key: output[key] for key in ("provider", "tool_id", "record_count")}
                      | {"terminal_status": output["scan_terminal_status"],
                         "gaps": _reasons(output["scan_gap_records"]),
+                        "disabled_by_configuration": output.get("disabled_by_configuration", False),
                         "not_applicable_input_count": int(not_applicable.get("count", 0))})
         skipped.extend(not_applicable.get("items", ()))
         gaps.extend(output["scan_gap_records"])
@@ -702,7 +829,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None, fail_tool: str
         for step, tasks in TOPOLOGY.items():
             if tuple(context.config.step(step).tasks) != tasks:
                 raise ValueError(f"CI configuration task order mismatch: {step}")
-        analysis_bounds(context.config.settings)
+        _ci_settings(context.config.settings)
         catalog = load_target_catalog(context.run_root, intake_target_root=False)
         if catalog.source_fingerprint != context.source_fingerprint:
             raise ValueError("CI target fingerprint does not match the accepted target catalog")

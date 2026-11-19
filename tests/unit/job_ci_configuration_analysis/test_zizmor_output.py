@@ -140,7 +140,9 @@ def test_zero_byte_span_is_not_replaced_with_a_whole_source_line(tmp_path: Path)
     source.parent.mkdir(parents=True)
     source.write_text("name: workflow\n")
     [record] = _decode([zizmor_finding(row=0, column=0, offset=0, feature="")])
-    unit = SimpleNamespace(job=SimpleNamespace(target_root=tmp_path, source_fingerprint="a" * 64))
+    unit = SimpleNamespace(job=SimpleNamespace(
+        target_root=tmp_path, source_fingerprint="a" * 64, config=SimpleNamespace(settings={}),
+    ))
     location = _source_location(unit, record)
     assert location is not None and location.start_byte == location.end_byte == 0
     assert location.start_line == location.end_line == location.start_column == location.end_column == 1

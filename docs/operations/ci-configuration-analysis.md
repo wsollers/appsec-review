@@ -17,6 +17,18 @@ coverage deterministically. Configuration lives under `[jobs.job_ci_configuratio
 `appsec-review.toml`, including provider routing, worker counts, bounds, correlation identity, and
 reviewed ruleset identity.
 
+Provider `tools` lists select only the already-declared branches; an empty list disables that
+provider's scans. Omitted provider settings retain the central adapter defaults. Disabled branches
+keep their task and shard declarations, report `CONFIGURED_DISABLED`, and carry
+`disabled_by_configuration` through raw output, indexing and coverage. They never resolve images,
+read scan inputs, or launch linters. Coverage describes the configured work, not execution of disabled
+tools. The discovery-only `other` provider uses the configured tool name
+`supported_discovery_without_linter`. Unknown settings, providers or tools, duplicate tool names,
+non-integer bounds, and unsupported framework/ruleset/correlation identities are rejected at job
+admission. Frameworks must match their provider's wired Checkov adapter; the supported identities
+remain `ci-static-reviewed-rules/1` and `exact-only/1`. Changing an identity does not select a new
+implementation.
+
 The lane never contacts a CI controller or provider API. It never evaluates YAML, Groovy, or Kotlin
 DSL, never loads Jenkins or TeamCity plugins, never expands generators, never starts a build, and
 never executes commands found in a pipeline; all commands in target definitions are inert data.
@@ -59,7 +71,11 @@ External linters receive only definitions their declared input support accepts
 files under `.github/workflows/`, while Zizmor also reads `.github/actions/**/action.yml`
 definitions. A definition outside a linter's support is `SKIPPED_NA` for that linter and never
 launched; when none remain the branch is `NOT_APPLICABLE` without a gap. A supported definition on
-which a linter fails stays a gap.
+which a linter fails stays a gap. Before image resolution or external execution, source bytes are
+admitted against `max_file_bytes`. Static scanning, hierarchy and indexed source-location reads use
+the same bounded read (at most the limit plus one overflow-detection byte), including when a file
+grows after its size check. Indexed source hashes use those same bytes. An input over the bound is
+not scanned; a later over-bound source-location read fails rather than publishing an invented span.
 
 Gaps are `producer-gap/1` records declared by the unit that found them (`strict_gaps`): a pinned image
 missing from the local daemon is `producer_blocked` (retryable) on the scan unit; a linter exception
@@ -67,12 +83,18 @@ or an exit code outside its accepted set is `producer_failed` scoped to the defi
 over-`max_file_bytes` definition and a cataloged definition with no enabled linter are
 `producer_reported_gap` scoped to the definition; unreadable/invalid UTF-8 static or hierarchy
 input, malformed native linter output and invalid source mappings are `parser_error`; the
-`max_files` and `max_observations_per_tool` bounds are `truncated`. Normalization, indexing, coverage
+`max_files` and `max_observations_per_tool` bounds are `truncated`. Executor stdout/stderr truncation
+flags and report files exceeding the wired tool's `output_bytes` limit also produce `truncated`;
+report files are bounded before parsing, independently of executor capture. Normalization, indexing, coverage
 and publication declare no gaps of their own — they carry the scan records as payload
 (`scan_gap_records`, `gap_records`) so the handoff counts each gap once — and the published handoff
-keeps the human reasons under `gaps` with `gap_count` and `coverage_status`. Empty-result shape is
-adapter-specific: native Zizmor requires an array, so `[]` is empty while `{}` is a parser error;
-generic object adapters do not manufacture an observation from `{}`. Non-retryable failure
+keeps the human reasons under `gaps` with `gap_count` and `coverage_status`. Native reports are parsed
+atomically: invalid UTF-8/JSON, malformed records, Checkov parsing-error reports, and error-shaped
+objects cannot become complete zero-finding scans. actionlint's JSONL must have no malformed lines.
+Empty-result shape is adapter-specific: native Zizmor requires an array, so `[]` is empty while `{}`
+is a parser error; actionlint and Checkov retain silent output, `{}` and `[]` compatibility on exit 0.
+Checkov result envelopes must contain a `failed_checks` array. A missing report or actionlint/Checkov
+exit 1 without findings is a parser gap, not an empty success. Non-retryable failure
 records are not advisory. See the [canonical process and acceptance checks](job_ci_configuration_analysis.md).
 The job's events are `CI_DEFINITIONS_DISCOVERED`,
 one `CI_TOOL_SCANNED` per provider/tool branch, and `CI_ANALYSIS_PUBLISHED`.
