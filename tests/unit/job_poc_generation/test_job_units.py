@@ -277,6 +277,97 @@ def accepted_ptr_for(_candidate: dict[str, Any]) -> SimpleNamespace:
     return SimpleNamespace(path="jobs/rev/latest.json", sha256="a" * 64)
 
 
+@pytest.mark.parametrize(("name", "language"), [
+    ("poc bad", "cxx"), ("PocUpper", "cxx"), ("main", "cxx"), ("poc_valid\n", "cxx"), ("poc bad", "c")],
+    ids=["space", "uppercase", "entry-point", "trailing-newline", "c-space"])
+def test_refused_names_publish_inert_source_under_an_application_filename(
+    tmp_path: Path, name: str, language: str,
+) -> None:
+    workspace, manifest = _fast_workspace(tmp_path / "ws")
+    build = relay_unit(workspace, manifest)
+    build = replace(build, command=replace(build.command, language=language))
+    ctx = _job_context(tmp_path)
+    cd = _candidate_dict(1)
+    pkg = {"neighborhood": {"function": {"name": relay.SINK, "path": "src/packet.cpp",
+                                        "start_line": 8, "end_line": 20}}}
+    verified = _verified_inputs(ctx.run_root, [cd], {1: pkg})
+    accepted_builds = builds(build)
+    fake_exec = FakeExecutor(ast=ast_document("good"))
+    result = dict(relay.answer(test_name=name)["result"], claim=cd["claim_id"])
+    poc_job.SchemaSet(ROOT / poc_job.SCHEMA_ROOT).validate("writer-answer", result)
+    job = poc_job.build_job(
+        infer=lambda *_a, **_kw: None, executor_factory=lambda _u, _p: fake_exec,
+        builds_factory=lambda _r: accepted_builds, core_factory=lambda *_a: SimpleNamespace(),
+        view_factory=lambda *_a, **_kw: _view_with_resolved_labels(), repository_root=ROOT)
+    with (
+        patch("appsec_review.jobs.job_poc_generation.inputs.verify_inputs", return_value=verified),
+        patch("appsec_review.jobs.job_poc_generation.job.accepted_handoff", return_value=accepted_ptr_for(cd)),
+        patch("appsec_review.jobs.job_poc_generation.job.run_writer",
+              return_value=WriterOutcome("answered", result, "ok", ())),
+    ):
+        output = job.handler(ctx)
+    assert output["status"] != "FAILED", output.get("failed_units")
+    published = output["outputs"]["publish.publish_handoff"]
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert published["counts"]["by_status"][POLICY_DENIED] == 1
+    assert fake_exec.calls == []
+    summary = poc_job.read_bound_json(ctx.run_root, published["artifact"])
+    row = summary["candidates"][0]
+    assert row["functions"]["test_function"] == name
+    source_name = "poc_refused.c" if language == "c" else "poc_refused.cpp"
+    assert Path(row["files"]["source"]["path"]).name == source_name
+    validated = poc_job.read_bound_json(
+        ctx.run_root, output["outputs"]["validate.policy"]["artifact"])["entries"][cd["claim_id"]]
+    source = poc_job.read_bound_json(ctx.run_root, validated["source"])
+    assert source["source_name"] == source_name
+    raw_source = (ctx.run_root / row["files"]["source"]["path"]).read_bytes()
+    assert raw_source == source["text"].encode("utf-8")
+    assert hashlib.sha256(raw_source).hexdigest() == validated["source_sha256"]
+    provenance = poc_job.read_bound_json(ctx.run_root, row["files"]["provenance"])
+    assert provenance["files"]["source"] == {"name": source_name, "sha256": validated["source_sha256"]}
+    compile_record = poc_job.read_bound_json(ctx.run_root, row["files"]["compile"])
+    assert compile_record["policy"]["verdict"] == "denied"
+    assert any(v["rule"] in {"name", "entry_point"} for v in compile_record["policy"]["violations"])
+
+
+@pytest.mark.parametrize(("constraint", "verdict"), [
+    ("at least 08", "passed"), ("exactly -1", "denied"), ("exactly 1.5", "passed")],
+    ids=["leading-zero", "signed-trigger-absent", "unsupported-qualified"])
+def test_validation_consumes_numeric_trigger_without_losing_qualifications(
+    tmp_path: Path, constraint: str, verdict: str,
+) -> None:
+    workspace, manifest = _fast_workspace(tmp_path / "ws")
+    build = relay_unit(workspace, manifest)
+    ctx = _job_context(tmp_path)
+    cd = _candidate_dict(1, basis=_basis_dict(trigger=[{**relay.TRIGGER, "constraint": constraint}]))
+    pkg = {"neighborhood": {"function": {"name": relay.SINK, "path": "src/packet.cpp",
+                                        "start_line": 8, "end_line": 20}}}
+    verified = _verified_inputs(ctx.run_root, [cd], {1: pkg})
+    fake_exec = FakeExecutor(ast=ast_document("good"))
+    job = poc_job.build_job(
+        infer=lambda *_a, **_kw: None, executor_factory=lambda _u, _p: fake_exec,
+        builds_factory=lambda _r: builds(build), core_factory=lambda *_a: SimpleNamespace(),
+        view_factory=lambda *_a, **_kw: _view_with_resolved_labels(), repository_root=ROOT)
+    result = dict(relay.answer()["result"], claim=cd["claim_id"])
+    with (
+        patch("appsec_review.jobs.job_poc_generation.inputs.verify_inputs", return_value=verified),
+        patch("appsec_review.jobs.job_poc_generation.job.accepted_handoff", return_value=accepted_ptr_for(cd)),
+        patch("appsec_review.jobs.job_poc_generation.job.run_writer",
+              return_value=WriterOutcome("answered", result, "ok", ())),
+    ):
+        output = job.handler(ctx)
+    assert output["status"] != "FAILED", output.get("failed_units")
+    validated = poc_job.read_bound_json(
+        ctx.run_root, output["outputs"]["validate.policy"]["artifact"])["entries"][cd["claim_id"]]
+    assert validated["policy_verdict"] == verdict
+    if verdict == "denied":
+        assert validated["terminal"]["status"] == POLICY_DENIED
+        assert "trigger_absent" in {v["rule"] for v in validated["violations"]}
+    else:
+        assert validated["unchecked_triggers"] == ([constraint] if constraint == "exactly 1.5" else [])
+    fake_exec.assert_nothing_is_linked_or_run()
+
+
 def test_unit_branches_for_plan_write_validate_compile_and_publish_errors(tmp_path: Path) -> None:
     workspace, manifest = _fast_workspace(tmp_path / "ws")
     unit = relay_unit(workspace, manifest)

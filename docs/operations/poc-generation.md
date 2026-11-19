@@ -167,10 +167,21 @@ All of them are deterministic and fail closed; any violation is `policy_denied`.
   constructed is a builtin, a project type or on `type_allowlist` (this is what refuses `std::ifstream`); array sizes and
   `new[]` sizes are constants within `max_array_elements`; string literals carry no URL, network address, absolute or
   `..` path, or secret-looking text; both functions call the sink (matched on the qualified name from the AST, not by text
-  search); the test function carries every numeric trigger value of the brief (`greater than 16` needs a literal or array
-  size above 16 in that function).
-- A trigger constraint with no number in it is not checked and is recorded; integer constants are otherwise not bounded,
-  because integer-overflow triggers need large values.
+  search). Only a resolved callee of an actual free, member or operator call counts: declarations, comments, name
+  strings, address/reference expressions and unevaluated operands such as `sizeof` do not satisfy the call requirement.
+  The test function carries every supported numeric trigger value of the brief (`greater than 16` needs a literal or
+  array size above 16 in that function); a signed literal contributes its signed value, not also its positive operand.
+- Loop counts use the initial value, signed nonzero step, comparison direction and inclusive/exclusive endpoint.
+  `!=` requires an exactly reachable endpoint; nested counts respect the same configured cap. Counter writes, address
+  escape or reference aliasing in the body, unsupported conversions, missing loop parts and unproven overflow are
+  refused. Since the reduced AST has no target integer-width metadata, the proof uses the portable minimum range of
+  the declared/desugared builtin integer type, including the final step before the failed condition. Unknown types
+  cannot establish a bound. This intentionally rejects some loops that a target-specific analysis could prove safe.
+- Numeric constraints support signed decimal (including leading zeros, e.g. `08`) and explicit hexadecimal integers,
+  simple comparisons and inclusive `between` ranges. Non-numeric, fractional, malformed, compound, negated or reversed
+  constraints remain in the validation record's `unchecked_triggers`, rather than being partially parsed or crashing
+  validation. Literal presence is not a dataflow or runtime proof that a particular argument meets the trigger.
+  Integer constants are otherwise not bounded, because integer-overflow triggers need large values.
 
 The AST is the reduction of `clang -fsyntax-only -Xclang -ast-dump=json`: for a translation unit that includes
 `<string>` the dump is tens of megabytes, so `ast_reduce.py` (stdlib only, copied into the scratch workspace) runs inside
@@ -219,6 +230,11 @@ Under `runs/<run-id>/data/jobs/job_poc_generation/attempts/<a>/steps/package/tas
 | `compile.json` | status, the policy verdict and violations, every command (classified, never raw argv), exit codes, diagnostics, object hashes and the symbol check ([`compile-record.schema.json`](../schemas/poc-generation/compile-record.schema.json)) |
 | `README.md` | what it shows, where to add it, setup, breakpoints, the expected observation, the writer's notes and limitations; model text is in code spans or fenced blocks that cannot be closed from inside |
 | `provenance.json` | hashes of the poc_basis, brief, review package, source, settings, guidance bundle and writer receipt, the model, the upstream handoffs, the build unit, workspace manifest and image ([`provenance.schema.json`](../schemas/poc-generation/provenance.schema.json)) |
+
+If the writer's test-function name fails the complete `poc_<lowercase words>` name policy, its source is stored as
+`poc_refused.cpp` (`poc_refused.c` for C). The original answer/name stays in the protected records and developer
+description; the source bytes and their hash are unchanged. A rejected name therefore remains a `policy_denied`
+candidate, not an invalid artifact path that prevents publishing the other candidates.
 
 The handoff (`appsec-review/poc-generation-handoff/2`, summary [`poc-generation.schema.json`](../schemas/poc-generation/poc-generation.schema.json))
 lists **every** attempted candidate with its status, reason, a description of at most 300 characters, the function names,

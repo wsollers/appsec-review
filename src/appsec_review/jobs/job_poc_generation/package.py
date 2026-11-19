@@ -22,7 +22,7 @@ from appsec_review.jobs.job_final_report_publication.render import code, plain
 from appsec_review.storage import atomic_bytes, atomic_json
 
 from .candidates import PocCandidate
-from .source import WriterAnswer
+from .source import NAME, WriterAnswer
 from .statuses import COMPILE_VERIFIED
 
 PROVENANCE_SCHEMA = "appsec-review/poc-provenance/2"
@@ -38,7 +38,8 @@ STATUS_TEXT = {
 
 
 def source_file_name(answer: WriterAnswer, language: str) -> str:
-    return f"{answer.test_name}{'.c' if language == 'c' else '.cpp'}"
+    name = answer.test_name if NAME.fullmatch(answer.test_name) else "poc_refused"
+    return f"{name}{'.c' if language == 'c' else '.cpp'}"
 
 
 def describe(status: str, answer: WriterAnswer | None, reason: str) -> str:

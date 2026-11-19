@@ -82,7 +82,11 @@ _PATH = re.compile(r"^\"?(?:/[A-Za-z0-9_.~$-]|[A-Za-z]:[\\/]|~[/\\]|\.\.[/\\])|[
 _SECRET = re.compile(r"(?i)(password|passwd|secret|api[_-]?key|private[_-]?key|credential|authorization:|bearer\s|"
                      r"BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})")
 _TOKEN_RUN = re.compile(r"[A-Za-z0-9+/=_-]{32,}")
-_NUMBER = r"(0[xX][0-9a-fA-F]+|\d+)"
+_INTEGER = r"[+-]?(?:0[xX][0-9a-fA-F]+|[0-9]+)"
+_NUMBER = r"(?<![\w.+-])(" + _INTEGER + r")(?![\w.+-])"
+_NUMERIC_TOKEN = re.compile(r"[+-]?[0-9][A-Za-z0-9_.]*")
+_UNSUPPORTED_CONSTRAINT = re.compile(
+    r"[=<>!≤≥+\-*/%&|^~−±]|\b(?:not|no|except|unless|and|or|but|between|equal|exactly|than)\b")
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,7 +127,7 @@ class Expectation:
 
 
 def numeric_requirement(constraint: str) -> Requirement | None:
-    """The numeric condition a trigger constraint states, or ``None`` when it states none."""
+    """One signed integer condition, or ``None`` to retain an unchecked qualification."""
     text = " ".join(str(constraint).split())
     lowered = text.lower()
     patterns = (
@@ -133,15 +137,23 @@ def numeric_requirement(constraint: str) -> Requirement | None:
         (r"(?:greater than|more than|larger than|bigger than|longer than|exceed(?:s|ing)?|over|above|>)\s*" + _NUMBER, ">"),
         (r"(?:less than|fewer than|smaller than|shorter than|below|under|<)\s*" + _NUMBER, "<"),
         (r"(?:equal(?:s| to)?|exactly|==|=)\s*" + _NUMBER, "=="),
+        (_NUMBER, "=="),
     )
+    tokens = list(_NUMERIC_TOKEN.finditer(lowered))
     for pattern, operator in patterns:
         found = re.search(pattern, lowered)
-        if found:
-            low = int(found.group(1), 0)
-            high = int(found.group(2), 0) if operator == "between" else None
-            return Requirement(operator, low, high, text[:120])
-    bare = re.search(r"(?<![\w.])" + _NUMBER + r"(?![\w.])", lowered)
-    return Requirement("==", int(bare.group(1), 0), None, text[:120]) if bare else None
+        if not found:
+            continue
+        groups = (1, 2) if operator == "between" else (1,)
+        if ([token.span() for token in tokens] != [found.span(group) for group in groups]
+                or _UNSUPPORTED_CONSTRAINT.search(lowered[:found.start()] + " " + lowered[found.end():])):
+            return None
+        low = _integer_value(found.group(1))
+        high = _integer_value(found.group(2)) if operator == "between" else None
+        if low is None or (operator == "between" and (high is None or high < low)):
+            return None
+        return Requirement(operator, low, high, text[:120])
+    return None
 
 
 # --------------------------------------------------------------------------------------------------
@@ -161,6 +173,7 @@ class _Checker:
                              if item.get("kind") in TYPE_DECLARATION_KINDS}
         self.sink_hits: dict[str, int] = {}
         self.values: dict[str, set[int]] = {}
+        self.unevaluated = False
         self.denylist = {category: tuple(items) for category, items in settings.policy.call_denylist.items()}
 
     # -- reporting ---------------------------------------------------------------------------------
@@ -275,10 +288,16 @@ class _Checker:
         if handler is not None:
             if handler(node, multiplier) is False:
                 return
-        for key in CHILD_LISTS:                      # inner, and the implicit filler elements of an array initializer
-            for child in node.get(key, ()) if isinstance(node.get(key), list) else ():
-                if isinstance(child, Mapping):
-                    self.walk(child, multiplier)
+        previous = self.unevaluated
+        self.unevaluated |= text in {
+            "UnaryExprOrTypeTraitExpr", "TypeAliasDecl", "TypedefDecl", "StaticAssertDecl", "FunctionDecl"}
+        try:
+            for key in CHILD_LISTS:                  # includes implicit filler elements of an array initializer
+                for child in node.get(key, ()) if isinstance(node.get(key), list) else ():
+                    if isinstance(child, Mapping):
+                        self.walk(child, multiplier)
+        finally:
+            self.unevaluated = previous
 
     # -- per-kind rules ----------------------------------------------------------------------------
     def on_DeclRefExpr(self, node: Mapping[str, Any], _multiplier: int) -> None:
@@ -315,8 +334,6 @@ class _Checker:
         if resolved and path == self.source:
             self.add("recursion", f"{qualified} is a PoC function; a PoC function calls nothing it defines", node)
             return
-        if self.is_sink(qualified):
-            self.sink_hits[self.function] = self.sink_hits.get(self.function, 0) + 1
         if matches(qualified, self.settings.policy.call_allowlist):
             return
         if not resolved:
@@ -339,19 +356,24 @@ class _Checker:
                    for sink in self.expectation.sink_names)
 
     def on_CallExpr(self, node: Mapping[str, Any], _multiplier: int) -> None:
-        children = [child for child in node.get("inner", ()) if isinstance(child, Mapping)]
-        callee = children[0] if children else {}
-        while callee.get("kind") in {"ImplicitCastExpr", "ParenExpr"} and callee.get("inner"):
-            callee = callee["inner"][0]
+        children = _children(node)
+        callee = _unwrapped(children[0]) if children else {}
         reference = callee.get("referencedDecl") if callee.get("kind") == "DeclRefExpr" else None
-        if not (isinstance(reference, Mapping) and reference.get("kind") in FUNCTION_KINDS):
+        identity = reference.get("id") if isinstance(reference, Mapping) else None
+        if node.get("kind") == "CXXMemberCallExpr" and callee.get("kind") == "MemberExpr":
+            identity = callee.get("referencedMemberDecl")
+        elif not (isinstance(reference, Mapping) and reference.get("kind") in FUNCTION_KINDS):
             self.add("indirect_call", "a call must name its function directly", node)
+            return
+        info = self.declarations.get(str(identity))
+        if not isinstance(info, Mapping) or info.get("kind") not in FUNCTION_KINDS:
+            self.add("unresolved_reference", "the callee cannot be resolved to a function declaration", node)
+            return
+        if not self.unevaluated and self.is_sink(str(info.get("qualified", ""))):
+            self.sink_hits[self.function] = self.sink_hits.get(self.function, 0) + 1
 
-    def on_CXXOperatorCallExpr(self, node: Mapping[str, Any], _multiplier: int) -> None:
-        return None
-
-    def on_CXXMemberCallExpr(self, node: Mapping[str, Any], _multiplier: int) -> None:
-        return None
+    on_CXXOperatorCallExpr = on_CallExpr
+    on_CXXMemberCallExpr = on_CallExpr
 
     def on_StringLiteral(self, node: Mapping[str, Any], _multiplier: int) -> None:
         value = str(node.get("value", ""))
@@ -367,21 +389,23 @@ class _Checker:
         self.note(len(body.encode("utf-8", "replace")))
 
     def on_IntegerLiteral(self, node: Mapping[str, Any], _multiplier: int) -> None:
-        try:
-            self.note(int(str(node.get("value", "")), 0))
-        except ValueError:
-            return
+        value = _literal(node)
+        if value is None:
+            self.add("unsupported_construct", "an integer literal has no supported integer value", node)
+        else:
+            self.note(value)
 
-    def on_UnaryOperator(self, node: Mapping[str, Any], _multiplier: int) -> None:
-        children = [child for child in node.get("inner", ()) if isinstance(child, Mapping)]
-        if node.get("opcode") == "-" and children and children[0].get("kind") == "IntegerLiteral":
-            try:
-                self.note(-int(str(children[0].get("value", "")), 0))
-            except ValueError:
-                return
+    def on_UnaryOperator(self, node: Mapping[str, Any], _multiplier: int) -> bool:
+        if node.get("opcode") in {"+", "-"}:
+            value = _literal(node)
+            if value is not None:
+                self.note(value)
+                return False                         # -1 is not also evidence of the value +1
+        return True
 
     def note(self, value: int) -> None:
-        self.values.setdefault(self.function, set()).add(value)
+        if not self.unevaluated:
+            self.values.setdefault(self.function, set()).add(value)
 
     def on_VarDecl(self, node: Mapping[str, Any], _multiplier: int) -> None:
         if node.get("storageClass") in {"extern", "static"}:
@@ -432,14 +456,16 @@ class _Checker:
         return True
 
     def on_ForStmt(self, node: Mapping[str, Any], multiplier: int) -> bool:
-        parts = [child if isinstance(child, Mapping) else {} for child in node.get("inner", ())]
+        parts = _children(node)
         if len(parts) != 5:
             self.add("unbounded_loop", "a for loop must have an initializer, a bound and a step", node)
             return True
-        init, _variable, condition, step, body = parts
-        bound = self.loop_bound(init, condition, step)
+        init, condition_variable, condition, step, body = parts
+        bound = None if condition_variable else self.loop_bound(init, condition, step, body)
         if bound is None:
-            self.add("unbounded_loop", "a for loop must count a local integer to a constant bound", node)
+            self.add("unbounded_loop",
+                     "a for loop needs a finite, non-overflowing local integer progression with no body mutation",
+                     node)
         else:
             multiplier *= max(1, bound)
             if bound > self.settings.bounds.max_loop_iterations or multiplier > self.settings.bounds.max_loop_iterations:
@@ -451,27 +477,55 @@ class _Checker:
                 self.walk(child, multiplier)
         return False
 
-    def loop_bound(self, init: Mapping[str, Any], condition: Mapping[str, Any], step: Mapping[str, Any]
+    def loop_bound(self, init: Mapping[str, Any], condition: Mapping[str, Any], step: Mapping[str, Any],
+                   body: Mapping[str, Any]
                    ) -> int | None:
-        decls = [child for child in (init.get("inner") or ()) if isinstance(child, Mapping)]
+        decls = _children(init)
         if init.get("kind") != "DeclStmt" or len(decls) != 1 or decls[0].get("kind") != "VarDecl":
             return None
         variable = decls[0]
-        initial = _literal(next(iter(variable.get("inner") or ()), {}))
-        if initial is None or condition.get("kind") != "BinaryOperator" or condition.get("opcode") not in {
-                "<", "<=", ">", ">=", "!="}:
+        limits = _integer_range(variable)
+        initial = _literal(_only_child(variable))
+        if (not variable.get("id") or limits is None or initial is None or not body.get("kind")
+                or not _counter_read_only(body, variable)
+                or condition.get("kind") != "BinaryOperator" or condition.get("opcode") not in {
+                "<", "<=", ">", ">=", "!="}):
             return None
-        sides = [child for child in condition.get("inner", ()) if isinstance(child, Mapping)]
-        if len(sides) != 2 or not _refers_to(sides[0], variable) or (limit := _literal(sides[1])) is None:
+        sides = _children(condition)
+        if (len(sides) != 2 or not _loop_reference(sides[0], variable)
+                or (limit := _literal(sides[1])) is None):
             return None
+        parts = _children(step)
         if step.get("kind") == "UnaryOperator" and step.get("opcode") in {"++", "--"}:
-            ok = any(_refers_to(child, variable) for child in step.get("inner", ()) if isinstance(child, Mapping))
+            if len(parts) != 1 or not _loop_reference(parts[0], variable):
+                return None
+            stride = 1 if step["opcode"] == "++" else -1
         elif step.get("kind") == "CompoundAssignOperator" and step.get("opcode") in {"+=", "-="}:
-            parts = [child for child in step.get("inner", ()) if isinstance(child, Mapping)]
-            ok = len(parts) == 2 and _refers_to(parts[0], variable) and (_literal(parts[1]) or 0) > 0
+            if (len(parts) != 2 or not _loop_reference(parts[0], variable)
+                    or (stride := _literal(parts[1])) is None):
+                return None
+            stride *= 1 if step["opcode"] == "+=" else -1
         else:
-            ok = False
-        return abs(limit - initial) if ok else None
+            return None
+        low, high = limits
+        if stride == 0 or not all(low <= value <= high for value in (initial, limit)):
+            return None
+        operator = str(condition["opcode"])
+        active = (initial != limit if operator == "!=" else
+                  Requirement(operator, limit, None, "").satisfied_by(initial))
+        if not active:
+            return 0
+        direction = 1 if operator in {"<", "<="} else -1 if operator in {">", ">="} else (
+            1 if limit > initial else -1)
+        if stride * direction <= 0:
+            return None
+        distance, magnitude = abs(limit - initial), abs(stride)
+        if operator == "!=" and distance % magnitude:
+            return None
+        count = (distance // magnitude + 1 if operator in {"<=", ">="}
+                 else (distance + magnitude - 1) // magnitude)
+        # The final step happens before the failed condition, even at an inclusive endpoint.
+        return count if low <= initial + count * stride <= high else None
 
     # -- types -------------------------------------------------------------------------------------
     def types(self, node: Mapping[str, Any]) -> None:
@@ -513,25 +567,88 @@ class _Checker:
         self.function = ""
 
 
+def _integer_value(value: str) -> int | None:
+    if not re.fullmatch(_INTEGER, value):
+        return None
+    try:
+        return int(value, 16 if value.lstrip("+-").lower().startswith("0x") else 10)
+    except ValueError:
+        return None
+
+
+def _children(node: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    children = node.get("inner", [])
+    return children if isinstance(children, list) and all(isinstance(item, Mapping) for item in children) else []
+
+
+def _only_child(node: Mapping[str, Any]) -> Mapping[str, Any]:
+    children = _children(node)
+    return children[0] if len(children) == 1 else {}
+
+
+def _unwrapped(node: Mapping[str, Any]) -> Mapping[str, Any]:
+    while node.get("kind") in {"ImplicitCastExpr", "ParenExpr"}:
+        node = _only_child(node)
+    return node
+
+
 def _literal(node: Mapping[str, Any]) -> int | None:
-    while node.get("kind") in {"ImplicitCastExpr", "ParenExpr"} and node.get("inner"):
-        node = node["inner"][0]
+    if node.get("kind") in {"ImplicitCastExpr", "ParenExpr"}:
+        value = _literal(_only_child(node))
+        if value is not None and node.get("castKind") == "IntegralCast":
+            limits = _integer_range(node)
+            if limits is None or not limits[0] <= value <= limits[1]:
+                return None
+        return value
     if node.get("kind") == "IntegerLiteral":
-        try:
-            return int(str(node.get("value", "")), 0)
-        except ValueError:
-            return None
-    if node.get("kind") == "UnaryOperator" and node.get("opcode") == "-" and node.get("inner"):
-        inner = _literal(node["inner"][0])
-        return -inner if inner is not None else None
+        return _integer_value(str(node.get("value", "")))
+    if node.get("kind") == "UnaryOperator" and node.get("opcode") in {"+", "-"}:
+        inner = _literal(_only_child(node))
+        return inner * (-1 if node["opcode"] == "-" else 1) if inner is not None else None
     return None
 
 
 def _refers_to(node: Mapping[str, Any], variable: Mapping[str, Any]) -> bool:
-    while node.get("kind") in {"ImplicitCastExpr", "ParenExpr"} and node.get("inner"):
-        node = node["inner"][0]
+    node = _unwrapped(node)
     reference = node.get("referencedDecl") if node.get("kind") == "DeclRefExpr" else None
-    return isinstance(reference, Mapping) and reference.get("id") == variable.get("id")
+    return bool(variable.get("id")) and isinstance(reference, Mapping) and reference.get("id") == variable["id"]
+
+
+def _loop_reference(node: Mapping[str, Any], variable: Mapping[str, Any]) -> bool:
+    while node.get("kind") in {"ImplicitCastExpr", "ParenExpr"}:
+        if node.get("castKind") not in (None, "LValueToRValue", "NoOp"):
+            return False
+        node = _only_child(node)
+    return _refers_to(node, variable)
+
+
+def _counter_read_only(node: Mapping[str, Any], variable: Mapping[str, Any], *, read: bool = False) -> bool:
+    if node.get("kind") == "DeclRefExpr" and _refers_to(node, variable):
+        return read
+    if node.get("kind") != "ParenExpr":
+        read = node.get("kind") == "ImplicitCastExpr" and node.get("castKind") == "LValueToRValue"
+    for key in CHILD_LISTS:
+        children = node.get(key, [])
+        if not isinstance(children, list) or not all(isinstance(child, Mapping) for child in children):
+            return False
+        if not all(_counter_read_only(child, variable, read=read) for child in children):
+            return False
+    return True
+
+
+def _integer_range(node: Mapping[str, Any]) -> tuple[int, int] | None:
+    """Portable minimum ranges: the reduced AST has no target integer-width metadata."""
+    type_info = node.get("type") or {}
+    words = str(type_info.get("desugaredQualType") or type_info.get("qualType", "")).split()
+    if not words or any(word not in {"signed", "unsigned", "short", "long", "int", "char"} for word in words):
+        return None
+    base = " ".join(word for word in words if word not in {"signed", "unsigned", "int"})
+    bits = {"": 16, "char": 8, "short": 16, "long": 32, "long long": 64}.get(base)
+    if bits is None:
+        return None
+    unsigned = "unsigned" in words
+    high = 2 ** (bits if unsigned else bits - 1) - 1
+    return (0 if unsigned or words == ["char"] else -high, high)
 
 
 def check_ast(reduced: Mapping[str, Any], settings: PocGenerationSettings, expectation: Expectation

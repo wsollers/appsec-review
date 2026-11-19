@@ -100,7 +100,7 @@ def check_answer(answer: WriterAnswer, settings: PocGenerationSettings, resolver
     for name in names:
         if name in ENTRY_NAMES:
             add("entry_point", f"{name} is a program entry point", name)
-        elif not NAME.match(name):
+        elif not NAME.fullmatch(name):
             add("name", f"a PoC function is named poc_<words> in lowercase; got {name[:80]!r}", name)
     if answer.test_name == answer.control_name:
         add("name", "the test function and the negative control need different names")
