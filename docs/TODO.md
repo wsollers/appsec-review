@@ -323,7 +323,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5089 | [Preserve certified chain severity and dossier availability in executive output](#t-5089-preserve-certified-chain-severity-and-dossier-availability-in-executive-output) | review | open |
 | T-5090 | [Require real header release evidence for dependency versions](#t-5090-require-real-header-release-evidence-for-dependency-versions) | evidence | done (2026-11-19, b577faf8fe20300ec0572a1e6780dbdf26b6b350) |
 | T-5091 | [Bind advisory reachability to exact package symbols and bounded call sites](#t-5091-bind-advisory-reachability-to-exact-package-symbols-and-bounded-call-sites) | evidence | done (2026-11-19, 874b13235ffcc340072489cda97da1840d372e2a) |
-| T-5092 | [Preserve clangd call occurrences locations and coverage](#t-5092-preserve-clangd-call-occurrences-locations-and-coverage) | graph | in-progress |
+| T-5092 | [Preserve clangd call occurrences locations and coverage](#t-5092-preserve-clangd-call-occurrences-locations-and-coverage) | graph | done (2026-11-19, 0c37a8bb505c4f9b6049350002368f86f8d18261) |
 | T-5093 | [Preserve overload linkage and exact AST source identities](#t-5093-preserve-overload-linkage-and-exact-ast-source-identities) | graph | done (2026-11-19, 081722277a076f38db3b95082611c343ee430bc9) |
 | T-5094 | [Preserve failed and partial compiled-analysis outcomes through reuse](#t-5094-preserve-failed-and-partial-compiled-analysis-outcomes-through-reuse) | graph | open |
 | T-5095 | [Preserve full-mode control flow under presentation and AST filtering bounds](#t-5095-preserve-full-mode-control-flow-under-presentation-and-ast-filtering-bounds) | graph | open |
@@ -375,7 +375,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5141 | [Update only active required image pins by default](#t-5141-update-only-active-required-image-pins-by-default) | images | open |
 | T-5142 | [Verify declared preinstalled CodeQL runtime identities at readiness](#t-5142-verify-declared-preinstalled-codeql-runtime-identities-at-readiness) | images | open |
 | T-5143 | [Honor evidence request wire shapes and zero retrieval budgets](#t-5143-honor-evidence-request-wire-shapes-and-zero-retrieval-budgets) | review | open |
-| T-5144 | [Require verifier blindness evidence for independent confirmation](#t-5144-require-verifier-blindness-evidence-for-independent-confirmation) | review | open |
+| T-5144 | [Require verifier blindness evidence for independent confirmation](#t-5144-require-verifier-blindness-evidence-for-independent-confirmation) | review | in-progress |
 | T-5145 | [Keep failed judges distinct from intentionally not-convened judges](#t-5145-keep-failed-judges-distinct-from-intentionally-not-convened-judges) | review | open |
 | T-5146 | [Honor disabled model profiles throughout inference dispatch](#t-5146-honor-disabled-model-profiles-throughout-inference-dispatch) | review | open |
 | T-5147 | [Publish JVM provenance and invalidate changed command indexes](#t-5147-publish-jvm-provenance-and-invalidate-changed-command-indexes) | build | open |
@@ -483,6 +483,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5249 | [Reproduce and repair recurrent Grype database listing selection](#t-5249-reproduce-and-repair-recurrent-grype-database-listing-selection) | data | open |
 | T-5250 | [Repair the three stateful guidance prompt-size test failures](#t-5250-repair-the-three-stateful-guidance-prompt-size-test-failures) | testing | done (2026-11-19, 86d81cae0680fd8fa97ffe6c7fd773fdc55e3a8e) |
 | T-5251 | [Bound shared subprocess stream capture before materialization](#t-5251-bound-shared-subprocess-stream-capture-before-materialization) | pipeline | open |
+| T-5252 | [Reconcile inherited documentation contract failures](#t-5252-reconcile-inherited-documentation-contract-failures) | testing | in-progress |
 
 ## Active entries
 
@@ -3973,12 +3974,16 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5092 — Preserve clangd call occurrences locations and coverage
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 0c37a8bb505c4f9b6049350002368f86f8d18261)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CSI-F02, CSI-F03, CSI-F04, CSI-F05, CSI-F06, CSI-F07. Resolved recursive calls are discarded as unresolved references; Exact symbol locations carry whole-file byte spans and unchecked coordinates.
 - **Scope:** `src/appsec_review/jobs/job_cpp_symbol_index/job.py`
 - **Done when:** Recursive calls, bounded repeated occurrences, spaces and valid positions retain their meaning; omitted/truncated inputs are not complete coverage. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_cpp_symbol_index.md`.
+  Integrated primary repair `0a6b511ee346c893dfbb5d1a15c8742e73d2985e`, typed configuration
+  hook `b3207177ea5fa699c70cb4aa67a8b7fa68c9e5c5` and the State commit's decimal/CRLF boundary
+  follow-up. Main symbol/configuration selection: 148 passed/8.72 s, two workers, seed 5092,
+  no skips or slow cases. CSI-F01's alternate graph consumer remains under T-5098.
 
 ### T-5093 — Preserve overload linkage and exact AST source identities
 
@@ -4455,7 +4460,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5144 — Require verifier blindness evidence for independent confirmation
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** Archived audit/feedback cases: ISR-F02. Missing verifier blindness receipt can still yield independent confirmation.
 - **Scope:** `src/appsec_review/jobs/job_inference_security_review/teams.py`, `src/appsec_review/review/adjudication.py`; paired callers/tests identified by those cases.
@@ -5461,6 +5466,24 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Refs:** `src/appsec_review/container_runtime/executor.py`,
   `src/appsec_review/runtime/execution_safety.py`; coordinator source review, 2026-11-19;
   T-5102.
+
+### T-5252 — Reconcile inherited documentation contract failures
+
+- **State:** in-progress
+- **Area:** testing
+- **Why:** the bounded repair documentation selection has 154 passes and two inherited failures:
+  frontmatter reconciliation metadata and unresolved prose identifiers across seven unchanged
+  pages. Attribution against `bc4ae5fc78b3e10192ac12759d94d93d1538cfe0` found the same errors;
+  they are not passing checks or evidence that the full documentation corpus was reconciled.
+- **Scope:** the exact failures in `tests/docs/test_docs_frontmatter.py` and
+  `tests/docs/test_docs_identifiers.py`, affecting the CVE-bin-tool README, inference architecture,
+  review inference/guidance, review protocol v3, lead severity triage, smoke scorecard and the
+  2026-11-14 OWASP process review. Resolve claims against actual declarations and documentation
+  policy; keep proposals distinct from implementation, without invented identifiers or weaker checks.
+- **Done when:** the affected documentation checks pass with source-backed identifiers and honest
+  metadata. Do not advance `docs/docs-sync.json` without its full cumulative reconciliation.
+- **Refs:** `tests/docs/test_docs_frontmatter.py`, `tests/docs/test_docs_identifiers.py`;
+  repair documentation handoff at `7a0a51efbd0ff43becc51fd5fc9d1d805a673b9c`, 2026-11-19.
 
 ## Legacy backlog
 
