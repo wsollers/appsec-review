@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+from copy import deepcopy
 from pathlib import Path
 import sqlite3
 
@@ -21,11 +23,11 @@ def _unit(staged, *, seeded_settings=sc.SEEDED):
     return unit
 
 
-def _hood(staged, executor_root=None):
+def _hood(staged, executor=None):
     """The neighborhood the seeded IR job publishes for the same project (the real handler, recorded IR)."""
     from appsec_review.jobs.job_cpp_compiled_analysis import build_job
 
-    ir_executor = sc.FixtureExecutor(staged.run_root)
+    ir_executor = executor or sc.FixtureExecutor(staged.run_root)
     unit = staged.unit("ir.projects", {"catalog.projects": {"projects": {sc.CASE: staged.cataloged}}})
     ir = next(item for item in build_job(executor_factory=lambda _u: ir_executor).units
               if item.unit_id == "ir.projects").handler(unit)
@@ -45,6 +47,158 @@ def _observations(staged, result) -> list[dict]:
     path = staged.run_root / result["index_identity"]["relative_path"]
     return [json.loads(row[5]) | {"_path": json.loads(row[5]).get("path")} for row in
             sqlite3.connect(path).execute("select * from entities where kind = 'tool_observation'")]
+
+
+HEADER_SEED = ("include/util.h", 3, 3)
+HEADER_SOURCE = b"#pragma once\ninline int shared(int value) {\n  return value;\n}\n"
+HEADER_IR = """define linkonce_odr i32 @_Z6sharedi(i32 %value) !dbg !1 {
+entry:
+  ret i32 %value, !dbg !3
+}
+!1 = distinct !DISubprogram(name: "shared", linkageName: "_Z6sharedi", file: !2, line: 2)
+!2 = !DIFile(filename: "include/util.h", directory: "/scratch/source")
+!3 = !DILocation(line: 3, column: 3, scope: !1)
+"""
+
+
+def _header_hood(tmp_path, *, varying_ranges=False):
+    """Two compiler modules defining the same physical header function, through the real producer."""
+    staged = sc.stage(tmp_path, observations=[sc.observation("proj/include/util.h", 3)])
+    for path in (staged.target / "proj/include/util.h", staged.case_root / "source/include/util.h"):
+        path.write_bytes(HEADER_SOURCE)
+    record = next(row for row in staged.mapping["files"] if row["target_path"] == "proj/include/util.h")
+    record["sha256"] = hashlib.sha256(HEADER_SOURCE).hexdigest()
+    staged.rows[:] = [row for row in staged.rows if Path(row["file"]).stem in {"net", "util"}]
+    database = staged.case_root / "normalized-compile-commands.json"
+    database.write_text(json.dumps(staged.rows), encoding="utf-8")
+    staged.cataloged["compile_database"].update(
+        sha256=hashlib.sha256(database.read_bytes()).hexdigest(), size_bytes=database.stat().st_size)
+
+    class HeaderExecutor(sc.FixtureExecutor):
+        def execute(self, request):
+            result = super().execute(request)
+            if request.argv[1] == "ir":
+                for index, path in enumerate(sorted((request.scratch_root / "analysis/ir").glob("tu-*.ll"))):
+                    text = HEADER_IR.replace("line: 3, column", "line: 4, column") if varying_ranges and index else HEADER_IR
+                    path.write_text(text, encoding="utf-8")
+            return result
+
+    accepted = _hood(staged, HeaderExecutor(staged.run_root))
+    handoff = _ir_handoff(accepted)
+    assert len(handoff["seed_functions"]) == len(handoff["ranges"]) == 2
+    assert {row[:3] for row in map(tuple, handoff["seed_functions"])} == {HEADER_SEED}
+    seeds = seeding.ScopeSeeds(sc.CASE, (seeding.Seed(*HEADER_SEED),), total=1)
+    return staged, accepted, seeds
+
+
+def _ir_handoff(accepted):
+    return accepted["result"]["outputs"]["ir.projects"]["projects"][sc.CASE]["handoff"]
+
+
+def test_header_seed_keeps_every_producer_identity_and_its_association(tmp_path):
+    _, accepted, seeds = _header_hood(tmp_path)
+    hood = seeded.neighborhood_of(accepted, sc.CASE)
+    placement = seeded.classify("include/util.h", 2, seeds, hood)
+    assert placement["label"] == seeded.IN_SEED_FUNCTION
+    assert placement["seeds"] == [list(HEADER_SEED)]
+    assert hood.seed_functions[HEADER_SEED] == tuple(sorted(_ir_handoff(accepted)["ranges"]))
+    assert placement["function"] is None
+    assert placement["function_candidates"] == sorted(_ir_handoff(accepted)["ranges"])
+    assert placement["function_ambiguity"] == "multiple_innermost_functions_without_translation_unit"
+
+
+def test_partial_seed_association_is_qualified_without_an_arbitrary_function(tmp_path):
+    _, accepted, seeds = _header_hood(tmp_path)
+    handoff = _ir_handoff(accepted)
+    handoff["seed_functions"] = handoff["seed_functions"][:1]
+    hood = seeded.neighborhood_of(accepted, sc.CASE)
+    placement = seeded.classify("include/util.h", 2, seeds, hood)
+    assert placement["label"] == seeded.IN_NEIGHBORHOOD
+    assert placement["function"] is None and placement["seeds"] == []
+    assert placement["candidate_seeds"] == [list(HEADER_SEED)]
+    assert placement["function_candidates"] == sorted(handoff["ranges"])
+    at_seed = seeded.classify("include/util.h", 3, seeds, hood)
+    assert at_seed["label"] == seeded.AT_SEED and at_seed["seeds"] == [list(HEADER_SEED)]
+    assert at_seed["function"] is None
+
+
+def test_different_tu_range_widths_do_not_select_a_translation_unit(tmp_path):
+    _, accepted, seeds = _header_hood(tmp_path, varying_ranges=True)
+    hood = seeded.neighborhood_of(accepted, sc.CASE)
+    placement = seeded.classify("include/util.h", 2, seeds, hood)
+    assert placement["function"] is None
+    assert placement["function_candidates"] == sorted(_ir_handoff(accepted)["ranges"])
+    assert placement["label"] == seeded.IN_SEED_FUNCTION and placement["seeds"] == [list(HEADER_SEED)]
+
+
+def test_header_membership_hash_keeps_all_identities_but_not_row_order(tmp_path):
+    _, accepted, _ = _header_hood(tmp_path)
+    original = seeded.neighborhood_of(accepted, sc.CASE).sha256()
+    reordered = deepcopy(accepted)
+    rows = _ir_handoff(reordered)["seed_functions"]
+    rows[:] = list(reversed(rows)) + rows[:1]
+    assert seeded.neighborhood_of(reordered, sc.CASE).sha256() == original
+    for position in range(2):
+        partial = deepcopy(accepted)
+        _ir_handoff(partial)["seed_functions"].pop(position)
+        assert seeded.neighborhood_of(partial, sc.CASE).sha256() != original
+    changed_depth = deepcopy(accepted)
+    neighborhood = _ir_handoff(changed_depth)["neighborhood"]
+    first = sorted(neighborhood)[0]
+    neighborhood[first] += 1
+    assert seeded.neighborhood_of(changed_depth, sc.CASE).sha256() != original
+
+
+def test_legacy_single_function_handoff_keeps_unambiguous_placement():
+    handoff = {"ranges": {"shared": ["include/util.h", 2, 4]}, "neighborhood": {"shared": 0},
+               "seed_functions": [[*HEADER_SEED, "shared"]]}
+    accepted = {"result": {"outputs": {"ir.projects": {"projects": {sc.CASE: {"handoff": handoff}}}}}}
+    hood = seeded.neighborhood_of(accepted, sc.CASE)
+    seeds = seeding.ScopeSeeds(sc.CASE, (seeding.Seed(*HEADER_SEED),), total=1)
+    assert seeded.classify("include/util.h", 2, seeds, hood) == {
+        "label": seeded.IN_SEED_FUNCTION, "seeds": [list(HEADER_SEED)],
+        "function": "shared", "outside_neighborhood": False}
+
+
+def test_header_ambiguity_survives_real_diagnostic_publication_and_cache_changes(tmp_path):
+    staged, accepted, _ = _header_hood(tmp_path)
+
+    class HeaderDiagnostics(sc.StaticExecutor):
+        def __init__(self):
+            super().__init__(staged.run_root, diagnostics={("tidy", "util"): [(2, "header-rule", 0, False)]})
+
+        def execute(self, request):
+            result = super().execute(request)
+            if request.argv[1] == "tidy":
+                path = request.scratch_root / "tidy.json"
+                document = json.loads(path.read_text())
+                for diagnostic in document["diagnostics"]:
+                    diagnostic["path"] = "/target/source/include/util.h"
+                path.write_text(json.dumps(document), encoding="utf-8")
+            return result
+
+    full, _ = _run(staged, HeaderDiagnostics(), accepted=accepted)
+    observations = _observations(staged, full)
+    assert len(observations) == 1
+    placement = observations[0]["seeded"]
+    assert placement["label"] == seeded.IN_SEED_FUNCTION
+    assert placement["seeds"] == [list(HEADER_SEED)] and placement["function"] is None
+    assert placement["function_candidates"] == sorted(_ir_handoff(accepted)["ranges"])
+    assert "function_ambiguity" in placement
+    reordered = deepcopy(accepted)
+    _ir_handoff(reordered)["seed_functions"].reverse()
+    executor = HeaderDiagnostics()
+    reused, _ = _run(staged, executor, accepted=reordered)
+    assert executor.calls == [] and reused["index_identity"]["sha256"] == full["index_identity"]["sha256"]
+    partial = deepcopy(accepted)
+    _ir_handoff(partial)["seed_functions"].pop(0)
+    executor = HeaderDiagnostics()
+    changed, _ = _run(staged, executor, accepted=partial)
+    assert len(executor.calls) == 2
+    assert changed["index_identity"]["sha256"] != full["index_identity"]["sha256"]
+    placement = _observations(staged, changed)[0]["seeded"]
+    assert placement["label"] == seeded.IN_NEIGHBORHOOD and placement["seeds"] == []
+    assert placement["candidate_seeds"] == [list(HEADER_SEED)]
 
 
 def test_only_the_seeded_units_are_analyzed_never_the_whole_program(tmp_path: Path) -> None:
@@ -78,7 +232,11 @@ def test_diagnostics_carry_seed_label_trace_length_and_fix_it(tmp_path: Path) ->
     by_rule = {item["native_rule_id"]: item for item in _observations(staged, result)}
     at_seed = by_rule["bugprone-not-null-terminated-result"]
     assert at_seed["seeded"]["label"] == seeded.AT_SEED and at_seed["fix_it"] is True
-    assert at_seed["seeded"]["seeds"] == [["src/util.cpp", 14, 14]] and at_seed["seeded"]["function"] == "copy_field"
+    identities = [key for key, function in _ir_handoff(accepted)["functions"].items()
+                  if function["name"] == "copy_field"]
+    assert len(identities) == 1
+    assert at_seed["seeded"]["seeds"] == [["src/util.cpp", 14, 14]]
+    assert at_seed["seeded"]["function"] == identities[0]
     assert by_rule["unix.cstring.NullArg"]["trace_length"] == 3
     assert by_rule["cppcoreguidelines-avoid-c-arrays"]["seeded"]["label"] == seeded.IN_SEED_FUNCTION
     assert by_rule["readability-magic-numbers"]["seeded"]["label"] == seeded.IN_NEIGHBORHOOD

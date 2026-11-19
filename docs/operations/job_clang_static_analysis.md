@@ -251,6 +251,21 @@ Source: [handler and diagnostic adapter](../../src/appsec_review/jobs/job_clang_
    coverage. Publish an observations shard and coverage row. Save full-mode results, but do not
    checkpoint seeded results with engine or translation-unit failures.
 
+Seeded placement retains every compiled-analysis function identity associated with a physical
+seed; repeated header definitions in different translation units are not reduced to one name.
+Range-width selection is per reported compile-unit identity, never a way to select a TU.
+Current diagnostic records do not identify their compiling TU, so multiple innermost candidates
+produce `function: null`, sorted `function_candidates`, and an explicit `function_ambiguity`.
+`in_seed_function` and `seeds` assert only associations shared by all candidates; associations
+valid for only some candidates remain in `candidate_seeds` with `in_neighborhood` placement.
+Direct `at_seed` matches remain valid regardless of function ambiguity. Legacy single-function
+handoffs keep their unambiguous placement.
+
+The seeded checkpoint identity includes all seed-function memberships, ranges, depths and
+reported compile-unit identities. Reordered or duplicate seed-function rows are equivalent;
+adding/removing an identity or changing its scope invalidates reuse. The consumer implementation
+identity is versioned so older last-wins placement is not reused.
+
 ### `acceptance`
 
 1. Compose scope shards and unavailable-scope coverage under the

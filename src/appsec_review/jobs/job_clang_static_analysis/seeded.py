@@ -27,7 +27,7 @@ from appsec_review.jobs.cpp_seeded import (  # noqa: F401
 )
 from appsec_review.storage import canonical_json
 
-SEEDED_IMPL = "clang-static-seeded/1"
+SEEDED_IMPL = "clang-static-seeded/2"
 AT_SEED, IN_SEED_FUNCTION, IN_NEIGHBORHOOD = "at_seed", "in_seed_function", "in_neighborhood"
 OUTSIDE, UNCLASSIFIED = "outside_neighborhood", "unclassified"
 LABELS = (AT_SEED, IN_SEED_FUNCTION, IN_NEIGHBORHOOD, OUTSIDE, UNCLASSIFIED)
@@ -43,15 +43,20 @@ class Neighborhood:
 
     ranges: Mapping[str, tuple[str, int, int]] = field(default_factory=dict)
     depth: Mapping[str, int] = field(default_factory=dict)
-    seed_functions: Mapping[tuple[str, int, int], str] = field(default_factory=dict)
+    seed_functions: Mapping[tuple[str, int, int], tuple[str, ...]] = field(default_factory=dict)
+    compile_units: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def known(self) -> bool:
         return bool(self.ranges)
 
     def sha256(self) -> str:
-        return hashlib.sha256(canonical_json({"ranges": {k: list(v) for k, v in sorted(self.ranges.items())},
-                                              "seeds": sorted([*k, v] for k, v in self.seed_functions.items())})).hexdigest()
+        return hashlib.sha256(canonical_json({
+            "ranges": {k: list(v) for k, v in sorted(self.ranges.items())},
+            "depth": dict(sorted(self.depth.items())),
+            "seeds": sorted([*key, list(names)] for key, names in self.seed_functions.items()),
+            "compile_units": dict(sorted(self.compile_units.items())),
+        })).hexdigest()
 
 
 def neighborhood_of(accepted: Mapping[str, Any], case_id: str) -> Neighborhood:
@@ -63,8 +68,15 @@ def neighborhood_of(accepted: Mapping[str, Any], case_id: str) -> Neighborhood:
     ranges = {str(name): (str(value[0]), int(value[1]), int(value[2]))
               for name, value in handoff["ranges"].items()}
     depth = {str(name): int(value) for name, value in handoff.get("neighborhood", {}).items()}
-    seeds = {(str(row[0]), int(row[1]), int(row[2])): str(row[3]) for row in handoff.get("seed_functions", ())}
-    return Neighborhood(ranges, depth, seeds)
+    seeds: dict[tuple[str, int, int], set[str]] = {}
+    for row in handoff.get("seed_functions", ()):
+        seeds.setdefault((str(row[0]), int(row[1]), int(row[2])), set()).add(str(row[3]))
+    compile_units = {str(name): function["compile_unit_id"]
+                     for name, function in handoff.get("functions", {}).items()
+                     if isinstance(function, Mapping) and isinstance(function.get("compile_unit_id"), str)
+                     and function["compile_unit_id"] and name in ranges}
+    return Neighborhood(ranges, depth, {key: tuple(sorted(names)) for key, names in sorted(seeds.items())},
+                        compile_units)
 
 
 def identity_values(settings: SeededSettings, scope_seeds: seeding.ScopeSeeds, hood: Neighborhood) -> dict[str, Any]:
@@ -73,28 +85,45 @@ def identity_values(settings: SeededSettings, scope_seeds: seeding.ScopeSeeds, h
 
 
 def classify(path: str, line: int, scope_seeds: seeding.ScopeSeeds, hood: Neighborhood) -> dict[str, Any]:
-    """Where one diagnostic sits relative to the seeds and, when known, the neighborhood."""
+    """Classify a physical location without guessing which TU produced the diagnostic."""
     hits: list[tuple[str, int, int]] = []
     label = None
     for seed in scope_seeds.seeds:
         if seed.path == path and seed.start_line <= line <= seed.end_line:
             hits.append(seed.key)
             label = AT_SEED
-    function = None
-    best = None
-    for name, (source, start, end) in sorted(hood.ranges.items()):
-        if source == path and start <= line <= end and (best is None or end - start < best):
-            function, best = name, end - start
-    if function is not None:
+    matches = {name: end - start for name, (source, start, end) in hood.ranges.items()
+               if source == path and start <= line <= end}
+    # Range width can choose an innermost function within a TU, never the TU itself.
+    best: dict[str | None, int] = {}
+    for name, width in matches.items():
+        compile_unit = hood.compile_units.get(name)
+        best[compile_unit] = min(width, best.get(compile_unit, width))
+    functions = {name for name, width in matches.items() if width == best[hood.compile_units.get(name)]}
+    possible: list[tuple[str, int, int]] = []
+    if functions:
         for seed in scope_seeds.seeds:
-            if hood.seed_functions.get(seed.key) == function and seed.key not in hits:
+            if seed.key in hits:
+                continue
+            associated = set(hood.seed_functions.get(seed.key, ()))
+            if functions <= associated:
                 hits.append(seed.key)
                 label = label or IN_SEED_FUNCTION
+            elif functions & associated:
+                possible.append(seed.key)
         label = label or IN_NEIGHBORHOOD
     if label is None:
         label = OUTSIDE if hood.known else UNCLASSIFIED
-    return {"label": label, "seeds": [list(key) for key in sorted(hits)[:MAX_SEEDS_PER_DIAGNOSTIC]],
-            "function": function, "outside_neighborhood": label == OUTSIDE}
+    placement = {"label": label, "seeds": [list(key) for key in sorted(hits)[:MAX_SEEDS_PER_DIAGNOSTIC]],
+                 "function": next(iter(functions)) if len(functions) == 1 else None,
+                 "outside_neighborhood": label == OUTSIDE}
+    if len(functions) > 1:
+        placement.update(
+            function_candidates=sorted(functions),
+            function_ambiguity="multiple_innermost_functions_without_translation_unit",
+            candidate_seeds=[list(key) for key in sorted(possible)[:MAX_SEEDS_PER_DIAGNOSTIC]],
+        )
+    return placement
 
 
 @dataclass(frozen=True, slots=True)
