@@ -623,6 +623,49 @@ def test_a_changed_seed_set_reruns_the_ir_and_the_ast(tmp_path: Path) -> None:
     assert not ir["projects"][sc.CASE].get("checkpoint_reused") and other.calls[0] == ("ir", REPLAYED[1:])
 
 
+def test_priority_only_change_reruns_ir_and_ast_in_the_same_prepared_case(tmp_path: Path) -> None:
+    from appsec_review.retrieval import write_manifest
+    from appsec_review.storage import file_sha256
+
+    observations = [sc.observation("proj/src/net.cpp", 6, severity="HIGH"),
+                    sc.observation("proj/src/util.cpp", 14, severity="LOW")]
+    staged = sc.stage(tmp_path, observations=observations)
+    settings = {**sc.SEEDED, "unit_limit": 1}
+    executor = sc.FixtureExecutor(staged.run_root)
+    unit = staged.unit("ir.projects", seeded=settings)
+    original_plan = seeded.plan_for(unit, {sc.CASE: staged.cataloged}, seeded.settings_of(unit))
+    original = _pair(staged, executor, seeded_settings=settings)
+    unchanged = _pair(staged, executor, seeded_settings=settings)
+    assert [mode for mode, _ in executor.calls] == ["ir", "cfg", "ast"]
+    assert all(output["projects"][sc.CASE]["checkpoint_reused"] for output in unchanged)
+    compile_identity = dict(staged.cataloged["compile_database"])
+    source_identity = staged.mapping["case_snapshot"]
+
+    changed_observations = [{**item, "severity": "LOW" if item["severity"] == "HIGH" else "HIGH"}
+                            for item in observations]
+    changed_shard = sc._observation_shard(staged.run_root, "priority-only", changed_observations)
+    staged.manifest_path = staged.manifest_path.with_name("priority-only.json")
+    write_manifest(staged.manifest_path, run_id="run", target_snapshot=sc.SNAPSHOT,
+                   target_root=staged.target, indexes=[changed_shard])
+    staged.manifest_sha = file_sha256(staged.manifest_path)
+    unit = staged.unit("ir.projects", seeded=settings)
+    changed_plan = seeded.plan_for(unit, {sc.CASE: staged.cataloged}, seeded.settings_of(unit))
+    before, after = original_plan.for_scope(sc.CASE), changed_plan.for_scope(sc.CASE)
+    assert before.rows == after.rows
+    assert [seed.rank for seed in before.seeds] != [seed.rank for seed in after.seeds]
+    assert staged.cataloged["compile_database"] == compile_identity
+    assert staged.mapping["case_snapshot"] == source_identity
+
+    changed = _pair(staged, executor, seeded_settings=settings)
+    assert [mode for mode, _ in executor.calls[3:]] == ["ir", "cfg", "ast"]
+    for previous, current in zip(original, changed):
+        assert not current["projects"][sc.CASE].get("checkpoint_reused")
+        assert current["projects"][sc.CASE]["artifact"] != previous["projects"][sc.CASE]["artifact"]
+    repeated = _pair(staged, executor, seeded_settings=settings)
+    assert len(executor.calls) == 6
+    assert all(output["projects"][sc.CASE]["checkpoint_reused"] for output in repeated)
+
+
 def test_shards_and_records_are_byte_identical_across_runs(tmp_path: Path) -> None:
     outputs = []
     for name in ("a", "b"):

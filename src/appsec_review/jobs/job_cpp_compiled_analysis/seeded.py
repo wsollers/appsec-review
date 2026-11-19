@@ -67,8 +67,9 @@ def plan_for(unit: UnitContext, catalogs: Mapping[str, Mapping[str, Any]],
 
 
 def identity_values(settings: SeededSettings, scope_seeds: seeding.ScopeSeeds, **extra: Any) -> dict[str, Any]:
-    """The seeded part of a checkpoint identity: bounds, mode and the sorted seed set."""
+    """Bind bounds, mode, seed locations and priorities that can change bounded TU selection."""
     return {"seeded": {**settings.identity(), "seeds": [list(row) for row in sorted(scope_seeds.rows)],
+                       "seed_priorities": sorted([*seed.key, seed.rank] for seed in scope_seeds.seeds),
                        "impl": SEEDED_IMPL, **extra}}
 
 
