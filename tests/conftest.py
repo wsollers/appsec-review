@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import os
 
@@ -15,6 +16,20 @@ _TIER_BUDGETS = pytest.StashKey[dict]()
 _PHASE_CLOCK = pytest.StashKey[time_budgets.PhaseClock]()
 _PYTEST_SCRATCH_ROOT = (_REPOSITORY_ROOT / "test" / "tmp").resolve()
 _HOST_PINS_PREVIOUS = pytest.StashKey[str | None]()
+
+
+# Interleaved exact file selectors can have distinct nested directory collectors.
+# Bind shared documentation fixtures to their common test ancestor instead.
+@pytest.fixture
+def doc_inventory() -> dict:
+    return json.loads((_REPOSITORY_ROOT / "docs/generated/inventory.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def doc_pages() -> dict[str, str]:
+    ledger = json.loads((_REPOSITORY_ROOT / "docs/docs-ledger.json").read_text(encoding="utf-8"))
+    return {row["path"]: (_REPOSITORY_ROOT / row["path"]).read_text(encoding="utf-8")
+            for row in ledger["documents"] if row["path"].endswith(".md")}
 
 
 def _resolved_from_invocation(value: str | Path, invocation_dir: Path) -> Path:

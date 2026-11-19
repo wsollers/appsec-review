@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+import subprocess
+import sys
+
 import pytest
 
 from scripts.docs_support import identifier_errors, with_frontmatter
@@ -26,6 +30,20 @@ def test_current_prose_identifiers_resolve(doc_pages, doc_inventory) -> None:
         errors.extend(f"{path}: {error}" for error in identifier_errors(
             text, doc_inventory, planning_registry=path == "docs/TODO.md"))
     assert not errors, "\n".join(errors)
+
+
+def test_documentation_fixtures_survive_interleaved_exact_selectors(tmp_path) -> None:
+    root = Path(__file__).resolve().parents[2]
+    outcome = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "--setup-only", "-o", "addopts=",
+         f"--basetemp={tmp_path / 'interleaved'}",
+         "tests/docs/test_generated_docs.py", "tests/test_documentation.py",
+         "tests/docs/test_docs_identifiers.py", "-k",
+         "adapter_reference_without_a_scan_is_not_a_launch or "
+         "current_documentation_local_links_resolve or current_prose_identifiers_resolve"],
+        cwd=root, capture_output=True, text=True, timeout=8,
+    )
+    assert outcome.returncode == 0, outcome.stdout + outcome.stderr
 
 
 @pytest.mark.parametrize("body", [
