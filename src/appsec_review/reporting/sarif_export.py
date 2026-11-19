@@ -23,6 +23,28 @@ from .sarif_contracts import (
 )
 
 
+def _validate_replacement_region(region: Any) -> None:
+    if not isinstance(region, Mapping):
+        raise ValueError(f"Invalid SARIF replacement deletedRegion: {region}")
+    line_fields = {"startLine", "endLine", "startColumn", "endColumn"}
+    byte_fields = {"byteOffset", "byteLength"}
+    has_lines, has_bytes = bool(line_fields & region.keys()), bool(byte_fields & region.keys())
+    valid = has_lines or has_bytes
+    if has_lines:
+        start = region.get("startLine")
+        end = region.get("endLine", start)
+        valid = valid and type(start) is int and start >= 1 and type(end) is int and end >= start
+        for field in ("startColumn", "endColumn"):
+            if field in region:
+                valid = valid and type(region[field]) is int and region[field] >= 1
+        if valid and end == start:
+            valid = region.get("endColumn", region.get("startColumn", 1)) >= region.get("startColumn", 1)
+    if has_bytes:
+        valid = valid and all(type(region.get(field)) is int and region[field] >= 0 for field in byte_fields)
+    if not valid:
+        raise ValueError(f"Invalid SARIF replacement deletedRegion: {region}")
+
+
 def validate_sarif_log(sarif_log: Mapping[str, Any]) -> None:
     """Validate critical OASIS SARIF 2.1.0 structural and referential invariants."""
     if sarif_log.get("$schema") != SARIF_SCHEMA_URI:
@@ -95,9 +117,7 @@ def validate_sarif_log(sarif_log: Mapping[str, Any]) -> None:
                 if not uri or not isinstance(repls, Sequence) or not repls:
                     raise ValueError(f"Invalid SARIF artifactChange: {ac}")
                 for rep in repls:
-                    del_reg = rep.get("deletedRegion", {})
-                    if del_reg.get("startLine", 0) < 1:
-                        raise ValueError(f"Invalid SARIF replacement deletedRegion: {del_reg}")
+                    _validate_replacement_region(rep.get("deletedRegion"))
 
 
 def export_sarif_bundle(

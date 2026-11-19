@@ -53,6 +53,29 @@ a `producer-gap/1` omission in `sarif-export-result.json`, not a default severit
 location. Missing reachability stays `unknown`; bare numbers do not become CWE identifiers.
 Backlog and withheld packages are not promoted through export.
 
+SARIF rules partition by established domain/taxonomy and technical severity, including when a
+caller supplies a rule ID. Mixed-severity results cannot inherit whichever finding sorts first.
+Unmapped predicates/CWEs remain explicitly `unclassified`, without an invented OWASP category.
+
+The job selects the confirmed-finding dossier, not a PoC dossier for the same finding. Current
+accepted dossier inputs provide no ordered source-to-sink path: the job records
+`sarif_codeflow_omitted` rather than converting excerpt/citation order or a legacy synthesized
+timeline into `codeFlows`. The lower exporter still supports explicitly supplied ordered paths;
+that capability does not establish their admission into a gate-certified dossier.
+
+Qualified remediation comes from the dossier's exact-edit projection and its gate-bound
+validation and patch artifacts, not `remediation_guide` prose or an advertised diff.
+`static_checked`/`build_checked` proposals require matching passed applicability, policy and
+static checks, analyst-supported semantic review, and (for `build_checked`) the passed build
+check. Neither status establishes runtime correctness or a resolved finding. Fixes retain
+those check statuses, validation/patch references, baseline hashes and new-file absence proofs.
+Their replacement regions use the producer's UTF-8 byte offsets/lengths, without invented line
+numbers. The protected projected edits must match the bound original patch exactly: redacted,
+normalized or truncated patches are omitted, never applied as modified text or replaced with
+private original text. Unavailable, unqualified, unbound or unsupported fix projections have
+explicit `sarif_fix_omitted` records in the export accounting; changed bound bytes fail integrity
+validation. No source excerpts, PoC source or raw diagnostic narratives are copied into SARIF.
+
 ### Protected payloads and public summaries stay separate
 
 [Dossier publication](../../src/appsec_review/jobs/job_dossier_publication/job.py) produces

@@ -9,7 +9,7 @@ import json
 import re
 from typing import Any
 
-from .dimensions import DIMENSIONS, dimension_of_package, owasp_of_cwe_or_domain
+from .dimensions import DIMENSIONS, Dimension, dimension_of_package, owasp_of_cwe_or_domain
 
 SARIF_SCHEMA_URI = (
     "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json"
@@ -44,6 +44,7 @@ _SEVERITY_SCORE = {
 }
 _DOMAIN_BY_KEY = {dim.key: dim for dim in DIMENSIONS}
 _DOMAIN_BY_ID = {dim.domain_id: dim for dim in DIMENSIONS}
+_UNCLASSIFIED = Dimension("unclassified", "Unclassified", (), "", domain_id="unclassified")
 
 
 def _clean_str(value: Any) -> str:
@@ -100,7 +101,7 @@ def _resolve_radar_domain(finding: Mapping[str, Any], cwes: Sequence[str]) -> An
     if cwes and "weakness_cwe" not in probe:
         probe["weakness_cwe"] = cwes[0]
     key = dimension_of_package(probe)
-    return _DOMAIN_BY_KEY.get(key, DIMENSIONS[0])
+    return _DOMAIN_BY_KEY.get(key, _UNCLASSIFIED)
 
 
 def _resolve_owasp_ids(finding: Mapping[str, Any], cwes: Sequence[str], domain_id: str) -> list[str]:
@@ -307,6 +308,9 @@ def build_sarif_fixes(
     finding: Mapping[str, Any], *, primary_uri: str, primary_line: int,
 ) -> list[dict[str, Any]]:
     """Build SARIF 2.1.0 ``fixes`` when validated remediation diffs/replacements exist."""
+    exact = finding.get("exact_remediation")
+    if isinstance(exact, Mapping):
+        return _exact_fixes(exact)
     rem_candidates: list[Mapping[str, Any]] = []
     for key in ("validated_remediation", "remediation", "remediation_guide"):
         val = finding.get(key)
@@ -376,6 +380,50 @@ def build_sarif_fixes(
     }]
 
 
+def _exact_fixes(remediation: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Keep accepted UTF-8 byte coordinates; no source text or line mapping is inferred."""
+    status = remediation.get("validation_status")
+    if status not in {"static_checked", "build_checked"}:
+        raise ValueError("SARIF exact remediation requires a qualified validation outcome")
+    changes = []
+    for file in sorted(remediation["files"], key=lambda row: row["path"]):
+        replacements = []
+        last_end = -1
+        for edit in file["edits"]:
+            start, end = edit["start"], edit["end"]
+            if (type(start) is not int or type(end) is not int or start < 0 or end < start
+                    or start < last_end or start == end == last_end
+                    or not isinstance(edit["old"], str) or not isinstance(edit["new"], str)
+                    or len(edit["old"].encode("utf-8")) != end - start):
+                raise ValueError("SARIF exact remediation has invalid byte edits")
+            replacements.append({
+                "deletedRegion": {"byteOffset": start, "byteLength": end - start},
+                "insertedContent": {"text": edit["new"]},
+            })
+            last_end = end
+        if not replacements:
+            raise ValueError("SARIF exact remediation has no edits")
+        changes.append({
+            "artifactLocation": {"uri": _normalize_uri(file["path"])},
+            "replacements": replacements,
+            "properties": {"before_sha256": file["before_sha256"], "absence_proof": file["absence_proof"]},
+        })
+    if not changes:
+        raise ValueError("SARIF exact remediation has no files")
+    return [{
+        "description": {"text": f"Remediation proposal ({status}); not a resolved finding. "
+                                "Runtime regression was not performed."},
+        "artifactChanges": changes,
+        "properties": {
+            "validation_status": status,
+            "patch": dict(remediation["patch"]),
+            "validation": dict(remediation["validation"]),
+            "checks": dict(remediation["checks"]),
+            "runtime_regression": "not_performed_by_policy",
+        },
+    }]
+
+
 def _primary_location(finding: Mapping[str, Any]) -> tuple[str, int, int, str]:
     raw_path = finding.get("path") or finding.get("file") or finding.get("primary_path") or finding.get("uri")
     line_val = finding.get("line") or finding.get("start_line")
@@ -429,12 +477,14 @@ def build_sarif_log(
         all_cwes.update(cwes)
         all_owasp.update(owasp_ids)
 
-        rule_id = _clean_str(finding.get("rule_id")) or (
-            f"appsec-review/{domain_id}/{cwes[0].lower()}" if cwes else f"appsec-review/{domain_id}"
-        )
         severity = _clean_str(finding.get("severity")).lower()
         if severity not in _SEVERITY_TO_LEVEL:
             raise ValueError("SARIF finding requires an explicit supported severity")
+        base_rule_id = _clean_str(finding.get("rule_id")) or "appsec-review"
+        # A rule has one severity and taxonomy: neither may depend on the first result's ID.
+        classification = "/".join((domain_id, "+".join(cwe.lower() for cwe in cwes) or "unmapped",
+                                    "+".join(owasp_ids) or "unmapped"))
+        rule_id = f"{base_rule_id}/{classification}/{severity}"
         level = _SEVERITY_TO_LEVEL[severity]
         uri, start_line, end_line, symbol = _primary_location(finding)
         title = _clean_str(finding.get("title") or finding.get("summary")) or f"{domain.label} finding"

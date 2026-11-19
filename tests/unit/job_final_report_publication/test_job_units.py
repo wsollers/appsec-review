@@ -473,7 +473,15 @@ def test_sarif_publication_uses_only_certified_findings_and_reproves_bytes(tmp_p
     assert results[0]["locations"][0]["physicalLocation"] == {
         "artifactLocation": {"uri": "src/parser.c"}, "region": {"startLine": 40, "endLine": 52}}
     assert EXCERPT not in read_bound(fx.root, published["sarif"]).decode()
-    assert read_bound_json(fx.root, published["sarif_result"])["gaps"] == []
+    assert fx.dossier["taint_path_timeline"] == [] and fx.dossier["remediation"] == []
+    assert "codeFlows" not in results[0] and "fixes" not in results[0]
+    identity = fx.dossier["finding"]["finding_package_id"]
+    accounting = read_bound_json(fx.root, published["sarif_result"])
+    assert accounting["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert [gap["reason"] for gap in accounting["gaps"]] == [
+        f"sarif_codeflow_omitted:{identity}:ordered_trace_not_in_accepted_dossier_contract",
+        f"sarif_fix_omitted:{identity}:qualified_remediation_not_available",
+    ]
     path = fx.root / published["sarif"]["path"]
     sarif["runs"][0]["results"][0]["level"] = "note"
     atomic_json(path, sarif)
@@ -495,7 +503,15 @@ def test_bound_dossier_narrative_reaches_the_pdf_source_without_its_excerpt(
     assert "attacker{-}controlled length reaches a fixed{-}size copy" in tex
     assert "lines 40{-}52" in tex and "CWE{-}120" in tex and "memory corruption" in tex
     assert EXCERPT not in tex and "SECRET_EXCERPT" not in tex
-    assert outputs["acceptance.publish_handoff"]["terminal_status"] == "SUCCEEDED"
+    published = outputs["acceptance.publish_handoff"]
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    sarif_gaps = read_bound_json(fx.root, published["sarif_result"])["gaps"]
+    assert published["gaps"] == sarif_gaps
+    identity = fx.dossier["finding"]["finding_package_id"]
+    assert [gap["reason"] for gap in sarif_gaps] == [
+        f"sarif_codeflow_omitted:{identity}:ordered_trace_not_in_accepted_dossier_contract",
+        f"sarif_fix_omitted:{identity}:qualified_remediation_not_available",
+    ]
 
 
 def test_tampered_or_unbound_claimed_dossier_fails_closed(
