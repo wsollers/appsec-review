@@ -7,13 +7,14 @@ import json
 
 import pytest
 
+from appsec_review.jobs.job_dependency_intelligence.discovery import discover_native_dependencies
 from appsec_review.jobs.job_dependency_intelligence.investigation import investigate_native_metadata
 from appsec_review.jobs.job_dependency_intelligence.native_inference_contracts import (
     INFERENCE_COUNTERS, INVESTIGATION_SCHEMA, METADATA_SCHEMA, PLAN_SCHEMA,
     NativeInferenceBounds, NativeInferenceError,
 )
 from appsec_review.jobs.job_dependency_intelligence.native_sbom_contracts import (
-    DISCOVERY_SCHEMA, GAP_KINDS, NativeInputIntegrityError, SbomBounds, evidence_identity,
+    DISCOVERY_SCHEMA, GAP_KINDS, NativeBounds, NativeInputIntegrityError, SbomBounds, evidence_identity,
 )
 from appsec_review.jobs.job_dependency_intelligence.resolution import normalize_dependencies
 from appsec_review.jobs.job_dependency_intelligence.sbom import build_spdx
@@ -801,6 +802,34 @@ def test_inline_comments_and_unicode_do_not_change_physical_line_selectors():
                   if item["kind"] == "native_metadata_citation")
     assert record["selector"]["start_line"] == 2
     assert record["selector"]["start_byte"] == len(text.split("\n")[0].encode()) + 1
+
+
+@pytest.mark.parametrize(("prefix", "version"), [
+    ('/* café \\\r\n*/\r\n', "1.2.3"),
+    ('#define EXAMPLE \\\r\n/* café\r\n', None),
+], ids=["closed-comment", "continued-comment-open"])
+def test_discovery_and_investigation_share_comment_state_and_original_evidence(prefix, version):
+    literal = '#define FOO_VERSION /* literal */ "1.2.3"\r\n'
+    text = prefix + literal + ("*/\r\n" if version is None else "")
+    _, files, read, _ = inputs({"vendor/foo/foo.h": text})
+    discovery = discover_native_dependencies(
+        source_fingerprint="snapshot-1", files=files, invocations=[], artifacts=[], read_file=read,
+        bounds=NativeBounds(10, 64, 10, 4096, 4096, 10, 100, 32, 4096, 512))
+    result = investigate_native_metadata(
+        discovery, files, read_file=read, propose=Model(lambda payload: []), bounds=BOUNDS)
+    candidate = result["discovery"]["candidates"][0]
+    assert candidate["release"]["value"] == version
+    assert candidate["release"]["status"] == ("corroborated" if version else "unknown")
+    if version:
+        evidence = {item["evidence_id"]: item for item in result["discovery"]["evidence"]}
+        for key in candidate["release"]["evidence_ids"]:
+            item = evidence[key]
+            assert item["value"] == literal
+            assert item["sha256"] == hashlib.sha256(text.encode()).hexdigest()
+            assert item["selector"] == {
+                "start_byte": len(prefix.encode()), "end_byte": len(text.encode()),
+                "start_line": 3, "end_line": 3,
+            }
 
 
 def test_missing_model_never_leaves_an_unsubstantiated_input_purl_spdx_eligible():

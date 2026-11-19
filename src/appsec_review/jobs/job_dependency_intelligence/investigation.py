@@ -17,7 +17,9 @@ import xml.etree.ElementTree as ET
 
 from appsec_review.storage import canonical_json
 
-from .discovery import _Discovery, _domain, _normalized_name, _reference, _relative, _text, _within
+from .discovery import (
+    _Discovery, _domain, _normalized_name, _physical_lines, _reference, _relative, _text, _within,
+)
 from .native_inference_contracts import (
     INVESTIGATION_SCHEMA, METADATA_SCHEMA, PLAN_SCHEMA, InvestigationResult,
     NativeInferenceBounds, NativeInferenceError, Propose,
@@ -250,56 +252,6 @@ def _plist(read: _Read, name: str) -> list[_Fact]:
                   "framework_bundle_identity")]
 
 
-def _header_lines(lines: list[tuple[str, tuple[int, int, int, int]]]
-                  ) -> tuple[list[tuple[str, tuple[int, int, int, int]]], bool]:
-    """Mask comments and spliced physical lines without evaluating C expressions."""
-    masked = []
-    block = False
-    continued = False
-    malformed = False
-    for line, span in lines:
-        if continued:
-            continued = line.rstrip("\r\n").endswith("\\")
-            masked.append(("\n", span))
-            continue
-        continued = line.rstrip("\r\n").endswith("\\")
-        chars = []
-        index = 0
-        quoted = None
-        while index < len(line):
-            char = line[index]
-            if block:
-                if line.startswith("*/", index):
-                    chars.extend("  ")
-                    index += 2
-                    block = False
-                    continue
-                chars.append(char if char in "\r\n" else " ")
-            elif quoted:
-                chars.append(char)
-                if char == "\\" and index + 1 < len(line):
-                    index += 1
-                    chars.append(line[index])
-                elif char == quoted:
-                    quoted = None
-            elif line.startswith("//", index):
-                chars.extend("\n" if value == "\n" else " " for value in line[index:])
-                break
-            elif line.startswith("/*", index):
-                chars.extend("  ")
-                index += 2
-                block = True
-                continue
-            else:
-                chars.append(char)
-                if char in "\"'":
-                    quoted = char
-            index += 1
-        malformed |= quoted is not None
-        masked.append(("".join(chars), span))
-    return masked, malformed or block or continued
-
-
 def _facts(read: _Read, name: str, fingerprint: str, bounds: NativeInferenceBounds,
            report: Callable[[str, str, str, Sequence[str]], None]) -> tuple[list[_Fact], bool]:
     path = read.record["path"]
@@ -322,13 +274,9 @@ def _facts(read: _Read, name: str, fingerprint: str, bounds: NativeInferenceBoun
              for index, line in enumerate(read.lines)]
     root = str(PurePosixPath(path).parent)
     suffix = PurePosixPath(path).suffix.casefold()
-    lexical_incomplete = False
     try:
         if suffix in {".h", ".hh", ".hpp", ".hxx", ".inc"}:
-            header_lines, lexical_incomplete = _header_lines(lines)
-            if lexical_incomplete:
-                report("unsupported_metadata", path, "incomplete header comment/string/continuation", ())
-            parser.header(read.record, root, header_lines)
+            parser.header(read.record, root, lines)
         elif suffix == ".pc" or basename.endswith(("config.cmake", "-config.cmake")):
             parser.metadata(read.record, root, lines)
         else:
@@ -349,7 +297,7 @@ def _facts(read: _Read, name: str, fingerprint: str, bounds: NativeInferenceBoun
         selector = parser.evidence[fact["evidence_id"]]["selector"]
         span = (path, selector["start_line"], selector["end_line"])
         spans = (span,) if is_header or suffix == ".cmake" else tuple(sorted(set([span, *identity_spans])))
-        direct = not parser.release_incomplete and not parser.version_conflicts and not lexical_incomplete
+        direct = not parser.release_incomplete and not parser.version_conflicts
         if (fact["role"] == "document" and "." not in fact["value"]
                 and re.fullmatch(r"\d{4}", fact["value"])
                 and not re.search(r"\b(?:Version\s*:|version\s+|v\d)", read.lines[span[1] - 1], re.I)):
@@ -541,7 +489,7 @@ class _Investigation:
         except UnicodeDecodeError:
             self.gap("decode_failed", path, "selected metadata is not valid UTF-8")
             return None
-        lines = re.findall(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+$", text)
+        lines = _physical_lines(text)
         offsets = [0]
         for line in lines:
             offsets.append(offsets[-1] + len(line.encode("utf-8")))

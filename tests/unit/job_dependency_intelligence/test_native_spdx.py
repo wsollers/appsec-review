@@ -11,10 +11,15 @@ from typing import Any
 from jsonschema import Draft7Validator
 import pytest
 
+from appsec_review.jobs.job_dependency_intelligence.curation import curate_native_components
+from appsec_review.jobs.job_dependency_intelligence.discovery import discover_native_dependencies
+from appsec_review.jobs.job_dependency_intelligence.investigation import investigate_native_metadata
+from appsec_review.jobs.job_dependency_intelligence.native_inference_contracts import NativeInferenceBounds
 from appsec_review.jobs.job_dependency_intelligence.native_sbom_contracts import (
-    DISCOVERY_SCHEMA, PROVENANCE_SCHEMA, SBOM_COUNTERS, NativeInputIntegrityError,
+    DISCOVERY_SCHEMA, PROVENANCE_SCHEMA, SBOM_COUNTERS, NativeBounds, NativeInputIntegrityError,
     SbomBounds, SpdxValidationError, candidate_identity, evidence_identity,
 )
+from appsec_review.jobs.job_dependency_intelligence.resolution import normalize_dependencies
 from appsec_review.jobs.job_dependency_intelligence.sbom import (
     build_spdx, schema_sha256, validate_spdx,
 )
@@ -481,6 +486,77 @@ def test_only_corroborated_native_releases_become_version_info(status: str) -> N
     assert result["document"]["relationships"][0]["relationshipType"] == "DESCRIBES"
     assert not any(row["relationshipType"] == "DEPENDS_ON" for row in result["document"]["relationships"])
     assert json.loads(emitted["sourceInfo"])["release"] == status
+
+
+@pytest.mark.parametrize(("text", "version", "status"), [
+    pytest.param('/* Historical example only.\n#define ZLIB_VERSION "1.2.11"\n*/\n',
+                 None, "unknown", id="block-comment"),
+    pytest.param('// #define ZLIB_VERSION "1.2.11"\n', None, "unknown", id="line-comment"),
+    pytest.param('// café\u2028#define ZLIB_VERSION "1.2.11"\r\n',
+                 None, "unknown", id="unicode-not-newline"),
+    pytest.param('// historical \\\n#define ZLIB_VERSION "1.2.11"\n',
+                 None, "unknown", id="continued-comment"),
+    pytest.param('#define EXAMPLE \\\n#define ZLIB_VERSION "1.2.11"\n',
+                 None, "unknown", id="continued-macro-body"),
+    pytest.param('/\\\n* historical\n#define ZLIB_VERSION "1.2.11"\n*/\n',
+                 None, "unknown", id="spliced-comment-delimiter"),
+    pytest.param('#define EXAMPLE \\\n/* historical\n#define ZLIB_VERSION "1.2.11"\n*/\n',
+                 None, "unknown", id="comment-start-in-continuation"),
+    pytest.param('/* historical \\\n*/\n#define ZLIB_VERSION "1.3.1"\n',
+                 "1.3.1", "corroborated", id="comment-end-in-continuation"),
+    pytest.param('#define ZLIB_VERSION /* literal */ "1.3.1" /* release */\n',
+                 "1.3.1", "corroborated", id="active-inline-comments"),
+    pytest.param('/* old\n#define ZLIB_VERSION "1.2.11"\n*/\n#define ZLIB_VERSION "1.3.1"\n',
+                 "1.3.1", "corroborated", id="active-not-commented-release"),
+    pytest.param('#define ZLIB_VERSION "1.3.1 /* literal */ // literal"\n',
+                 "1.3.1", "corroborated", id="quoted-comment-markers"),
+    pytest.param('#define NOTE "escaped \\" /* not a comment"\n#define ZLIB_VERSION "1.3.1"\n',
+                 "1.3.1", "corroborated", id="escaped-quote"),
+    pytest.param('#define ZLIB_VERSION \\\n"1.3.1"\n',
+                 None, "unknown", id="unsupported-spliced-version"),
+    pytest.param('#define ZLIB_VERSION "1.3.1"\n/* unfinished',
+                 None, "inferred", id="incomplete-comment"),
+    pytest.param('#define ZLIB_VERSION "1.3.1"\n#define ZLIB_VERSION "1.2.11"\n',
+                 None, "conflicted", id="ambiguous-release"),
+    pytest.param('#if PLATFORM\n#define ZLIB_VERSION "1.3.1"\n#endif\n',
+                 None, "unknown", id="conditional-release"),
+    pytest.param('extern const char *zlib_version;\n', None, "unknown", id="missing-release"),
+])
+def test_header_discovery_versions_reach_inventory_and_spdx_only_with_real_evidence(
+    text: str, version: str | None, status: str,
+) -> None:
+    data = text.encode("utf-8")
+    file = {
+        "domain": "target", "root_id": "target", "path": "vendor/zlib/zlib.h",
+        "sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data),
+        "upstream": artifact("catalog.json"), "backing": None,
+    }
+    read = lambda record, limit: data[:limit]
+    native = discover_native_dependencies(
+        source_fingerprint=SOURCE, files=[file], invocations=[], artifacts=[], read_file=read,
+        bounds=NativeBounds(10, 64, 10, 4096, 4096, 10, 100, 32, 4096, 512))
+    curated = curate_native_components(native, [file], propose=None, bounds=NativeInferenceBounds())
+    investigated = investigate_native_metadata(
+        curated["discovery"], [file], read_file=read, propose=None, bounds=NativeInferenceBounds())
+    rows, gaps = normalize_dependencies(
+        [], [], investigated["discovery"]["candidates"],
+        supported_hosts=("github.com",), max_dependencies=10)
+    result = build(native=investigated["discovery"])
+    assert len(result["document"]["packages"]) == 1
+    emitted = result["document"]["packages"][0]
+    assert emitted.get("versionInfo") == version
+    assert ("versionInfo" in emitted) == (version is not None)
+    assert gaps == []
+    assert [(row["name"], row["version"]) for row in rows] == [("zlib", version)]
+    assert native["candidates"][0]["release"]["status"] == status
+    assert json.loads(emitted["sourceInfo"])["release"] == status
+    if status in {"inferred", "conflicted"} or "#if" in text:
+        assert native["gaps"]
+    for evidence in native["evidence"]:
+        if evidence["kind"] in {"macro_version", "unsupported_metadata"}:
+            selector = evidence["selector"]
+            assert evidence["sha256"] == file["sha256"]
+            assert evidence["value"].encode() == data[selector["start_byte"]:selector["end_byte"]]
 
 
 def test_native_observed_purl_is_preserved_without_fabrication() -> None:

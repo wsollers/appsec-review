@@ -155,6 +155,71 @@ def _option_prefix(value: str, option: str, *, msvc: bool) -> bool:
     return value.startswith(option)
 
 
+def _physical_lines(text: str) -> list[str]:
+    return re.findall(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+$", text)
+
+
+def _header_lines(lines: Sequence[tuple[str, tuple[int, int, int, int]]]
+                  ) -> tuple[list[tuple[str, str, tuple[int, int, int, int]]], bool]:
+    """Mask comments after line splicing, retaining original bytes' text and physical spans."""
+    logical = []
+    parts: list[str] = []
+    originals: list[str] = []
+    first = (0, 0, 1, 1)
+    for line, span in lines:
+        if not originals:
+            first = span
+        splice = re.search(r"\\(?:\r\n|\r|\n)$", line)
+        parts.append(line[:splice.start()] if splice else line)
+        originals.append(line)
+        if not splice:
+            logical.append(("".join(parts), "".join(originals),
+                            (first[0], span[1], first[2], span[3])))
+            parts, originals = [], []
+    malformed = bool(originals)
+    if originals:
+        logical.append(("".join(parts), "".join(originals),
+                        (first[0], lines[-1][1][1], first[2], lines[-1][1][3])))
+    masked = []
+    block = False
+    for line, original, span in logical:
+        chars = []
+        index = 0
+        quoted = None
+        while index < len(line):
+            char = line[index]
+            if block:
+                if line.startswith("*/", index):
+                    chars.extend("  ")
+                    index += 2
+                    block = False
+                    continue
+                chars.append(char if char in "\r\n" else " ")
+            elif quoted:
+                chars.append(char)
+                if char == "\\" and index + 1 < len(line):
+                    index += 1
+                    chars.append(line[index])
+                elif char == quoted:
+                    quoted = None
+            elif line.startswith("//", index):
+                chars.extend("\n" if value == "\n" else " " for value in line[index:])
+                break
+            elif line.startswith("/*", index):
+                chars.extend("  ")
+                index += 2
+                block = True
+                continue
+            else:
+                chars.append(char)
+                if char in "\"'":
+                    quoted = char
+            index += 1
+        malformed |= quoted is not None or line.endswith("\\")
+        masked.append(("".join(chars), original, span))
+    return masked, malformed or block
+
+
 class _Discovery:
     def __init__(self, fingerprint: str, bounds: NativeBounds) -> None:
         self.fingerprint = fingerprint
@@ -445,7 +510,7 @@ class _Discovery:
         root = self.file_root(file)
         lines: list[tuple[str, tuple[int, int, int, int]]] = []
         start = 0
-        for number, line in enumerate(text.splitlines(keepends=True), 1):
+        for number, line in enumerate(_physical_lines(text), 1):
             end = start + len(line.encode("utf-8"))
             lines.append((line, (start, end, number, number)))
             start = end
@@ -515,7 +580,15 @@ class _Discovery:
 
     def header(self, file: NativeFile, root: str,
                lines: Sequence[tuple[str, tuple[int, int, int, int]]]) -> None:
-        directives = [(index, _DIRECTIVE.match(line)) for index, (line, _) in enumerate(lines)]
+        source_lines = lines
+        header_lines, lexical_incomplete = _header_lines(source_lines)
+        if lexical_incomplete:
+            span = (source_lines[0][1][0], source_lines[-1][1][1],
+                    source_lines[0][1][2], source_lines[-1][1][3])
+            self.unsupported_file(file, "incomplete header comment/string/continuation", span,
+                                  "".join(line for line, _ in source_lines))
+        directives = [(index, _DIRECTIVE.match(line))
+                      for index, (line, _, _) in enumerate(header_lines)]
         directives = [(index, match) for index, match in directives if match]
         # The include guard is the first ``#ifndef X`` / ``#define X`` pair at nesting depth zero;
         # a balanced prelude such as ``#if defined(__cplusplus)`` ... ``#endif`` may precede it.
@@ -542,8 +615,8 @@ class _Discovery:
         # Subjects of release-shaped macros this file could not read; they make the root's release
         # incomplete only when they speak about a release this file emits (or when it emits none).
         unread_subjects: list[str] = []
-        for index, (line, span) in enumerate(lines):
-            directive = _DIRECTIVE.match(line)
+        for index, (parsed, line, span) in enumerate(header_lines):
+            directive = _DIRECTIVE.match(parsed)
             if directive:
                 operator = directive[1]
                 if operator in {"if", "ifdef", "ifndef"}:
@@ -552,14 +625,19 @@ class _Discovery:
                     conditions[-1] = False
                 elif operator == "endif" and conditions:
                     conditions.pop()
-            match = _DEFINE.match(line)
+            match = _DEFINE.match(parsed)
             if not match:
                 continue
             macro, raw = match.groups()
             if macro not in _KNOWN and not re.search(r"(?:^|_)VERSION(?:_|$)", macro):
                 continue
-            raw = re.sub(r"\s*(?://.*|/\*.*?\*/)\s*$", "", raw).strip()
+            raw = raw.strip()
             subject = _macro_subject(macro)
+            if span[2] != span[3]:
+                unread_subjects.extend([subject] if subject else [])
+                self.unsupported_file(file, "continued version macro is not evaluated", span, line,
+                                      affects_release=False)
+                continue
             if any(not allowed for allowed in conditions):
                 unread_subjects.extend([subject] if subject else [])
                 self.unsupported_file(file, "conditional version macro is not evaluated", span, line,
@@ -625,7 +703,7 @@ class _Discovery:
             ordered = [values[part] for part in ("MAJOR", "MINOR", "PATCH")]
             span = (min(value[1][0] for value in ordered), max(value[1][1] for value in ordered),
                     min(value[1][2] for value in ordered), max(value[1][3] for value in ordered))
-            literal = "".join(line for line, location in lines
+            literal = "".join(line for line, location in source_lines
                               if span[0] <= location[0] and location[1] <= span[1])
             self.emit(file, root, _prefix_name(prefix), "macro_version_tuple", literal, span,
                       role="header", release=".".join(str(value[0]) for value in ordered))

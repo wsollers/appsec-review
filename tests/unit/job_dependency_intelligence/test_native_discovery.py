@@ -103,6 +103,38 @@ def test_buildless_known_header_has_exact_utf8_crlf_evidence_and_scoped_license(
     assert "LICENSE" not in linked_paths
 
 
+@pytest.mark.parametrize("release", [
+    '#define ZLIB_VERSION /* literal */ "1.3.1" // release\r\n',
+    '/* prefix */ #define ZLIB_VERSION "1.3.1" /* tail */\r\n',
+], ids=["inline", "prefix"])
+def test_comment_masking_keeps_original_header_bytes_and_physical_lines(release):
+    prefix = '// café\u2028still one line\r\n/* history\r\n#define ZLIB_VERSION "0.1"\r\n*/\r\n'
+    raw = (prefix + release).encode()
+    result, _ = discover({"vendor/zlib/zlib.h": raw})
+    candidate = named(result, "zlib")
+    assert candidate["release"]["status"] == "corroborated"
+    assert candidate["release"]["value"] == "1.3.1"
+    evidence = next(item for item in result["evidence"] if item["kind"] == "macro_version")
+    assert evidence["value"] == release
+    assert evidence["sha256"] == hashlib.sha256(raw).hexdigest()
+    assert evidence["selector"] == {
+        "start_byte": len(prefix.encode()), "end_byte": len(raw), "start_line": 5, "end_line": 5,
+    }
+
+
+def test_comment_masking_keeps_original_tuple_span_including_intervening_comments():
+    text = ('#define FOO_VERSION_MAJOR /* major */ 1\r\n'
+            '/* history\r\n#define FOO_VERSION_MAJOR 9\r\n*/\r\n'
+            '#define FOO_VERSION_MINOR 2\r\n#define FOO_VERSION_PATCH 3 /* patch */\r\n')
+    result, _ = discover({"vendor/foo/foo.h": text})
+    assert named(result, "foo")["release"]["value"] == "1.2.3"
+    evidence = next(item for item in result["evidence"] if item["kind"] == "macro_version_tuple")
+    assert evidence["value"] == text
+    assert evidence["selector"] == {
+        "start_byte": 0, "end_byte": len(text.encode()), "start_line": 1, "end_line": 6,
+    }
+
+
 @pytest.mark.parametrize(("macro", "value", "name", "version"), [
     ("ZLIB_VERSION", '"1.3"', "zlib", "1.3"),
     ("SQLITE_VERSION", '"3.45.0"', "sqlite", "3.45.0"),

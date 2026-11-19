@@ -429,6 +429,11 @@ Generated task and applicability bindings remain [T-147](../TODO.md) and [T-157]
    inputs within native bounds. Extract dependency hints from compile/link tokens, loader
    metadata, vendored paths, headers, pkg-config, CMake and package/license documents.
    Preserve competing claims and evidence identities rather than choosing an unsupported version.
+   Header discovery and investigation share comment/continuation-aware lexical checks: commented
+   examples and continued macro bodies are not release evidence; spliced version definitions and
+   incomplete lexical constructs remain unsupported. Retain original source hashes and physical
+   line/byte spans, never masked text, in evidence. Only corroborated releases reach normalized
+   inventory versions and SPDX `versionInfo`; see [native inventory](native-sbom.md).
 2. Publish bounded `native-discovery.json`; normalize declared, package and native candidates
    under dependency-count and supported-repository-host limits. Unusable identities are reasons.
    Conservative maximal exposure retains conflicting evidence and defaults to production when

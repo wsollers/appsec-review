@@ -31,6 +31,16 @@ records. Only corroborated, nonconflicting native releases become `versionInfo`;
 licenses, copyright, and download locations are `NOASSERTION`. ABI suffixes and filename
 versions are hints, not confirmed package releases.
 
+Discovery and metadata investigation share the same bounded header lexer. It masks block and
+line comments, respects quoted comment markers and escaped quotes, and tracks backslash-newline
+continuations before identifying directives. Commented examples and continued macro bodies
+cannot establish releases. Spliced version definitions remain unsupported rather than being
+evaluated; incomplete comments, strings or continuations prevent release corroboration and
+produce `unsupported_metadata` gaps. Conditional expressions are not evaluated. Evidence retains
+the original UTF-8 bytes, hash and physical line/byte spans, including comments and continuations,
+not the masked parsing text. Missing or conflicting release evidence never supplies an SPDX
+`versionInfo`.
+
 Between discovery and publication, model-assisted curation identifies libraries and separate
 inferred SDK families; root-scoped investigation selects bounded catalog files and proposes
 independently cited metadata. Models do not browse or execute search patterns. Deterministic
