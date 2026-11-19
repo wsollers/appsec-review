@@ -94,6 +94,32 @@ def test_identity_resumes_per_producer_and_changes_with_mode_depth_limit_and_see
     assert [files for files, _ in other_executor.calls] == [UNITS[1:]]
 
 
+def test_priority_only_change_invalidates_seeded_cache_without_changing_seed_locations(tmp_path: Path) -> None:
+    observations = [sc.observation("proj/src/net.cpp", 6, severity="HIGH"),
+                    sc.observation("proj/src/util.cpp", 14, severity="LOW")]
+    staged = sc.stage(tmp_path, observations=observations)
+    original_manifest = staged.manifest_path.read_bytes()
+    executor = sc.CpgExecutor(staged.run_root)
+    settings = {**sc.SEEDED, "unit_limit": 1}
+    first, _ = _run(staged, executor, seeded_settings=settings)
+    assert first["analyzed_files"] == ["src/net.cpp"]
+    _run(staged, executor, seeded_settings=settings)
+    assert len(executor.calls) == 1
+
+    changed = [observations[0], {**observations[1], "severity": "CRITICAL"}]
+    for name, items in (("reprioritized", changed), ("reordered", list(reversed(changed)))):
+        shard = sc._observation_shard(staged.run_root, "evidence", items)
+        manifest = staged.manifest_path.with_name(name + ".json")
+        sc.write_manifest(manifest, run_id="run", target_snapshot=sc.SNAPSHOT, target_root=staged.target,
+                          indexes=[shard])
+        staged.manifest_path, staged.manifest_sha = manifest, sc.file_sha256(manifest)
+        result, _ = _run(staged, executor, seeded_settings=settings)
+        assert result["analyzed_files"] == ["src/util.cpp"]
+        assert len(executor.calls) == 2
+        assert result["index_identity"]["sha256"] != first["index_identity"]["sha256"]
+    assert (staged.manifest_path.parent / "upstream.json").read_bytes() == original_manifest
+
+
 def test_shards_are_byte_identical_across_runs(tmp_path: Path) -> None:
     outputs = []
     for name in ("a", "b"):

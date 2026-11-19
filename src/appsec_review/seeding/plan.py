@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+import os
 from pathlib import Path
 from typing import Any
 
 from appsec_review.config.seeding import SeededSettings
 from appsec_review.retrieval.core import resolve_context_manifest
+from appsec_review.storage.shared import safe_path
 
 from .ledger import SeedPlan, extract_seeds
 from .record import ProjectScope
@@ -32,16 +34,37 @@ def seed_plan(job: Any, scopes: Sequence[ProjectScope], settings: SeededSettings
 MAX_SCAN_BYTES = 1024 * 1024
 
 
+class SourceScanLimit(ValueError):
+    """An existing source could not be scanned within the per-file byte limit."""
+
+
 def source_reader(source_root: Path):
-    """``read_text`` for :func:`select_units`: a project-relative file's text, bounded, never a symlink."""
+    """Read an accepted source copy without following links or exceeding the per-file byte limit.
+
+    Oversized sources are omitted, not silently parsed as complete prefixes. The selector records
+    ``SourceScanLimit`` as a gap while retaining the file's existence for include search ordering.
+    """
     root = source_root.resolve()
 
     def read(relative: str) -> str | None:
-        path = (root / relative).resolve()
-        if root not in path.parents or not path.is_file() or path.is_symlink():
+        try:
+            path = safe_path(root, relative)
+        except ValueError:
             return None
         try:
-            return path.read_bytes()[:MAX_SCAN_BYTES].decode("utf-8", errors="replace")
+            if not path.is_file():
+                return None
+            gap = (f"include_scan_bytes_limit_reached: {relative} exceeds {MAX_SCAN_BYTES} bytes; "
+                   "its transitive includes were not scanned")
+            if path.stat().st_size > MAX_SCAN_BYTES:
+                raise SourceScanLimit(gap)
+            with path.open("rb", buffering=0) as stream:
+                if os.fstat(stream.fileno()).st_size > MAX_SCAN_BYTES:
+                    raise SourceScanLimit(gap)
+                data = stream.read(MAX_SCAN_BYTES)
+                if os.fstat(stream.fileno()).st_size > MAX_SCAN_BYTES:
+                    raise SourceScanLimit(gap)
+            return data.decode("utf-8", errors="replace")
         except OSError:
             return None
 

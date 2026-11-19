@@ -81,6 +81,7 @@ def neighborhood_of(accepted: Mapping[str, Any], case_id: str) -> Neighborhood:
 
 def identity_values(settings: SeededSettings, scope_seeds: seeding.ScopeSeeds, hood: Neighborhood) -> dict[str, Any]:
     return {"seeded": {**settings.identity(), "seeds": [list(row) for row in sorted(scope_seeds.rows)],
+                       "seed_priorities": sorted([*seed.key, seed.rank] for seed in scope_seeds.seeds),
                        "neighborhood": hood.sha256(), "impl": SEEDED_IMPL}}
 
 

@@ -7,12 +7,15 @@ Acceptance requirement 1: seed extraction, ledger statuses and the neighborhood 
 from __future__ import annotations
 
 import ast
+from contextlib import contextmanager
+from copy import deepcopy
+import inspect
 from pathlib import Path
 
 import pytest
 
 from appsec_review import seeding
-from appsec_review.seeding import neighborhood, units
+from appsec_review.seeding import neighborhood, plan, units
 from appsec_review.seeding.ledger import Seed
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "appsec_review"
@@ -21,14 +24,34 @@ LEDGER_LITERALS = {"resolved", "unresolved", "file_not_in_database", "over_limit
 
 
 def _definitions(path: Path) -> list[tuple[str, int]]:
-    """Names a module defines (functions, classes, upper-case constants) with their line."""
+    """Definition names, disambiguating generic verbs by the shared seeding inputs."""
     found = []
     for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.FunctionDef):
+            arguments = {item.arg for item in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)}
+            if node.name == "expand" and not {"callers", "callees"} <= arguments:
+                continue
+            if node.name == "select_units" and not {"seeds", "include_scan_files"} <= arguments:
+                continue
         if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
             found.append((node.name, node.lineno))
         elif isinstance(node, ast.Assign):
-            found.extend((target.id, node.lineno) for target in node.targets if isinstance(target, ast.Name))
+            found.extend((target.id, node.lineno) for target in node.targets
+                         if isinstance(target, ast.Name) and target.id.isupper())
     return found
+
+
+def test_shared_algorithm_guard_detects_copies_not_unrelated_generic_verbs(tmp_path: Path) -> None:
+    unrelated = tmp_path / "unrelated.py"
+    unrelated.write_text("def expand(value): return value\n"
+                         "def select_units(run_root, job, claim): return {}\n"
+                         "def adapter():\n    expand = lambda compact, labels: compact\n", encoding="utf-8")
+    copied = tmp_path / "copied.py"
+    copied.write_text(inspect.getsource(neighborhood.expand) + "\n" + inspect.getsource(units.select_units)
+                      + "\nLEDGER_STATUSES = ()\n",
+                      encoding="utf-8")
+    assert _definitions(unrelated) == [("adapter", 3)]
+    assert {name for name, _line in _definitions(copied)} >= {"expand", "select_units", "LEDGER_STATUSES"}
 
 
 def test_only_the_seeding_package_defines_ledger_statuses() -> None:
@@ -163,3 +186,217 @@ def test_select_units_limit_and_scan_budget_are_named_gaps() -> None:
     assert scan.selected == () and any(gap.startswith(units.INCLUDE_SCAN_LIMIT) for gap in scan.gaps)
     with pytest.raises(ValueError):
         units.select_units(rows, [], unit_limit=0, include_scan_files=0, read_text=lambda _: None)
+
+
+def _sources(root: Path, files: dict[str, str]) -> None:
+    for relative, text in files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+
+@pytest.mark.parametrize("flag", ("-I", "-isystem", "-iquote", "-idirafter"))
+@pytest.mark.parametrize("joined", (False, True), ids=("paired", "joined"))
+@pytest.mark.parametrize("relative", (False, True), ids=("absolute", "relative"))
+def test_header_seed_supported_include_flags_use_accepted_cwd(
+    tmp_path: Path, flag: str, joined: bool, relative: bool,
+) -> None:
+    _sources(tmp_path, {"src/a.cpp": '#include "h.h"\n', "inc/h.h": "int h;\n"})
+    operand = "../inc" if relative else "/scratch/source/inc"
+    flags = (flag + operand,) if joined else (flag, operand)
+    row = dict(_row("src/a.cpp", *flags), directory="/scratch/source/src")
+    before = deepcopy(row)
+    seed = _seed("inc/h.h")
+    selected = units.select_units([row], [seed], unit_limit=1, include_scan_files=3,
+                                  read_text=seeding.source_reader(tmp_path))
+    assert selected.selected == (0,)
+    assert selected.by_seed == {seed.key: (0,)}
+    assert selected.uncovered == () and selected.gaps == ()
+    assert row == before
+
+
+@pytest.mark.parametrize("cwd,operand", (
+    ("/scratch/build", "/scratch/source/inc"),
+    ("/scratch/build/sub", "../../source/inc"),
+))
+def test_header_seed_build_cwd_can_resolve_accepted_source(
+    tmp_path: Path, cwd: str, operand: str,
+) -> None:
+    _sources(tmp_path, {"a.cpp": "#include <h.h>\n", "inc/h.h": "int h;"})
+    row = dict(_row("a.cpp", "-isystem", operand), directory=cwd)
+    selected = units.select_units([row], [_seed("inc/h.h")], unit_limit=1, include_scan_files=2,
+                                  read_text=seeding.source_reader(tmp_path))
+    assert selected.selected == (0,) and not selected.gaps
+
+
+@pytest.mark.parametrize("cwd", ("", "src", "/unaccepted"))
+def test_header_seed_relative_include_never_guesses_source_cwd(tmp_path: Path, cwd: str) -> None:
+    _sources(tmp_path, {"src/a.cpp": '#include "h.h"\n', "inc/h.h": "int h;"})
+    row = dict(_row("src/a.cpp", "-I../inc"), directory=cwd)
+    result = units.select_units([row], [_seed("inc/h.h")], unit_limit=1, include_scan_files=5,
+                                read_text=seeding.source_reader(tmp_path))
+    assert result.selected == () and result.uncovered == (("inc/h.h", 3, 3),)
+
+
+@pytest.mark.parametrize("quoted,expected", ((True, "src/h.h"), (False, "inc/h.h")))
+def test_header_seed_respects_quote_and_system_search_order(
+    tmp_path: Path, quoted: bool, expected: str,
+) -> None:
+    directive = '#include "h.h"\n' if quoted else "#include <h.h>\n"
+    _sources(tmp_path, {"src/a.cpp": directive, **{f"{directory}/h.h": "int h;"
+                                                 for directory in ("src", "quote", "inc", "system", "after")}})
+    row = _row("src/a.cpp", "-idirafter/scratch/source/after", "-isystem/scratch/source/system",
+               "-iquote/scratch/source/quote", "-I/scratch/source/inc")
+    seeds = [_seed(f"{directory}/h.h") for directory in ("src", "quote", "inc", "system", "after")]
+    result = units.select_units([row], seeds, unit_limit=1, include_scan_files=10,
+                                read_text=seeding.source_reader(tmp_path))
+    assert result.by_seed == {_seed(expected).key: (0,)}
+    assert len(result.uncovered) == 4
+
+
+@pytest.mark.parametrize("budget,expected_reads,selected", (
+    (0, (), ()),
+    (1, ("a.cpp",), ()),
+    (2, ("a.cpp", "missing/h.h"), ()),
+    (3, ("a.cpp", "missing/h.h", "inc/h.h"), (0,)),
+))
+def test_header_seed_budget_counts_candidate_misses_and_cache_hits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, budget: int,
+    expected_reads: tuple[str, ...], selected: tuple[int, ...],
+) -> None:
+    main = "#include <h.h>\n#include <h.h>\n"
+    _sources(tmp_path, {"a.cpp": main, "inc/h.h": ""})
+    row = _row("a.cpp", "-I/scratch/source/missing", "-I/scratch/source/inc")
+    reader = seeding.source_reader(tmp_path)
+    reads = []
+    physical_reads = _observe_file_reads(monkeypatch, tmp_path)
+
+    def observed_read(path: str) -> str | None:
+        reads.append(path)
+        return reader(path)
+
+    result = units.select_units([row], [_seed("inc/h.h")], unit_limit=1, include_scan_files=budget,
+                                read_text=observed_read)
+    assert tuple(reads) == expected_reads
+    expected_physical = ([("a.cpp", len(main))] if budget else []) + ([("inc/h.h", 0)] if budget == 3 else [])
+    assert [(path, count) for path, _size, count in physical_reads] == expected_physical
+    assert all(0 <= requested <= plan.MAX_SCAN_BYTES for _path, requested, _count in physical_reads)
+    assert result.selected == selected
+    assert any(gap.startswith(units.INCLUDE_SCAN_LIMIT) for gap in result.gaps) == (budget < 3)
+
+
+def test_header_seed_parses_cached_headers_but_resolves_each_tu_separately(tmp_path: Path) -> None:
+    _sources(tmp_path, {"a.cpp": '#include "shared.h"\n', "shared.h": "#include <h.h>\n",
+                        "left/h.h": '#include "../shared.h"\n', "right/h.h": "int right;"})
+    rows = [_row("a.cpp", "-I/scratch/source/left"), _row("a.cpp", "-I/scratch/source/right")]
+    reader = seeding.source_reader(tmp_path)
+    reads = []
+
+    def observed_read(path: str) -> str | None:
+        reads.append(path)
+        return reader(path)
+
+    result = units.select_units(rows, [_seed("right/h.h")], unit_limit=2, include_scan_files=4,
+                                read_text=observed_read)
+    assert result.selected == (1,) and not result.gaps
+    assert reads == ["a.cpp", "shared.h", "left/h.h", "right/h.h"]
+
+
+def test_header_seed_exhaustion_does_not_skip_unknown_shadowing_header(tmp_path: Path) -> None:
+    _sources(tmp_path, {"a.cpp": "#include <h.h>\n", "cached/h.h": "", "unread/h.h": ""})
+    rows = [_row("a.cpp", "-I/scratch/source/cached"),
+            _row("a.cpp", "-I/scratch/source/unread", "-I/scratch/source/cached")]
+    result = units.select_units(rows, [_seed("cached/h.h")], unit_limit=2, include_scan_files=2,
+                                read_text=seeding.source_reader(tmp_path))
+    assert result.selected == (0,)
+    assert result.by_seed == {_seed("cached/h.h").key: (0,)}
+    assert any(gap.startswith(units.INCLUDE_SCAN_LIMIT) for gap in result.gaps)
+
+
+def test_header_seed_unit_limit_keeps_highest_priority_before_path_order(tmp_path: Path) -> None:
+    _sources(tmp_path, {"a.cpp": '#include "a.h"\n', "a.h": "",
+                        "z.cpp": '#include "z.h"\n', "z.h": ""})
+    rows = [_row("a.cpp"), _row("z.cpp")]
+    seeds = [Seed("a.h", 1, 1, rank=3), Seed("z.h", 1, 1, rank=0)]
+    for ordered in (seeds, list(reversed(seeds))):
+        result = units.select_units(rows, ordered, unit_limit=1, include_scan_files=4,
+                                    read_text=seeding.source_reader(tmp_path))
+        assert result.selected == (1,)
+        assert result.by_seed == {seeds[1].key: (1,)}
+        assert result.uncovered == (seeds[0].key,)
+        assert any(gap.startswith(units.UNIT_LIMIT_REACHED) for gap in result.gaps)
+
+
+def _observe_file_reads(monkeypatch: pytest.MonkeyPatch, root: Path) -> list[tuple[str, int, int]]:
+    original = Path.open
+    reads = []
+
+    class ObservedStream:
+        def __init__(self, stream, relative: str):
+            self.stream = stream
+            self.relative = relative
+
+        def __getattr__(self, name):
+            return getattr(self.stream, name)
+
+        def read(self, size: int = -1):
+            data = self.stream.read(size)
+            reads.append((self.relative, size, len(data)))
+            return data
+
+    @contextmanager
+    def observed_open(path: Path, *args, **kwargs):
+        with original(path, *args, **kwargs) as stream:
+            yield ObservedStream(stream, path.relative_to(root).as_posix()) if root in path.parents else stream
+
+    monkeypatch.setattr(Path, "open", observed_open)
+    return reads
+
+
+@pytest.mark.parametrize("extra", (0, 1), ids=("exact-byte-limit", "over-byte-limit"))
+def test_header_seed_source_byte_limit_bounds_actual_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: int,
+) -> None:
+    directive = b'#include "h.h"\n'
+    data = directive + b" " * (plan.MAX_SCAN_BYTES - len(directive) + extra)
+    (tmp_path / "a.cpp").write_bytes(data)
+    (tmp_path / "h.h").write_bytes(b"int h;")
+    reads = _observe_file_reads(monkeypatch, tmp_path)
+    result = units.select_units([_row("a.cpp")], [_seed("h.h")], unit_limit=1, include_scan_files=2,
+                                read_text=seeding.source_reader(tmp_path))
+    if extra:
+        assert reads == []
+        assert result.selected == ()
+        assert any(gap.startswith("include_scan_bytes_limit_reached:") for gap in result.gaps)
+    else:
+        assert [(path, count) for path, _size, count in reads] == [
+            ("a.cpp", plan.MAX_SCAN_BYTES), ("h.h", 6)]
+        assert all(0 <= requested <= plan.MAX_SCAN_BYTES for _path, requested, _count in reads)
+        assert result.selected == (0,) and not result.gaps
+
+
+def test_header_seed_oversized_candidate_shadows_later_search_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _sources(tmp_path, {"a.cpp": "#include <h.h>\n", "first/h.h": " " * (plan.MAX_SCAN_BYTES + 1),
+                        "later/h.h": ""})
+    reads = _observe_file_reads(monkeypatch, tmp_path)
+    row = _row("a.cpp", "-I/scratch/source/first", "-I/scratch/source/later")
+    result = units.select_units([row], [_seed("first/h.h"), _seed("later/h.h")],
+                                unit_limit=1, include_scan_files=2, read_text=seeding.source_reader(tmp_path))
+    assert result.by_seed == {_seed("first/h.h").key: (0,)}
+    assert result.uncovered == (_seed("later/h.h").key,)
+    assert [(path, size) for path, _requested, size in reads] == [("a.cpp", len("#include <h.h>\n"))]
+    assert any(gap.startswith("include_scan_bytes_limit_reached:") for gap in result.gaps)
+
+
+@pytest.mark.parametrize("link_directory", (False, True), ids=("file-symlink", "directory-symlink"))
+def test_header_seed_reader_rejects_symlink_aliases_without_reading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, link_directory: bool,
+) -> None:
+    _sources(tmp_path, {"real/h.h": "int h;"})
+    alias = tmp_path / "alias"
+    alias.symlink_to(tmp_path / ("real" if link_directory else "real/h.h"), target_is_directory=link_directory)
+    reads = _observe_file_reads(monkeypatch, tmp_path)
+    assert seeding.source_reader(tmp_path)("alias/h.h" if link_directory else "alias") is None
+    assert reads == []

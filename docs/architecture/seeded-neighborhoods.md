@@ -51,7 +51,7 @@ Each producer names its own bounds in `[jobs.<job>.settings.seeded_bounds]`:
 | `function_limit` | compiled | Neighborhood functions per project. |
 | `unit_limit` | compiled, clang-static, cpg | Replayed or analyzed translation units per project. |
 | `block_limit` | compiled | Basic blocks with instruction detail per function. |
-| `include_scan_files` | compiled, clang-static, cpg | Files read when mapping a header seed to the units that include it. |
+| `include_scan_files` | compiled, clang-static, cpg | Source-reader calls when mapping a header seed to its translation units, including missing candidate probes. Each distinct candidate is read at most once per selection. |
 
 ## 4. One shared seeding module
 
@@ -61,6 +61,24 @@ the call-graph `expand` walk (`seeding/neighborhood.py`), unit selection (`seedi
 compact record (`seeding/record.py`). `jobs/cpp_seeded.py` is the compile-database selection shared by the
 clang-static and CPG jobs. `tests/test_seeding_module.py` fails if a second module defines the ledger
 statuses or reimplements these algorithms, or if a seeded producer does not import the shared module.
+
+Header selection handles paired and joined `-I`, `-isystem`, `-iquote` and `-idirafter` operands.
+Relative operands use the accepted compile row's rebased source/build working directory; an absent or
+unidentified cwd is not guessed. Only paths resolving inside `/scratch/source` become source identities:
+external system headers and build-only generated files are not relabelled as accepted source.
+Quoted includes search the including file's directory, then `-iquote`, `-I`, `-isystem` and `-idirafter`;
+angle includes search only the last three groups. A same-named header earlier in the search path shadows
+later candidates. Cached source text-derived includes and misses are shared across rows, but resolution
+uses each row's own include search paths.
+
+The source reader uses the prepared accepted source copy, rejects symlink components, and reads at most
+1 MiB per file. A larger file is omitted before content reads and names `include_scan_bytes_limit_reached`;
+its existence still shadows later candidates, but its transitive includes are unavailable. Count-budget
+exhaustion names `include_scan_limit_reached` and does not probe further or substitute a cached later
+candidate for an uninspected earlier one. File counts bound all probes, not just parsed or selected files;
+the include walk has no additional silent closure cutoff. Direct main-source seeds need no include reads.
+`unit_limit` admits matches by seed priority, then seed location and TU path/index for deterministic ties;
+the retained rows are sorted by path/index for replay. Omitted seeds and units remain explicit gaps.
 
 The **compact record** (`appsec-review/seeded-producer-record/1`, bounded) rides on each producer's index
 identity so the graph job builds the card without opening any producer artifact. An unresolved seed keeps
@@ -119,6 +137,11 @@ the affected producer; an unchanged producer reuses its checkpoint, and CodeQL's
 ordering are deterministic; run/attempt-bound artifact and receipt references mean this is not a
 blanket guarantee of byte-identical shards or cards across distinct runs. Configuration changes
 require a new frozen run, not an in-place setting edit.
+
+Compile-database producers also bind each seed location's priority rank in their checkpoint identity.
+A rank-only change can change the selected TU when `unit_limit` is reached and therefore cannot reuse
+the old selection. Reordering the same locations/ranks does not invalidate it. Existing compile-unit,
+neighborhood membership/depth, tool and setting identities remain part of the checkpoint.
 
 ## 9. Publication and exposure
 

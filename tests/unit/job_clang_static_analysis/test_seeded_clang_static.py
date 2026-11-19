@@ -212,6 +212,32 @@ def test_only_the_seeded_units_are_analyzed_never_the_whole_program(tmp_path: Pa
     assert record["resolved_seed_count"] == 2 and record["status_counts"] == {"resolved": 2}
 
 
+def test_priority_only_change_invalidates_seeded_cache_without_changing_seed_locations(tmp_path: Path) -> None:
+    observations = [sc.observation("proj/src/net.cpp", 6, severity="HIGH"),
+                    sc.observation("proj/src/util.cpp", 14, severity="LOW")]
+    staged = sc.stage(tmp_path, observations=observations)
+    original_manifest = staged.manifest_path.read_bytes()
+    executor = sc.StaticExecutor(staged.run_root)
+    settings = {**sc.SEEDED, "unit_limit": 1}
+    first, _ = _run(staged, executor, seeded_settings=settings)
+    assert first["analyzed_units"] == ["unit:src/net.cpp"]
+    _run(staged, executor, seeded_settings=settings)
+    assert len(executor.calls) == 2
+
+    changed = [observations[0], {**observations[1], "severity": "CRITICAL"}]
+    for name, items in (("reprioritized", changed), ("reordered", list(reversed(changed)))):
+        shard = sc._observation_shard(staged.run_root, "evidence", items)
+        manifest = staged.manifest_path.with_name(name + ".json")
+        sc.write_manifest(manifest, run_id="run", target_snapshot=sc.SNAPSHOT, target_root=staged.target,
+                          indexes=[shard])
+        staged.manifest_path, staged.manifest_sha = manifest, sc.file_sha256(manifest)
+        result, _ = _run(staged, executor, seeded_settings=settings)
+        assert result["analyzed_units"] == ["unit:src/util.cpp"]
+        assert len(executor.calls) == 4
+        assert result["index_identity"]["sha256"] != first["index_identity"]["sha256"]
+    assert (staged.manifest_path.parent / "upstream.json").read_bytes() == original_manifest
+
+
 def test_zero_seeds_is_a_clean_skip_with_a_named_gap_and_partial_coverage(tmp_path: Path) -> None:
     staged = sc.stage(tmp_path, observations=[])
     executor = sc.StaticExecutor(staged.run_root)

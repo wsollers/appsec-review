@@ -16,6 +16,7 @@ import posixpath
 import re
 
 from .ledger import Seed
+from .plan import SourceScanLimit
 
 SOURCE_ROOT = "/scratch/source/"
 _INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"\n]+)[>"]', re.MULTILINE)
@@ -37,25 +38,43 @@ class UnitSelection:
 
 def relative_source(row: Mapping[str, object]) -> str:
     """Project-relative path of a compile row's main source."""
-    file = str(row["file"])
-    return file[len(SOURCE_ROOT):] if file.startswith(SOURCE_ROOT) else file.lstrip("/")
+    return _source_path(str(row["file"]), str(row.get("directory", ""))) or ""
 
 
-def include_directories(row: Mapping[str, object]) -> tuple[str, ...]:
-    """Project-relative ``-I`` style directories of one compile row (system paths are ignored)."""
-    arguments = [str(item) for item in row.get("arguments", ())]
-    found: list[str] = []
-    for index, argument in enumerate(arguments):
+def _source_path(value: str, directory: str) -> str | None:
+    if not posixpath.isabs(value):
+        if not any(directory == root or directory.startswith(root + "/")
+                   for root in (SOURCE_ROOT.rstrip("/"), "/scratch/build")):
+            return None
+        value = posixpath.join(directory, value)
+    normalized = posixpath.normpath(value)
+    if normalized == SOURCE_ROOT.rstrip("/"):
+        return "."
+    return normalized[len(SOURCE_ROOT):] if normalized.startswith(SOURCE_ROOT) else None
+
+
+def include_directories(row: Mapping[str, object], *, quoted: bool = True) -> tuple[str, ...]:
+    """Accepted source include paths in compiler search order; only quotes use ``-iquote``.
+
+    Paired and joined operands are resolved against the row's accepted source/build cwd. External
+    system paths and generated build material are not invented as accepted source identities.
+    """
+    arguments = iter(str(item) for item in row.get("arguments", ()))
+    found: dict[str, list[str]] = {flag: [] for flag in _INCLUDE_FLAGS}
+    for argument in arguments:
         for flag in _INCLUDE_FLAGS:
-            value = None
-            if argument == flag and index + 1 < len(arguments):
-                value = arguments[index + 1]
-            elif argument.startswith(flag) and argument != flag:
+            if argument == flag:
+                value = next(arguments, "")
+            elif argument.startswith(flag):
                 value = argument[len(flag):]
-            if value is not None and (value.startswith(SOURCE_ROOT) or value == SOURCE_ROOT.rstrip("/")):
-                found.append(posixpath.normpath(value[len(SOURCE_ROOT):] or "."))
+            else:
+                continue
+            relative = _source_path(value, str(row.get("directory", ""))) if value else None
+            if relative is not None:
+                found[flag].append(relative)
             break
-    return tuple(dict.fromkeys(found))
+    order = ("-iquote", "-I", "-isystem", "-idirafter") if quoted else ("-I", "-isystem", "-idirafter")
+    return tuple(dict.fromkeys(path for flag in order for path in found[flag]))
 
 
 class _Scanner:
@@ -66,34 +85,51 @@ class _Scanner:
         self.budget = budget
         self.reads = 0
         self.exhausted = False
-        self._direct: dict[str, tuple[str, ...]] = {}
+        self.gaps: list[str] = []
+        self._direct: dict[str, tuple[tuple[str, str], ...] | None] = {}
 
-    def direct(self, path: str, directories: Sequence[str]) -> tuple[str, ...]:
-        key = path
-        if key not in self._direct:
+    def _includes(self, path: str) -> tuple[tuple[str, str], ...] | None:
+        if not path or path == "." or posixpath.isabs(path) or path == ".." or path.startswith("../"):
+            return None
+        if path not in self._direct:
             if self.reads >= self.budget:
                 self.exhausted = True
-                return ()
+                return None
             self.reads += 1
-            text = self.read_text(path)
-            names = [match.group(2) for match in _INCLUDE.finditer(text or "")] if text else []
-            self._direct[key] = tuple(names)
+            try:
+                text = self.read_text(path)
+            except SourceScanLimit as error:
+                self.gaps.append(str(error))
+                # The file exists and shadows later include directories even though its includes
+                # are unavailable. Do not select a different same-named header as a substitute.
+                self._direct[path] = ()
+            else:
+                self._direct[path] = (tuple((match.group(1), match.group(2))
+                                           for match in _INCLUDE.finditer(text)) if text is not None else None)
+        return self._direct[path]
+
+    def direct(self, path: str, directories: Sequence[str],
+               quote_directories: Sequence[str]) -> tuple[str, ...]:
         resolved: list[str] = []
         base = posixpath.dirname(path)
-        for name in self._direct[key]:
-            for directory in (base, *directories):
+        for delimiter, name in self._includes(path) or ():
+            search = (base, *quote_directories) if delimiter == '"' else directories
+            for directory in search:
                 candidate = posixpath.normpath(posixpath.join(directory, name))
-                if self.read_text(candidate) is not None:
+                if self._includes(candidate) is not None:
                     resolved.append(candidate)
+                    break
+                if self.exhausted and candidate not in self._direct:
                     break
         return tuple(resolved)
 
-    def closure(self, main: str, directories: Sequence[str], limit: int = 2000) -> frozenset[str]:
+    def closure(self, main: str, directories: Sequence[str],
+                quote_directories: Sequence[str]) -> frozenset[str]:
         seen = {main}
         stack = [main]
-        while stack and len(seen) < limit:
+        while stack:
             current = stack.pop()
-            for header in self.direct(current, directories):
+            for header in self.direct(current, directories, quote_directories):
                 if header not in seen:
                     seen.add(header)
                     stack.append(header)
@@ -104,13 +140,15 @@ def select_units(rows: Sequence[Mapping[str, object]], seeds: Iterable[Seed], *,
                  include_scan_files: int, read_text: Callable[[str], str | None]) -> UnitSelection:
     """Row indexes (into ``rows``) whose translation unit can contain each seed, bounded.
 
-    ``read_text`` returns a project-relative file's text or ``None``; it is only consulted for header
-    seeds and counts against ``include_scan_files``. The result is deterministic: rows are visited in
-    (path, index) order.
+    ``read_text`` returns a project-relative file's text or ``None``; every invocation, including
+    failed candidate probes, counts against ``include_scan_files``. Source contents and misses are
+    cached within this selection, not include resolutions, which depend on each row's search paths.
+    Rows are scanned in (path, index) order; the unit limit admits matches by (seed rank, seed key)
+    before the retained rows are sorted for replay.
     """
     if unit_limit < 1 or include_scan_files < 0:
         raise ValueError("unit_limit must be positive and include_scan_files not negative")
-    seed_list = sorted(seeds, key=lambda seed: seed.key)
+    seed_list = sorted(seeds, key=lambda seed: (seed.rank, seed.key))
     order = sorted(range(len(rows)), key=lambda index: (relative_source(rows[index]), index))
     mains: dict[str, list[int]] = {}
     for index in order:
@@ -128,24 +166,27 @@ def select_units(rows: Sequence[Mapping[str, object]], seeds: Iterable[Seed], *,
     if pending:
         wanted = {seed.path for seed in pending}
         for index in order:
-            closure = scanner.closure(relative_source(rows[index]), include_directories(rows[index]))
+            closure = scanner.closure(relative_source(rows[index]),
+                                      include_directories(rows[index], quoted=False),
+                                      include_directories(rows[index]))
             for seed in pending:
                 if seed.path in closure and seed.path in wanted:
                     matches.setdefault(seed.key, []).append(index)
         if scanner.exhausted:
             gaps.append(f"{INCLUDE_SCAN_LIMIT}: include_scan_files {include_scan_files} was reached; header "
                         "seeds may be missing translation units")
+        gaps.extend(scanner.gaps)
     selected: list[int] = []
     for seed in seed_list:
         for index in matches.get(seed.key, ()):
             if index not in selected:
                 selected.append(index)
-    selected.sort(key=lambda index: (relative_source(rows[index]), index))
     if len(selected) > unit_limit:
         dropped = selected[unit_limit:]
         selected = selected[:unit_limit]
         gaps.append(f"{UNIT_LIMIT_REACHED}: unit_limit {unit_limit} reached; {len(dropped)} translation "
                     "unit(s) holding seeds were not replayed")
+    selected.sort(key=lambda index: (relative_source(rows[index]), index))
     chosen = set(selected)
     by_seed = {key: tuple(index for index in indexes if index in chosen)
                for key, indexes in matches.items()}
