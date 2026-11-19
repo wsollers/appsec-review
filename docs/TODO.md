@@ -332,8 +332,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5098 | [Preserve alternate graph symbol kinds identities and disputed evidence](#t-5098-preserve-alternate-graph-symbol-kinds-identities-and-disputed-evidence) | graph | in-progress |
 | T-5099 | [Keep alternate graph storage immutable and traversal honestly bounded](#t-5099-keep-alternate-graph-storage-immutable-and-traversal-honestly-bounded) | graph | in-progress |
 | T-5100 | [Preserve artifact index content and unambiguous relationship identities](#t-5100-preserve-artifact-index-content-and-unambiguous-relationship-identities) | evidence | open |
-| T-5101 | [Validate artifact scanner native selectors output shapes and staging custody](#t-5101-validate-artifact-scanner-native-selectors-output-shapes-and-staging-custody) | scanners | in-progress |
-| T-5102 | [Bound artifact scan reads and guarantee archive parser progress](#t-5102-bound-artifact-scan-reads-and-guarantee-archive-parser-progress) | scanners | in-progress |
+| T-5101 | [Validate artifact scanner native selectors output shapes and staging custody](#t-5101-validate-artifact-scanner-native-selectors-output-shapes-and-staging-custody) | scanners | done (2026-11-19, fdee874d3625f01514d55ed77ecc2e7aaa565ab0) |
+| T-5102 | [Bound artifact scan reads and guarantee archive parser progress](#t-5102-bound-artifact-scan-reads-and-guarantee-archive-parser-progress) | scanners | done (2026-11-19, bc4ae5fc78b3e10192ac12759d94d93d1538cfe0) |
 | T-5103 | [Recognize imported Wasm features and universal Mach-O format correctly](#t-5103-recognize-imported-wasm-features-and-universal-mach-o-format-correctly) | binary | open |
 | T-5104 | [Deliver artifact risks without losing identity or inventing severity](#t-5104-deliver-artifact-risks-without-losing-identity-or-inventing-severity) | review | open |
 | T-5105 | [Bind artifact scan indexes to immutable result content](#t-5105-bind-artifact-scan-indexes-to-immutable-result-content) | evidence | open |
@@ -4057,21 +4057,28 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5101 — Validate artifact scanner native selectors output shapes and staging custody
 
-- **State:** in-progress
+- **State:** done (2026-11-19, fdee874d3625f01514d55ed77ecc2e7aaa565ab0)
 - **Area:** scanners
 - **Why:** Archived audit/feedback cases: ASA-F01, ASA-F03, ASA-F10. Every positive CVE-bin-tool array has a nonresolving native selector; Incompatible scanner JSON becomes a complete zero-finding scan.
 - **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/findings.py`, `src/appsec_review/jobs/job_artifact_security_analysis/job.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`.
+  Combined main scanner selection after the real-executor follow-up: 89 passed/8.62 s,
+  two workers, seed 5101, no skips or slow cases. Native selectors resolve the original bytes;
+  malformed/error-shaped reports cannot become completed zero-finding scans.
 
 ### T-5102 — Bound artifact scan reads and guarantee archive parser progress
 
-- **State:** in-progress
+- **State:** done (2026-11-19, bc4ae5fc78b3e10192ac12759d94d93d1538cfe0)
 - **Area:** scanners
 - **Why:** Archived audit/feedback cases: ASA-F02, ASA-F09. Scanner adapter ignores execution bounds and eagerly reads unbounded report files; Negative ar member size makes the builtin archive reader stop making progress.
 - **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/formats.py`, `src/appsec_review/jobs/job_artifact_security_analysis/scanners.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`.
+  Shares the 89-case main verification with T-5101. Real executor regressions exercise timeout,
+  retained-stream truncation/receipt hashes and file-size argv, while bounded parser probes
+  reject negative ar sizes. Shared live subprocess capture memory remains separately open
+  under T-5251; post-return retention is not a fix for that limitation.
 
 ### T-5103 — Recognize imported Wasm features and universal Mach-O format correctly
 
