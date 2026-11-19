@@ -27,8 +27,14 @@ and reports failed PDF rendering as a gap while keeping source artifacts. Its cl
 not copy this tool's arbitrary review interchange into developer dossiers or public output.
 Only sanitized summaries/statuses and artifact references belong in public projections.
 `reporting/dossier_render.py` reuses the commissioned executor/template, retains
-`dossier-rendering-receipt/1`, and removes only its run-owned input/scratch staging. Final `dd9c9ad`
-now certifies these refs in gate/report `/2`. The owner-verified
+`dossier-rendering-receipt/1`, and removes only its run-owned input/scratch staging. Integration
+`dd9c9ad` introduced gate/report `/2` certification; current gate `/2` and report `/3` preserve
+that boundary. Dossier Markdown, HTML and LaTeX now share one bounded document, including accepted
+counterevidence and exact-edit patch displays, without inventing paths or validation outcomes.
+Report radar `/2` keeps unknown measurements as `null` with reasons (**N/A** in renderings);
+measured zero remains numeric and unknown chart vertices are omitted. See
+[report metric semantics](final-report.md#domain-coverage-and-unknown-measurements-t-5088).
+The owner-verified
 [seeded dossier sample](dossier-publication.md#verified-seeded-sample) is retained. The historical
 native all-lane check at `039b24e4` uses a renderer double and is not another live PDF result;
 see the [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).

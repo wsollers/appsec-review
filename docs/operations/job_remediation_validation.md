@@ -37,8 +37,8 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_remediation_validation/job.py#L323) |
-| `assess` | `assess.validate` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_remediation_validation/job.py#L306) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_remediation_validation/job.py#L324) |
+| `assess` | `assess.validate` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_remediation_validation/job.py#L307) |
 | `load` | `load.verify_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_remediation_validation/job.py#L84) |
 
 ### Accepted input declarations
@@ -91,7 +91,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | `tests/test_remediation_jobs.py::test_real_runner_publishes_build_checked_without_changing_original_state_or_shipment` |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_remediation_compiler.py`<br>`tests/test_remediation_models.py`<br>`tests/test_remediation_patches.py`<br>`tests/unit/job_remediation_validation/test_coverage_edges.py` |
+| unit | `tests/test_remediation_compiler.py`<br>`tests/test_remediation_models.py`<br>`tests/test_remediation_patches.py`<br>`tests/unit/job_remediation_validation/test_coverage_edges.py`<br>`tests/unit/job_remediation_validation/test_execution_receipts.py` |
 
 ### Dagster placement
 

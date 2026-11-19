@@ -8,8 +8,8 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Operating the final publication gate and the final report
 
-**Delivered snapshot contract (`c44eddc1`, integrated by `dd9c9ad`):** PoC, remediation
-and dossiers precede one final gate. Gate `/2` and report `/3` contracts certify and consume one snapshot;
+**Delivered completion ordering (`c44eddc1`, integrated by `dd9c9ad`):** PoC, remediation
+and dossiers precede one final gate. The current gate `/2` and report `/3` contracts certify and consume one snapshot;
 the shared reader accepts review `/3`, including nested chain/package bindings.
 The [completion design](../architecture/evidence-completion-and-remediation.md) requires
 one gate-certified snapshot after every enabled producer, including protected
@@ -47,7 +47,7 @@ consumers, including separately enabled export.
 ### Final-report export integrity
 
 The existing `report.assemble` task writes `findings.sarif` and `sarif-export-result.json`
-alongside `final-report.json`; there is no `job_sarif_export` stage. The accepted handoff binds
+alongside `final-report.json`; there is no separate SARIF job. The accepted handoff binds
 both SARIF artifacts and the existing `final-report.html`. Publication reassembles the
 gate-derived JSON/SARIF and checks the Markdown and HTML renderings before accepting them.
 
@@ -289,8 +289,8 @@ PoC failure never contradicts the finding, and a compiled PoC cannot upgrade it 
 ### Standalone OpenVEX is not a report input
 
 The user selected standalone post-gate export while preserving gate-only reporting.
-At `74d931273a383f2f33bac90d3569a070a0ef612d`, report dependencies and `CONSUMES` are exactly
-`job_final_publication_gate`; report `/3` has no `openvex_export` block, output links or
+Since `74d931273a383f2f33bac90d3569a070a0ef612d`, report dependencies and `CONSUMES` are exactly
+`job_final_publication_gate`; the current report `/3` retains no `openvex_export` block, output links or
 live optional attachment discovery. This supersedes the earlier OpenVEX report-link/fan-in
 proposal, not the pre-gate completion design.
 

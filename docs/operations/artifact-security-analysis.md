@@ -156,6 +156,7 @@ The shared executor's `_default_runner` uses `subprocess.run(capture_output=True
 safety path uses `execution_safety.run_process` with `communicate()`. A noisy subprocess can
 therefore consume application memory beyond the job's stream-retention cap. The timeout, native
 file-write limit and bounded post-execution reads do not fix that shared capture limitation.
+It remains tracked by [T-5251](../TODO.md#t-5251-bound-shared-subprocess-stream-capture-before-materialization).
 
 The protected `artifact_scanner_io` dataset owns scanner scratch, receipts, retained parser bytes
 and diagnostics, plus the empty mount placeholders under each task's `target-inputs/<token>/` and
@@ -349,9 +350,11 @@ The [interchange upgrade](../architecture/job-interchange.md) adds common observ
 and native-result references to this scanner lane. The implementation keeps
 `appsec-review/artifact-security-record/2` and `appsec-review/artifact-security-observation/1`,
 with additive common/provenance metadata. Finding normalization is
-`appsec-review/artifact-security-findings/3` (bumped for the installer-record attribution fields,
-which rebuilds the observations shard but keeps scan checkpoints reusable), parser identity is
-`appsec-review/artifact-security-parsers/3+<policy-identity>`, and normalization is
+`appsec-review/artifact-security-findings/5` (native CVE-bin-tool root-array selectors);
+a finding-normalizer-only change rebuilds the observations shard but keeps scan checkpoints reusable.
+The repaired native-report contracts and bounded reads use parser identity
+`appsec-review/artifact-security-parsers/4+<policy-identity>`, invalidating older scan checkpoints.
+Normalization remains
 `appsec-review/artifact-security-normalizer/2` for retained parser-input semantics.
 Keep original scanner result identity, parser, retained byte count/hash, selector, and completeness
 alongside domain-specific artifact/package fields. A synthesized BLint report or partitioned result

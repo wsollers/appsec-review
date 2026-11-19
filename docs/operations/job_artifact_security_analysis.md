@@ -39,6 +39,7 @@ The stream cap is **retention**, not bounded live subprocess capture: the shared
 `capture_output=True`, or `communicate()` under execution safety, and truncates streams after the
 runner returns. Noisy commands can still exceed that cap in application memory. This job's timeout,
 file-write limit and bounded post-execution reads do not repair that shared runtime limitation.
+See [T-5251](../TODO.md#t-5251-bound-shared-subprocess-stream-capture-before-materialization).
 
 <!-- generated:begin job=job_artifact_security_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -53,20 +54,20 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L806) |
-| `analyze` | `analyze.blint` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `analyze` | `analyze.cve_bin_tool` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `analyze` | `analyze.grype` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `analyze` | `analyze.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `analyze` | `analyze.jvm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `analyze` | `analyze.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `analyze` | `analyze.osv` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `analyze` | `analyze.packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `analyze` | `analyze.spotbugs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `analyze` | `analyze.syft` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `analyze` | `analyze.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L601) |
-| `index` | `index.observations` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L719) |
-| `load` | `load.accepted_artifacts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L594) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L812) |
+| `analyze` | `analyze.blint` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `analyze` | `analyze.cve_bin_tool` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `analyze` | `analyze.grype` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `analyze` | `analyze.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `analyze` | `analyze.jvm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `analyze` | `analyze.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `analyze` | `analyze.osv` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `analyze` | `analyze.packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `analyze` | `analyze.spotbugs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `analyze` | `analyze.syft` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `analyze` | `analyze.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
+| `index` | `index.observations` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L725) |
+| `load` | `load.accepted_artifacts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L599) |
 
 ### Accepted input declarations
 

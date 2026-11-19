@@ -459,5 +459,6 @@ Changing review evidence, commissioned producer identity or enablement requires 
 unchanged upstream computation need not be rerun just to rebuild this projection. The publication
 unit rechecks the snapshot rather than trusting its earlier classification. Artifact-bearing
 results are not portable failed-attempt checkpoints.
-The public gate/report schema remains `/2`; audit data adds certified bindings and sanitized
-limitations, not a new finding state or a public audit-record endpoint.
+The public gate remains `/2`; the [current report `/3`](final-report.md#domain-coverage-and-unknown-measurements-t-5088)
+changes metric representation, not gate certification. Audit data adds certified bindings and
+sanitized limitations, not a new finding state or a public audit-record endpoint.

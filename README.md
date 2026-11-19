@@ -17,6 +17,11 @@ The upgraded job JSON contract, native scanner provenance, migration rules, and 
 Schema are documented in [job interchange](docs/architecture/job-interchange.md).
 Admission, execution, and coverage are separate; scanner observations are not confirmed findings.
 
+The [final report](docs/operations/final-report.md) publishes report `/3` with radar `/2`.
+Unknown exposure, inspection and corroboration remain `null` with reasons (**N/A** in renderings),
+not measured zero. Protected [dossiers](docs/operations/dossier-publication.md) preserve accepted
+evidence and exact-edit patch references without inventing paths, guard conclusions or fix verification.
+
 Build discovery now separates the recipe-independent whole-bundle **graph/2** from immutable,
 recipe-bound selection/refinement receipts. Null recipes remain accepted planning unknowns, not
 execution authority. Windows/Linux x64 intent and project-declared mobile facts do not substitute

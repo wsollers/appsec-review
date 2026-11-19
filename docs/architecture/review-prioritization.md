@@ -325,14 +325,24 @@ useful when comparing languages with different idioms).
 <a id="missing-values"></a>**Missing values.** A feature is missing (`null`) when its producer did not
 cover the item: no CodeQL coverage for the language, no accepted history or a partial history
 binding for an absent file, no functions in a file (complexity), or undefined instability. Missing
-features are excluded and the remaining weights are renormalized:
-`score = Σ wᵢ·pᵢ / Σ wᵢ` over available features. `feature_coverage` (the available share of
+features are excluded and the remaining base-feature weights are renormalized:
+`base_score = Σ wᵢ·pᵢ / Σ wᵢ` over available features. `feature_coverage` (the available share of
 configured weight) and `missing_features` are published with every item. Zero is never imputed for
 a missing value, because that would rank uncovered languages (for example PHP without CodeQL)
 systematically lower. With exact history binding, a file without in-window changes has
 `history_hotspot = 0`, an observed value.
 
-**Tie-breaking.** Higher score, then more boundary signals (`ingress + sink + privilege_shift +
+**Composite score.** The weighted-percentile result is the base, not the published final priority.
+Engineering modifiers produce `raw_score = base_score + sum(composite_modifiers)`.
+The published `score` divides that raw value by `1 + sum(enabled configured boost maxima)`,
+fixed by the frozen job settings rather than observed source availability. It remains in `[0, 1]`
+without clipping or a magnitude-based percent conversion. The versioned normalization metadata,
+per-boost maxima and settings hash accompany ranking/index/summary artifacts; old or mismatched
+rankings are rejected before publication. Review units use this declared scale, not a guessed one.
+See the [composite contract](../operations/review-prioritization.md#composite-score-contract) for
+rounding, missing-source and cross-configuration limits.
+
+**Tie-breaking.** Higher raw score, then more boundary signals (`ingress + sink + privilege_shift +
 semantic_path`), then higher feature coverage, then path, start line, and name.
 
 **Selection.** The top `ceil(file_top_fraction × files)` files and `ceil(function_top_fraction ×
@@ -356,7 +366,7 @@ Retrieval index `priority`, shard `review-prioritization`:
 
 | Entity kind | Native id | Payload | Location |
 |---|---|---|---|
-| `priority_item` | `file:<path>` or `function:<path>#<qualified>@<line>:<column>` | scope, rank, score, `features`, `percentiles`, `missing_features`, `feature_coverage`, `boundary_total`, `evidence` (bounded by `max_evidence_links_per_item`), `evidence_truncated`, unit metrics, weights, population, score identity | functions: exact Tree-sitter bytes and points; files: whole file |
+| `priority_item` | `file:<path>` or `function:<path>#<qualified>@<line>:<column>` | scope, rank, normalized `score`, `base_score`, `raw_score`, `composite_modifiers`, `score_normalization`, `features`, `percentiles`, `missing_features`, `feature_coverage`, `boundary_total`, `evidence` (bounded by `max_evidence_links_per_item`), `evidence_truncated`, unit metrics, weights, population, base/composite score identities | functions: exact Tree-sitter bytes and points; files: whole file |
 | `review_signal` | signal, suppression, or path id | the signal record: producer, rule id and version, basis, category, surface, owning function, detail | Tree-sitter exact span; Semgrep line span; CodeQL sink line span |
 | `review_flow_step` | path id and ordinal | ordered CodeQL path message and producer | resolved CodeQL step line span |
 | `review_context_file` | file path | one-hop import neighbor of a selected item | accepted whole-file span |

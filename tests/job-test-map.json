@@ -264,6 +264,7 @@
         "tests/unit/job_dependency_intelligence/test_native_advisories.py",
         "tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py",
         "tests/unit/job_dependency_intelligence/test_native_spdx.py",
+        "tests/unit/job_dependency_intelligence/test_sca_reachability.py",
         "tests/unit/job_dependency_intelligence/test_unity_inventory.py"
       ],
       "integration": [
@@ -371,7 +372,11 @@
         "tests/test_inference_fixture_contracts.py",
         "tests/test_inference_review_config.py",
         "tests/test_review_guidance_execution.py",
-        "tests/unit/job_inference_security_review/test_contract.py",
+        "tests/unit/job_inference_security_review/test_contract.py::test_check_isolation_and_excluded_reject_evaluator_and_target_guidance",
+        "tests/unit/job_inference_security_review/test_contract.py::test_contract_datasets_topology_and_registry_parity",
+        "tests/unit/job_inference_security_review/test_contract.py::test_input_validator_rejects_mismatched_steps_tasks_and_untyped_settings",
+        "tests/unit/job_inference_security_review/test_contract.py::test_sources_index_names_and_package_works_tamper_guard",
+        "tests/unit/job_inference_security_review/test_contract.py::test_status_artifact_and_read_integrity_guards",
         "tests/unit/job_inference_security_review/test_handlers.py",
         "tests/unit/job_inference_security_review/test_stages_and_schemas.py",
         "tests/unit/observability_findings/test_actionability_evidence.py",
@@ -481,7 +486,8 @@
         "tests/test_openvex_projection.py",
         "tests/test_openvex_settings.py",
         "tests/test_openvex_wiring.py",
-        "tests/unit/job_openvex_export/test_coverage_edges.py"
+        "tests/unit/job_openvex_export/test_coverage_edges.py",
+        "tests/unit/job_openvex_export/test_dependency_publication.py"
       ],
       "integration": [],
       "acceptance": [],
@@ -594,7 +600,8 @@
       "unit": [
         "tests/test_remediation_models.py",
         "tests/test_remediation_patches.py",
-        "tests/unit/job_remediation_planning/test_coverage_edges.py"
+        "tests/unit/job_remediation_planning/test_coverage_edges.py",
+        "tests/unit/job_remediation_planning/test_t174_risk_first_planning.py"
       ],
       "integration": [],
       "acceptance": ["tests/test_remediation_jobs.py::test_real_review_produces_exact_confirmed_only_proposals_and_regression_specs"],
@@ -605,7 +612,8 @@
         "tests/test_remediation_compiler.py",
         "tests/test_remediation_models.py",
         "tests/test_remediation_patches.py",
-        "tests/unit/job_remediation_validation/test_coverage_edges.py"
+        "tests/unit/job_remediation_validation/test_coverage_edges.py",
+        "tests/unit/job_remediation_validation/test_execution_receipts.py"
       ],
       "integration": [],
       "acceptance": ["tests/test_remediation_jobs.py::test_real_runner_publishes_build_checked_without_changing_original_state_or_shipment"],
@@ -655,6 +663,7 @@
         "tests/test_review_prioritization.py",
         "tests/test_syntax_metrics_streaming.py",
         "tests/unit/job_review_prioritization/test_contract.py",
+        "tests/unit/job_review_prioritization/test_signals_and_rewiring.py",
         "tests/unit/runtime/test_wave2_consumers.py"
       ],
       "integration": [
@@ -865,6 +874,33 @@
     }
   },
   "common_contracts": {
+    "alternate-cpg-consumption": {
+      "jobs": [
+        "job_inference_security_review",
+        "job_owasp_control_assessment",
+        "job_review_package_assembly"
+      ],
+      "unit": [
+        "tests/unit/job_inference_security_review/test_contract.py::test_alternate_cpg_is_admitted_and_read_without_sticky_violation",
+        "tests/unit/job_inference_security_review/test_contract.py::test_alternate_cpg_refuses_unadmitted_or_missing_bytes"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "evidence-querying-guidance": {
+      "jobs": ["job_inference_security_review"],
+      "unit": [
+        "tests/test_guidance_procedures.py::test_querying_attachment_cannot_make_an_unwired_task_composable",
+        "tests/test_guidance_procedures.py::test_querying_attachment_does_not_bypass_the_request_input_budget",
+        "tests/test_guidance_procedures.py::test_querying_attachment_full_bundle_requires_registered_source",
+        "tests/test_guidance_procedures.py::test_querying_attachment_preserves_supported_compositions",
+        "tests/test_guidance_procedures.py::test_querying_attachment_source_tampering_is_refused_when_rendered_or_pinned"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
     "fixture-review-repair": {
       "jobs": [
         "job_document_issue_analysis",
@@ -1012,6 +1048,18 @@
         "tests/test_repair_admission.py::test_successful_portable_unit_is_admitted_into_fresh_attempt"
       ],
       "integration": ["tests/integration/test_repair_workflow.py"],
+      "acceptance": [],
+      "live": []
+    },
+    "reporting-projections": {
+      "jobs": ["job_dossier_publication", "job_final_report_publication"],
+      "unit": [
+        "tests/unit/reporting/test_executive_report.py",
+        "tests/unit/reporting/test_projection_authority.py",
+        "tests/unit/reporting/test_radar_chart.py",
+        "tests/unit/reporting/test_t176_radar_and_dossiers.py"
+      ],
+      "integration": [],
       "acceptance": [],
       "live": []
     },

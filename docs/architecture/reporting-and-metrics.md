@@ -10,9 +10,10 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 
 ## As built today
 
-This view reflects the current repository state, including T-150's
-protected decision-audit readers and dossier projection. Public gate/report schemas and finding
-decisions are unchanged; traceability is not a new finding state or quality label.
+This view includes T-150's protected decision-audit readers and the bounded dossier/report repairs
+in T-5086–T-5088. The gate remains `/2`; report `/3` and radar `/2` distinguish unknown metrics
+from measured zero. Finding decisions are unchanged; traceability is not a new finding state or
+quality label.
 
 ### Certification precedes presentation
 
@@ -242,22 +243,39 @@ Exact contracts, failure branches and acceptance checks stay on the job pages.
 [Review inference and guidance](review-inference-and-guidance.md) owns the model/evidence decision
 boundary; this subsystem observes and projects it rather than widening it.
 
-### Executive report v2, 12-axis security radar, finding dossiers, SARIF 2.1.0 & CVE-bound OpenVEX (T-176)
+### Executive report, 12-axis radar and evidence-grounded dossiers
 
-- **12-axis Security Posture Radar (`appsec-review/security-radar-tracker/1`)**: Projects 12
-  security dimensions across four funnel series (`Detected`, `Corroborated`, `Reachable`,
-  `Remediated`) with deterministic inline SVG rendering (`reporting/radar_svg.py`) and longitudinal
-  baseline delta support.
-- **Executive Report (`appsec-review/final-report/2`) & Finding Dossiers (`appsec-review/dossier/1`)**:
+- **12-axis Security Posture Radar (`appsec-review/security-radar-tracker/2`)**: Projects
+  `surface_exposure`, `verified_coverage`, `corroborated_leads` and `confirmed_high_critical`.
+  Exposure, inspection and corroboration require explicit measurements; accepted packages and
+  lane-B cells cannot substitute for them. The current gate supplies no per-domain measurements,
+  so those fields and undefined derived metrics remain `null` with reasons, displayed as **N/A**.
+  Measured zero remains numeric. Markdown, HTML and LaTeX use the same report radar; SVG/TikZ
+  geometry omits unknown vertices rather than joining or filling through them.
+  See [coverage and metric qualifications](../operations/final-report.md#domain-coverage-and-unknown-measurements-t-5088).
+- **Executive Report (`appsec-review/final-report/3`) & Finding Dossiers (`appsec-review/dossier/1`)**:
   `job_final_report_publication` renders an executive risk narrative, exploitability funnel,
   multi-step attack-chain summaries, top remediation choke-points, OWASP/CWE posture matrix, and
-  named coverage gaps. `job_dossier_publication` emits self-contained per-finding engineering
-  dossiers with source-to-sink slices, guard analysis, compile-only PoC verification status (with
-  explicit non-execution banner), and remediation diffs.
-- **Enriched SARIF 2.1.0 & CVE-bound OpenVEX**: SARIF exports populate `codeFlows[].threadFlows` and
-  `fixes[]`, while `job_openvex_export` binds third-party CVEs from `appsec-review/sca-reachability/1`
-  to evidence-backed `affected` and `not_affected` (`vulnerable_code_not_in_execute_path` /
-  `vulnerable_code_not_present`) VEX statements.
+  named coverage gaps. Active chains use certified `component_claim_ids` and count each publishable
+  member once. Backlog and withheld packages remain separate and cannot certify a domain clean.
+  `job_dossier_publication` uses one common document across Markdown/HTML/LaTeX, preserving
+  counterevidence, qualifications, risk and provenance. Ordered paths, guard conclusions and
+  scanner corroboration stay unrecorded when absent from accepted projections. Actual exact-edit
+  patches retain their bound artifact, original byte ranges and redacted old/new text; they are
+  not applicable unified diffs. The overall accepted validation outcome governs the headline,
+  never a single passing check. Compile-only PoCs remain explicitly unexecuted.
+- **SARIF 2.1.0 & dependency OpenVEX**: Exports use the certified evidence described above,
+  not dossier-invented paths or fixes. The optional dependency companion reads
+  `appsec-review/sca-reachability/1` from the admitted dependency handoff's
+  `acceptance.publish_handoff` output. Supported static symbol-use observations with call sites
+  become `affected`; incomplete/unknown reachability becomes `under_investigation`. It has no
+  complete executable-path certificate and cannot publish dependency `not_affected`.
+  [Dependency intelligence](../operations/dependency-intelligence.md#pinned-osv-and-source-reachability)
+  documents exact package/version bindings and the conservative Python-only positive symbol-use
+  boundary; imports and native FFI context alone are not vulnerable-symbol calls.
+
+Historical report `/2` and radar `/1` remain unchanged and use their declared validators. Legacy
+estimates are labelled as such, never retrospectively certified as measurements.
 
 ## Dataflow
 
@@ -269,9 +287,10 @@ flowchart TD
   review --> gate["job_final_publication_gate"]
   engineering --> gate
   dossiers --> gate
-  gate --> report["job_final_report_publication: appsec-review/final-report/2 + SARIF 2.1.0"]
-  report --> radar["appsec-review/security-radar-tracker/1: 12-axis 4-series SVG radar"]
-  gate --> vex["job_openvex_export: CVE-bound affected & justified not_affected VEX"]
+  gate --> report["job_final_report_publication: appsec-review/final-report/3 + SARIF 2.1.0"]
+  report --> radar["appsec-review/security-radar-tracker/2: 12 axes; unknown metrics remain N/A"]
+  gate --> vex["job_openvex_export: affected findings; optional dependency companion"]
+  dependencies["Admitted job_dependency_intelligence: static SCA symbol-use evidence"] --> vex
   report --> snapshot["finding-snapshot/1"]
   snapshot --> scorecard["finding-metrics/1"]
   independent["Independent labels / prior snapshots / corpus results"] --> scorecard

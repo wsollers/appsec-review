@@ -88,6 +88,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_clang_static_analysis` | `clang_static_raw` | `application/json` | handoff | optional | gap |
 | `job_code_graph_index` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_code_graph_index` | `code_graph_facts` | `appsec-review/graph-fact/1` | handoff | optional | gap |
+| `job_code_graph_index` | `alternate_cpg_index` | `appsec-review/alternate-cpg/1` | handoff | optional | gap |
 | `job_code_graph_index` | `code_graph_stages` | `appsec-review/code-graph-stage/1` | handoff | optional | gap |
 | `job_code_graph_index` | `code_graph_checkpoints` | `appsec-review/code-graph-checkpoint/1` | handoff | optional | gap |
 | `job_code_graph_index` | `code_graph_summary` | `appsec-review/code-graph-index/1` | handoff | optional | gap |
@@ -424,560 +425,565 @@ flowchart LR
   producer31 --> input31 --> job
   input31 -. schema .-> input_schema31
   producer32["job_code_graph_index"]
-  input32["code_graph_stages"]
-  input_schema32["appsec-review/code-graph-stage/1"]
+  input32["alternate_cpg_index"]
+  input_schema32["appsec-review/alternate-cpg/1"]
   producer32 --> input32 --> job
   input32 -. schema .-> input_schema32
   producer33["job_code_graph_index"]
-  input33["code_graph_checkpoints"]
-  input_schema33["appsec-review/code-graph-checkpoint/1"]
+  input33["code_graph_stages"]
+  input_schema33["appsec-review/code-graph-stage/1"]
   producer33 --> input33 --> job
   input33 -. schema .-> input_schema33
   producer34["job_code_graph_index"]
-  input34["code_graph_summary"]
-  input_schema34["appsec-review/code-graph-index/1"]
+  input34["code_graph_checkpoints"]
+  input_schema34["appsec-review/code-graph-checkpoint/1"]
   producer34 --> input34 --> job
   input34 -. schema .-> input_schema34
-  producer35["job_codeql_analysis"]
-  input35["handoff"]
-  input_schema35["appsec-review/job-handoff/2"]
+  producer35["job_code_graph_index"]
+  input35["code_graph_summary"]
+  input_schema35["appsec-review/code-graph-index/1"]
   producer35 --> input35 --> job
   input35 -. schema .-> input_schema35
   producer36["job_codeql_analysis"]
-  input36["codeql_predecessor_import"]
-  input_schema36["appsec-review/codeql-predecessor-import/1"]
+  input36["handoff"]
+  input_schema36["appsec-review/job-handoff/2"]
   producer36 --> input36 --> job
   input36 -. schema .-> input_schema36
   producer37["job_codeql_analysis"]
-  input37["codeql_graph_export"]
-  input_schema37["appsec-review/codeql-graph-export/1"]
+  input37["codeql_predecessor_import"]
+  input_schema37["appsec-review/codeql-predecessor-import/1"]
   producer37 --> input37 --> job
   input37 -. schema .-> input_schema37
   producer38["job_codeql_analysis"]
-  input38["codeql_observations"]
-  input_schema38["appsec-review/codeql-sarif-normalizer/3"]
+  input38["codeql_graph_export"]
+  input_schema38["appsec-review/codeql-graph-export/1"]
   producer38 --> input38 --> job
   input38 -. schema .-> input_schema38
   producer39["job_codeql_analysis"]
-  input39["codeql_plan_and_summary"]
-  input_schema39["appsec-review/codeql-analysis-handoff/1"]
+  input39["codeql_observations"]
+  input_schema39["appsec-review/codeql-sarif-normalizer/3"]
   producer39 --> input39 --> job
   input39 -. schema .-> input_schema39
   producer40["job_codeql_analysis"]
-  input40["codeql_scope_material"]
-  input_schema40["application/octet-stream"]
+  input40["codeql_plan_and_summary"]
+  input_schema40["appsec-review/codeql-analysis-handoff/1"]
   producer40 --> input40 --> job
   input40 -. schema .-> input_schema40
-  producer41["job_cpg_analysis"]
-  input41["handoff"]
-  input_schema41["appsec-review/job-handoff/2"]
+  producer41["job_codeql_analysis"]
+  input41["codeql_scope_material"]
+  input_schema41["application/octet-stream"]
   producer41 --> input41 --> job
   input41 -. schema .-> input_schema41
   producer42["job_cpg_analysis"]
-  input42["cpg_graph_coverage"]
-  input_schema42["appsec-review/retrieval-index/2"]
+  input42["handoff"]
+  input_schema42["appsec-review/job-handoff/2"]
   producer42 --> input42 --> job
   input42 -. schema .-> input_schema42
   producer43["job_cpg_analysis"]
-  input43["cpg_scope_coverage"]
-  input_schema43["appsec-review/cpp-index-coverage/1"]
+  input43["cpg_graph_coverage"]
+  input_schema43["appsec-review/retrieval-index/2"]
   producer43 --> input43 --> job
   input43 -. schema .-> input_schema43
   producer44["job_cpg_analysis"]
-  input44["cpg_summary"]
-  input_schema44["appsec-review/cpg-analysis/1"]
+  input44["cpg_scope_coverage"]
+  input_schema44["appsec-review/cpp-index-coverage/1"]
   producer44 --> input44 --> job
   input44 -. schema .-> input_schema44
   producer45["job_cpg_analysis"]
-  input45["cpg_binary"]
-  input_schema45["application/octet-stream"]
+  input45["cpg_summary"]
+  input_schema45["appsec-review/cpg-analysis/1"]
   producer45 --> input45 --> job
   input45 -. schema .-> input_schema45
-  producer46["job_cpp_compiled_analysis"]
-  input46["handoff"]
-  input_schema46["appsec-review/job-handoff/2"]
+  producer46["job_cpg_analysis"]
+  input46["cpg_binary"]
+  input_schema46["application/octet-stream"]
   producer46 --> input46 --> job
   input46 -. schema .-> input_schema46
   producer47["job_cpp_compiled_analysis"]
-  input47["cpp_build_graph"]
-  input_schema47["appsec-review/retrieval-index/2"]
+  input47["handoff"]
+  input_schema47["appsec-review/job-handoff/2"]
   producer47 --> input47 --> job
   input47 -. schema .-> input_schema47
   producer48["job_cpp_compiled_analysis"]
-  input48["clang_ast"]
+  input48["cpp_build_graph"]
   input_schema48["appsec-review/retrieval-index/2"]
   producer48 --> input48 --> job
   input48 -. schema .-> input_schema48
   producer49["job_cpp_compiled_analysis"]
-  input49["llvm_ir"]
+  input49["clang_ast"]
   input_schema49["appsec-review/retrieval-index/2"]
   producer49 --> input49 --> job
   input49 -. schema .-> input_schema49
   producer50["job_cpp_compiled_analysis"]
-  input50["infer_observations"]
+  input50["llvm_ir"]
   input_schema50["appsec-review/retrieval-index/2"]
   producer50 --> input50 --> job
   input50 -. schema .-> input_schema50
   producer51["job_cpp_compiled_analysis"]
-  input51["binary_symbols"]
+  input51["infer_observations"]
   input_schema51["appsec-review/retrieval-index/2"]
   producer51 --> input51 --> job
   input51 -. schema .-> input_schema51
   producer52["job_cpp_compiled_analysis"]
-  input52["cpp_blocked_branches"]
+  input52["binary_symbols"]
   input_schema52["appsec-review/retrieval-index/2"]
   producer52 --> input52 --> job
   input52 -. schema .-> input_schema52
   producer53["job_cpp_compiled_analysis"]
-  input53["cpp_plan_and_summary"]
-  input_schema53["appsec-review/cpp-compiled-analysis/2"]
+  input53["cpp_blocked_branches"]
+  input_schema53["appsec-review/retrieval-index/2"]
   producer53 --> input53 --> job
   input53 -. schema .-> input_schema53
   producer54["job_cpp_compiled_analysis"]
-  input54["cpp_case_material"]
-  input_schema54["application/octet-stream"]
+  input54["cpp_plan_and_summary"]
+  input_schema54["appsec-review/cpp-compiled-analysis/2"]
   producer54 --> input54 --> job
   input54 -. schema .-> input_schema54
-  producer55["job_cpp_symbol_index"]
-  input55["handoff"]
-  input_schema55["appsec-review/job-handoff/2"]
+  producer55["job_cpp_compiled_analysis"]
+  input55["cpp_case_material"]
+  input_schema55["application/octet-stream"]
   producer55 --> input55 --> job
   input55 -. schema .-> input_schema55
   producer56["job_cpp_symbol_index"]
-  input56["clangd_symbols"]
-  input_schema56["appsec-review/retrieval-index/2"]
+  input56["handoff"]
+  input_schema56["appsec-review/job-handoff/2"]
   producer56 --> input56 --> job
   input56 -. schema .-> input_schema56
   producer57["job_cpp_symbol_index"]
-  input57["clangd_coverage"]
-  input_schema57["appsec-review/cpp-index-coverage/1"]
+  input57["clangd_symbols"]
+  input_schema57["appsec-review/retrieval-index/2"]
   producer57 --> input57 --> job
   input57 -. schema .-> input_schema57
   producer58["job_cpp_symbol_index"]
-  input58["clangd_summary"]
-  input_schema58["appsec-review/cpp-symbol-index/1"]
+  input58["clangd_coverage"]
+  input_schema58["appsec-review/cpp-index-coverage/1"]
   producer58 --> input58 --> job
   input58 -. schema .-> input_schema58
   producer59["job_cpp_symbol_index"]
-  input59["clangd_tool_io"]
-  input_schema59["appsec-review/container-execution/1"]
+  input59["clangd_summary"]
+  input_schema59["appsec-review/cpp-symbol-index/1"]
   producer59 --> input59 --> job
   input59 -. schema .-> input_schema59
-  producer60["job_debug_symbol_indexing"]
-  input60["handoff"]
-  input_schema60["appsec-review/job-handoff/2"]
+  producer60["job_cpp_symbol_index"]
+  input60["clangd_tool_io"]
+  input_schema60["appsec-review/container-execution/1"]
   producer60 --> input60 --> job
   input60 -. schema .-> input_schema60
   producer61["job_debug_symbol_indexing"]
-  input61["normalized_symbols"]
-  input_schema61["appsec-review/retrieval-index/2"]
+  input61["handoff"]
+  input_schema61["appsec-review/job-handoff/2"]
   producer61 --> input61 --> job
   input61 -. schema .-> input_schema61
   producer62["job_debug_symbol_indexing"]
-  input62["symbol_coverage"]
-  input_schema62["appsec-review/debug-symbol-coverage/1"]
+  input62["normalized_symbols"]
+  input_schema62["appsec-review/retrieval-index/2"]
   producer62 --> input62 --> job
   input62 -. schema .-> input_schema62
   producer63["job_debug_symbol_indexing"]
-  input63["target_decision"]
-  input_schema63["appsec-review/debug-symbol-decision/2"]
+  input63["symbol_coverage"]
+  input_schema63["appsec-review/debug-symbol-coverage/1"]
   producer63 --> input63 --> job
   input63 -. schema .-> input_schema63
   producer64["job_debug_symbol_indexing"]
-  input64["raw_artifact_refs"]
-  input_schema64["appsec-review/debug-symbol-inputs/1"]
+  input64["target_decision"]
+  input_schema64["appsec-review/debug-symbol-decision/2"]
   producer64 --> input64 --> job
   input64 -. schema .-> input_schema64
   producer65["job_debug_symbol_indexing"]
-  input65["reader_executions"]
-  input_schema65["appsec-review/container-execution/1"]
+  input65["raw_artifact_refs"]
+  input_schema65["appsec-review/debug-symbol-inputs/1"]
   producer65 --> input65 --> job
   input65 -. schema .-> input_schema65
   producer66["job_debug_symbol_indexing"]
-  input66["debug_symbol_summary"]
-  input_schema66["appsec-review/debug-symbol-indexing/1"]
+  input66["reader_executions"]
+  input_schema66["appsec-review/container-execution/1"]
   producer66 --> input66 --> job
   input66 -. schema .-> input_schema66
-  producer67["job_dependency_intelligence"]
-  input67["handoff"]
-  input_schema67["appsec-review/job-handoff/2"]
+  producer67["job_debug_symbol_indexing"]
+  input67["debug_symbol_summary"]
+  input_schema67["appsec-review/debug-symbol-indexing/1"]
   producer67 --> input67 --> job
   input67 -. schema .-> input_schema67
   producer68["job_dependency_intelligence"]
-  input68["native_discovery"]
-  input_schema68["appsec-review/native-discovery/1"]
+  input68["handoff"]
+  input_schema68["appsec-review/job-handoff/2"]
   producer68 --> input68 --> job
   input68 -. schema .-> input_schema68
   producer69["job_dependency_intelligence"]
-  input69["native_component_curation"]
-  input_schema69["appsec-review/native-component-curation/1"]
+  input69["native_discovery"]
+  input_schema69["appsec-review/native-discovery/1"]
   producer69 --> input69 --> job
   input69 -. schema .-> input_schema69
   producer70["job_dependency_intelligence"]
-  input70["native_metadata_investigation"]
-  input_schema70["appsec-review/native-metadata-investigation/1"]
+  input70["native_component_curation"]
+  input_schema70["appsec-review/native-component-curation/1"]
   producer70 --> input70 --> job
   input70 -. schema .-> input_schema70
   producer71["job_dependency_intelligence"]
-  input71["native_inference_metrics"]
-  input_schema71["appsec-review/native-inference-metrics/1"]
+  input71["native_metadata_investigation"]
+  input_schema71["appsec-review/native-metadata-investigation/1"]
   producer71 --> input71 --> job
   input71 -. schema .-> input_schema71
   producer72["job_dependency_intelligence"]
-  input72["native_spdx"]
-  input_schema72["SPDX-2.3"]
+  input72["native_inference_metrics"]
+  input_schema72["appsec-review/native-inference-metrics/1"]
   producer72 --> input72 --> job
   input72 -. schema .-> input_schema72
   producer73["job_dependency_intelligence"]
-  input73["native_sbom_provenance"]
-  input_schema73["appsec-review/native-sbom-provenance/1"]
+  input73["native_spdx"]
+  input_schema73["SPDX-2.3"]
   producer73 --> input73 --> job
   input73 -. schema .-> input_schema73
   producer74["job_dependency_intelligence"]
-  input74["native_sbom_metrics"]
-  input_schema74["appsec-review/native-sbom-metrics/1"]
+  input74["native_sbom_provenance"]
+  input_schema74["appsec-review/native-sbom-provenance/1"]
   producer74 --> input74 --> job
   input74 -. schema .-> input_schema74
   producer75["job_dependency_intelligence"]
-  input75["native_advisory_observations"]
-  input_schema75["appsec-review/retrieval-index/2"]
+  input75["native_sbom_metrics"]
+  input_schema75["appsec-review/native-sbom-metrics/1"]
   producer75 --> input75 --> job
   input75 -. schema .-> input_schema75
   producer76["job_dependency_intelligence"]
-  input76["native_advisory_lookup"]
-  input_schema76["appsec-review/native-advisory-lookup/1"]
+  input76["native_advisory_observations"]
+  input_schema76["appsec-review/retrieval-index/2"]
   producer76 --> input76 --> job
   input76 -. schema .-> input_schema76
   producer77["job_dependency_intelligence"]
-  input77["dependency_context"]
-  input_schema77["appsec-review/retrieval-index/2"]
+  input77["native_advisory_lookup"]
+  input_schema77["appsec-review/native-advisory-lookup/1"]
   producer77 --> input77 --> job
   input77 -. schema .-> input_schema77
   producer78["job_dependency_intelligence"]
-  input78["scorecard_responses"]
-  input_schema78["application/json"]
+  input78["dependency_context"]
+  input_schema78["appsec-review/retrieval-index/2"]
   producer78 --> input78 --> job
   input78 -. schema .-> input_schema78
   producer79["job_dependency_intelligence"]
-  input79["dependency_intelligence_handoff"]
-  input_schema79["appsec-review/dependency-intelligence-handoff/1"]
+  input79["scorecard_responses"]
+  input_schema79["application/json"]
   producer79 --> input79 --> job
   input79 -. schema .-> input_schema79
-  producer80["job_evidence_collection"]
-  input80["handoff"]
-  input_schema80["appsec-review/job-handoff/2"]
+  producer80["job_dependency_intelligence"]
+  input80["dependency_intelligence_handoff"]
+  input_schema80["appsec-review/dependency-intelligence-handoff/1"]
   producer80 --> input80 --> job
   input80 -. schema .-> input_schema80
   producer81["job_evidence_collection"]
-  input81["static_tool_observations"]
-  input_schema81["appsec-review/retrieval-index/2"]
+  input81["handoff"]
+  input_schema81["appsec-review/job-handoff/2"]
   producer81 --> input81 --> job
   input81 -. schema .-> input_schema81
   producer82["job_evidence_collection"]
-  input82["static_tool_evidence"]
-  input_schema82["appsec-review/static-tool-evidence/2"]
+  input82["static_tool_observations"]
+  input_schema82["appsec-review/retrieval-index/2"]
   producer82 --> input82 --> job
   input82 -. schema .-> input_schema82
   producer83["job_evidence_collection"]
-  input83["static_tool_io"]
-  input_schema83["appsec-review/container-execution/1"]
+  input83["static_tool_evidence"]
+  input_schema83["appsec-review/static-tool-evidence/2"]
   producer83 --> input83 --> job
   input83 -. schema .-> input_schema83
-  producer84["job_language_build"]
-  input84["handoff"]
-  input_schema84["appsec-review/job-handoff/2"]
+  producer84["job_evidence_collection"]
+  input84["static_tool_io"]
+  input_schema84["appsec-review/container-execution/1"]
   producer84 --> input84 --> job
   input84 -. schema .-> input_schema84
   producer85["job_language_build"]
-  input85["topology_refinement_inputs"]
-  input_schema85["appsec-review/build-topology-refinement/1"]
+  input85["handoff"]
+  input_schema85["appsec-review/job-handoff/2"]
   producer85 --> input85 --> job
   input85 -. schema .-> input_schema85
   producer86["job_language_build"]
-  input86["build_actions"]
-  input_schema86["appsec-review/retrieval-index/2"]
+  input86["topology_refinement_inputs"]
+  input_schema86["appsec-review/build-topology-refinement/1"]
   producer86 --> input86 --> job
   input86 -. schema .-> input_schema86
   producer87["job_language_build"]
-  input87["jvm_build_actions"]
+  input87["build_actions"]
   input_schema87["appsec-review/retrieval-index/2"]
   producer87 --> input87 --> job
   input87 -. schema .-> input_schema87
   producer88["job_language_build"]
-  input88["language_build_receipts"]
-  input_schema88["appsec-review/language-build-handoff/2"]
+  input88["jvm_build_actions"]
+  input_schema88["appsec-review/retrieval-index/2"]
   producer88 --> input88 --> job
   input88 -. schema .-> input_schema88
   producer89["job_language_build"]
-  input89["build_workspaces"]
-  input_schema89["application/octet-stream"]
+  input89["language_build_receipts"]
+  input_schema89["appsec-review/language-build-handoff/2"]
   producer89 --> input89 --> job
   input89 -. schema .-> input_schema89
-  producer90["job_post_build_security_assessment"]
-  input90["handoff"]
-  input_schema90["appsec-review/job-handoff/2"]
+  producer90["job_language_build"]
+  input90["build_workspaces"]
+  input_schema90["application/octet-stream"]
   producer90 --> input90 --> job
   input90 -. schema .-> input_schema90
   producer91["job_post_build_security_assessment"]
-  input91["build_security"]
-  input_schema91["appsec-review/retrieval-index/2"]
+  input91["handoff"]
+  input_schema91["appsec-review/job-handoff/2"]
   producer91 --> input91 --> job
   input91 -. schema .-> input_schema91
   producer92["job_post_build_security_assessment"]
-  input92["build_security_documents"]
-  input_schema92["appsec-review/post-build-security-assessment/1"]
+  input92["build_security"]
+  input_schema92["appsec-review/retrieval-index/2"]
   producer92 --> input92 --> job
   input92 -. schema .-> input_schema92
-  producer93["job_profile_data"]
-  input93["handoff"]
-  input_schema93["appsec-review/job-handoff/2"]
+  producer93["job_post_build_security_assessment"]
+  input93["build_security_documents"]
+  input_schema93["appsec-review/post-build-security-assessment/1"]
   producer93 --> input93 --> job
   input93 -. schema .-> input_schema93
   producer94["job_profile_data"]
-  input94["profile_data"]
-  input_schema94["appsec-review/retrieval-index/2"]
+  input94["handoff"]
+  input_schema94["appsec-review/job-handoff/2"]
   producer94 --> input94 --> job
   input94 -. schema .-> input_schema94
   producer95["job_profile_data"]
-  input95["profile_data_handoff"]
-  input_schema95["appsec-review/profile-data-handoff/1"]
+  input95["profile_data"]
+  input_schema95["appsec-review/retrieval-index/2"]
   producer95 --> input95 --> job
   input95 -. schema .-> input_schema95
-  producer96["job_project_build"]
-  input96["handoff"]
-  input_schema96["appsec-review/job-handoff/2"]
+  producer96["job_profile_data"]
+  input96["profile_data_handoff"]
+  input_schema96["appsec-review/profile-data-handoff/1"]
   producer96 --> input96 --> job
   input96 -. schema .-> input_schema96
   producer97["job_project_build"]
-  input97["topology_refinement_inputs"]
-  input_schema97["appsec-review/build-topology-refinement/1"]
+  input97["handoff"]
+  input_schema97["appsec-review/job-handoff/2"]
   producer97 --> input97 --> job
   input97 -. schema .-> input_schema97
   producer98["job_project_build"]
-  input98["project_build_dispatch"]
-  input_schema98["appsec-review/project-build-dispatch/3"]
+  input98["topology_refinement_inputs"]
+  input_schema98["appsec-review/build-topology-refinement/1"]
   producer98 --> input98 --> job
   input98 -. schema .-> input_schema98
   producer99["job_project_build"]
-  input99["probe_workspaces"]
-  input_schema99["application/octet-stream"]
+  input99["project_build_dispatch"]
+  input_schema99["appsec-review/project-build-dispatch/3"]
   producer99 --> input99 --> job
   input99 -. schema .-> input_schema99
   producer100["job_project_build"]
-  input100["image_build_streams"]
-  input_schema100["text/plain"]
+  input100["probe_workspaces"]
+  input_schema100["application/octet-stream"]
   producer100 --> input100 --> job
   input100 -. schema .-> input_schema100
-  producer101["job_review_intake"]
-  input101["handoff"]
-  input_schema101["appsec-review/job-handoff/2"]
+  producer101["job_project_build"]
+  input101["image_build_streams"]
+  input_schema101["text/plain"]
   producer101 --> input101 --> job
   input101 -. schema .-> input_schema101
   producer102["job_review_intake"]
-  input102["model_preflight"]
-  input_schema102["appsec-review/model-preflight/1"]
+  input102["handoff"]
+  input_schema102["appsec-review/job-handoff/2"]
   producer102 --> input102 --> job
   input102 -. schema .-> input_schema102
   producer103["job_review_intake"]
-  input103["binary_evidence"]
-  input_schema103["appsec-review/binary-evidence-intake/1"]
+  input103["model_preflight"]
+  input_schema103["appsec-review/model-preflight/1"]
   producer103 --> input103 --> job
   input103 -. schema .-> input_schema103
   producer104["job_review_intake"]
-  input104["review_intake"]
-  input_schema104["appsec-review/review-intake/1"]
+  input104["binary_evidence"]
+  input_schema104["appsec-review/binary-evidence-intake/1"]
   producer104 --> input104 --> job
   input104 -. schema .-> input_schema104
-  producer105["job_review_prioritization"]
-  input105["handoff"]
-  input_schema105["appsec-review/job-handoff/2"]
+  producer105["job_review_intake"]
+  input105["review_intake"]
+  input_schema105["appsec-review/review-intake/1"]
   producer105 --> input105 --> job
   input105 -. schema .-> input_schema105
   producer106["job_review_prioritization"]
-  input106["priority_items"]
-  input_schema106["appsec-review/retrieval-index/2"]
+  input106["handoff"]
+  input_schema106["appsec-review/job-handoff/2"]
   producer106 --> input106 --> job
   input106 -. schema .-> input_schema106
   producer107["job_review_prioritization"]
-  input107["prioritization_documents"]
-  input_schema107["appsec-review/review-prioritization/1"]
+  input107["priority_items"]
+  input_schema107["appsec-review/retrieval-index/2"]
   producer107 --> input107 --> job
   input107 -. schema .-> input_schema107
-  producer108["job_security_tagging"]
-  input108["handoff"]
-  input_schema108["appsec-review/job-handoff/2"]
+  producer108["job_review_prioritization"]
+  input108["prioritization_documents"]
+  input_schema108["appsec-review/review-prioritization/1"]
   producer108 --> input108 --> job
   input108 -. schema .-> input_schema108
   producer109["job_security_tagging"]
-  input109["tag_assignments"]
-  input_schema109["appsec-review/tag-assignment/1"]
+  input109["handoff"]
+  input_schema109["appsec-review/job-handoff/2"]
   producer109 --> input109 --> job
   input109 -. schema .-> input_schema109
   producer110["job_security_tagging"]
-  input110["tagging_documents"]
-  input_schema110["appsec-review/security-tagging-handoff/1"]
+  input110["tag_assignments"]
+  input_schema110["appsec-review/tag-assignment/1"]
   producer110 --> input110 --> job
   input110 -. schema .-> input_schema110
-  producer111["job_source_history_analysis"]
-  input111["handoff"]
-  input_schema111["appsec-review/job-handoff/2"]
+  producer111["job_security_tagging"]
+  input111["tagging_documents"]
+  input_schema111["appsec-review/security-tagging-handoff/1"]
   producer111 --> input111 --> job
   input111 -. schema .-> input_schema111
   producer112["job_source_history_analysis"]
-  input112["history_signals"]
-  input_schema112["appsec-review/retrieval-index/2"]
+  input112["handoff"]
+  input_schema112["appsec-review/job-handoff/2"]
   producer112 --> input112 --> job
   input112 -. schema .-> input_schema112
   producer113["job_source_history_analysis"]
-  input113["history_documents"]
-  input_schema113["appsec-review/source-history-analysis/2"]
+  input113["history_signals"]
+  input_schema113["appsec-review/retrieval-index/2"]
   producer113 --> input113 --> job
   input113 -. schema .-> input_schema113
   producer114["job_source_history_analysis"]
-  input114["raw_git_history"]
-  input_schema114["application/octet-stream"]
+  input114["history_documents"]
+  input_schema114["appsec-review/source-history-analysis/2"]
   producer114 --> input114 --> job
   input114 -. schema .-> input_schema114
   producer115["job_source_history_analysis"]
-  input115["history_tool_io"]
-  input_schema115["appsec-review/container-execution/1"]
+  input115["raw_git_history"]
+  input_schema115["application/octet-stream"]
   producer115 --> input115 --> job
   input115 -. schema .-> input_schema115
-  producer116["job_svf_alias_analysis"]
-  input116["handoff"]
-  input_schema116["appsec-review/job-handoff/2"]
+  producer116["job_source_history_analysis"]
+  input116["history_tool_io"]
+  input_schema116["appsec-review/container-execution/1"]
   producer116 --> input116 --> job
   input116 -. schema .-> input_schema116
   producer117["job_svf_alias_analysis"]
-  input117["svf_alias_sets"]
-  input_schema117["appsec-review/retrieval-index/2"]
+  input117["handoff"]
+  input_schema117["appsec-review/job-handoff/2"]
   producer117 --> input117 --> job
   input117 -. schema .-> input_schema117
   producer118["job_svf_alias_analysis"]
-  input118["svf_alias_scope_coverage"]
-  input_schema118["appsec-review/cpp-index-coverage/1"]
+  input118["svf_alias_sets"]
+  input_schema118["appsec-review/retrieval-index/2"]
   producer118 --> input118 --> job
   input118 -. schema .-> input_schema118
   producer119["job_svf_alias_analysis"]
-  input119["svf_alias_summary"]
-  input_schema119["appsec-review/svf-alias-analysis-handoff/1"]
+  input119["svf_alias_scope_coverage"]
+  input_schema119["appsec-review/cpp-index-coverage/1"]
   producer119 --> input119 --> job
   input119 -. schema .-> input_schema119
   producer120["job_svf_alias_analysis"]
-  input120["svf_alias_raw"]
-  input_schema120["application/json"]
+  input120["svf_alias_summary"]
+  input_schema120["appsec-review/svf-alias-analysis-handoff/1"]
   producer120 --> input120 --> job
   input120 -. schema .-> input_schema120
-  producer121["job_target_analysis_plan"]
-  input121["handoff"]
-  input_schema121["appsec-review/job-handoff/2"]
+  producer121["job_svf_alias_analysis"]
+  input121["svf_alias_raw"]
+  input_schema121["application/json"]
   producer121 --> input121 --> job
   input121 -. schema .-> input_schema121
   producer122["job_target_analysis_plan"]
-  input122["planning_feedback_cache"]
-  input_schema122["appsec-review/target-analysis-proposal/3"]
+  input122["handoff"]
+  input_schema122["appsec-review/job-handoff/2"]
   producer122 --> input122 --> job
   input122 -. schema .-> input_schema122
   producer123["job_target_analysis_plan"]
-  input123["analysis_plan"]
-  input_schema123["appsec-review/retrieval-index/2"]
+  input123["planning_feedback_cache"]
+  input_schema123["appsec-review/target-analysis-proposal/3"]
   producer123 --> input123 --> job
   input123 -. schema .-> input_schema123
   producer124["job_target_analysis_plan"]
-  input124["analysis_plan_documents"]
-  input_schema124["appsec-review/target-analysis-plan/1"]
+  input124["analysis_plan"]
+  input_schema124["appsec-review/retrieval-index/2"]
   producer124 --> input124 --> job
   input124 -. schema .-> input_schema124
-  producer125["job_target_catalog"]
-  input125["handoff"]
-  input_schema125["appsec-review/job-handoff/2"]
+  producer125["job_target_analysis_plan"]
+  input125["analysis_plan_documents"]
+  input_schema125["appsec-review/target-analysis-plan/1"]
   producer125 --> input125 --> job
   input125 -. schema .-> input_schema125
   producer126["job_target_catalog"]
-  input126["target_artifact_inputs"]
-  input_schema126["appsec-review/target-artifact-intake/1"]
+  input126["handoff"]
+  input_schema126["appsec-review/job-handoff/2"]
   producer126 --> input126 --> job
   input126 -. schema .-> input_schema126
   producer127["job_target_catalog"]
-  input127["source_files"]
-  input_schema127["appsec-review/retrieval-index/2"]
+  input127["target_artifact_inputs"]
+  input_schema127["appsec-review/target-artifact-intake/1"]
   producer127 --> input127 --> job
   input127 -. schema .-> input_schema127
   producer128["job_target_catalog"]
-  input128["declaration_symbols"]
+  input128["source_files"]
   input_schema128["appsec-review/retrieval-index/2"]
   producer128 --> input128 --> job
   input128 -. schema .-> input_schema128
   producer129["job_target_catalog"]
-  input129["components"]
+  input129["declaration_symbols"]
   input_schema129["appsec-review/retrieval-index/2"]
   producer129 --> input129 --> job
   input129 -. schema .-> input_schema129
   producer130["job_target_catalog"]
-  input130["target_documents"]
+  input130["components"]
   input_schema130["appsec-review/retrieval-index/2"]
   producer130 --> input130 --> job
   input130 -. schema .-> input_schema130
   producer131["job_target_catalog"]
-  input131["build_units"]
+  input131["target_documents"]
   input_schema131["appsec-review/retrieval-index/2"]
   producer131 --> input131 --> job
   input131 -. schema .-> input_schema131
   producer132["job_target_catalog"]
-  input132["catalog_documents"]
-  input_schema132["appsec-review/target-catalog/1"]
+  input132["build_units"]
+  input_schema132["appsec-review/retrieval-index/2"]
   producer132 --> input132 --> job
   input132 -. schema .-> input_schema132
-  producer133["job_test_coverage"]
-  input133["handoff"]
-  input_schema133["appsec-review/job-handoff/2"]
+  producer133["job_target_catalog"]
+  input133["catalog_documents"]
+  input_schema133["appsec-review/target-catalog/1"]
   producer133 --> input133 --> job
   input133 -. schema .-> input_schema133
   producer134["job_test_coverage"]
-  input134["test_coverage"]
-  input_schema134["appsec-review/retrieval-index/2"]
+  input134["handoff"]
+  input_schema134["appsec-review/job-handoff/2"]
   producer134 --> input134 --> job
   input134 -. schema .-> input_schema134
   producer135["job_test_coverage"]
-  input135["test_coverage_handoff"]
-  input_schema135["appsec-review/test-coverage-handoff/1"]
+  input135["test_coverage"]
+  input_schema135["appsec-review/retrieval-index/2"]
   producer135 --> input135 --> job
   input135 -. schema .-> input_schema135
-  producer136["job_tree_sitter_ast"]
-  input136["handoff"]
-  input_schema136["appsec-review/job-handoff/2"]
+  producer136["job_test_coverage"]
+  input136["test_coverage_handoff"]
+  input_schema136["appsec-review/test-coverage-handoff/1"]
   producer136 --> input136 --> job
   input136 -. schema .-> input_schema136
   producer137["job_tree_sitter_ast"]
-  input137["tree_sitter_ast"]
-  input_schema137["appsec-review/tree-sitter-normalizer/1"]
+  input137["handoff"]
+  input_schema137["appsec-review/job-handoff/2"]
   producer137 --> input137 --> job
   input137 -. schema .-> input_schema137
   producer138["job_tree_sitter_ast"]
-  input138["tree_sitter_coverage"]
-  input_schema138["appsec-review/tree-sitter-ast/1"]
+  input138["tree_sitter_ast"]
+  input_schema138["appsec-review/tree-sitter-normalizer/1"]
   producer138 --> input138 --> job
   input138 -. schema .-> input_schema138
   producer139["job_tree_sitter_ast"]
-  input139["tree_sitter_node_shards"]
-  input_schema139["appsec-review/tree-sitter-normalizer/1"]
+  input139["tree_sitter_coverage"]
+  input_schema139["appsec-review/tree-sitter-ast/1"]
   producer139 --> input139 --> job
   input139 -. schema .-> input_schema139
   producer140["job_tree_sitter_ast"]
-  input140["generated_source_backing"]
-  input_schema140["appsec-review/generated-source-backing/1"]
+  input140["tree_sitter_node_shards"]
+  input_schema140["appsec-review/tree-sitter-normalizer/1"]
   producer140 --> input140 --> job
   input140 -. schema .-> input_schema140
   producer141["job_tree_sitter_ast"]
-  input141["tree_sitter_tool_io"]
-  input_schema141["appsec-review/container-execution/1"]
+  input141["generated_source_backing"]
+  input_schema141["appsec-review/generated-source-backing/1"]
   producer141 --> input141 --> job
   input141 -. schema .-> input_schema141
-  producer142["job_third_party_data_sync"]
-  input142["feed_snapshot"]
-  input_schema142["appsec-review/public-feed-use/1"]
+  producer142["job_tree_sitter_ast"]
+  input142["tree_sitter_tool_io"]
+  input_schema142["appsec-review/container-execution/1"]
   producer142 --> input142 --> job
   input142 -. schema .-> input_schema142
+  producer143["job_third_party_data_sync"]
+  input143["feed_snapshot"]
+  input_schema143["appsec-review/public-feed-use/1"]
+  producer143 --> input143 --> job
+  input143 -. schema .-> input_schema143
   output0["owasp_control_gaps"]
   output_schema0["appsec-review/owasp-control-gap/1"]
   job --> output0

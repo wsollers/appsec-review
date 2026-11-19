@@ -72,7 +72,9 @@ Relevant bounded procedures and design references:
 - [`operations/openvex-export.md`](operations/openvex-export.md) — OpenVEX defaults, explicit opt-out/overrides,
   certified-gate/independent-export diagrams, operator status, privacy and metrics refresh;
   whole-chain/manual validation and final exact-main reconciliation remain separately tracked.
-- [`operations/final-report.md`](operations/final-report.md) — `job_final_publication_gate` and `job_final_report_publication`: re-verification of the accepted review handoff, publishable / verification backlog / withheld accounting, named limitations, `final-report.json` and the deterministic Markdown (PDF is a later step).
+- [`operations/final-report.md`](operations/final-report.md) — `job_final_publication_gate` and
+  `job_final_report_publication`: certified gate `/2`, report `/3` and radar `/2`, separate package
+  accounting and unknown metrics, deterministic Markdown/HTML and receipted executive PDF outcomes.
 - [`architecture/evidence-completion-and-remediation.md`](architecture/evidence-completion-and-remediation.md) —
   delivered completion source and approved dossier decisions: compile-only PoC before one final gate,
   chains before review seal, confirmed-only remediation and nonexecuting validation.

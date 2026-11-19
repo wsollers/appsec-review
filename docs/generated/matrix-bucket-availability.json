@@ -6296,7 +6296,7 @@
           "completeness_reviewer"
         ]
       },
-      "schema": "appsec-review/final-report/2",
+      "schema": "appsec-review/final-report/3",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_final_report_publication.datasets",
       "stage": "artifact_only",
@@ -8435,7 +8435,7 @@
       "authority": "producer_evidence",
       "bucket": "scanner_observations",
       "dataset": "artifact_scanner_io",
-      "description": "Scanner streams, container scratch and copied feed databases.",
+      "description": "Scanner streams, container scratch, copied feed databases and read-only input mount placeholders.",
       "family": "scanner_findings",
       "gap": [
         "T-157"
