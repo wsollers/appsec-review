@@ -969,8 +969,13 @@ Explicit native product declarations receive the same physical-role checks durin
 retained-byte verification as automatically discovered products. Machine/class alone is insufficient:
 executables cannot stand in for static archives, shared libraries or objects. Archives must contain
 compatible relocatable/import members, and import libraries retain their positive member check.
-ELF, PE and Mach-O roles use bounded headers; ELF shared-object naming fallback uses the declared
-logical product path even when retained bytes are read from a content-addressed object.
+ELF, PE and Mach-O roles use bounded headers. ELF `ET_DYN` admission checks the complete program
+table (at most 64 entries) and referenced dynamic tables (at most 4096 tags in total), using bounded
+reads at their declared file offsets rather than truncating evidence to a header prefix.
+`PT_INTERP` or `DF_1_PIE` identifies an executable regardless of filename. A shared-object role
+requires terminated dynamic metadata, no executable indicator and a zero entry point; missing,
+truncated, over-bound or ambiguous metadata is refused. Neither a `.so` name nor a CAS object name
+proves a role. The generic discovery classifier is separate from this admission check.
 
 ### Build-output dispositions
 

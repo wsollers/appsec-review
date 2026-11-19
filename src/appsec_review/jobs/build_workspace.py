@@ -22,7 +22,7 @@ import shutil
 import stat
 import struct
 import time
-from typing import Any
+from typing import Any, BinaryIO
 import uuid
 
 from appsec_review.config.build_workspaces import BuildWorkspacePolicy
@@ -289,16 +289,73 @@ def native_product_axes(path: Path) -> dict[str, Any]:
         return {"isa": isa, "bits": bits, "import_library": imports}
 
 
-def _native_product_role(path: Path, logical_name: str) -> str | None:
-    from appsec_review.jobs.artifact_kinds import _elf_role, _macho_role
+def _elf_product_role(stream: BinaryIO, head: bytes) -> str | None:
+    if len(head) < 52 or head[4] not in {1, 2} or head[5] not in {1, 2}:
+        return None
+    wide, order = head[4] == 2, "<" if head[5] == 1 else ">"
+    header_size, program_size, dynamic_size = (64, 56, 16) if wide else (52, 32, 8)
+    if len(head) < header_size:
+        return None
+    kind = struct.unpack_from(order + "H", head, 16)[0]
+    if kind in {1, 2}:
+        return "object" if kind == 1 else "executable"
+    if kind != 3:
+        return None
+    entry, phoff = struct.unpack_from(order + ("QQ" if wide else "II"), head, 24)
+    entsize, count = struct.unpack_from(order + "HH", head, 54 if wide else 42)
+    size = os.fstat(stream.fileno()).st_size
+    if (entsize != program_size or not 1 <= count <= 64
+            or not header_size <= phoff <= size or count * entsize > size - phoff):
+        return None
+    stream.seek(phoff)
+    programs = stream.read(count * entsize)
+    if len(programs) != count * entsize:
+        return None
+    executable, dynamic_seen, remaining_tags = False, False, 4096
+    for index in range(count):
+        start = index * entsize
+        program_type = struct.unpack_from(order + "I", programs, start)[0]
+        if program_type not in {2, 3}:  # PT_DYNAMIC and PT_INTERP carry executable-role evidence.
+            continue
+        offset = struct.unpack_from(order + ("Q" if wide else "I"), programs, start + (8 if wide else 4))[0]
+        length = struct.unpack_from(order + ("Q" if wide else "I"), programs, start + (32 if wide else 16))[0]
+        if not length or offset > size or length > size - offset:
+            return None
+        if program_type == 3:
+            executable = True
+            continue
+        if length % dynamic_size or length // dynamic_size > remaining_tags:
+            return None
+        remaining_tags -= length // dynamic_size
+        stream.seek(offset)
+        dynamic = stream.read(length)
+        if len(dynamic) != length:
+            return None
+        terminated = False
+        for tag, value in struct.iter_unpack(order + ("qQ" if wide else "iI"), dynamic):
+            if tag == 0:  # DT_NULL terminates the bounded dynamic table.
+                terminated = True
+                break
+            if tag == 0x6FFFFFFB and value & 0x08000000:  # DT_FLAGS_1 / DF_1_PIE.
+                executable = True
+        if not terminated:
+            return None
+        dynamic_seen = True
+    if executable:
+        return "executable"
+    # ET_DYN also covers static PIE. Neither a suffix nor an unexplained entry point proves a DSO.
+    return "shared-library" if dynamic_seen and entry == 0 else None
+
+
+def _native_product_role(path: Path) -> str | None:
+    from appsec_review.jobs.artifact_kinds import _macho_role
 
     with path.open("rb") as stream:
         head = stream.read(4096)
         if head.startswith(b"!<arch>\n"):
             return "static-library"
         if head.startswith(b"\x7fELF"):
-            # Retained bytes live under a CAS hash, not their original shared-library name.
-            return _elf_role(head, logical_name)
+            return _elf_product_role(stream, head)
         if head.startswith(b"MZ"):
             offset = struct.unpack_from("<I", head, 60)[0]
             stream.seek(offset)
@@ -321,8 +378,8 @@ def verify_native_product(path: Path, spec: ProductSpec) -> None:
         raise WorkspaceError("native retained binary target differs from its accepted enforcement")
     expected_role = {"static_archive": "static-library", "import_library": "static-library",
                      "runtime_shared": "shared-library", "executable": "executable", "native_object": "object"}
-    if _native_product_role(path, PurePosixPath(spec.path).name) != expected_role[spec.role]:
-        raise WorkspaceError("native product role differs from its actual binary container")
+    if _native_product_role(path) != expected_role[spec.role]:
+        raise WorkspaceError("native product role is unresolved or differs from its actual binary container")
     if spec.role in {"static_archive", "import_library"} and (
             actual["import_library"] != (spec.role == "import_library")):
         raise WorkspaceError("native archive/import-library role differs from its actual members")

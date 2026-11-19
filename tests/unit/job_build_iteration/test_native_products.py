@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import struct
-from dataclasses import replace
+from dataclasses import asdict, replace
 
 import pytest
 
@@ -18,6 +18,39 @@ def _archive(member):
     return b"!<arch>\n" + header + member + (b"\n" if len(member) % 2 else b"")
 
 
+def _dynamic_elf(case="shared", *, bits=64, order="<"):
+    wide = bits == 64
+    header_size, program_size, dynamic_size = (64, 56, 16) if wide else (52, 32, 8)
+    phoff = 8192 if case in {"late-interpreter", "truncated-programs"} else header_size
+    count = 0 if case == "missing-programs" else 65 if case == "many-programs" else 1
+    data = bytearray(max(544, phoff + count * program_size))
+    data[:7] = b"\x7fELF" + bytes((2 if wide else 1, 1 if order == "<" else 2, 1))
+    struct.pack_into(order + "HHI", data, 16, 3, 62 if wide else 3, 1)
+    entry = 0x1000 if case in {"static-pie", "unknown-entry"} else 0
+    struct.pack_into(order + ("QQ" if wide else "II"), data, 24, entry, phoff)
+    struct.pack_into(order + "HHH", data, 52 if wide else 40, header_size, program_size, count)
+    dynamic_offset = 512
+    dynamic_length = dynamic_size * 2
+    if case == "many-dynamic-tags":
+        dynamic_length = 4097 * dynamic_size
+        data.extend(bytes(dynamic_offset + dynamic_length - len(data)))
+    if count:
+        if wide:
+            struct.pack_into(order + "IIQQQQQQ", data, phoff, 3 if case == "late-interpreter" else 2,
+                             0, dynamic_offset, 0, 0, dynamic_length, dynamic_length, 8)
+        else:
+            struct.pack_into(order + "IIIIIIII", data, phoff, 2, dynamic_offset, 0, 0,
+                             dynamic_length, dynamic_length, 0, 4)
+    tag_format = order + ("QQ" if wide else "II")
+    struct.pack_into(tag_format, data, dynamic_offset, 0x6FFFFFFB, 0x08000000 if case == "static-pie" else 0)
+    struct.pack_into(tag_format, data, dynamic_offset + dynamic_size, 1 if case == "unterminated" else 0, 0)
+    if case == "truncated-programs":
+        return bytes(data[:header_size])
+    if case == "truncated-dynamic":
+        return bytes(data[:dynamic_offset + dynamic_size])
+    return bytes(data)
+
+
 def _bytes(role):
     if role == "static_archive":
         return _archive(NATIVE_OBJECT)
@@ -26,9 +59,7 @@ def _bytes(role):
     if role == "native_object":
         return NATIVE_OBJECT
     if role == "runtime_shared":
-        data = bytearray(NATIVE_OBJECT)
-        struct.pack_into("<H", data, 16, 3)
-        return bytes(data)
+        return _dynamic_elf()
     return NATIVE_OUTPUT
 
 
@@ -118,3 +149,54 @@ def test_native_roles_keep_supported_pe_macho_and_coff_headers(tmp_path, contain
     verify_native_product(path, _spec(role))
     with pytest.raises(WorkspaceError, match="role"):
         verify_native_product(path, _spec("native_object" if role == "executable" else "executable"))
+
+
+@pytest.mark.parametrize("case", [
+    "late-interpreter", "static-pie", "truncated-programs", "truncated-dynamic",
+    "unterminated", "missing-programs", "unknown-entry", "many-programs", "many-dynamic-tags",
+])
+@pytest.mark.parametrize("boundary", ["commit", "retained"])
+def test_elf_shared_admission_requires_complete_non_executable_byte_evidence(tmp_path, case, boundary):
+    from appsec_review.jobs.build_workspace import _immutable
+    from appsec_review.storage.atomic import canonical_json_sha256
+    from tests.test_native_target_enforcement import _retained_native
+
+    root, workspace, binding, _ = _retained_native(tmp_path)
+    spec = _spec("runtime_shared")
+    with workspace.writer() as writer:
+        writer.begin_attempt(binding, "role-check", writer.state()["generation"])
+        (workspace.paths.target / "libcontrol.so").write_bytes(_dynamic_elf(case))
+        if boundary == "commit":
+            with pytest.raises(WorkspaceError, match="role"):
+                writer.commit([spec])
+            assert writer.committed_generation()["accepted"] == {}
+            writer.fail_attempt("synthetic unresolved or executable ELF")
+        else:
+            # Retain bytes through the real legacy/untyped path, then publish the historical
+            # typed declaration with production serializers: no byte validator is mocked.
+            legacy = writer.commit([replace(spec, role=None)])
+            record = writer.read_retained_record(root, legacy.reference)
+            record["products"] = [asdict(spec)]
+            reference = _immutable(
+                root, f"artifacts/build/workspace/products/{canonical_json_sha256(record)}.json", record)
+            current = writer.committed_generation()
+            generation = writer._publish_generation(
+                current["entries"], {binding.node_id: reference}, current["input_identity"])
+            with pytest.raises(WorkspaceError, match="role"):
+                verify_retained_product(root, generation, reference, binding)
+
+
+@pytest.mark.parametrize("case", ["late-interpreter", "static-pie"])
+def test_elf_executable_indicators_win_over_shared_library_filename(tmp_path, case):
+    path = tmp_path / "libcontrol.so"
+    path.write_bytes(_dynamic_elf(case))
+    verify_native_product(path, replace(_spec("executable"), path="target/libcontrol.so"))
+
+
+@pytest.mark.parametrize("bits,order", [(32, "<"), (32, ">"), (64, "<"), (64, ">")])
+def test_complete_shared_elf_role_does_not_depend_on_any_filename(tmp_path, bits, order):
+    path = tmp_path / "content-addressed-object"
+    path.write_bytes(_dynamic_elf(bits=bits, order=order))
+    spec = replace(_spec("runtime_shared"), path="target/no-library-suffix",
+                   axes={**NATIVE_AXES, "isa": "x86_64" if bits == 64 else "x86"})
+    verify_native_product(path, spec)
