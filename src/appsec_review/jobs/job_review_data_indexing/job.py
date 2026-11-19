@@ -569,7 +569,9 @@ def build_job(*, providers: Providers = registry_providers,
         matrices = {"schema": "appsec-review/coverage-matrices/2", "target_snapshot": document["target_snapshot"],
                     "languages": matrix.language_matrix(
                         view.store, leads, enable_swift=unit.job.tools.enable_swift),
-                    "build_units": matrix.build_unit_matrix(view.store),
+                    "build_units": matrix.build_unit_matrix(
+                        view.store, codeql_handoff=consumer_handoffs.get("job_codeql_analysis"),
+                        target_snapshot=document["target_snapshot"]),
                     "producer_consumer": matrix.producer_consumer_matrix(
                         jobs, document["consumes"], handoffs=consumer_handoffs,
                         observations={name: read_input_observations(unit.job.run_root, value.handoff)

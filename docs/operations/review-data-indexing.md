@@ -51,6 +51,14 @@ presence or observation counts. All-unavailable scopes stay unavailable; mixed, 
 incomplete coverage stays partial, with scoped reasons. An empty observation shard with complete
 scope coverage is distinct from an empty shard published after a failed scan.
 
+The current CodeQL normalizer does not put build-unit IDs in shard producer metadata. For those
+shards, the matrix joins the admitted handoff's `execution.scopes` output to the exact index
+name, shard ID, schema, hash, fingerprint and path, then reads the scope's explicit build-unit ID.
+The shard must be a handoff artifact, and its execution evidence must agree on scope, language
+and query profile. Foreign target/run metadata and conflicting bindings fail closed. Scope IDs,
+storage basenames and languages are never guessed to be build-unit IDs; source-only scopes
+remain language coverage without inventing a build unit.
+
 `max_links_per_rule` limits emitted relationships across all candidates, including ambiguous
 fan-out. An advisory match reserves its `AFFECTED_BY` edge and both provenance edges together;
 insufficient space omits the entire bundle and its new entities. Receipts conserve candidate

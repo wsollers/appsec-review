@@ -16,7 +16,7 @@ from typing import Any
 
 from appsec_review.graph.contract import GRAPH_INDEX, Coverage, Family
 from appsec_review.indexing.derive import bounded_gaps
-from appsec_review.indexing.store import ShardSet
+from appsec_review.indexing.store import AcceptedHandoff, ShardSet
 from appsec_review.swift_policy import SWIFT_KNOWN_GAP
 
 
@@ -201,7 +201,60 @@ def language_matrix(shards: ShardSet, lead_languages: Mapping[str, int], *,
     return rows
 
 
-def build_unit_matrix(shards: ShardSet) -> list[dict[str, Any]]:
+def _codeql_index_key(shard: Mapping[str, Any]) -> tuple[Any, ...]:
+    return tuple(shard.get(key) for key in ("name", "shard_id", "schema", "sha256", "fingerprint", "relative_path"))
+
+
+def _codeql_scope_units(shards: ShardSet, accepted: AcceptedHandoff | None,
+                       target_snapshot: str | None) -> dict[tuple[Any, ...], str | None]:
+    """Bind immutable shards through the admitted normalizer outputs, not their storage names."""
+    if accepted is None:
+        return {}
+    if (accepted.job_id != "job_codeql_analysis"
+            or accepted.handoff.get("job_id") != accepted.job_id
+            or accepted.handoff.get("run_id") != shards.run_root.name
+            or target_snapshot is None or accepted.handoff.get("target_snapshot") != target_snapshot):
+        raise ValueError("CodeQL build-unit binding run/producer/snapshot differs from the accepted input")
+    selected = {_codeql_index_key(shard): shard
+                for shard in shards.select(index="observations", job="job_codeql_analysis")}
+    artifacts = {(item["path"], item["sha256"]) for item in accepted.handoff.get("artifacts", ())}
+    outputs = accepted.handoff.get("outputs") or {}
+    normalized = (outputs.get("execution.scopes") or {}).get("scopes") or ()
+    bindings: dict[tuple[Any, ...], str | None] = {}
+    for item in normalized:
+        if not isinstance(item, Mapping) or not isinstance(item.get("index_identity"), Mapping):
+            continue  # normalization failures can publish a gap without producing a shard
+        key = _codeql_index_key(item["index_identity"])
+        if key not in selected:
+            continue
+        shard = selected[key]
+        if (shard["relative_path"], shard["sha256"]) not in artifacts:
+            raise ValueError("CodeQL scope shard is not an artifact of the admitted handoff")
+        scope = item.get("scope")
+        if not isinstance(scope, Mapping):
+            raise ValueError("CodeQL scope has no explicit build-unit binding metadata")
+        scope_id, unit = scope.get("scope_id"), scope.get("build_unit_id")
+        if not isinstance(scope_id, str) or not scope_id or (unit is not None and (
+                not isinstance(unit, str) or not unit)):
+            raise ValueError("CodeQL scope has an invalid explicit build-unit binding")
+        evidence = [row["payload"] for row in shards.entities((shard,), kinds=("evidence_artifact",))
+                    if row["payload"].get("producer") == "codeql"]
+        if (len(evidence) != 1 or evidence[0].get("scope_id") != scope_id
+                or evidence[0].get("language") != scope.get("language")
+                or evidence[0].get("language") != shard.get("producer", {}).get("language")
+                or evidence[0].get("query_profile") != shard.get("producer", {}).get("query_profile")):
+            raise ValueError("CodeQL scope binding differs from the published execution evidence")
+        if key in bindings and bindings[key] != unit:
+            raise ValueError("CodeQL scope has conflicting admitted build-unit bindings")
+        explicit = shard.get("producer", {}).get("build_unit_id")
+        if explicit is not None and explicit != unit:
+            raise ValueError("CodeQL scope conflicts with the shard's explicit build-unit binding")
+        bindings[key] = unit
+    return bindings
+
+
+def build_unit_matrix(shards: ShardSet, *, codeql_handoff: AcceptedHandoff | None = None,
+                      target_snapshot: str | None = None) -> list[dict[str, Any]]:
     """One row per accepted build unit with build, artifact, compiled and CodeQL lanes."""
     units: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
     for row in shards.entities(shards.select(index="build", job="job_target_catalog"), kinds=("build_action", "project")):
@@ -219,8 +272,9 @@ def build_unit_matrix(shards: ShardSet) -> list[dict[str, Any]]:
         scope = shard.get("producer", {}).get("scope_id") or shard.get("shard_id")
         units[str(scope)]["compiled"].append(str(shard.get("shard_id")))
     codeql: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    scope_units = _codeql_scope_units(shards, codeql_handoff, target_snapshot)
     for shard in shards.select(index="observations", job="job_codeql_analysis"):
-        unit = shard.get("producer", {}).get("build_unit_id") or shard.get("producer", {}).get("scope_id")
+        unit = scope_units.get(_codeql_index_key(shard), shard.get("producer", {}).get("build_unit_id"))
         if unit:
             units[str(unit)]["codeql"].append(str(shard.get("shard_id")))
             codeql[str(unit)].append(shard)

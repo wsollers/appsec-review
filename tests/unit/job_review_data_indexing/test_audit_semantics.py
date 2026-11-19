@@ -57,7 +57,8 @@ def _shard(run, index, shard_id, job, entities=(), *, coverage=("complete",), pr
 ])
 def test_codeql_language_and_unit_require_actual_coverage(tmp_path, states, expected):
     shard = _shard(tmp_path, "observations", "codeql-python", "job_codeql_analysis",
-                   coverage=states, producer={"language": "python", "scope_id": "unit-python"})
+                   coverage=states, producer={"language": "python", "scope_id": "scope-python",
+                                              "build_unit_id": "unit-python"})
     store = ShardSet(tmp_path, [shard])
     language = matrix.language_matrix(store, {})[0]["lanes"]["codeql"]
     unit = matrix.build_unit_matrix(store)[0]["lanes"]["codeql"]
@@ -70,7 +71,7 @@ def test_codeql_language_and_unit_require_actual_coverage(tmp_path, states, expe
 def test_codeql_failed_scope_does_not_contaminate_other_languages_or_units(tmp_path):
     store = ShardSet(tmp_path, [
         _shard(tmp_path, "observations", name, "job_codeql_analysis", coverage=(status,),
-               producer={"language": language, "scope_id": name})
+               producer={"language": language, "scope_id": "scope-" + name, "build_unit_id": name})
         for name, language, status in (("py-ok", "python", "complete"), ("py-failed", "python", "unavailable"),
                                        ("js-ok", "javascript", "complete"))
     ])
