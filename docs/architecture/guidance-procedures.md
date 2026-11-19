@@ -117,6 +117,25 @@ latency or detection-quality claims; task input and other personas can change pr
 26,000 UTF-8 bytes and at most three procedures without a binary shard), excluded selections,
 job restrictions, source tampering, missing guidance and unchanged remediation schemas/citations.
 
+T-5250 compacts only the hypothesis-hunter role's schema/example explanations and formatting.
+The seven JSON examples and non-examples retain identical parsed values; prohibited decisions and
+the tool list are unchanged. The rendered role section drops from 10,344 to 8,756 UTF-8 bytes.
+All other sections, including every selected procedure, retain their text and section hashes.
+For the existing `control_gap` fixture (`cpp_rpc_service`, no granted tools, no binary/querying
+additions), complete rendered sizes are:
+
+| Stateful persona | Before (bytes) | After (bytes) |
+| --- | ---: | ---: |
+| `authentication_session` | 27,579 | 25,991 |
+| `business_logic_abuse` | 26,761 | 25,173 |
+| `filesystem_resources` | 27,051 | 25,463 |
+
+Focused units check complete rendered source/procedure content, deterministic hashes, exact pinned
+bundles/prompts, closed-schema examples, evidence questions and unresolved obligations. The unchanged
+26,000-byte regression bound is not a universal assembly cap: binary/querying attachment still follows
+its wiring, and configured request limits still apply. These offline checks establish neither live
+review quality nor integration/acceptance results.
+
 The [opt-in evaluation harness](../operations/guidance-evaluation.md) uses separate vulnerable,
 fixed and incomplete-evidence fixtures and the actual role bundles. It reports role-appropriate
 quality and usage metrics and supports a hash-distinct procedure-only ablation. Offline tests do
