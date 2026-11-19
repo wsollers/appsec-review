@@ -29,9 +29,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_binary_evidence_indexing/job.py#L405) |
-| `index` | `index.binaries` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_binary_evidence_indexing/job.py#L391) |
-| `load` | `load.accepted_publications` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_binary_evidence_indexing/job.py#L373) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_binary_evidence_indexing/job.py#L430) |
+| `index` | `index.binaries` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_binary_evidence_indexing/job.py#L416) |
+| `load` | `load.accepted_publications` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_binary_evidence_indexing/job.py#L398) |
 
 ### Accepted input declarations
 
