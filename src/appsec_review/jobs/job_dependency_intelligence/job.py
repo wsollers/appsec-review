@@ -12,6 +12,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
+from appsec_review import osv_matching
 from appsec_review.inference import Infer
 from appsec_review.jobs.engineering_contracts import DEPENDENCY_INTELLIGENCE_HANDOFF_SCHEMA
 from appsec_review.jobs.job_language_build import load_accepted_language_build
@@ -554,6 +555,35 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                 *unit.output("resolution.curate_components")["gaps"],
                 *unit.output("resolution.investigate_components")["gaps"],
                 *repositories["gaps"], *scorecard["gaps"], *sbom["gaps"], *advisory["gaps"]]
+        native_matches: list[dict[str, Any]] = []
+        if advisory.get("match_count", 0) and isinstance(advisory.get("artifact"), Mapping):
+            adv_doc = json.loads(_safe_read(unit.job.run_root, advisory["artifact"]).decode("utf-8"))
+            if isinstance(adv_doc.get("matches"), list):
+                native_matches = [dict(m) for m in adv_doc["matches"] if isinstance(m, Mapping)]
+        sca_settings = DependencyIntelligenceSettings.from_settings(unit.job.config.settings)
+        reachability_doc = evaluate_sca_reachability(
+            source_fingerprint=unit.job.source_fingerprint,
+            repository_root=unit.job.repository_root,
+            run_root=unit.job.run_root,
+            target_root=unit.job.target_root,
+            dependencies=resolved["dependencies"],
+            scanner_advisories=_evidence_advisories(unit.job.run_root),
+            native_advisory_matches=native_matches,
+            partition_files=loaded.get("native_files", ()),
+            partition_gaps=[str(gap) for gap in loaded.get("native_gaps", ())],
+            settings=sca_settings,
+            osv_snapshot=osv_snapshot,
+            external_input_selection=getattr(unit.job, "external_input_selection", None),
+        )
+        gaps.extend(_gap("", "sca_reachability_gap", detail) for detail in reachability_doc["gaps"])
+        reachability_path = unit.unit_root / "sca-reachability.json"
+        atomic_json(reachability_path, reachability_doc)
+        reachability_artifact = _artifact(unit.job.run_root, reachability_path)
+        unit.job.events.write(
+            "SCA_REACHABILITY_COMPLETED",
+            unit_id=unit.unit_id,
+            **reachability_doc["telemetry"],
+        )
         unique_gaps = {canonical_json(item): item for item in gaps}
         gaps = [unique_gaps[key] for key in sorted(unique_gaps)]
         producer_artifacts = [{"job": key, "sha256": value} for key, value in sorted(loaded["upstream_handoffs"].items())]
@@ -561,11 +591,19 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
             "dependencies": resolved["dependencies"], "scorecards": scorecard["records"], "gaps": gaps,
         })).hexdigest()})
         producer_artifacts.append({"native_advisory_lookup_sha256": advisory["artifact"]["sha256"]})
+        # The document binds the verified OSV snapshot, source-use evidence and coverage gaps,
+        # including snapshot changes that leave the indexed advisory rows unchanged.
+        producer_artifacts.append({"sca_reachability_sha256": reachability_artifact["sha256"]})
         fingerprint = index_fingerprint(name="inventory", target_snapshot=unit.job.source_fingerprint,
             producer_artifacts=producer_artifacts,
             tool_identity={"scorecard_api": unit.job.config.settings["scorecard"]["base_url"],
                            "native_sbom": sbom["input_fingerprint"],
-                           "spdx_sha256": (sbom.get("artifact") or {}).get("sha256")},
+                           "spdx_sha256": (sbom.get("artifact") or {}).get("sha256"),
+                           "sca_reachability": {
+                               "settings": asdict(sca_settings), "matcher": osv_matching.SCHEMA,
+                               "semver": osv_matching.SEMVER,
+                               "ecosystem_orderings": dict(osv_matching.ECOSYSTEM_ORDERINGS),
+                           }},
             parser_identity=PARSER_IDENTITY, normalizer_identity=NORMALIZER_IDENTITY,
             mapping_identity=MAPPING_IDENTITY)
         path = unit.job.run_root / "data" / "indices" / "inventory" / f"{fingerprint}.sqlite"
@@ -597,35 +635,6 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                                                 dependency_identity, True, 1.0,
                                                 payload={"context_only": True, "security_finding": False}))
 
-        native_matches: list[dict[str, Any]] = []
-        if advisory.get("match_count", 0) and isinstance(advisory.get("artifact"), Mapping):
-            adv_doc = json.loads(_safe_read(unit.job.run_root, advisory["artifact"]).decode("utf-8"))
-            if isinstance(adv_doc.get("matches"), list):
-                native_matches = [dict(m) for m in adv_doc["matches"] if isinstance(m, Mapping)]
-        sca_settings = DependencyIntelligenceSettings.from_settings(unit.job.config.settings)
-        reachability_doc = evaluate_sca_reachability(
-            source_fingerprint=unit.job.source_fingerprint,
-            repository_root=unit.job.repository_root,
-            run_root=unit.job.run_root,
-            target_root=unit.job.target_root,
-            dependencies=resolved["dependencies"],
-            scanner_advisories=_evidence_advisories(unit.job.run_root),
-            native_advisory_matches=native_matches,
-            partition_files=loaded.get("native_files", ()),
-            partition_gaps=[str(gap) for gap in loaded.get("native_gaps", ())],
-            settings=sca_settings,
-            osv_snapshot=osv_snapshot,
-            external_input_selection=getattr(unit.job, "external_input_selection", None),
-        )
-        gaps.extend(_gap("", "sca_reachability_gap", detail) for detail in reachability_doc["gaps"])
-        reachability_path = unit.unit_root / "sca-reachability.json"
-        atomic_json(reachability_path, reachability_doc)
-        reachability_artifact = _artifact(unit.job.run_root, reachability_path)
-        unit.job.events.write(
-            "SCA_REACHABILITY_COMPLETED",
-            unit_id=unit.unit_id,
-            **reachability_doc["telemetry"],
-        )
         for adv_rec in reachability_doc["advisories"]:
             sig_id = LogicalIdentity.derive(
                 EntityKind.REVIEW_SIGNAL,

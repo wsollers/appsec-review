@@ -16,6 +16,15 @@ It consumes only accepted target-catalog, language-build, artifact-index, and ev
 handoffs. Target content, protected compiler commands, SBOM observations, model output, and remote
 responses are data.
 
+The four framework handoffs are required at admission, as are the target catalog's
+`catalog_documents`, the language build's `language_build_receipts`, and the artifact index's
+`artifact_index_summary`. Required publication does not require successful native compilation:
+empty receipts and artifact inventories and partial upstream coverage remain valid. Source Syft
+inventory, per-scope build/artifact/scanner datasets, C/C++ analysis and the OSV feed remain optional;
+missing source Syft or OSV coverage produces a named gap rather than a clean result. The currently
+declared C/C++ inputs are not read by this producer. Reads use admitted handoff pins and retain
+actual consumption receipts; scheduling or an available pointer cannot replace a required pin.
+
 ## Contract
 
 The job publishes `appsec-review/dependency-intelligence-handoff/1` and one immutable `inventory`
@@ -26,6 +35,14 @@ retrieval shard named `dependency-intelligence`. The shard contains:
 - `review_signal` entities for normalized Scorecard context;
 - exact response artifact hashes and `DERIVED_FROM` relations from Scorecard context to a dependency;
 - dependency-scoped coverage rows and gaps.
+
+SCA reachability is evaluated before choosing the inventory shard's immutable identity. The
+fingerprint binds the exact `sca-reachability.json` content (including its verified OSV manifest,
+snapshot and index identities, source-use evidence and gaps), effective reachability bounds and
+settings, and the OSV matcher/comparator identities. A changed snapshot therefore selects a new
+shard even when advisory rows are unchanged. Identical inputs reuse identical bytes; recomputation
+never overwrites a previously published shard. These identities do not promote static symbol use
+into proof of whole-program execution.
 
 After repository inference, a distinct deterministic unit canonicalizes repository identities and
 groups every referring `dependency_id`. Scorecard retrieval consumes only that repository inventory,
