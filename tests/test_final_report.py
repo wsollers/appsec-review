@@ -39,7 +39,7 @@ from tests.fixtures.inference_review.fake_infer import NARRATIVES
 INTEGRITY = (IntegrityError, RetrievalIntegrityError)
 SCHEMAS = ROOT / "docs" / "schemas" / "final-report"
 NAMES = ("common", "final-publication-gate", "final-report", "final-report-v3", "final-report-v4",
-         "final-report-pdf-receipt", "security-radar-tracker", "security-radar-tracker-v2")
+         "final-report-pdf-receipt", "sarif-export-result", "security-radar-tracker", "security-radar-tracker-v2")
 GATE_DOC = ("acceptance.publish_handoff", "final-publication-gate.json")
 REPORT_DOC = ("report.assemble", "final-report.json")
 REPORT_MD = ("report.render", "final-report.md")
