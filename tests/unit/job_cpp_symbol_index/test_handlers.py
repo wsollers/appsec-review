@@ -49,7 +49,7 @@ def _make_scope_and_unit(
     run_root = base / "run"
     target_root = base / "target"
     files_text = sources or {
-        "native/a.cpp": "int helper() { return 1; }\nint main() { return helper(); }\n",
+        "native/a.cpp": "int helper() { return 1; }\nint main() { return helper() + helper(); }\n",
     }
     case_id = "case-native"
     case_root = run_root / "data" / "cpp" / "projects" / case_id
@@ -154,6 +154,7 @@ class FakeClangdExecutor:
         timed_out: bool = False,
         oom_killed: bool = False,
         stdout_truncated: bool = False,
+        stderr_truncated: bool = False,
     ) -> None:
         self.run_root = run_root
         self.yaml_text = yaml_text
@@ -162,6 +163,7 @@ class FakeClangdExecutor:
         self.timed_out = timed_out
         self.oom_killed = oom_killed
         self.stdout_truncated = stdout_truncated
+        self.stderr_truncated = stderr_truncated
         self.calls: list[tuple[str, tuple[str, ...]]] = []
 
     def execute(self, request: Any) -> ExecutionResult:
@@ -202,7 +204,7 @@ class FakeClangdExecutor:
             self.timed_out,
             self.oom_killed,
             self.stdout_truncated,
-            False,
+            self.stderr_truncated,
             rel(raw / "stdout.bin"),
             rel(raw / "stderr.bin"),
             rel(receipt),
@@ -275,7 +277,7 @@ References:
       FileURI:   'file:///target/source/a.cpp'
       Start:
         Line:    1
-        Column:  30
+        Column:  31
     Container:
       ID:        2222222222222222
   - Kind:        badkind
@@ -311,7 +313,7 @@ def test_location_and_uri_helpers_and_post_acceptance_tamper_detection(tmp_path:
     assert _position({"Line": "2", "Column": "4"}) == (3, 5)
 
     _, target_root, scope, unit = _make_scope_and_unit(tmp_path)
-    sizes: dict[str, int] = {}
+    sizes: dict = {}
     assert _accepted_location(unit, scope, "not-a-mapping", sizes) is None
     assert _accepted_location(unit, scope, {"FileURI": "file:///usr/include/x.h"}, sizes) is None
     assert (
@@ -382,7 +384,7 @@ def test_normalize_scope_edges_limits_and_error_surfaces(tmp_path: Path) -> None
     assert counts["symbols"] == 2
     assert counts["external_symbols"] == 1
     assert counts["relations"] == 2
-    assert counts["unresolved_references"] == 3  # self-ref + bad container + non-mapping ref
+    assert counts["unresolved_references"] == 2  # bad container + non-mapping ref; self-ref resolves
     assert counts["coverage"] == "complete"
     edges = {rel.kind: rel for rel in builder.relations}
     assert set(edges) == {RelationKind.CALLS, RelationKind.REFERENCES}
@@ -482,7 +484,8 @@ def test_clangd23_system_headers_not_found_is_a_named_gap_and_units_count_as_unp
         "src/main.cpp": "int main() { return 0; }\n",  # direct 'cstdlib' error; its Processing line is garbled
         "src/util.c": "int util(void) { return 1; }\n",  # direct 'stdio.h' error
         "third_party/zlib/uncompr.c": "int u(void) { return 2; }\n",  # 'sys/types.h' via zlib.h -> zconf.h
-        "third_party/zlib/inflate.c": "int i(void) { return 3; }\n",  # 'sys/types.h' via zutil.h chain
+        # Match the real fixture's definition coordinates without needing the third-party source.
+        "third_party/zlib/inflate.c": "\n" * 156 + "int         inflateReset2() { return 3; }\n",
         "third_party/bzip2/huffman.c": "int h(void) { return 4; }\n",  # 'stdlib.h' via bzlib_private.h
         "third_party/lz4/lib/lz4hc.c": "int l(void) { return 5; }\n",  # 'stdlib.h' via #include "lz4.c"
     }
@@ -686,3 +689,217 @@ def test_build_job_units_skipped_na_unavailable_and_inventory_claims(
         if p.startswith(("data/code-index/clangd", f"data/jobs/{JOB_ID}"))
     ]
     assert mine == []
+
+
+def _symbol_document(identifier: str, *, start: tuple[int, int] = (0, 4),
+                     end: tuple[int, int] = (0, 10), file: str = "a.cpp",
+                     name: str = "helper") -> str:
+    return (
+        f"--- !Symbol\nID: {identifier}\nName: {name}\nSymInfo:\n  Kind: Function\n"
+        f"Definition:\n  FileURI: 'file:///target/source/{file}'\n"
+        f"  Start:\n    Line: {start[0]}\n    Column: {start[1]}\n"
+        f"  End:\n    Line: {end[0]}\n    Column: {end[1]}\n...\n"
+    )
+
+
+def _reference_document(target: str, sources: list[str], *, kind: int = 28,
+                        file: str = "a.cpp", positions: list[tuple[int, int]] | None = None) -> str:
+    positions = positions or [(0, 4)] * len(sources)
+    return f"--- !Refs\nID: {target}\nReferences:\n" + "".join(
+        f"  - Kind: {kind}\n    Container:\n      ID: {source}\n"
+        f"    Location:\n      FileURI: 'file:///target/source/{file}'\n"
+        f"      Start:\n        Line: {line}\n        Column: {column}\n"
+        f"      End:\n        Line: {line}\n        Column: {column + 6}\n"
+        for source, (line, column) in zip(sources, positions, strict=True)
+    ) + "...\n"
+
+
+def _published_rows(run_root: Path, result: dict, table: str) -> list[sqlite3.Row]:
+    assert table in {"locations", "relations", "coverage", "entities"}
+    with sqlite3.connect(run_root / result["index_identity"]["relative_path"]) as db:
+        db.row_factory = sqlite3.Row
+        return db.execute(f"SELECT * FROM {table}").fetchall()
+
+
+def test_recursive_calls_survive_serialization_but_self_declarations_do_not(tmp_path: Path) -> None:
+    run_root, _, scope, unit = _make_scope_and_unit(
+        tmp_path, sources={"native/a.cpp": "int helper() { return helper() + helper(); }\n"}
+    )
+    identifier = "1111111111111111"
+    text = (_symbol_document(identifier)
+            + _reference_document(identifier, [identifier, identifier], positions=[(0, 22), (0, 33)])
+            + _reference_document(identifier, [identifier], kind=1))
+    result = _index_scope(unit, scope, lambda _u: FakeClangdExecutor(run_root, yaml_text=text))
+    relations = _published_rows(run_root, result, "relations")
+    assert len(relations) == 1
+    edge = relations[0]
+    assert edge["kind"] == RelationKind.CALLS.value
+    assert edge["source_id"] == edge["target_id"]
+    payload = json.loads(edge["payload_json"])
+    assert payload["occurrences"] == 2
+    assert [loc["column"] for loc in payload["locations"]] == [23, 34]
+    assert result["counts"]["unresolved_references"] == 0
+    assert result["terminal_status"] == "SUCCEEDED"
+
+
+def test_relation_budget_preserves_later_occurrences_of_admitted_edges(tmp_path: Path) -> None:
+    run_root, _, scope, unit = _make_scope_and_unit(
+        tmp_path, settings_override={"max_relations_per_scope": 1, "locations_per_relation": 1},
+        sources={"native/a.cpp": "int helper() { return 1; }\n"
+                 "int main() { return helper() + helper() + helper(); }\n"
+                 "int other() { return helper() + helper(); }\n"},
+    )
+    a, b, c = ("1111111111111111", "2222222222222222", "3333333333333333")
+    text = (_symbol_document(a)
+            + _symbol_document(b, start=(1, 4), end=(1, 8), name="main")
+            + _symbol_document(c, start=(2, 4), end=(2, 9), name="other"))
+    text += _reference_document(a, [b, c, b, c, b], positions=[(1, 20), (2, 21), (1, 31), (2, 32), (1, 42)])
+    result = _index_scope(unit, scope, lambda _u: FakeClangdExecutor(run_root, yaml_text=text))
+    relations = _published_rows(run_root, result, "relations")
+    assert len(relations) == 1
+    payload = json.loads(relations[0]["payload_json"])
+    assert payload["occurrences"] == 3
+    assert len(payload["locations"]) == 1
+    assert result["counts"]["unresolved_references"] == 2
+    assert result["gaps"] == ["clangd relation limit reached"]
+    assert _published_rows(run_root, result, "coverage")[0]["status"] == "partial"
+
+
+@pytest.mark.parametrize(
+    "source,start,end,expected_bytes",
+    [
+        ("int helper() {}\n", (0, 4), (0, 10), (4, 10)),
+        ("// α😀\r\nint helper() {}\r\n", (1, 4), (1, 10), (15, 21)),
+        ("/*😀*/ int helper() {}\n", (0, 11), (0, 17), (13, 19)),
+        ("int helper", (0, 4), (0, 10), (4, 10)),
+        ("int\nhelper\n", (0, 0), (1, 6), (0, 10)),
+    ],
+    ids=("ascii", "crlf", "utf16", "eof", "multiline"),
+)
+def test_symbol_byte_spans_match_verified_utf16_positions(
+    tmp_path: Path, source: str, start: tuple[int, int], end: tuple[int, int],
+    expected_bytes: tuple[int, int],
+) -> None:
+    run_root, target_root, scope, unit = _make_scope_and_unit(tmp_path, sources={"native/a.cpp": source})
+    text = _symbol_document("1111111111111111", start=start, end=end)
+    result = _index_scope(unit, scope, lambda _u: FakeClangdExecutor(run_root, yaml_text=text))
+    location = _published_rows(run_root, result, "locations")[0]
+    assert (location["start_byte"], location["end_byte"]) == expected_bytes
+    assert (location["start_line"], location["start_column"]) == (start[0] + 1, start[1] + 1)
+    assert (location["end_line"], location["end_column"]) == (end[0] + 1, end[1] + 1)
+    assert location["file_sha256"] == file_sha256(target_root / "native/a.cpp")
+    assert result["terminal_status"] == "SUCCEEDED"
+
+
+@pytest.mark.parametrize(
+    "start,end",
+    [
+        ((1000, 4), (1000, 10)),
+        ((0, 1000), (0, 1001)),
+        ((0, 10), (0, 4)),
+        ((0, -1), (0, 4)),
+        ((0, 3), (0, 4)),  # middle of the astral character's UTF-16 surrogate pair
+        ((0, 4), (1, 1)),  # past the empty final line
+        ((0, 4095), (0, 4095)),  # clangd packed-position overflow sentinel
+    ],
+    ids=("line", "column", "reversed", "negative", "surrogate", "end", "overflow"),
+)
+def test_unresolvable_symbol_coordinates_publish_gap_not_exact_location(
+    tmp_path: Path, start: tuple[int, int], end: tuple[int, int],
+) -> None:
+    run_root, _, scope, unit = _make_scope_and_unit(
+        tmp_path, sources={"native/a.cpp": "/*😀*/ int helper() {}\n"}
+    )
+    text = _symbol_document("1111111111111111", start=start, end=end)
+    result = _index_scope(unit, scope, lambda _u: FakeClangdExecutor(run_root, yaml_text=text))
+    assert not _published_rows(run_root, result, "locations")
+    assert result["counts"]["symbols"] == 0
+    assert result["counts"]["external_symbols"] == 0
+    assert any("source location" in gap for gap in result["gaps"])
+    assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
+
+
+def test_invalid_reference_location_preserves_occurrence_but_not_fabricated_position(tmp_path: Path) -> None:
+    run_root, _, scope, unit = _make_scope_and_unit(tmp_path)
+    a, b = "1111111111111111", "2222222222222222"
+    text = (_symbol_document(a) + _symbol_document(b, start=(1, 4), end=(1, 8), name="main")
+            + _reference_document(a, [b, b], positions=[(1, 20), (1000, 4)]))
+    result = _index_scope(unit, scope, lambda _u: FakeClangdExecutor(run_root, yaml_text=text))
+    payload = json.loads(_published_rows(run_root, result, "relations")[0]["payload_json"])
+    assert payload["occurrences"] == 2
+    assert payload["locations"] == [{"path": "native/a.cpp", "line": 2, "column": 21, "ref_kind": 28}]
+    assert any("source location" in gap for gap in result["gaps"])
+    assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
+
+
+def test_invalid_definition_falls_back_to_verified_declaration_with_gap(tmp_path: Path) -> None:
+    run_root, _, scope, unit = _make_scope_and_unit(tmp_path)
+    text = _symbol_document("1111111111111111", start=(1000, 4), end=(1000, 10))
+    text = text.removesuffix("...\n") + (
+        "CanonicalDeclaration:\n  FileURI: 'file:///target/source/a.cpp'\n"
+        "  Start:\n    Line: 0\n    Column: 4\n  End:\n    Line: 0\n    Column: 10\n...\n"
+    )
+    result = _index_scope(unit, scope, lambda _u: FakeClangdExecutor(run_root, yaml_text=text))
+    location = _published_rows(run_root, result, "locations")[0]
+    assert (location["start_byte"], location["end_byte"]) == (4, 10)
+    assert result["counts"]["symbols"] == 1
+    assert result["counts"]["external_symbols"] == 0
+    assert any("source location" in gap for gap in result["gaps"])
+    assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
+
+
+def test_truncated_diagnostics_never_certify_processed_coverage(tmp_path: Path) -> None:
+    run_root, target_root, scope, unit = _make_scope_and_unit(tmp_path)
+    text = _symbol_document("1111111111111111")
+    executor = FakeClangdExecutor(run_root, yaml_text=text, stderr_truncated=True)
+    result = _index_scope(unit, scope, lambda _u: executor)
+    assert result["counts"]["processed_translation_units"] == 0
+    assert result["counts"]["omitted_translation_units"] == 0
+    assert result["counts"]["symbols"] == 1
+    assert any("diagnostics" in gap and "truncated" in gap for gap in result["gaps"])
+    assert _published_rows(run_root, result, "coverage")[0]["status"] == "partial"
+
+    upstream = run_root / "upstream.json"
+    write_manifest(upstream, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
+                   target_root=target_root, indexes=())
+    unit.job.input_manifest_path = upstream
+    unit.job.input_manifest_sha256 = file_sha256(upstream)
+    unit.outputs["load.accepted_cpp"] = {"upstream": {}, "unavailable": {}}
+    unit.outputs["index.scopes"] = {
+        "scopes": [result], "gaps": result["gaps"], "terminal_status": result["terminal_status"],
+    }
+    published = build_job().units[-1].handler(unit)
+    summary = json.loads((run_root / published["artifact"]["path"]).read_text())
+    assert summary["counts"]["processed_translation_units"] == 0
+    assert summary["gaps"] == result["gaps"]
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+
+
+@pytest.mark.parametrize("diagnostic", ("clean", "included", "direct", "error", "prefix"))
+def test_translation_unit_paths_with_spaces_are_matched_exactly(tmp_path: Path, diagnostic: str) -> None:
+    run_root, _, scope, unit = _make_scope_and_unit(
+        tmp_path, sources={"native/a b.cpp": "int helper() {}\n", "native/a.cpp": "int other() {}\n"}
+    )
+    stderr = ("1[1/2] Processing file /target/source/a b.cpp\n"
+              "[2/2] Processing file /target/source/a.cpp\n")
+    stderr += {
+        "clean": "",
+        "included": ("In file included from /target/source/a b.cpp:1:\n"
+                     "/target/source/include x.h:1:10: fatal error: 'cstdio' file not found\n"),
+        "direct": "/target/source/a b.cpp:1:10: fatal error: 'cstdio' file not found\n",
+        "error": "Error while processing /target/source/a b.cpp.\n",
+        "prefix": "",
+    }[diagnostic]
+    if diagnostic == "prefix":
+        stderr = "[1/1] Processing file /target/source/a b.cpp.extra\n"
+    text = _symbol_document("1111111111111111", file="a%20b.cpp")
+    result = _index_scope(
+        unit, scope, lambda _u: FakeClangdExecutor(run_root, yaml_text=text, stderr_text=stderr)
+    )
+    expected_processed = 2 if diagnostic == "clean" else 0 if diagnostic == "prefix" else 1
+    assert result["counts"]["processed_translation_units"] == expected_processed
+    assert result["counts"]["omitted_translation_units"] == (2 if diagnostic == "prefix" else 0)
+    if diagnostic in {"included", "direct"}:
+        assert result["counts"]["translation_units_with_unresolved_headers"] == 1
+        assert "a b.cpp" in next(g for g in result["gaps"] if g.startswith("system_headers_unresolved:"))
+    assert result["terminal_status"] == ("SUCCEEDED" if diagnostic == "clean" else "COMPLETED_WITH_GAPS")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -112,3 +113,33 @@ def test_shared_topology_places_symbol_index_between_cpp_build_and_code_graph() 
     assert "job_cpp_compiled_analysis" in entry["dependencies"]
     assert JOB_ID in by_id["job_codeql_analysis"]["dependencies"]
     assert JOB_ID in by_id["job_code_graph_index"]["upstream_handoffs"]
+
+
+@pytest.mark.parametrize("name", (
+    "workers", "max_documents_per_scope", "max_symbols_per_scope",
+    "max_relations_per_scope", "locations_per_relation",
+))
+@pytest.mark.parametrize("value", (0, -1, True, 1.5, "2", None))
+def test_invalid_index_settings_fail_before_job_execution(name: str, value: object) -> None:
+    config = load_config(REPO_ROOT / "appsec-review.toml").job(JOB_ID)
+    config = replace(config, settings={**config.settings, name: value})
+    validator = build_job().input_validators[0]
+    with pytest.raises(ValueError, match=name + ".*positive integer"):
+        validator(SimpleNamespace(config=config), {})
+
+
+@pytest.mark.parametrize("value", (1, 10**10))
+def test_positive_index_settings_have_no_undeclared_upper_cap(value: int) -> None:
+    config = load_config(REPO_ROOT / "appsec-review.toml").job(JOB_ID)
+    settings = {**config.settings, **{name: value for name in (
+        "workers", "max_documents_per_scope", "max_symbols_per_scope",
+        "max_relations_per_scope", "locations_per_relation",
+    )}}
+    _validate(SimpleNamespace(config=replace(config, settings=settings)), {})
+
+
+def test_unknown_index_setting_is_rejected_before_job_execution() -> None:
+    config = load_config(REPO_ROOT / "appsec-review.toml").job(JOB_ID)
+    config = replace(config, settings={**config.settings, "locations_per_relations": 8})
+    with pytest.raises(ValueError, match="unknown.*locations_per_relations"):
+        build_job().input_validators[0](SimpleNamespace(config=config), {})

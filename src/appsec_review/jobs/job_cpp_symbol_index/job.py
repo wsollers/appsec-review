@@ -9,7 +9,7 @@ normalizes declarations, definitions, and call/reference edges between accepted 
 from __future__ import annotations
 
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 import hashlib
 from pathlib import Path, PurePosixPath
 import re
@@ -27,24 +27,27 @@ from appsec_review.retrieval import (
     RelationRecord, SourceLocation, index_fingerprint,
 )
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.storage import atomic_json
 
 from .clangd_yaml import iter_tagged, parse_documents
+from .settings import CppSymbolIndexSettings
 from appsec_review.jobs.job_cpp_symbol_index.datasets import CONTRACT, DATASETS
 
 
 JOB_ID = "job_cpp_symbol_index"
 SCHEMA = "appsec-review/cpp-symbol-index/1"
 TOOL_ID = "tool-clangd-indexer"
-NORMALIZER = "clangd-yaml-normalizer/1"
+NORMALIZER = "clangd-yaml-normalizer/2"
 CALL_BIT = 16  # clangd RefKind::Call
 # clangd's all-TUs executor writes these lines from parallel threads, so they interleave by line
-# and may carry another thread's fragment as a prefix; none of these patterns is anchored.
-_PROCESSED = re.compile(r"\[[0-9]+/[0-9]+\] Processing file (/\S+)")
-_INCLUDED_FROM = re.compile(r"In file included from (/\S+?):[0-9]+")
+# and may carry another thread's fragment as a prefix; none requires a leading line boundary.
+_PROCESSED = re.compile(
+    r"\[[0-9]+/[0-9]+\] Processing file (/[^\r\n]*?)"
+    r"(?=\[[0-9]+/[0-9]+\] Processing file |\r?$)", re.MULTILINE)
+_INCLUDED_FROM = re.compile(r"In file included from (/[^\r\n]+?):[0-9]+(?=[:,\r\n]|$)")
 _NOT_FOUND = re.compile(r"'([^']+)' file not found")
-_NOT_FOUND_AT = re.compile(r"(/\S+?):[0-9]+:[0-9]+: fatal error: '([^']+)' file not found")
-_ERROR_PROCESSING = re.compile(r"Error while processing (/\S+)\.")
+_NOT_FOUND_AT = re.compile(r"(/[^\r\n]+?):[0-9]+:[0-9]+: fatal error: '([^']+)' file not found")
+_ERROR_PROCESSING = re.compile(r"Error while processing (/[^\r\n]+?)\.(?=\r?$)", re.MULTILINE)
 _GAP_HEADERS = 16
 _GAP_UNITS = 8
 
@@ -88,10 +91,7 @@ def _bounded(names: list[str], limit: int) -> str:
 
 
 def _settings(unit: UnitContext) -> Mapping[str, int]:
-    settings = unit.job.config.settings
-    return {name: int(settings[name]) for name in (
-        "workers", "max_documents_per_scope", "max_symbols_per_scope",
-        "max_relations_per_scope", "locations_per_relation")}
+    return CppSymbolIndexSettings.from_mapping(unit.job.config.settings).limits()
 
 
 def _container_path(uri: Any) -> str | None:
@@ -101,33 +101,96 @@ def _container_path(uri: Any) -> str | None:
 
 
 def _position(value: Any) -> tuple[int, int] | None:
-    try:
-        return int(value["Line"]) + 1, int(value["Column"]) + 1  # clangd positions are 0-based
-    except (KeyError, TypeError, ValueError):
+    if not isinstance(value, Mapping):
         return None
+    coordinates = []
+    for name in ("Line", "Column"):
+        coordinate = value.get(name)
+        if isinstance(coordinate, str) and re.fullmatch(r"[0-9]+", coordinate):
+            coordinate = int(coordinate)  # the bounded YAML parser retains scalars as strings
+        if type(coordinate) is not int:
+            return None
+        coordinates.append(coordinate)
+    line, column = coordinates
+    # SymbolLocation::Position saturates its packed 20-bit line / 12-bit UTF-16 column.
+    if not 0 <= line < (1 << 20) - 1 or not 0 <= column < (1 << 12) - 1:
+        return None
+    return line + 1, column + 1
+
+
+@dataclass(frozen=True)
+class _SourceBytes:
+    lines: tuple[bytes, ...]
+    starts: tuple[int, ...]
+
+    @classmethod
+    def read(cls, path: Path, sha256: str, target_path: str) -> _SourceBytes:
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"clangd symbol source changed after acceptance: {target_path}")
+        data = path.read_bytes()
+        if hashlib.sha256(data).hexdigest() != sha256:
+            raise ValueError(f"clangd symbol source changed after acceptance: {target_path}")
+        lines = tuple(data.split(b"\n"))
+        starts = []
+        offset = 0
+        for line in lines:
+            starts.append(offset)
+            offset += len(line) + 1
+        return cls(lines, tuple(starts))
+
+    def offset(self, position: tuple[int, int]) -> int | None:
+        line, column = position
+        if line > len(self.lines):
+            return None
+        try:
+            text = self.lines[line - 1].decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        units, offset = 1, self.starts[line - 1]
+        for char in text:
+            if units == column:
+                return offset
+            units += 2 if ord(char) > 0xFFFF else 1
+            offset += len(char.encode("utf-8"))
+            if units > column:
+                return None
+        return offset if units == column else None
+
+
+def _location_gap(gaps: list[str] | None) -> None:
+    message = "clangd source locations could not be resolved against accepted bytes"
+    if gaps is not None and message not in gaps:
+        gaps.append(message)
 
 
 def _accepted_location(unit: UnitContext, scope: IndexScope, value: Any,
-                       sizes: dict[str, int]) -> tuple[SourceLocation, dict] | None:
+                       sources: dict[str, _SourceBytes],
+                       gaps: list[str] | None = None) -> tuple[SourceLocation, dict] | None:
     if not isinstance(value, Mapping):
         return None
     path = _container_path(value.get("FileURI"))
     accepted = scope.accepted_file(path) if path else None
     start, end = _position(value.get("Start")), _position(value.get("End"))
-    if accepted is None or start is None:
+    if accepted is None:
         return None
-    end = end or start
+    if "End" not in value:
+        end = start
+    if start is None or end is None:
+        _location_gap(gaps)
+        return None
     target_path = str(accepted["target_path"])
-    if target_path not in sizes:  # verify each accepted source once per scope, not per symbol
+    if target_path not in sources:  # hash and map the same accepted bytes, once per scope
         target_file = (unit.job.target_root or Path()) / Path(*PurePosixPath(target_path).parts)
-        if not target_file.is_file() or target_file.is_symlink() or file_sha256(target_file) != accepted["sha256"]:
-            raise ValueError(f"clangd symbol source changed after acceptance: {target_path}")
-        sizes[target_path] = target_file.stat().st_size
+        sources[target_path] = _SourceBytes.read(target_file, str(accepted["sha256"]), target_path)
+    start_byte, end_byte = sources[target_path].offset(start), sources[target_path].offset(end)
+    if start_byte is None or end_byte is None or end_byte < start_byte:
+        _location_gap(gaps)
+        return None
     location = SourceLocation(
-        unit.job.source_fingerprint, target_path, str(accepted["sha256"]), 0, sizes[target_path],
+        unit.job.source_fingerprint, target_path, str(accepted["sha256"]), start_byte, end_byte,
         start[0], end[0], start[1], end[1],
         {"uri": str(value.get("FileURI"))[:4096], "line": start[0], "column": start[1]},
-        "clangd-uri-exact-path", 1.0, False)
+        "clangd-uri-utf16-verified-bytes", 1.0, False)
     return location, {"path": target_path, "line": start[0], "column": start[1],
                       "end_line": end[0], "end_column": end[1]}
 
@@ -150,9 +213,12 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
     from appsec_review.runtime import execution_safety as safety
     gaps: list[str] = []
     run_root = unit.job.run_root
+    diagnostics_truncated = execution.get("stderr_truncated", False)
     safety.failed_result(execution["timed_out"] or execution["oom_killed"]
-                         or execution["exit_code"] != 0 or execution["stdout_truncated"],
-                         "clangd execution failed or truncated its index", action="cpp.symbols")
+                         or execution["exit_code"] != 0 or execution["stdout_truncated"]
+                         or diagnostics_truncated,
+                         "clangd diagnostics were truncated" if diagnostics_truncated
+                         else "clangd execution failed or truncated its index", action="cpp.symbols")
     if execution["timed_out"]:
         gaps.append("clangd-indexer timed out")
     elif execution["oom_killed"]:
@@ -161,6 +227,8 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
         gaps.append(f"clangd-indexer exited with status {execution['exit_code']}")
     if execution["stdout_truncated"]:
         gaps.append("clangd index output exceeded the tool output bound and was truncated")
+    if diagnostics_truncated:
+        gaps.append("clangd diagnostics exceeded the tool output bound and were truncated")
     stderr = (run_root / execution["stderr_path"]).read_text(encoding="utf-8", errors="replace")
     processed = {match.group(1) for match in _PROCESSED.finditer(stderr)}
     expected = {row["file"] for row in scope.container_compile_database()}
@@ -171,7 +239,7 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
     # not processed: its index lacks every declaration behind the failing include.
     unresolved_headers, unresolved_units = unresolved_system_headers(stderr, expected)
     errored = {match.group(1) for match in _ERROR_PROCESSING.finditer(stderr)} & expected
-    not_processed = sorted(set(missing) | set(unresolved_units) | errored)
+    not_processed = sorted(expected if diagnostics_truncated else set(missing) | set(unresolved_units) | errored)
     if unresolved_headers:
         gaps.append(f"system_headers_unresolved: {_bounded(unresolved_headers, _GAP_HEADERS)} not found "
                     f"in {len(unresolved_units)} of {len(expected)} translation units"
@@ -197,7 +265,7 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
         gaps.append("clangd index document limit reached")
 
     symbols: dict[str, LogicalIdentity] = {}
-    sizes: dict[str, int] = {}
+    sources: dict[str, _SourceBytes] = {}
     external = 0
     candidates: list[tuple[bool, int, str, Mapping[str, Any], Any, Any, Any, str]] = []
     seen_ids: set[str] = set()
@@ -206,11 +274,14 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
         if not re.fullmatch(r"[0-9A-F]{16}", clangd_id) or clangd_id in seen_ids:
             continue
         seen_ids.add(clangd_id)
-        definition = _accepted_location(unit, scope, value.get("Definition"), sizes)
-        declaration = _accepted_location(unit, scope, value.get("CanonicalDeclaration"), sizes)
+        definition = _accepted_location(unit, scope, value.get("Definition"), sources, gaps)
+        declaration = _accepted_location(unit, scope, value.get("CanonicalDeclaration"), sources, gaps)
         chosen = definition or declaration
         if chosen is None:
-            external += 1  # declared only outside accepted sources (system or SDK headers)
+            locations = (value.get("Definition"), value.get("CanonicalDeclaration"))
+            if not any(scope.accepted_file(path) for item in locations if isinstance(item, Mapping)
+                       if (path := _container_path(item.get("FileURI")))):
+                external += 1  # declared only outside accepted sources (system or SDK headers)
             continue
         kind = dispositions.classify(str(chosen[1]["path"])) if dispositions is not None else FIRST_PARTY
         candidates.append((kind != FIRST_PARTY, len(candidates), clangd_id, value, definition, declaration, chosen,
@@ -253,26 +324,27 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
         for reference in references:
             container = reference.get("Container", {}) if isinstance(reference, Mapping) else {}
             source = symbols.get(str(container.get("ID", "")) if isinstance(container, Mapping) else "")
-            if target is None or source is None or source == target:
+            if target is None or source is None:
                 unresolved_refs += 1
                 continue
             kind_bits = int(reference.get("Kind", 0)) if str(reference.get("Kind", "0")).isdigit() else 0
             kind = RelationKind.CALLS if kind_bits & CALL_BIT else RelationKind.REFERENCES
+            if source == target and kind != RelationKind.CALLS:
+                continue  # declaration/definition self-references are resolved, but not edges
             key = (kind, source.value, target.value)
             if key not in edges:
                 if len(edges) >= limits["max_relations_per_scope"]:
-                    gaps.append("clangd relation limit reached")
-                    break
+                    if "clangd relation limit reached" not in gaps:
+                        gaps.append("clangd relation limit reached")
+                    unresolved_refs += 1
+                    continue
                 edges[key] = {"occurrences": 0, "locations": []}
             edge = edges[key]
             edge["occurrences"] += 1
-            location = reference.get("Location", {})
-            path = _container_path(location.get("FileURI")) if isinstance(location, Mapping) else None
-            accepted = scope.accepted_file(path) if path else None
-            start = _position(location.get("Start")) if isinstance(location, Mapping) else None
-            if accepted and start and len(edge["locations"]) < limits["locations_per_relation"]:
-                edge["locations"].append({"path": str(accepted["target_path"]), "line": start[0],
-                                          "column": start[1], "ref_kind": kind_bits})
+            location = _accepted_location(unit, scope, reference.get("Location"), sources, gaps)
+            if location and len(edge["locations"]) < limits["locations_per_relation"]:
+                edge["locations"].append({key: location[1][key] for key in ("path", "line", "column")}
+                                         | {"ref_kind": kind_bits})
     for (kind, source, target), edge in sorted(edges.items(), key=lambda item: (item[0][0].value, *item[0][1:])):
         builder.add_relation(RelationRecord(kind, source, target, True, 1.0, None,
                                             {"producer": "clangd", **edge}))
@@ -354,6 +426,7 @@ def _validate(context, _result) -> None:
     for step, task in (("load", "accepted_cpp"), ("index", "scopes"), ("acceptance", "publish_handoff")):
         if tuple(context.config.step(step).tasks) != (task,):
             raise ValueError(f"C++ symbol-index task configuration mismatch: {step}")
+    CppSymbolIndexSettings.from_mapping(context.config.settings)
 
 
 def build_job(*, executor_factory=None) -> Job:
@@ -373,7 +446,7 @@ def build_job(*, executor_factory=None) -> Job:
             raise ValueError("accepted C++ scopes changed between load and index")
         runnable = [scope for scope in scopes if scope.container_compile_database()]
         skipped = [_not_applicable_scope(scope) for scope in scopes if not scope.container_compile_database()]
-        with ThreadPoolExecutor(max_workers=max(1, _settings(unit)["workers"])) as pool:
+        with ThreadPoolExecutor(max_workers=_settings(unit)["workers"]) as pool:
             results = list(pool.map(lambda scope: _index_scope(unit, scope, executor_factory), runnable))
         gaps = [f"{item['case_id']}: {gap}" for item in results for gap in item["gaps"]]
         gaps.extend(f"{case_id}: {reason}" for case_id, reason in unavailable.items())

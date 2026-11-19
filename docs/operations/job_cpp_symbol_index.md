@@ -247,17 +247,33 @@ the executed tool is resolved in the handler, not inferred from that table.
    [signing](signing.md) remain shared launch gates.
 3. Compare stderr's processed translation units with the supported database, then parse only the
    supported YAML document subset. Preserve timeout, OOM, exit, output truncation, missing units,
-   malformed document and document-cap reasons.
+   malformed document and document-cap reasons. Diagnostic paths include spaces and must match
+   complete accepted filenames, not whitespace-delimited prefixes. Truncated stderr emits an
+   incomplete-diagnostics gap and certifies zero processed units, even if all processing markers
+   survived; omitted units still count only absent markers.
 4. Accept unique clangd IDs with an accepted definition or canonical declaration, preferring the
-   definition. Convert zero-based positions to accepted source locations. Count external-only
+   definition. Map zero-based UTF-16 positions to half-open byte spans in the same bytes whose
+   accepted hash was verified, preserving CRLF and non-ASCII text. Reject out-of-range, reversed,
+   mid-surrogate and clangd packed-position overflow coordinates with a source-location gap;
+   they are not external symbols. An absent end remains a point, not a whole-file span.
+   Count external-only
    symbols separately; admit symbols `first_party` first under `max_symbols_per_scope` using the
    frozen disposition table (`config/first_party.py`), recording `symbols_by_disposition` and
    `excluded_symbols_by_disposition` where only a first-party exclusion emits the symbol-limit gap.
 5. Link retained reference containers and targets: call-bit references become `CALLS`, others
-   `REFERENCES`. Aggregate repeated edges with occurrence counts and bounded locations; count
-   unresolved references without inventing edges. Enforce relation bounds.
+   `REFERENCES`. Retain recursive calls; resolved non-call self-references do not create edges
+   or inflate the unresolved count. Aggregate repeated edges with occurrence counts and bounded,
+   byte-validated locations. The relation cap rejects only new edges: later occurrences of
+   retained edges still count. Rejected references contribute to `unresolved_references` and
+   the relation-limit gap. No over-budget edge or fabricated source position is published.
 6. Publish one analysis shard per scope and save its checkpoint. Coverage is unavailable for a
    failed exit with no symbols, partial with reasons, complete otherwise.
+
+The job validates `workers`, `max_documents_per_scope`, `max_symbols_per_scope`,
+`max_relations_per_scope` and `locations_per_relation` as positive integers before execution.
+Booleans, strings, floats, missing values and nonpositive values are rejected, not coerced or
+clamped. There is no additional upper cap. The separate centrally resolved `source_dispositions`
+table and generic `enabled` setting retain their existing validation.
 
 ### `acceptance`
 
@@ -273,10 +289,13 @@ flowchart LR
   job --> scopes["load.accepted_cpp"]
   scopes --> run["index.scopes: clangd-indexer"]
   run --> yaml["strict YAML normalization"]
-  yaml --> facts["analysis: symbols + CALLS / REFERENCES"]
+  yaml --> positions["hash-verified bytes + UTF-16 span validation"]
+  positions --> facts["analysis: symbols + recursive CALLS / REFERENCES"]
   facts --> publish["acceptance.publish_handoff"]
-  run -. "failed / truncated / missing translation units" .-> gaps["scope coverage reasons"]
+  run -. "failed / stdout or stderr truncated / missing units" .-> gaps["scope coverage reasons"]
   yaml -. "malformed / capped" .-> gaps
+  positions -. "unresolvable coordinates" .-> gaps
+  facts -. "new-edge cap; retain later occurrences" .-> gaps
   gaps --> publish
   scopes -. "changed accepted bytes" .-> stop["integrity exception"]
 ```
@@ -290,8 +309,9 @@ wraps them as `producer_reported_gap`, normally non-retryable; this does not mak
   compile units are explicit `SKIPPED_NA` decisions, not missing supported-unit failures.
 - Tooling failure: clangd timeout, OOM or nonzero exit; malformed YAML and an incomplete final
   document also prevent trustworthy full coverage.
-- Coverage missing: processed/expected translation-unit mismatch, truncated stdout, document,
-  symbol and relation limits. External symbols and unresolved references are separate counters,
+- Coverage missing: processed/expected translation-unit mismatch, truncated stdout or stderr,
+  unresolved accepted-source positions, document, symbol and relation limits.
+  External symbols and unresolved references are separate counters,
   not automatically gap records or evidence of complete resolution.
 - Changed source/database/manifest or a matching checkpoint with missing/changed evidence is an
   integrity exception, not a successfully published gap.
