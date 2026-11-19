@@ -83,7 +83,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_tree_sitter_ast/test_container_parser_routes.py` |
 | live | `tests/integration/test_tree_sitter_ast_live.py` |
-| unit | `tests/unit/job_tree_sitter_ast/test_cfg_and_guards.py`<br>`tests/unit/job_tree_sitter_ast/test_cfg_control.py`<br>`tests/unit/job_tree_sitter_ast/test_contract.py`<br>`tests/unit/job_tree_sitter_ast/test_model.py`<br>`tests/unit/job_tree_sitter_ast/test_normalize_and_projection.py`<br>`tests/unit/job_tree_sitter_ast/test_scope_execution.py`<br>`tests/unit/job_tree_sitter_ast/test_generated_sources.py`<br>`tests/unit/job_tree_sitter_ast/test_job_and_dagster.py` |
+| unit | `tests/unit/job_tree_sitter_ast/test_cfg_and_guards.py`<br>`tests/unit/job_tree_sitter_ast/test_cfg_control.py`<br>`tests/unit/job_tree_sitter_ast/test_cfg_query_bounds.py`<br>`tests/unit/job_tree_sitter_ast/test_contract.py`<br>`tests/unit/job_tree_sitter_ast/test_model.py`<br>`tests/unit/job_tree_sitter_ast/test_normalize_and_projection.py`<br>`tests/unit/job_tree_sitter_ast/test_scope_execution.py`<br>`tests/unit/job_tree_sitter_ast/test_generated_sources.py`<br>`tests/unit/job_tree_sitter_ast/test_job_and_dagster.py` |
 
 ### Dagster placement
 

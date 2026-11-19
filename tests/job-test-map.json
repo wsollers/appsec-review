@@ -28,11 +28,13 @@
     },
     "job_artifact_security_analysis": {
       "unit": [
+        "tests/unit/job_artifact_security_analysis/test_artifact_outcomes.py",
         "tests/unit/job_artifact_security_analysis/test_contract.py",
         "tests/unit/job_artifact_security_analysis/test_formats.py",
         "tests/unit/job_artifact_security_analysis/test_findings.py",
         "tests/unit/job_artifact_security_analysis/test_scanners.py",
         "tests/unit/job_artifact_security_analysis/test_job_graph.py",
+        "tests/unit/job_artifact_security_analysis/test_lead_promotion.py",
         "tests/unit/runtime/test_wave2_contracts.py::test_artifact_security_declarations_and_real_publication_ownership",
         "tests/unit/runtime/test_wave2_consumers.py::test_artifact_security_consumers_declare_exact_results_and_no_unused_acceptance",
         "tests/unit/runtime/test_wave2_consumers.py::test_artifact_security_acceptance_loader_and_admission_enforce_observe_output"
@@ -868,6 +870,7 @@
       "unit": [
         "tests/unit/job_tree_sitter_ast/test_cfg_and_guards.py",
         "tests/unit/job_tree_sitter_ast/test_cfg_control.py",
+        "tests/unit/job_tree_sitter_ast/test_cfg_query_bounds.py",
         "tests/unit/job_tree_sitter_ast/test_contract.py",
         "tests/unit/job_tree_sitter_ast/test_model.py",
         "tests/unit/job_tree_sitter_ast/test_normalize_and_projection.py",

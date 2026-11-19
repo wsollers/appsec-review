@@ -48,11 +48,11 @@ diagnostic copies. Probe-limited JVM classes retain SpotBugs applicability with 
 classification; oversized Wasm inputs publish an incomplete-input gap and no definitive negative
 resource facts, even if the bounded prefix ends cleanly at a section boundary.
 
-The stream cap is **retention**, not bounded live subprocess capture: the shared executor uses
-`capture_output=True`, or `communicate()` under execution safety, and truncates streams after the
-runner returns. Noisy commands can still exceed that cap in application memory. This job's timeout,
-file-write limit and bounded post-execution reads do not repair that shared runtime limitation.
-See [T-5251](../TODO.md#t-5251-bound-shared-subprocess-stream-capture-before-materialization).
+Local scanner stream capture now drains both pipes incrementally and retains only each configured
+prefix plus one overflow byte, including under execution safety. Published bytes, hashes and
+truncation flags preserve the exact retention contract. Native broker capture and file sinks retain
+their separate bounds; native/live validation is not implied. See
+[T-5251](../TODO.md#t-5251-bound-shared-subprocess-stream-capture-before-materialization).
 
 <!-- generated:begin job=job_artifact_security_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
@@ -67,20 +67,20 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L812) |
-| `analyze` | `analyze.blint` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `analyze` | `analyze.cve_bin_tool` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `analyze` | `analyze.grype` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `analyze` | `analyze.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `analyze` | `analyze.jvm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `analyze` | `analyze.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `analyze` | `analyze.osv` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `analyze` | `analyze.packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `analyze` | `analyze.spotbugs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `analyze` | `analyze.syft` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `analyze` | `analyze.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L606) |
-| `index` | `index.observations` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L725) |
-| `load` | `load.accepted_artifacts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L599) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L835) |
+| `analyze` | `analyze.blint` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `analyze` | `analyze.cve_bin_tool` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `analyze` | `analyze.grype` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `analyze` | `analyze.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `analyze` | `analyze.jvm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `analyze` | `analyze.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `analyze` | `analyze.osv` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `analyze` | `analyze.packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `analyze` | `analyze.spotbugs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `analyze` | `analyze.syft` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `analyze` | `analyze.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
+| `index` | `index.observations` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L737) |
+| `load` | `load.accepted_artifacts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L611) |
 
 ### Accepted input declarations
 
@@ -120,7 +120,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | `tests/acceptance/test_dependency_output_bounds.py::test_blint_reviews_production_dependency_binaries_but_not_build_only_ones` |
 | integration | `tests/integration/job_artifact_security_analysis/test_artifact_security_graph.py`<br>`tests/integration/test_installer_record_scans.py`<br>`tests/integration/job_artifact_indexing/test_artifact_input_contracts.py` |
 | live | None declared |
-| unit | `tests/unit/job_artifact_security_analysis/test_contract.py`<br>`tests/unit/job_artifact_security_analysis/test_formats.py`<br>`tests/unit/job_artifact_security_analysis/test_findings.py`<br>`tests/unit/job_artifact_security_analysis/test_scanners.py`<br>`tests/unit/job_artifact_security_analysis/test_job_graph.py`<br>`tests/unit/runtime/test_wave2_contracts.py::test_artifact_security_declarations_and_real_publication_ownership`<br>`tests/unit/runtime/test_wave2_consumers.py::test_artifact_security_consumers_declare_exact_results_and_no_unused_acceptance`<br>`tests/unit/runtime/test_wave2_consumers.py::test_artifact_security_acceptance_loader_and_admission_enforce_observe_output` |
+| unit | `tests/unit/job_artifact_security_analysis/test_artifact_outcomes.py`<br>`tests/unit/job_artifact_security_analysis/test_contract.py`<br>`tests/unit/job_artifact_security_analysis/test_formats.py`<br>`tests/unit/job_artifact_security_analysis/test_findings.py`<br>`tests/unit/job_artifact_security_analysis/test_scanners.py`<br>`tests/unit/job_artifact_security_analysis/test_job_graph.py`<br>`tests/unit/job_artifact_security_analysis/test_lead_promotion.py`<br>`tests/unit/runtime/test_wave2_contracts.py::test_artifact_security_declarations_and_real_publication_ownership`<br>`tests/unit/runtime/test_wave2_consumers.py::test_artifact_security_consumers_declare_exact_results_and_no_unused_acceptance`<br>`tests/unit/runtime/test_wave2_consumers.py::test_artifact_security_acceptance_loader_and_admission_enforce_observe_output` |
 
 ### Dagster placement
 

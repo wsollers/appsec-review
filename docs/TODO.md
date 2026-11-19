@@ -334,9 +334,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5100 | [Preserve artifact index content and unambiguous relationship identities](#t-5100-preserve-artifact-index-content-and-unambiguous-relationship-identities) | evidence | done (2026-11-19, 0c613e7e3b4bf06f16d021b2a9b7cce5aff9850e) |
 | T-5101 | [Validate artifact scanner native selectors output shapes and staging custody](#t-5101-validate-artifact-scanner-native-selectors-output-shapes-and-staging-custody) | scanners | done (2026-11-19, fdee874d3625f01514d55ed77ecc2e7aaa565ab0) |
 | T-5102 | [Bound artifact scan reads and guarantee archive parser progress](#t-5102-bound-artifact-scan-reads-and-guarantee-archive-parser-progress) | scanners | done (2026-11-19, bc4ae5fc78b3e10192ac12759d94d93d1538cfe0) |
-| T-5103 | [Recognize imported Wasm features and universal Mach-O format correctly](#t-5103-recognize-imported-wasm-features-and-universal-mach-o-format-correctly) | binary | in-progress |
-| T-5104 | [Deliver artifact risks without losing identity or inventing severity](#t-5104-deliver-artifact-risks-without-losing-identity-or-inventing-severity) | review | in-progress |
-| T-5105 | [Bind artifact scan indexes to immutable result content](#t-5105-bind-artifact-scan-indexes-to-immutable-result-content) | evidence | in-progress |
+| T-5103 | [Recognize imported Wasm features and universal Mach-O format correctly](#t-5103-recognize-imported-wasm-features-and-universal-mach-o-format-correctly) | binary | done (2026-11-19, 0d1be7b45444d50fe0f274611e695094e2668a03) |
+| T-5104 | [Deliver artifact risks without losing identity or inventing severity](#t-5104-deliver-artifact-risks-without-losing-identity-or-inventing-severity) | review | done (2026-11-19, 0d1be7b45444d50fe0f274611e695094e2668a03) |
+| T-5105 | [Bind artifact scan indexes to immutable result content](#t-5105-bind-artifact-scan-indexes-to-immutable-result-content) | evidence | done (2026-11-19, 0d1be7b45444d50fe0f274611e695094e2668a03) |
 | T-5106 | [Resolve binary external references and real pseudo-C call sites](#t-5106-resolve-binary-external-references-and-real-pseudo-c-call-sites) | binary | in-progress |
 | T-5107 | [Report stored binary relationships and truncated evidence accurately](#t-5107-report-stored-binary-relationships-and-truncated-evidence-accurately) | binary | in-progress |
 | T-5108 | [Preserve shell dialect and uncertainty under environment bounds](#t-5108-preserve-shell-dialect-and-uncertainty-under-environment-bounds) | build | open |
@@ -443,7 +443,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5209 | [Index the real threat-model schema without dropping owners and threats](#t-5209-index-the-real-threat-model-schema-without-dropping-owners-and-threats) | evidence | open |
 | T-5210 | [Retain graph eligibility language restrictions and distinct threat sites](#t-5210-retain-graph-eligibility-language-restrictions-and-distinct-threat-sites) | evidence | open |
 | T-5211 | [Preserve language control flow and explicit CFG incompleteness](#t-5211-preserve-language-control-flow-and-explicit-cfg-incompleteness) | graph | done (2026-11-19, 6e91ad8a10f208d3b1f7b0de347147d01240dbab) |
-| T-5212 | [Bind CFG cache semantics and apply bounds before materialization](#t-5212-bind-cfg-cache-semantics-and-apply-bounds-before-materialization) | graph | in-progress |
+| T-5212 | [Bind CFG cache semantics and apply bounds before materialization](#t-5212-bind-cfg-cache-semantics-and-apply-bounds-before-materialization) | graph | done (2026-11-19, 5b92dae8befb957b3413595eaeb9af0ea28d507e) |
 | T-5213 | [Align optional intake declarations and Tree-sitter loader behavior](#t-5213-align-optional-intake-declarations-and-tree-sitter-loader-behavior) | pipeline | open |
 | T-5214 | [Verify every native scope checkpoint evidence artifact](#t-5214-verify-every-native-scope-checkpoint-evidence-artifact) | graph | open |
 | T-5215 | [Bind seed omission and provenance accounting into native checkpoint reuse](#t-5215-bind-seed-omission-and-provenance-accounting-into-native-checkpoint-reuse) | graph | open |
@@ -4123,35 +4123,48 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`.
   Shares the 89-case main verification with T-5101. Real executor regressions exercise timeout,
   retained-stream truncation/receipt hashes and file-size argv, while bounded parser probes
-  reject negative ar sizes. Shared live subprocess capture memory remains separately open
-  under T-5251; post-return retention is not a fix for that limitation.
+  reject negative ar sizes. Shared live subprocess capture was repaired separately under
+  T-5251; the post-return retention changes in T-5102 alone did not fix that limitation.
 
 ### T-5103 — Recognize imported Wasm features and universal Mach-O format correctly
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 0d1be7b45444d50fe0f274611e695094e2668a03)
 - **Area:** binary
 - **Why:** Archived audit/feedback cases: ASA-F04, ASA-F05. Wasm resource/feature summaries omit imported memories and tables; Universal Mach-O files are classified as Java classes.
 - **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/formats.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`.
+  Imported Wasm resources retain full-width limits and origin; universal Mach-O headers and
+  slices are validated independently of Java magic. Probe-limited valid JVM candidates retain
+  SpotBugs applicability and explicit gaps. A section-aligned oversized Wasm prefix cannot
+  claim resource absence. Combined main artifact/prioritization selection: 162 passed/17.18 s,
+  two workers, seed 5103, no skips or slow cases. Native tools/live validation not run.
 
 ### T-5104 — Deliver artifact risks without losing identity or inventing severity
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 0d1be7b45444d50fe0f274611e695094e2668a03)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: ASA-F06, ASA-F08. New packaged-risk helpers never participate in a job task; Prioritization collapses different artifact findings and upgrades unknown severity.
 - **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/findings.py`, `src/appsec_review/jobs/job_artifact_security_analysis/job.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`; follow-up to closed T-170, T-171 (not reopened).
+  Shares the 162-case main selection with T-5103. Bounded native/archive risk candidates
+  retain uncertainty, observation/artifact/subject identities and actual evidence references.
+  Optional typed lead metadata preserves older valid records and closed schema constraints;
+  conflicting duplicate observations are rejected rather than silently replaced.
 
 ### T-5105 — Bind artifact scan indexes to immutable result content
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 0d1be7b45444d50fe0f274611e695094e2668a03)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: ASA-F07. Nonreusable reruns overwrite published result identities and reuse stale observation content.
 - **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`.
+  Shares the 162-case main selection with T-5103. Scan results, released-input checkpoints
+  and index identities bind actual content and coverage. Invocation-unique native scratch
+  preserves execution receipts as well as copied diagnostics across same-attempt reruns;
+  original bound hashes and native references remain verifiable.
 
 ### T-5106 — Resolve binary external references and real pseudo-C call sites
 
@@ -5140,16 +5153,21 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5212 — Bind CFG cache semantics and apply bounds before materialization
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 5b92dae8befb957b3413595eaeb9af0ea28d507e)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: TS-F05, TS-F06, TS-F08. CFG generation is absent from the scope cache validity contract; New CFG retrieval paginates only after processing every matching function.
 - **Scope:** `src/appsec_review/jobs/job_tree_sitter_ast/job.py`, `src/appsec_review/retrieval/core.py`
   TS-F05 is fixed in `6e91ad8a10f208d3b1f7b0de347147d01240dbab`: the separate CFG builder
   identity and actual node bound enter the scope fingerprint and checkpoint metadata. Changed
   semantics create new paths, preserve old bytes and reject mismatched metadata; valid reuse
-  remains. TS-F06 retrieval materialization and TS-F08 source-scope byte bounds remain open.
+  remains. TS-F06 now selects bounded metadata pages before materializing CFG payloads,
+  retaining keyset and byte-withholding continuation. TS-F08 excludes oversized sources with
+  explicit gaps, checks actual target sizes before dispatch, and bounds source reads by the
+  remaining scope allowance without rereading generated source for normalization.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_tree_sitter_ast.md`; follow-up to closed T-168, T-169 (not reopened).
+  Combined main selection: 93 passed/9.80 s, two workers, seed 5212, no skips or slow cases.
+  Native parser and live/integration validation were not performed.
 
 ### T-5213 — Align optional intake declarations and Tree-sitter loader behavior
 
