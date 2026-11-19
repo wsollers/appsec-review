@@ -17,7 +17,7 @@ from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json
 from .datasets import CONTRACT, DATASETS
-from .inputs import bound_json, finding_binding, load_inputs, verify_snapshot
+from .inputs import bound_json, exact_patch, finding_binding, load_inputs, verify_snapshot
 from .settings import DossierPublicationSettings
 
 JOB_ID = DOSSIER_PUBLICATION_JOB
@@ -73,11 +73,11 @@ def _remediation(root: Path, document: Mapping[str, Any], finding_id: str,
             ref = row.get(key)
             attachment = {} if ref is None else bound_json(root, ref, settings.max_artifact_bytes)
             result.append({"stage": stage, "status": row["status"], "reason": row.get("reason"),
+                           "patch": exact_patch(root, attachment.get("patch"), settings.max_artifact_bytes),
                            "artifact": ref, **{name: attachment.get(name) for name in (
                                "violated_invariant", "corrected_invariant", "compatibility_effects",
                                "affected_interfaces", "residual_risks", "deployment_prerequisites",
-                               "regression_spec", "validation_checks", "scope_limitations", "checks",
-                               "proposed_patch", "unified_diff")}})
+                               "regression_spec", "validation_checks", "scope_limitations", "checks")}})
     return result
 
 

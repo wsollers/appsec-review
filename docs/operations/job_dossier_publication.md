@@ -539,6 +539,8 @@ The [handler](../../src/appsec_review/jobs/job_dossier_publication/job.py),
 3. Load optional accepted PoC, planning and validation summaries. Verify their review binding,
    item/gap counts, nested references and nonexecution assurance; validation must name the
    accepted planning handoff. Require remediation attachments to concern confirmed findings.
+   Read the bounded, hash-bound exact-edit `patch` reference when present and validate its
+   existing schema. Do not look for nonexistent `proposed_patch` or `unified_diff` plan fields.
 4. Bind the review's source manifest and attack-chain manifest. Write the attempt-owned input
    snapshot; malformed or changed accepted evidence fails the unit.
 
@@ -555,8 +557,18 @@ The [handler](../../src/appsec_review/jobs/job_dossier_publication/job.py),
    without executing it; attach matching remediation and chain qualifications.
 3. Build the bounded dossier projection, including evidence and text truncation records.
    Include the verified decision basis, original-policy attribution and verification limits
-   without raw conversations or a new finding state. Render deterministic JSON and escaped LaTeX
-   into a new item directory.
+   without raw conversations or a new finding state. Excerpts/citations are unordered context,
+   not an inferred source-to-sink path. Guard narratives and scanner corroboration remain
+   unrecorded without accepted structured facts; the verifier headline uses only the explicit
+   finding independence result. Preserve the audit's actual verification values separately.
+   Render deterministic JSON plus Markdown, HTML and escaped LaTeX into a new item directory.
+   All three text formats use the common document so decision basis, dissent, qualifications,
+   risk dimensions, detailed remediation checks and provenance remain available.
+   Exact-edit patches show redacted old/new text, original byte ranges, baseline/absence
+   identities and the patch reference with explicit bounds, never a fabricated unified diff.
+   The accepted overall validation outcome controls the headline; applicability alone cannot
+   promote rejection, inconclusive or manual status. Unvalidated generated proposals are
+   `proposal_only`; absent remediation is `not_available` with no invented corrective invariant.
 4. If PDF is commissioned, run the pinned LaTeX renderer and retain its execution receipt.
    Publish a PDF only for successful real output; otherwise retain `render_failed` or
    `latex_only` with a reason. A pin/integrity failure is not downgraded into rendering success.

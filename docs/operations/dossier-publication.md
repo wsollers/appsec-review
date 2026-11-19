@@ -85,6 +85,33 @@ The [canonical job page](job_dossier_publication.md) describes verification and 
 the [audit contract](../architecture/triage-verifier-enhancement.md#product-routes) owns its
 protected route. No raw conversation or new worker/MCP grant is added.
 
+### Evidence-grounded presentation
+
+The accepted claim/finding projections do not contain an ordered taint path or a guard-analysis
+narrative. Dossiers therefore show path/guard analysis as unrecorded; source excerpts and
+citations are unordered context, including separately attributed opposing and qualifying audit
+relations. Confirmation, citation position, entity kinds and shard names are not path, guard or
+scanner-corroboration evidence. The verifier headline copies only an explicit accepted finding
+independence result (`independence_passed` / `independence_failed`); absence is `not_recorded`.
+Recorded protected verification checks keep their original values and absence reasons.
+
+Markdown, HTML and LaTeX use the same bounded document sections: decision basis, counterevidence,
+qualifications, separate risk dimensions, remediation checks, omissions and resolving provenance.
+Markdown escapes prose and fences inert code; it does not omit audit context for a shorter format.
+
+Remediation reads the actual hash-bound `patch` reference from the accepted plan/validation
+artifact (`remediation-exact-patch/1`). It displays bounded, redacted old/new text with original
+byte offsets, baseline hashes, new-file absence proofs and the original patch artifact identity.
+This is **not an applicable unified diff**; display normalization/redaction does not change the
+referenced bytes. File/edit/text caps have explicit truncation records.
+
+The headline follows the accepted **overall validation status**, not the strongest individual
+check: rejected, inconclusive and manual-validation outcomes stay so even when applicability,
+static or build checks passed. Without validation, `proposal_generated` is `proposal_only`;
+manual design, insufficient evidence and capped planning retain their dispositions. No attachment
+means `not_available`, not an invented fix or design requirement. Every check remains separate;
+neither an applicable patch nor a build check proves a fix or runtime regression.
+
 | Record | Operational meaning |
 | --- | --- |
 | Accepted input references | Review/job/ledger/manifest and exact claim/finding package/hash bindings; accepted optional producer handoffs, frozen settings and tool/guidance identities. No later `latest.json` discovery after certification. |

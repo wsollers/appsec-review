@@ -65,9 +65,10 @@ class _Projection:
             self.cuts.append({"field": name, **asdict(cut)})
         return text
 
-    def rows(self, values: Sequence[Any], name: str, *, limit: int | None = None) -> list[Any]:
+    def rows(self, values: Sequence[Any], name: str, *, limit: int | None = None,
+             preserve_order: bool = False) -> list[Any]:
         maximum = self.limits.evidence_rows if limit is None else limit
-        ordered = sorted(values, key=lambda row: canonical_json(row))
+        ordered = list(values) if preserve_order else sorted(values, key=lambda row: canonical_json(row))
         if len(ordered) > maximum:
             self.cuts.append({"field": name, "omitted": len(ordered) - maximum, "unit": "rows",
                               "sha256": hashlib.sha256(canonical_json(ordered)).hexdigest()})
@@ -90,25 +91,12 @@ def _safe_str(value: Any, max_chars: int = 600, *, identity: bool = False) -> st
     return kept
 
 
-def _safe_diff(value: Any, limits: DossierLimits) -> str | None:
-    if value is None:
-        return None
-    raw = clean(value, keep_newlines=True, code=True)
-    if not raw:
-        return None
-    redacted = "\n".join(redact_source_line(line) for line in raw.split("\n"))
-    kept, _ = bound_lines(redacted, limits.code_lines, limits.code_chars)
-    return kept or None
-
-
 def _build_classification_badge(
     *,
-    state: str,
     title: str,
     weakness_cwe: str,
     security_predicate: str,
     ship_block: Mapping[str, str],
-    evidence: Sequence[Mapping[str, Any]],
     sources: Sequence[Mapping[str, Any]],
     claim: Mapping[str, Any],
 ) -> dict[str, Any]:
@@ -123,16 +111,6 @@ def _build_classification_badge(
     if not tier:
         methods = [row["mapping_method"] for row in sources if row.get("mapping_method") and row["mapping_method"] != "not recorded"]
         tier = methods[0] if methods else ("source_excerpt_bound" if sources else "evidence_citation_only")
-    scanners: set[str] = set()
-    for s in claim.get("corroborating_scanners") or ():
-        val = _safe_str(s, 120, identity=True)
-        if val:
-            scanners.add(val)
-    for ev in evidence:
-        for k in ("shard_id", "entity_kind"):
-            val = _safe_str(ev.get(k), 120, identity=True)
-            if val:
-                scanners.add(val)
     reachability = _safe_str(claim.get("reachability"), 120, identity=True) or "unknown"
     return {
         "severity": (ship_block.get("technical_severity") or "unassessed").lower(),
@@ -142,117 +120,26 @@ def _build_classification_badge(
         "radar_domain_label": domain_label,
         "reachability_badge": reachability,
         "resolution_tier": tier,
-        "corroborating_scanners": sorted(scanners)[:16],
+        # Accepted claim/finding projections do not carry scanner corroboration.
+        "corroborating_scanners": [],
         "ship_block_status": ship_block.get("status") or "not_recorded",
     }
 
 
-def _build_taint_timeline(
-    *,
-    claim: Mapping[str, Any],
-    finding: Mapping[str, Any],
-    sources: Sequence[Mapping[str, Any]],
-    evidence: Sequence[Mapping[str, Any]],
-) -> list[dict[str, Any]]:
-    raw_steps = claim.get("taint_path") or finding.get("taint_path") or ()
-    steps: list[dict[str, Any]] = []
-    if isinstance(raw_steps, Sequence) and not isinstance(raw_steps, (str, bytes)) and raw_steps:
-        total = min(len(raw_steps), 24)
-        for idx, item in enumerate(raw_steps[:total]):
-            if not isinstance(item, Mapping):
-                continue
-            role = str(item.get("role") or "")
-            if role not in {"source", "hop", "guard_check", "sink"}:
-                role = "source" if idx == 0 else ("sink" if idx == total - 1 else "hop")
-            path = _safe_str(item.get("path"), 240, identity=True)
-            s_line = item.get("start_line") if isinstance(item.get("start_line"), int) else (
-                item.get("line") if isinstance(item.get("line"), int) else None
-            )
-            e_line = item.get("end_line") if isinstance(item.get("end_line"), int) else s_line
-            loc = f"{path}:{s_line}" if path and s_line is not None else (path or _safe_str(item.get("location"), 240) or "unlocated")
-            steps.append({
-                "step_index": len(steps) + 1,
-                "role": role,
-                "location": loc,
-                "path": path,
-                "start_line": s_line,
-                "end_line": e_line,
-                "symbol": _safe_str(item.get("symbol"), 180) or "not_recorded",
-                "taint_transform": _safe_str(item.get("taint_transform") or item.get("transform"), 300) or "direct_propagation",
-                "guard_disposition": _safe_str(item.get("guard_disposition") or item.get("guard"), 300) or "no_blocking_guard_on_path",
-                "entity_id": _safe_str(item.get("entity_id"), 180, identity=True),
-            })
-    if steps:
-        return steps
-
-    candidates: list[dict[str, Any]] = []
-    seen_locs: set[str] = set()
-    for src in sources:
-        path = src.get("path") or ""
-        s_line = src.get("start_line") if isinstance(src.get("start_line"), int) else None
-        e_line = src.get("end_line") if isinstance(src.get("end_line"), int) else s_line
-        loc = f"{path}:{s_line}" if path and s_line is not None else (path or src.get("entity_id") or "unlocated")
-        if loc in seen_locs:
-            continue
-        seen_locs.add(loc)
-        candidates.append({
-            "location": loc,
-            "path": path,
-            "start_line": s_line,
-            "end_line": e_line,
-            "symbol": src.get("source_id") or src.get("entity_id") or "not_recorded",
-            "taint_transform": f"resolved via {src.get('mapping_method') or 'source_excerpt'}",
-            "guard_disposition": "no_blocking_guard_established",
-            "entity_id": src.get("entity_id") or "",
-        })
-    for ev in evidence:
-        loc = ev.get("locator") or ev.get("entity_id") or "unlocated"
-        if loc in seen_locs:
-            continue
-        seen_locs.add(loc)
-        candidates.append({
-            "location": loc,
-            "path": ev.get("locator") or "",
-            "start_line": None,
-            "end_line": None,
-            "symbol": ev.get("entity_id") or "not_recorded",
-            "taint_transform": f"{ev.get('predicate') or 'evidence'} ({ev.get('kind') or 'citation'})",
-            "guard_disposition": "analyst_assessed_nonblocking" if ev.get("strength") != "counted_direct" else "verified_unblocked_citation",
-            "entity_id": ev.get("entity_id") or "",
-        })
-    total = min(len(candidates), 16)
-    for idx, item in enumerate(candidates[:total]):
-        role = "sink" if total == 1 else ("source" if idx == 0 else ("sink" if idx == total - 1 else "hop"))
-        steps.append({"step_index": idx + 1, "role": role, **item})
-    return steps
-
-
 def _build_adjudication_summary(
     *,
-    state: str,
+    finding: Mapping[str, Any],
     statement: str,
     preconditions: Sequence[str],
-    missing_predicates: Sequence[str],
     evidence: Sequence[Mapping[str, Any]],
     sources: Sequence[Mapping[str, Any]],
-    claim: Mapping[str, Any],
 ) -> dict[str, Any]:
     counted = [ev["relation_id"] for ev in evidence if ev["strength"] == "counted_direct"]
     analyst = [ev["relation_id"] for ev in evidence if ev["strength"] != "counted_direct"]
     basis_text = statement or "Accepted finding statement not recorded."
     if preconditions:
         basis_text = _safe_str(f"{basis_text} Preconditions: {'; '.join(preconditions[:4])}.", 900)
-    guard_note = _safe_str(claim.get("guard_analysis"), 600)
-    if not guard_note:
-        if missing_predicates:
-            guard_note = f"Open proof obligations remain: {', '.join(missing_predicates)}."
-        elif state == "confirmed":
-            guard_note = (
-                f"Adjudication confirmed exploitability across {len(counted)} counted direct citation(s); "
-                "candidate guards did not sanitize or block the taint path before the sink."
-            )
-        else:
-            guard_note = f"Adjudication state is {state}; independent blocking guard was not established."
+    guard_note = "Guard analysis is not recorded in the accepted projection; citations are not a guard narrative."
     src_by_entity = {src["entity_id"]: src for src in sources if src.get("entity_id")}
     resolving: list[dict[str, str]] = []
     for ev in evidence[:16]:
@@ -269,7 +156,9 @@ def _build_adjudication_summary(
             "line_span": span,
             "content_sha256": ev["content_sha256"],
         })
-    posture = "confirmed_independent" if state == "confirmed" and not missing_predicates else "bounded_adjudication"
+    independent = (finding.get("independence") or {}).get("independent")
+    posture = ("independence_passed" if independent is True else
+               "independence_failed" if independent is False else "not_recorded")
     return {
         "exploitability_basis": _safe_str(basis_text, 900) or "Not recorded.",
         "guard_bypass_summary": guard_note,
@@ -311,30 +200,16 @@ def _build_poc_harness_summary(poc_view: Mapping[str, Any] | None) -> dict[str, 
 def _build_remediation_guide(
     *,
     remedies: Sequence[Mapping[str, Any]],
-    raw_remediation: Sequence[Mapping[str, Any]],
-    weakness_cwe: str,
-    security_predicate: str,
-    limits: DossierLimits,
+    outcomes: Mapping[str, str],
 ) -> dict[str, Any]:
-    tier = "manual_design_required"
+    tier = outcomes.get("Validation") or outcomes.get("Planning") or "not_available"
+    if "Validation" not in outcomes and tier == "proposal_generated":
+        tier = "proposal_only"
     violated = ""
     corrected = ""
     steps: list[str] = []
     checklist: list[str] = []
     for row in remedies:
-        status = row.get("status") or ""
-        check_map = {chk["dimension"]: chk["status"] for chk in row.get("checks") or ()}
-        if status == "build_checked" or check_map.get("build") == "passed":
-            tier = "build_checked"
-        elif tier != "build_checked" and (
-            status in {"static_checked", "in_memory_patch_and_syntax_verified"}
-            or check_map.get("static_checks") == "passed"
-            or check_map.get("patch_applicability") == "passed"
-        ):
-            tier = ("in_memory_patch_and_syntax_verified"
-                    if status == "in_memory_patch_and_syntax_verified" else "static_checked")
-        elif tier == "manual_design_required" and status in {"planned", "proposed"}:
-            tier = "proposal_only"
         if not violated and row.get("violated_invariant"):
             violated = row["violated_invariant"]
         if not corrected and row.get("corrected_invariant"):
@@ -349,17 +224,6 @@ def _build_remediation_guide(
             checklist.append(vc)
         if row.get("regression_safety"):
             checklist.append(f"Regression safety assertion: {row['regression_safety']}")
-    proposed_diff: str | None = None
-    for raw_row in sorted(raw_remediation, key=lambda r: canonical_json(r)):
-        candidate = raw_row.get("proposed_patch") or raw_row.get("unified_diff")
-        proposed_diff = _safe_diff(candidate, limits)
-        if proposed_diff:
-            break
-    if not steps:
-        target_desc = f"{weakness_cwe} ({security_predicate})" if weakness_cwe and security_predicate else (
-            weakness_cwe or security_predicate or "the vulnerable sink"
-        )
-        steps.append(f"Introduce strict input validation or structural parameterization before {target_desc}.")
     checklist.append(
         "Verify fix compiles cleanly and passes existing unit/integration suites in CI "
         "(runtime regression is not_performed_by_policy during review)."
@@ -369,8 +233,8 @@ def _build_remediation_guide(
     return {
         "validation_tier": tier,
         "violated_invariant": violated or "Not recorded in upstream remediation plan.",
-        "corrected_invariant": corrected or "Enforce explicit boundary validation prior to sink.",
-        "proposed_diff": proposed_diff,
+        "corrected_invariant": corrected or "Not recorded in upstream remediation plan.",
+        "proposed_diff": None,
         "concrete_fix_steps": dedup_steps,
         "verification_checklist": dedup_checks,
     }
@@ -530,10 +394,24 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
                         "artifact": checks[name].get("artifact")}
                        for name in ("patch_applicability", "policy", "semantic_review", "static_checks", "build",
                                     "regression_compile", "runtime_regression") if name in checks]
+        patch_view = None
+        if row.get("patch") is not None:
+            patch = row["patch"]
+            files = []
+            for file in project.rows(patch["files"], "remediation.patch.files"):
+                name = "remediation.patch." + file["path"]
+                edits = [{"start": edit["start"], "end": edit["end"],
+                          "old": project.source(edit["old"], name + f".edits[{index}].old"),
+                          "new": project.source(edit["new"], name + f".edits[{index}].new")}
+                         for index, edit in enumerate(project.rows(
+                             file["edits"], name + ".edits", preserve_order=True))]
+                files.append({"path": file["path"], "before_sha256": file["before_sha256"],
+                              "absence_proof": file["absence_proof"], "edits": edits})
+            patch_view = {"artifact": dict(patch["artifact"]), "schema": patch["schema"], "files": files}
         remedies.append({key: project.text(row.get(key), "remediation." + key)
                          for key in ("stage", "status", "reason", "violated_invariant", "corrected_invariant",
                                      )} | details | {
-            "artifact": row.get("artifact"),
+            "artifact": row.get("artifact"), "patch": patch_view,
             "regression_safety": safety, "checks": check_views,
             "runtime_regression": "not_performed_by_policy",
             "notice": "Proposal/checks only. Not fixed, resolved, or regression verified."})
@@ -562,35 +440,26 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
     gaps_proj = [project.text(item, "gap") for item in sorted(gap_list)]
 
     classification_badge = _build_classification_badge(
-        state=finding["state"],
         title=title_proj,
         weakness_cwe=cwe_proj,
         security_predicate=pred_proj,
         ship_block=ship_proj,
-        evidence=evidence,
         sources=sources,
         claim=claim,
     )
-    taint_path_timeline = _build_taint_timeline(
-        claim=claim, finding=finding, sources=sources, evidence=evidence
-    )
+    # Neither accepted producer carries an ordered taint path. Excerpt/citation order is context only.
+    taint_path_timeline: list[dict[str, Any]] = []
     adjudication_summary = _build_adjudication_summary(
-        state=finding["state"],
+        finding=finding,
         statement=statement_proj,
         preconditions=precond_proj,
-        missing_predicates=missing_preds,
         evidence=evidence,
         sources=sources,
-        claim=claim,
     )
     poc_harness_summary = _build_poc_harness_summary(poc_view)
     remediation_guide = _build_remediation_guide(
-        remedies=remedies,
-        raw_remediation=remediation,
-        weakness_cwe=cwe_proj,
-        security_predicate=pred_proj,
-        limits=limits,
-    )
+        remedies=remedies, outcomes={row["stage"]: project.text(row.get("status"), "remediation.status")
+                                     for row in remediation})
 
     audit_view = None if decision_audit is None else _decision_basis(
         decision_audit, finding, by_id, provenance, project)
@@ -635,12 +504,12 @@ def dossier_document(dossier: Mapping[str, Any], *, source_date_epoch: int = 0) 
     poc_sum = dossier.get("poc_harness_summary") or {}
     rem_guide = dossier.get("remediation_guide") or {}
 
-    reachability = badge.get("reachability_badge") or dossier["state"]
+    reachability = badge.get("reachability_badge") or "unknown"
     owasp = badge.get("owasp_2025") or "unmapped"
     radar_label = badge.get("radar_domain_label") or "Unclassified"
     radar_id = badge.get("radar_domain_id") or "unclassified"
     res_tier = badge.get("resolution_tier") or "not_recorded"
-    scanners = ", ".join(badge.get("corroborating_scanners") or ()) or "none"
+    scanners = ", ".join(badge.get("corroborating_scanners") or ()) or "not recorded"
 
     blocks: list[Any] = [
         Stats((Stat("Finding", dossier["state"].upper(), dossier["state"]),
@@ -659,7 +528,7 @@ def dossier_document(dossier: Mapping[str, Any], *, source_date_epoch: int = 0) 
                 field("Security radar domain", f"{radar_label} ({radar_id})", limits),
                 field("Reachability badge", reachability, limits, mono=True),
                 field("Resolution tier", res_tier, limits, mono=True),
-                field("Corroborating scanners / cells", scanners, limits, mono=True),
+                field("Corroborating scanners", scanners, limits, mono=True),
                 field("Shipment policy", dossier["ship_block"]["policy"], limits),
                 field("Shipment decision", dossier["ship_block"]["status"], limits))),
                 Para("Preconditions"), bullets(dossier["preconditions"] or ["None recorded."], limits))),
@@ -681,18 +550,19 @@ def dossier_document(dossier: Mapping[str, Any], *, source_date_epoch: int = 0) 
         ))
     else:
         blocks.append(Box(BoxKind.GAP, "No source-to-sink path recorded",
-                          items=(Para("No ordered path steps were available for this finding."),)))
+                          items=(Para("No ordered path steps were available for this finding. "
+                                      "Source excerpts and citations below are unordered context, not a taint path."),)))
 
-    blocks.append(Heading(1, "Adjudication & Red/Blue/Verifier Evidence Summary", "adjudication"))
+    blocks.append(Heading(1, "Accepted adjudication and evidence summary", "adjudication"))
     if adj:
         adj_items: list[Any] = [
             Fields((
-                field("Verifier posture", adj.get("verifier_posture") or "bounded_adjudication", limits, mono=True),
+                field("Verifier posture", adj.get("verifier_posture") or "not_recorded", limits, mono=True),
                 field("Counted direct citations", str(len(adj.get("counted_direct_citations") or ())), limits, mono=True),
                 field("Analyst-assessed citations", str(len(adj.get("analyst_assessed_citations") or ())), limits, mono=True),
             )),
-            Para("Red exploitability basis: " + (adj.get("exploitability_basis") or "Not recorded.")),
-            Para("Blue guard evaluation: " + (adj.get("guard_bypass_summary") or "Not recorded.")),
+            Para("Accepted claim basis: " + (adj.get("exploitability_basis") or "Not recorded.")),
+            Para("Guard evaluation: " + (adj.get("guard_bypass_summary") or "Not recorded.")),
         ]
         if adj.get("resolving_citations"):
             adj_items.append(table(
@@ -798,17 +668,15 @@ def dossier_document(dossier: Mapping[str, Any], *, source_date_epoch: int = 0) 
         if poc["source"] is not None:
             blocks.append(Box(BoxKind.EVIDENCE, "Generated functions (inert text)", items=(
                 code(poc["source"], limits, caption="Untrusted generated source. Never executed by this pipeline."),)))
-    blocks.append(Heading(1, "Validated Remediation Patch & Verification Checklist", "remediation"))
+    blocks.append(Heading(1, "Remediation proposal, validation outcome and checklist", "remediation"))
     if rem_guide:
         rem_items: list[Any] = [
             Fields((
-                field("Validation tier", rem_guide.get("validation_tier") or "manual_design_required", limits, mono=True),
+                field("Validation outcome", rem_guide.get("validation_tier") or "not_available", limits, mono=True),
                 field("Violated invariant", rem_guide.get("violated_invariant") or "Not recorded.", limits),
                 field("Corrected invariant", rem_guide.get("corrected_invariant") or "Not recorded.", limits),
             )),
         ]
-        if rem_guide.get("proposed_diff"):
-            rem_items.append(code(rem_guide["proposed_diff"], limits, caption="Proposed unified remediation diff"))
         if rem_guide.get("concrete_fix_steps"):
             rem_items.extend([Para("Concrete fix guidance"), bullets(rem_guide["concrete_fix_steps"], limits)])
         if rem_guide.get("verification_checklist"):
@@ -821,15 +689,38 @@ def dossier_document(dossier: Mapping[str, Any], *, source_date_epoch: int = 0) 
             ("Required validation", "validation_checks"), ("Scope limitation", "scope_limitations"))
                    for text in row[key]]
         blocks.append(Box(BoxKind.VERIFICATION, row["stage"], chip="PROPOSAL / CHECK",
-                          items=(Fields((field("Status", row["status"], limits),)),
+                          items=(Fields((field("Status", row["status"], limits, mono=True),)),
                                  Para(row["reason"]), Para(row["violated_invariant"]),
                                  Para(row["corrected_invariant"]), bullets(details, limits),
                                  Para("Safe regression assertion: " + (row["regression_safety"] or "Not supplied.")),
                                  Para(row["notice"]))))
+        if row.get("artifact"):
+            blocks.append(Box(BoxKind.PROVENANCE, "Accepted remediation artifact", items=(
+                Fields((field("Path", row["artifact"]["path"], limits, mono=True),
+                        field("SHA-256", row["artifact"]["sha256"], limits, mono=True))),)))
+        patch = row.get("patch")
+        if patch is not None:
+            blocks.append(Box(BoxKind.PROVENANCE, "Accepted exact-edit patch", items=(
+                Para("Bounded, redacted display only; not an applicable unified diff. Byte offsets refer to the "
+                     "original baseline. Use the hash-bound patch artifact for exact bytes."),
+                Fields((field("Path", patch["artifact"]["path"], limits, mono=True),
+                        field("SHA-256", patch["artifact"]["sha256"], limits, mono=True))),)))
+            for file in patch["files"]:
+                blocks.append(Box(BoxKind.EVIDENCE, file["path"], items=(
+                    Fields((field("Baseline SHA-256", file["before_sha256"] or "new file", limits, mono=True),
+                            field("Absence proof", file["absence_proof"], limits))),)))
+                for edit in file["edits"]:
+                    blocks.append(Box(BoxKind.EVIDENCE, f"Original byte range [{edit['start']}, {edit['end']})",
+                                      items=(code(edit["old"], limits, caption="Old text (redacted)"),
+                                             code(edit["new"], limits, caption="New text (redacted)"))))
         for check in row["checks"]:
             blocks.append(Box(BoxKind.PROVENANCE, check["dimension"].replace("_", " "),
-                              items=(Fields((field("Check disposition", check["status"], limits),)),
+                              items=(Fields((field("Check disposition", check["status"], limits, mono=True),)),
                                      Para(check["reason"]))))
+            if check.get("artifact"):
+                blocks.append(Box(BoxKind.PROVENANCE, "Accepted check artifact", items=(
+                    Fields((field("Path", check["artifact"]["path"], limits, mono=True),
+                            field("SHA-256", check["artifact"]["sha256"], limits, mono=True))),)))
     if not dossier["remediation"]:
         blocks.append(Box(BoxKind.GAP, "No accepted remediation attachment", items=(
             Para("No plan or validation was available. No remediation is claimed."),)))

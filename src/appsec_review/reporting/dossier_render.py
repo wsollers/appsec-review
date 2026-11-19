@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import hashlib
+import html
 import json
 from pathlib import Path
 import shutil
@@ -18,6 +19,7 @@ from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, pla
 from .dossiers import dossier_document
 from .html import render_html
 from .latex import render_latex
+from .model import Box, Bullets, Code, Fields, Heading, Para, Stats, Table, Truncation
 
 if TYPE_CHECKING:
     from appsec_review.jobs.job_dossier_publication.settings import DossierPublicationSettings
@@ -27,8 +29,23 @@ RECEIPT_SCHEMA = "appsec-review/dossier-rendering-receipt/1"
 ExecutorFactory = Callable[..., ContainerExecutor]
 
 
-def _md_cell(value: Any) -> str:
-    return str(value if value is not None else "").replace("|", "\\|").replace("\n", " ").strip()
+def _md_text(value: str) -> str:
+    text = html.escape(value, quote=False).replace("\\", "\\\\").replace("\n", " ")
+    for token in ("`", "*", "_", "[", "]", "#", "|"):
+        text = text.replace(token, "\\" + token)
+    return text
+
+
+def _md_code(value: str) -> str:
+    fence = "`"
+    while fence in value:
+        fence += "`"
+    return f"{fence} {value.replace(chr(10), ' ')} {fence}"
+
+
+def _md_truncation(cut: Truncation | None) -> list[str]:
+    return [] if cut is None else [
+        f"Bounded omission: {cut.omitted} {cut.unit}; SHA-256 {_md_code(cut.sha256)}."]
 
 
 def render_dossier_html(dossier: Mapping[str, Any]) -> str:
@@ -37,166 +54,57 @@ def render_dossier_html(dossier: Mapping[str, Any]) -> str:
 
 
 def render_dossier_markdown(dossier: Mapping[str, Any]) -> str:
-    """Render a deterministic Markdown developer dossier with all structured T-176 sections."""
-    badge = dossier.get("classification_badge") or {}
-    timeline = dossier.get("taint_path_timeline") or ()
-    adj = dossier.get("adjudication_summary") or {}
-    poc_sum = dossier.get("poc_harness_summary") or {}
-    rem_guide = dossier.get("remediation_guide") or {}
-    title = dossier.get("title") or dossier["finding"]["finding_package_id"]
+    """Render the same bounded document as HTML/LaTeX, without a second content projection."""
+    document = dossier_document(dossier)
     lines = [
-        f"# Developer Finding Dossier: {title}",
+        f"# {_md_text(document.title)}: {_md_text(document.subtitle)}",
         "",
-        f"- **Run**: `{dossier['run_id']}`",
-        f"- **Dossier ID**: `{dossier['dossier_id']}`",
-        f"- **Kind**: `{dossier['kind']}`",
-        f"- **Visibility**: `{dossier['visibility']}` (`PROTECTED DEVELOPER ARTIFACT - DO NOT DISTRIBUTE`)",
-        "",
-        "## Protected Handling & Non-Execution Assurance",
+        f"- **Run**: {_md_code(document.run_id)}",
+        f"- **Dossier ID**: {_md_code(dossier['dossier_id'])}",
+        f"- **Kind**: {_md_code(dossier['kind'])}",
+        f"- **Visibility**: {_md_code(dossier['visibility'])} (PROTECTED DEVELOPER ARTIFACT - DO NOT DISTRIBUTE)",
         "",
     ]
-    for notice in dossier.get("notices") or ():
-        lines.append(f"- {notice}")
-    lines.extend([
-        "",
-        "## Severity, CWE/OWASP Mapping & Reachability Badge",
-        "",
-        f"- **State**: `{dossier['state']}`",
-        f"- **Reachability Badge**: `{badge.get('reachability_badge') or dossier['state']}`",
-        f"- **Technical Severity**: `{badge.get('severity') or dossier['ship_block'].get('technical_severity') or 'unassessed'}`",
-        f"- **Weakness CWE**: `{badge.get('weakness_cwe') or dossier.get('weakness_cwe') or 'not_recorded'}`",
-        f"- **OWASP Top 10 (2025)**: `{badge.get('owasp_2025') or 'unmapped'}`",
-        f"- **Security Radar Domain**: {badge.get('radar_domain_label') or 'Unclassified'} (`{badge.get('radar_domain_id') or 'unclassified'}`)",
-        f"- **Resolution Tier**: `{badge.get('resolution_tier') or 'not_recorded'}`",
-        f"- **Corroborating Scanners / Cells**: `{', '.join(badge.get('corroborating_scanners') or ()) or 'none'}`",
-        f"- **Finding Package**: `{dossier['finding']['finding_package_id']}`",
-        f"- **Claim**: `{dossier['finding']['claim_id']}`",
-        f"- **Release Recommendation**: `{dossier['ship_block'].get('status') or 'not_recorded'}`",
-        "",
-        "## Finding Statement",
-        "",
-        dossier.get("statement") or "No claim statement was recorded.",
-        "",
-    ])
-    if dossier.get("preconditions"):
-        lines.extend(["### Preconditions", ""])
-        for item in dossier["preconditions"]:
-            lines.append(f"- {item}")
-        lines.append("")
-    if dossier.get("missing_predicates"):
-        lines.extend(["### Open Proof Obligations", ""])
-        for item in dossier["missing_predicates"]:
-            lines.append(f"- `{item}`")
-        lines.append("")
-
-    lines.extend([
-        "## Source-to-Sink Call & Taint Path Timeline",
-        "",
-    ])
-    if timeline:
-        lines.extend([
-            "| Step | Role | Location | Symbol | Taint Transform | Guard Disposition |",
-            "|---:|---|---|---|---|---|",
-        ])
-        for step in timeline:
-            lines.append(
-                f"| {step['step_index']} | `{_md_cell(step['role'])}` | `{_md_cell(step['location'])}` "
-                f"| `{_md_cell(step['symbol'])}` | {_md_cell(step['taint_transform'])} "
-                f"| {_md_cell(step['guard_disposition'])} |"
-            )
-        lines.append("")
-    else:
-        lines.extend(["No source-to-sink path steps were recorded.", ""])
-
-    lines.extend([
-        "## Adjudication & Red/Blue/Verifier Evidence Summary",
-        "",
-        f"- **Verifier Posture**: `{adj.get('verifier_posture') or 'bounded_adjudication'}`",
-        f"- **Exploitability Basis (Red)**: {adj.get('exploitability_basis') or 'Not recorded.'}",
-        f"- **Guard Evaluation (Blue)**: {adj.get('guard_bypass_summary') or 'Not recorded.'}",
-        f"- **Counted Direct Citations**: `{len(adj.get('counted_direct_citations') or ())}`",
-        f"- **Analyst-Assessed Citations**: `{len(adj.get('analyst_assessed_citations') or ())}`",
-        "",
-    ])
-    if adj.get("resolving_citations"):
-        lines.extend([
-            "| Relation | Locator | Line Span | Content SHA-256 |",
-            "|---|---|---|---|",
-        ])
-        for cit in adj["resolving_citations"]:
-            lines.append(
-                f"| `{_md_cell(cit['relation_id'])}` | `{_md_cell(cit['locator'])}` "
-                f"| `{_md_cell(cit['line_span'])}` | `{_md_cell(cit['content_sha256'][:16])}` |"
-            )
-        lines.append("")
-
-    if dossier.get("sources"):
-        lines.extend(["## Bounded Source Excerpts", ""])
-        for src in dossier["sources"]:
-            span = f"lines {src['start_line']}-{src['end_line']}" if src.get("start_line") else "span unrecorded"
-            lines.extend([
-                f"### `{src['path'] or src['entity_id']}` ({span}, `{src['mapping_method']}`)",
-                "",
-                "```text",
-                src.get("excerpt") or "",
-                "```",
-                "",
-            ])
-
-    lines.extend([
-        "## Compile-Verified Proof-of-Concept Harness Summary",
-        "",
-        f"- **Compile Status**: `{poc_sum.get('compile_status') or 'not_available'}`",
-        f"- **Compile-Only Verified**: `{'yes' if poc_sum.get('compile_only_verified') else 'no'}`",
-        f"- **Safety Badge**: `{poc_sum.get('safety_badge') or 'not_performed_by_policy'}`",
-        f"- **Generated Code Execution**: `{poc_sum.get('generated_code_execution') or 'not_performed_by_policy'}`",
-        f"- **Summary**: {poc_sum.get('summary') or ''}",
-        "",
-    ])
-    if dossier.get("poc") and dossier["poc"].get("source"):
-        lines.extend([
-            "### Generated Function Source (NOT RUN)",
-            "",
-            "```text",
-            dossier["poc"]["source"],
-            "```",
-            "",
-        ])
-
-    lines.extend([
-        "## Validated Remediation Patch & Verification Checklist",
-        "",
-        f"- **Validation Tier**: `{rem_guide.get('validation_tier') or 'manual_design_required'}`",
-        f"- **Violated Invariant**: {rem_guide.get('violated_invariant') or 'Not recorded.'}",
-        f"- **Corrected Invariant**: {rem_guide.get('corrected_invariant') or 'Not recorded.'}",
-        "",
-    ])
-    if rem_guide.get("proposed_diff"):
-        lines.extend([
-            "### Proposed Unified Remediation Diff",
-            "",
-            "```diff",
-            rem_guide["proposed_diff"],
-            "```",
-            "",
-        ])
-    if rem_guide.get("concrete_fix_steps"):
-        lines.extend(["### Concrete Fix Guidance", ""])
-        for step in rem_guide["concrete_fix_steps"]:
-            lines.append(f"- {step}")
-        lines.append("")
-    if rem_guide.get("verification_checklist"):
-        lines.extend(["### Regression & Verification Checklist", ""])
-        for chk in rem_guide["verification_checklist"]:
-            lines.append(f"- [ ] {chk}")
-        lines.append("")
-
-    if dossier.get("gaps") or dossier.get("truncations"):
-        lines.extend(["## Coverage Gaps & Bounded Omissions", ""])
-        for gap in dossier.get("gaps") or ():
-            lines.append(f"- {gap}")
-        for cut in dossier.get("truncations") or ():
-            lines.append(f"- truncated `{cut['field']}`: omitted {cut['omitted']} {cut['unit']} (sha256 `{cut['sha256'][:16]}`)")
+    for block in document.blocks:
+        if isinstance(block, Heading):
+            lines.extend(["#" * (block.level + 1) + " " + _md_text(block.text), ""])
+            if block.subtitle:
+                lines.extend([_md_text(block.subtitle), ""])
+        elif isinstance(block, Stats):
+            lines.extend(f"- **{_md_text(stat.label)}**: {_md_code(stat.value)}" for stat in block.items)
+        elif isinstance(block, Box):
+            lines.extend([f"### {_md_text(block.title)}", ""])
+            for label in (block.meta, block.chip, *block.badges):
+                if label:
+                    lines.extend([_md_text(label), ""])
+            for item in block.items:
+                if isinstance(item, Para):
+                    lines.extend([_md_text(item.text), *_md_truncation(item.truncation)])
+                elif isinstance(item, Fields):
+                    for row in item.rows:
+                        value = _md_code(row.value) if row.mono else _md_text(row.value)
+                        lines.extend([f"- **{_md_text(row.label)}**: {value}",
+                                      *_md_truncation(row.truncation)])
+                elif isinstance(item, Code):
+                    fence = "```"
+                    while fence in item.text:
+                        fence += "`"
+                    lines.extend([_md_text(item.caption), "", fence + "text", item.text, fence,
+                                  *_md_truncation(item.truncation)])
+                elif isinstance(item, Bullets):
+                    lines.extend("- " + _md_text(value) for value in item.items)
+                    lines.extend(_md_truncation(item.omitted))
+                elif isinstance(item, Table):
+                    lines.append("| " + " | ".join(_md_text(value) for value in item.headers) + " |")
+                    lines.append("| " + " | ".join("---" for _ in item.headers) + " |")
+                    for row in item.rows:
+                        lines.append("| " + " | ".join(_md_text(cell.text) for cell in row) + " |")
+                    lines.extend(_md_truncation(item.omitted))
+                else:
+                    raise TypeError(f"unsupported dossier Markdown item: {type(item).__name__}")
+                lines.append("")
+        else:
+            raise TypeError(f"unsupported dossier Markdown block: {type(block).__name__}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 

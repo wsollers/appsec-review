@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -25,6 +26,12 @@ from appsec_review.observability import EventLog
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import JobContext
 from appsec_review.storage import atomic_bytes, atomic_json
+from appsec_review.storage import canonical_json
+from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
+from appsec_review.jobs.job_remediation_planning.contracts import PlanAnswer, verify_plan
+from appsec_review.reporting.dossiers import DossierLimits, build_dossier
+from appsec_review.reporting.dossier_render import render_dossier, render_dossier_markdown
+from tests import remediation_support
 from tests.dossier_fixture import ROOT, seed, settings
 
 
@@ -111,6 +118,174 @@ def _ctx(root: Path, name: str = "att-1", **overrides) -> JobContext:
         config=cfg,
         events=EventLog(attempt / "events.jsonl"),
     )
+
+
+def _accepted_exact_remediation(env, *, planning_status="proposal_generated", validation_status=None,
+                                static_status="passed", semantic_status="analyst_supported", proposal=None):
+    proposal = proposal or remediation_support.patch(
+        "src/example.c", "a" * 64, old="return n;", new="if (n > 8) return 0;\nreturn n;")
+    answer = remediation_support.answer(
+        env.source["finding"]["direct_evidence"], proposal if planning_status == "proposal_generated" else None,
+        status=planning_status)
+    parsed = PlanAnswer.from_mapping(answer, remediation_support.bounds(),
+                                    evidence_ids=set(env.source["finding"]["direct_evidence"]))
+    patch_ref = None if parsed.patch is None else _write(env.root, "exact-patch.json", parsed.patch.document)
+    context_ref = _write(env.root, "context.json", {
+        "finding": env.binding, "adjudication_id": env.source["finding"]["adjudication_id"]})
+    receipt_ref = _write(env.root, "writer.json", {
+        "role": "remediation_writer", "status": "answered",
+        "cell_id": f"remediation-writer:{env.binding['claim_id']}",
+        "guidance_bundle_sha256": "b" * 64, "result_sha256": hashlib.sha256(canonical_json(answer)).hexdigest()})
+    plan = {
+        "schema": REMEDIATION_PLAN_SCHEMA, "run_id": env.root.name,
+        "upstream": {"review_handoff": env.verified["inputs"]["review_handoff"], "poc_handoff": None},
+        "finding": env.binding, "adjudication_id": env.source["finding"]["adjudication_id"],
+        **answer, "patch": patch_ref, "assurance": nonexecution_assurance(),
+        "provenance": {"settings_sha256": "c" * 64, "source_context": context_ref,
+                       "writer_receipt": receipt_ref, "guidance_bundle_sha256": "b" * 64}, "gaps": [],
+    }
+    plan_ref = _write(env.root, "plan.json", plan)
+    schemas = SchemaSet(ROOT / "docs" / "schemas" / "remediation")
+    assert verify_plan(env.root, plan_ref, review_handoff=env.verified["inputs"]["review_handoff"],
+                       finding=env.binding, schemas=schemas) == plan
+    env.producer("job_remediation_planning", REMEDIATION_PLANNING_SCHEMA, REMEDIATION_PLANNING_HANDOFF_SCHEMA,
+                 [{"finding": env.binding, "status": planning_status, "reason": plan["reason"],
+                   "plan": plan_ref, "gap_ids": []}])
+    if validation_status:
+        from appsec_review.jobs.job_remediation_validation.job import _initial_checks
+        checks = _initial_checks()
+        for dimension, status in (("patch_applicability", "passed"), ("static_checks", static_status),
+                                  ("semantic_review", semantic_status)):
+            checks[dimension] = {"status": status, "reason": "retained check result", "artifact": None}
+        if validation_status == "build_checked":
+            checks["build"] = {"status": "passed", "reason": "retained build check", "artifact": None}
+        planning = env.accepted["job_remediation_planning"]
+        planning_ref = {"path": planning.path, "sha256": planning.sha256}
+        validation = {
+            "schema": REMEDIATION_VALIDATION_SCHEMA, "run_id": env.root.name,
+            "upstream": {**plan["upstream"], "planning_handoff": planning_ref},
+            "finding": env.binding, "adjudication_id": plan["adjudication_id"],
+            "plan": plan_ref, "patch": patch_ref, "status": validation_status,
+            "reason": "retained validation outcome", "checks": checks,
+            "assurance": nonexecution_assurance(), "settings_sha256": "d" * 64,
+            "cleanup": None, "gaps": [],
+        }
+        schemas.validate("validation", validation)
+        validation_ref = _write(env.root, "validation.json", validation)
+        env.producer("job_remediation_validation", REMEDIATION_VALIDATION_SUMMARY_SCHEMA,
+                     REMEDIATION_VALIDATION_HANDOFF_SCHEMA,
+                     [{"finding": env.binding, "status": validation_status, "reason": validation["reason"],
+                       "validation": validation_ref, "gap_ids": []}], extra={"planning_handoff": planning_ref})
+    return patch_ref
+
+
+@pytest.mark.parametrize("plan,status,static,semantic,tier", [
+    ("proposal_generated", None, "passed", "analyst_supported", "proposal_only"),
+    ("manual_design_required", None, "passed", "analyst_supported", "manual_design_required"),
+    ("insufficient_evidence", None, "passed", "analyst_supported", "insufficient_evidence"),
+    ("proposal_generated", "rejected", "failed", "not_performed", "rejected"),
+    ("proposal_generated", "rejected", "passed", "analyst_contradicted", "rejected"),
+    ("proposal_generated", "inconclusive", "passed", "analyst_unresolved", "inconclusive"),
+    ("proposal_generated", "manual_validation_required", "passed", "analyst_supported", "manual_validation_required"),
+    ("proposal_generated", "static_checked", "passed", "analyst_supported", "static_checked"),
+    ("proposal_generated", "build_checked", "passed", "analyst_supported", "build_checked"),
+], ids=["proposal", "manual-design", "insufficient", "static-rejected", "semantic-rejected",
+        "inconclusive", "manual-validation", "static", "build"])
+def test_accepted_remediation_projection_retains_exact_edits_and_outcomes(
+        tmp_path, monkeypatch, plan, status, static, semantic, tier):
+    env = _seed_env(tmp_path, monkeypatch)
+    patch_ref = _accepted_exact_remediation(
+        env, planning_status=plan, validation_status=status, static_status=static, semantic_status=semantic)
+    loaded = inputs.load_inputs(env.root, env.verified, settings())
+    remedies = dossier_job._remediation(env.root, loaded, env.binding["finding_package_id"], settings())
+    model = build_dossier(kind="confirmed_finding", **{**env.source, "remediation": remedies})
+    assert model["remediation_guide"]["validation_tier"] == tier
+    if patch_ref:
+        projected = next(row["patch"] for row in model["remediation"] if row["stage"] == "Planning")
+        assert projected["artifact"] == patch_ref
+        assert projected["files"] == read_bound_json(env.root, patch_ref)["files"]
+    assert model["remediation_guide"]["proposed_diff"] is None
+    result = render_dossier(env.root, env.root / "rendered", model,
+                            settings=settings(render_pdf=False), repository_root=ROOT)
+    assert result["status"] == "latex_only"
+    for suffix in ("md", "html"):
+        rendered = (env.root / "rendered" / f"dossier.{suffix}").read_text()
+        assert tier in rendered
+        assert "Validated Remediation Patch" not in rendered
+        if patch_ref:
+            assert patch_ref["sha256"] in rendered
+            assert "return n;" in rendered
+        if status:
+            assert semantic in rendered and static in rendered
+
+
+def test_exact_patch_projection_bounds_and_rechecks_original_bytes(tmp_path, monkeypatch):
+    env = _seed_env(tmp_path, monkeypatch)
+    patch_ref = _accepted_exact_remediation(env)
+    loaded = inputs.load_inputs(env.root, env.verified, settings())
+    remedies = dossier_job._remediation(env.root, loaded, env.binding["finding_package_id"], settings())
+    model = build_dossier(kind="confirmed_finding", **{**env.source, "remediation": remedies},
+                          limits=DossierLimits(code_chars=8))
+    assert any("patch" in cut["field"] for cut in model["truncations"])
+    assert "Bounded" in render_dossier_markdown(model)
+    atomic_bytes(env.root / patch_ref["path"], b"{}")
+    with pytest.raises((IntegrityError, ValueError), match="hash|sha256|changed"):
+        dossier_job._remediation(env.root, loaded, env.binding["finding_package_id"], settings())
+
+
+def test_exact_edits_keep_byte_order_new_file_absence_and_protected_text(tmp_path, monkeypatch):
+    env = _seed_env(tmp_path, monkeypatch)
+    proposal = {"schema": "appsec-review/remediation-exact-patch/1", "files": [
+        {"path": "src/example.c", "before_sha256": "a" * 64, "absence_proof": False,
+         "edits": [{"start": 2, "end": 3, "old": "a", "new": "b"},
+                   {"start": 10, "end": 11, "old": "c", "new": "d"}]},
+        {"path": "src/new.c", "before_sha256": None, "absence_proof": True,
+         "edits": [{"start": 0, "end": 0, "old": "", "new": 'password = "private-patch-value";\n'}]},
+    ]}
+    patch_ref = _accepted_exact_remediation(env, proposal=proposal)
+    loaded = inputs.load_inputs(env.root, env.verified, settings())
+    remedies = dossier_job._remediation(env.root, loaded, env.binding["finding_package_id"], settings())
+    model = build_dossier(kind="confirmed_finding", **{**env.source, "remediation": remedies})
+    patch_view = model["remediation"][0]["patch"]
+    assert patch_view["artifact"] == patch_ref
+    files = {row["path"]: row for row in patch_view["files"]}
+    assert [edit["start"] for edit in files["src/example.c"]["edits"]] == [2, 10]
+    assert files["src/new.c"]["before_sha256"] is None
+    assert files["src/new.c"]["absence_proof"] is True
+    assert files["src/new.c"]["edits"][0]["old"] == ""
+    assert "private-patch-value" not in canonical_json(model).decode()
+    assert read_bound_json(env.root, patch_ref) == proposal
+
+
+def test_absent_remediation_has_no_invented_design_or_patch(tmp_path):
+    source = seed(tmp_path / "run")
+    model = build_dossier(kind="confirmed_finding", **{**source, "remediation": []})
+    guide = model["remediation_guide"]
+    assert guide["validation_tier"] == "not_available"
+    assert guide["proposed_diff"] is None and guide["concrete_fix_steps"] == []
+    assert guide["corrected_invariant"] == "Not recorded in upstream remediation plan."
+    assert "No remediation is claimed" in render_dossier_markdown(model)
+
+
+def test_remediation_row_cap_does_not_hide_rejected_outcome(tmp_path, monkeypatch):
+    env = _seed_env(tmp_path, monkeypatch)
+    _accepted_exact_remediation(env, validation_status="rejected", static_status="failed")
+    loaded = inputs.load_inputs(env.root, env.verified, settings())
+    remedies = dossier_job._remediation(env.root, loaded, env.binding["finding_package_id"], settings())
+    model = build_dossier(kind="confirmed_finding", **{**env.source, "remediation": remedies},
+                          limits=DossierLimits(evidence_rows=1))
+    assert model["remediation_guide"]["validation_tier"] == "rejected"
+    assert any(cut["field"] == "remediation" and cut["omitted"] == 1 for cut in model["truncations"])
+
+
+def test_exact_patch_input_refuses_unclosed_shape_and_artifact_bound(tmp_path):
+    root = tmp_path / "run"
+    patch_ref = _write(root, "bad-patch.json", {
+        **remediation_support.patch("src/example.c", "a" * 64), "raw_prompt": "DO_NOT_COPY"})
+    with pytest.raises(IntegrityError, match="schema mismatch"):
+        inputs.exact_patch(root, patch_ref, settings().max_artifact_bytes)
+    with pytest.raises(IntegrityError, match="exceeds max_artifact_bytes"):
+        inputs.exact_patch(root, patch_ref, 8)
 
 
 def test_settings_and_validate_topology_edges(tmp_path: Path) -> None:

@@ -13,6 +13,7 @@ from appsec_review.jobs.completion_contracts import (
     verify_nonexecution_assurance,
 )
 from appsec_review.jobs.engineering_contracts import POC_GENERATION_HANDOFF_SCHEMA, POC_GENERATION_SCHEMA
+from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.decision_audit.reader import AcceptedAudit
 from appsec_review.reporting.dossiers import POC_STATUSES
@@ -35,6 +36,17 @@ def bound_json(root: Path, reference: Mapping[str, Any], maximum: int) -> Any:
     if path.stat().st_size > maximum:
         raise IntegrityError("dossier input exceeds max_artifact_bytes: " + reference["path"])
     return read_bound_json(root, reference)
+
+
+def exact_patch(root: Path, reference: Mapping[str, Any] | None, maximum: int) -> dict[str, Any] | None:
+    if reference is None:
+        return None
+    document = bound_json(root, reference, maximum)
+    schemas = SchemaSet(Path(__file__).resolve().parents[4] / "docs" / "schemas" / "remediation")
+    errors = schemas.errors("exact-patch", document)
+    if errors:
+        raise IntegrityError("dossier exact patch schema mismatch: " + "; ".join(errors[:3]))
+    return {"artifact": dict(reference), **document}
 
 
 def finding_binding(row: Mapping[str, Any]) -> FindingBinding:
@@ -108,6 +120,7 @@ def accepted_producer(root: Path, job: str, review: Mapping[str, str], findings:
                         or attachment.get("upstream", {}).get("review_handoff") != dict(review)):
                     raise IntegrityError("remediation artifact disagrees with its accepted summary: " + key)
                 verify_nonexecution_assurance(attachment.get("assurance") or {})
+                exact_patch(root, attachment.get("patch"), settings.max_artifact_bytes)
     for reference in _references(document):
         resolve_bound(root, reference)
     if job == "job_poc_generation" and "counts" in document:

@@ -66,6 +66,20 @@ score packages, and the accepted evidence manifest. `FindingBinding` contains ex
 `claim_id`, `finding_package_id`, `sha256`; the full upstream provenance must also retain the
 adjudication and review identities. `DossierKind` is `confirmed_finding` or `poc`.
 
+Current dossier presentation (T-5086/T-5087) keeps the absent ordered-path and guard-analysis
+fields explicit rather than deriving them from citation/excerpt order or confirmation. Shard ids
+and entity kinds are not corroborating scanners. Only an explicit accepted independence boolean
+produces the corresponding passed/failed headline; protected verification checks retain their
+original values. Markdown now renders the same common document as HTML/LaTeX, preserving
+decision basis, counterevidence, chain qualifications, risk and provenance.
+
+Accepted remediation `patch` references resolve to the existing exact-edit schema, not a unified
+diff string. Bounded redacted displays retain original byte ranges, baseline hashes, absence
+proofs and the immutable patch reference; original bytes remain in that artifact. Overall
+validation status, not individual passing checks, determines the displayed outcome. A generated
+proposal without validation is proposal-only; rejected/inconclusive/manual results are not
+upgraded by applicability. This presentation change does not add path proof or live validation.
+
 The distinction between **available**, **admissible**, and **publishable** is essential:
 
 | Layer | What it establishes | Resolver / rule |

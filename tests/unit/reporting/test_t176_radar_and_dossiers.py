@@ -5,8 +5,10 @@ import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+import pytest
 from jsonschema import Draft202012Validator
 
+from appsec_review.jobs.accepted_review import project_finding
 from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_SCHEMA
 from appsec_review.jobs.job_final_publication_gate import classify as gate_classify
 from appsec_review.jobs.job_final_report_publication.render import render_markdown
@@ -39,6 +41,7 @@ from appsec_review.reporting.latex import escape_latex, render_latex
 from appsec_review.review.identity import sha256_hex
 from tests.dossier_fixture import seed
 from tests.unit.review_decision_audit_wiring.helpers import verified_document
+from tests.unit.review_decision_audit_consumers.helpers import Fixture
 
 ROOT = Path(__file__).resolve().parents[3]
 RADAR_SCHEMA_PATH = ROOT / "docs" / "schemas" / "final-report" / "security-radar-tracker.schema.json"
@@ -268,9 +271,6 @@ def test_redesigned_dossier_sections_and_deterministic_latex_escaping(tmp_path: 
     assert r"\textasciicircum{}" in escaped
 
     source = seed(tmp_path / "run")
-    source["remediation"][0]["proposed_patch"] = (
-        "--- a/src/service.c\n+++ b/src/service.c\n@@ -10,1 +10,2 @@\n-memcpy(dst, src, n);\n+if (n <= sizeof(dst)) memcpy(dst, src, n);\n"
-    )
     model = build_dossier(kind="poc", **source)
     for key in (
         "classification_badge",
@@ -297,3 +297,76 @@ def test_redesigned_dossier_sections_and_deterministic_latex_escaping(tmp_path: 
     assert tex == render_latex(dossier_document(model))
     assert "not_performed_by_policy" in md
     assert "not_performed_by_policy" in html
+
+
+@pytest.mark.parametrize("independent", [None, False, True], ids=["absent", "failed", "passed"])
+def test_accepted_finding_does_not_invent_path_guard_or_independence(tmp_path, independent):
+    source = seed(tmp_path / "run")
+    finding = source["finding"]
+    package = {
+        **finding, "label": "confirmed", "gaps": [], "poc": None, "judge_verdict": None,
+        "verification_review_id": None,
+        "independence": {} if independent is None else {"independent": independent},
+        "ship_block": {
+            "policy": "ship-block-policy/1", "policy_sha256": "1" * 64,
+            "status": "not_ship_blocking", "reasons": [], "missing_factors": [],
+            "conditions": {"distinct_verification_required": False, "verifier_model_distinct": False},
+            "inputs": {"technical_severity": {
+                "rating": "medium", "score_id": None, "severity_floor": None, "severity_ceiling": None,
+                "missing_factors": []}},
+        },
+    }
+    source["finding"] = project_finding(
+        {"path": finding["path"], "sha256": finding["sha256"]}, package, finding["scores"])
+    model = build_dossier(kind="confirmed_finding", **source)
+    assert model["taint_path_timeline"] == []
+    assert model["classification_badge"]["corroborating_scanners"] == []
+    expected = "not_recorded" if independent is None else (
+        "independence_passed" if independent else "independence_failed")
+    assert model["adjudication_summary"]["verifier_posture"] == expected
+    for rendered in (json.dumps(model), render_dossier_markdown(model), render_dossier_html(model)):
+        assert "confirmed_independent" not in rendered
+        assert "verified_unblocked_citation" not in rendered
+        assert "candidate guards did not" not in rendered
+        assert "Guard analysis is not recorded" in rendered
+
+
+@pytest.mark.parametrize("format", ["markdown", "html", "latex"])
+def test_dossier_formats_preserve_audited_counterevidence_risk_and_provenance(tmp_path, format):
+    fixture = Fixture(tmp_path)
+    source = fixture.dossier()
+    source["finding"]["scores"] = [{
+        "score_id": "score-1", "sha256": "a" * 64, "provider": {"id": "risk-provider"},
+        "technical_severity": {"rating": "medium", "scale": "ordinal", "value": 2},
+        "missing_factors": ["deployment-unknown"],
+    }]
+    source["chains"] = [{"chain_id": "chain-1", "status": "qualified_supported",
+                         "objective": "Qualified chain", "qualifications": ["UNIQUE_CHAIN_LIMITATION"]}]
+    source["excerpts"] = [{"identity": "entity-dissent", "location": {"path": "example/dissent.c"},
+                           "excerpt": "counterevidence excerpt", "excerpt_start_line": 1, "excerpt_end_line": 1}]
+    model = build_dossier(**source, decision_audit=fixture.load())
+    render = {"markdown": render_dossier_markdown, "html": render_dossier_html,
+              "latex": lambda value: render_latex(dossier_document(value))}[format]
+    rendered = render(model)
+    for marker in ("Protected decision basis", "dissent", "qualification", "nondeciding",
+                   "UNIQUE_CHAIN_LIMITATION", "risk-provider", "deployment-unknown", "review handoff"):
+        expected = (escape_latex(marker) if format == "latex" else
+                    marker.replace("_", "\\_") if format == "markdown" else marker)
+        assert expected in rendered
+    assert model["taint_path_timeline"] == []
+    assert model["decision_basis"]["verification"]["existing_r6_passed"]["value"] is False
+    assert model["adjudication_summary"]["verifier_posture"] != "confirmed_independent"
+    assert "literal-secret" not in rendered
+    assert "DO_NOT_COPY_PRIVATE_WORKER_DICTIONARY" not in rendered
+
+
+def test_common_markdown_keeps_untrusted_markup_and_code_inert(tmp_path):
+    source = seed(tmp_path / "run")
+    source["claim"]["statement"] = '<script>alert(1)</script> [link](https://invalid.example)'
+    source["poc_source"] = "```\n# not a heading\n<script>inert code</script>"
+    model = build_dossier(kind="poc", **source)
+    markdown = render_dossier_markdown(model)
+    assert "<script>alert(1)</script>" not in markdown
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in markdown
+    assert "\\[link\\](https://invalid.example)" in markdown
+    assert "````text\n```\n# not a heading\n<script>inert code</script>\n````" in markdown
