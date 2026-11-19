@@ -282,9 +282,11 @@ Image-backed engineering follows [host pins](../operations/image-pin-verificatio
   verification before adjudication. Thinking-capable models enforce an explicit output-token floor
   above reasoning budgets. Multi-step attack-chain composition (`max_steps = 6`) admits chains
   across trust boundaries, including `medium + medium -> high/critical` escalations.
-- **Static compile-only PoC & 9-language remediation verification (`T-174`, `T-175`)**:
-  `job_poc_generation` validates generated harnesses purely via syntax/AST/compile-only checks
-  (`appsec-review/poc-compile-check/1`) across all nine languages; runtime PoC execution is hard-blocked
+- **Nonexecuting PoC checks & bounded remediation verification (`T-174`, `T-175`)**:
+  `job_poc_generation` records bounded lexical/policy checks across nine supported languages
+  (`appsec-review/poc-compile-check/2`), with Python AST parsing where applicable.
+  These records retain `compiler_verified: false`; commissioned native compile checks are separate
+  evidence, not proof that all nine languages were compiled. Runtime PoC execution is hard-blocked
   (`PocExecutionBlockedByPolicyError`) pending user-approved sandboxing (`T-175`).
   `job_remediation_planning` prioritizes Critical/High reachable findings and multi-step chain
   choke-points, and `job_remediation_validation` performs 9-language static syntax, guard-insertion,
@@ -311,7 +313,7 @@ flowchart TD
   ledger --> decide["Deterministic adjudication & calibrated scoring"]
   decide --> chains["Multi-step attack chains (up to 6 hops; medium+medium escalation)"]
   chains --> published["Sealed review handoff"]
-  published --> poc["job_poc_generation: appsec-review/poc-compile-check/1 (compile-only; execution blocked)"]
+  published --> poc["job_poc_generation: appsec-review/poc-compile-check/2 (lexical / Python AST; native compile evidence separate; execution blocked)"]
   published --> rem["job_remediation_planning / job_remediation_validation: risk-first + 9-lang static verify"]
   published --> reporting["Gate-certified reporting"]
   poc --> reporting

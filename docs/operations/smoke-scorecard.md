@@ -4,9 +4,12 @@ kind: "operations"
 subsystem: "testing and operations"
 status: "current"
 jobs: []
-last reconciled: "d31da01bf3a9e8d62bbe8d5e66e62d6b09ad43f4"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Smoke scorecard
+
+Previously recorded page-specific revision: `d31da01bf3a9e8d62bbe8d5e66e62d6b09ad43f4`; the
+frontmatter watermark follows the repository-wide docs-sync record, not this individual revision.
 
 `scripts/smoke-score.py` scores one completed smoke run against the smoke answer key
 ([test targets, "Scoring a smoke run"](test-targets.md#scoring-a-smoke-run-t-5019)). This document

@@ -4,9 +4,12 @@ kind: "architecture"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_inference_security_review"]
-last reconciled: "fadb6c2e9f8e23a99a59bf3c26cab82db7060493"
+last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Review protocol v3: two intakes, one review
+
+Previously recorded page-specific revision: `fadb6c2e9f8e23a99a59bf3c26cab82db7060493`; the
+frontmatter watermark follows the repository-wide docs-sync record, not this individual revision.
 
 Status: design, decided with the user on 2026-11-16 from the evidence of application runs `2026-11-15-0005`
 and `2026-11-15-0006`; not implemented. Where this document and
@@ -108,8 +111,15 @@ coverage is still derived from hunt cells and their receipts, never from the pla
 
 ### 4.1 The campaign
 
-A producer job, `job_model_hunting` (working name), runs a **campaign** over one accepted snapshot: `N` agents,
-each on the hunter's model profile, each with
+A future producer job would run a **campaign** over one accepted snapshot: `N` agents,
+each on the hunter's model profile. Its proposed working identifier below is not a registered job
+or an executable dispatch target:
+
+```text
+job_model_hunting
+```
+
+Each proposed campaign agent would receive:
 
 - a **mission** from the profile ("find exploitable memory corruption and injection reachable from the network
   and file surfaces of this program"), the stack persona and the threat model's interaction catalog as
@@ -235,7 +245,7 @@ at a time, findings and cost side by side. Passing unit tests do not establish r
 |---|---|---|---|
 | M1 | The clean run with the 2026-11-15 repairs (claim identity, vocabularies, expand, dossier hashing, admission, clustering, fsync) | code, landed together | T-5024, T-5025, T-5027, T-5029 |
 | M2 | Measurement run with the review reduced to analyse-then-verify: `red_per_team = 1`, `blue_per_team = 0`, judge disabled, `max_rounds = 1`; same target and overlay as M1 | configuration only | T-5028 (caps), new entry for the run |
-| M3 | `job_model_hunting`: the producer of `model_hypothesis` observations, its lead family, producer decision, dataset and topology edge; the hunter guidance moves from the hunt lane to the producer | job boundary | T-5030 (redefined) |
+| M3 | The [proposed hunting producer](#41-the-campaign): the producer of `model_hypothesis` observations, its lead family, producer decision, dataset and topology edge; the hunter guidance moves from the hunt lane to the producer | job boundary | T-5030 (redefined) |
 | M4 | Remove lane B from the review job: units, lane allocation, the cross-lane seed path, `lanes.*` settings that only lane B used; hunt packages become ordinary clustered packages of `model_hypothesis` leads | code | new entry, after M3 |
 | M5 | Judge as escalation: enabled only for disputed findings at or above a configured severity; blue refuter opt-in | configuration and a small routing change | new entry |
 | M6 | Scale: tooling cached per target snapshot and re-run for changed files; one package queue served across hosts; cell memoization reused across runs | design, then jobs | T-5031 follow-ups |

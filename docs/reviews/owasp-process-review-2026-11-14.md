@@ -14,6 +14,10 @@ At the end of the review `origin/main` had advanced to `810d837cd9a40609ebe3f909
 (one T-152 commit touching no OWASP path). No code was changed. Run evidence comes from smoke-cpp run `2026-11-14-0003` on this host; the
 answer key was not read. Line numbers refer to the reviewed commit.
 
+Retired rule-version labels below preserve that inspected source and its recorded test outcomes;
+they are marked as historical passages, not current declarations. Current producer contracts are
+on the [OWASP job page](../operations/job_owasp_control_assessment.md).
+
 **Important caveat for the run evidence.** The run started at 08:50 UTC from the main checkout at
 `515300d5`, which contains the two contract fixes (`1f40f7aa`, `055bf1f6`) but **not** the T-146
 subject-selection enhancement (`fdb85e69`, `afc7c1b8`, `441f5836` are not ancestors of `515300d5`).
@@ -137,7 +141,7 @@ Severity vocabulary: **defect** (wrong behaviour), **contract gap** (violates
   keys; `src/appsec_review/config/owasp.py:36-40` makes `max_discovery_files` and
   `max_discovery_bytes` optional with defaults. `docs/operations/owasp-control-assessment.md:71`
   describes `parser_versions` as versioned fingerprint inputs; no key exists for
-  `owasp-proof-obligations/2` or `owasp-complete-source-subjects/1`, and no code checks that the
+  <!-- historical:begin -->`owasp-proof-obligations/2` or `owasp-complete-source-subjects/1`<!-- historical:end -->, and no code checks that the
   TOML values (`evidence_binding = "2"`, `result_validator = "3"`, …) match the constants
   `EVIDENCE_RULE`, `RESULT_RULE`, `SELECTION_RULE`, `VERSION`.
 - Proposed fix: mark the two keys optional in the table, add the two missing versions, and assert
@@ -208,8 +212,8 @@ Commits since 2026-11-01 touching the job, by behaviour, not title:
   starve the four procedures; every omission is a named gap with a count. HTTP-route subjects keep
   the whole module when it fits (so middleware/guard context is visible) and a route function cut
   from an oversized module cannot establish an authorization obligation
-  (`assessment.py:373-376`). Evidence binding rule became `owasp-evidence-binding/2`, acceptance
-  `owasp-assessment-acceptance/3`, obligations `owasp-proof-obligations/2`; the resolver records a
+  (`assessment.py:373-376`). Evidence binding rule became <!-- historical:begin -->`owasp-evidence-binding/2`, acceptance
+  `owasp-assessment-acceptance/3`, obligations `owasp-proof-obligations/2`<!-- historical:end -->; the resolver records a
   `source_subject` with `complete` and `outside_lines`.
 - **Graph-derived routing context (6457fbf2, 1007ba46).** Security tagging now derives capability
   tags from accepted graph sites with a `declared`/`invoked` basis; `characterize_components`
@@ -366,7 +370,7 @@ line:
 | 3 | `IntegrityError: review execution contract failed: AttributeError` | `tests/test_owasp_telemetry.py::test_review_cell_terminal_metrics_cover_reuse_and_not_launched[*]` | same stub |
 | 2 | `assert 'unresolved' == 'independently_assessed'` | `tests/test_owasp_assessment_job.py:156` (`test_real_job_calls_worker_and_blinded_reviewer_over_accepted_tagged_evidence`, `test_partial_resume_reuses_worker_but_performs_missing_independent_review`) | expectation drift after T-146: fixture excerpts are whole-file spans, so `accept_obligations` now rejects them as incomplete subjects and the row stays `cannot_verify` |
 | 1 | `assert 'cannot_verify' == 'satisfied'` | `tests/test_owasp_assessment_job.py:263` | same cause |
-| 1 | `assert 'truncated' in 'ValueError: incomplete, redacted or ambiguous evidence cannot establish an obligation'` | `tests/test_owasp_proof_procedures.py:412` | message changed with `owasp-assessment-acceptance/3` |
+| 1 | `assert 'truncated' in 'ValueError: incomplete, redacted or ambiguous evidence cannot establish an obligation'` | `tests/test_owasp_proof_procedures.py:412` | message changed with <!-- historical:begin -->`owasp-assessment-acceptance/3`<!-- historical:end --> |
 | 2 | `AssertionError: {'validation.cell_04': 'Traceback … ValueError: scripted malformed response'}` | `tests/test_owasp_assessment_job.py:135` (`test_provider_and_output_failure_are_named_gaps_not_results[error1]`, `test_qualification_is_explicit_and_never_eligible`) | needs attribution: a transport raising a bare `ValueError` escapes `investigate`'s `except (ModelOutputError, ProviderError, TimeoutError, …)` (`assessment.py:255`) and fails the cell instead of becoming a named gap. Either the test should raise `ModelOutputError`, or the seam should classify unexpected transport exceptions |
 | 1 | `assert False` (no routing record matched) | `tests/test_owasp_evidence_binding.py:424` | not attributed |
 | 5 more | assorted (`test_configured_source_cap_survives_publication_and_projection`, `test_independent_disagreement_stays_visible_and_provisional`, `test_authentic_unrelated_evidence_cannot_prove_the_named_subject`, …) | `tests/test_owasp_assessment_job.py` | most likely the T-146 fixture drift above; not individually confirmed |

@@ -74,10 +74,17 @@ flowchart TB
     inf --> gate
     poc --> gate
     rem --> gate
-    gate --> rep["job_final_report_publication: appsec-review/final-report/2 + 12-axis SVG radar + SARIF 2.1.0"]
+    gate --> rep["job_final_report_publication: appsec-review/final-report/3 + radar/2 + SARIF 2.1.0"]
     gate --> vex["job_openvex_export: CVE-bound reachability VEX"]
   end
 ```
+
+The report renders deterministic Markdown and HTML plus a configured executive PDF from the
+certified gate snapshot and gate-bound dossiers. The accepted handoff's `pdf` outcome and renderer
+receipt distinguish rendered, failed and disabled output; the initial JSON's pre-render
+`not_rendered` declaration is not that outcome. Radar `/2` retains unknown measurements as
+`null` with reasons (**N/A** in renderings), not measured zero. Protected dossier PDFs remain
+separate. See [final report publication](operations/final-report.md#the-report).
 
 ## What makes the result trustworthy
 
