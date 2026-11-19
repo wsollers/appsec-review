@@ -397,11 +397,20 @@ class _Checker:
 
     def on_UnaryOperator(self, node: Mapping[str, Any], _multiplier: int) -> bool:
         if node.get("opcode") in {"+", "-"}:
-            value = _literal(node)
-            if value is not None:
-                self.note(value)
-                return False                         # -1 is not also evidence of the value +1
+            return self.literal_expression(node)
         return True
+
+    def on_ImplicitCastExpr(self, node: Mapping[str, Any], _multiplier: int) -> bool:
+        return self.literal_expression(node)
+
+    def literal_expression(self, node: Mapping[str, Any]) -> bool:
+        value = _literal(node)
+        if value is not None:
+            self.note(value)
+            return False
+        # A known operand is not evidence of an unproven negation/conversion result. Nonliteral
+        # operands still need traversal: their calls, references and arguments retain their checks.
+        return _literal(_only_child(node)) is None
 
     def note(self, value: int) -> None:
         if not self.unevaluated:
@@ -594,6 +603,8 @@ def _unwrapped(node: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def _literal(node: Mapping[str, Any]) -> int | None:
     if node.get("kind") in {"ImplicitCastExpr", "ParenExpr"}:
+        if node.get("kind") == "ImplicitCastExpr" and node.get("castKind") not in {"IntegralCast", "NoOp"}:
+            return None
         value = _literal(_only_child(node))
         if value is not None and node.get("castKind") == "IntegralCast":
             limits = _integer_range(node)
@@ -604,7 +615,11 @@ def _literal(node: Mapping[str, Any]) -> int | None:
         return _integer_value(str(node.get("value", "")))
     if node.get("kind") == "UnaryOperator" and node.get("opcode") in {"+", "-"}:
         inner = _literal(_only_child(node))
-        return inner * (-1 if node["opcode"] == "-" else 1) if inner is not None else None
+        if inner is None:
+            return None
+        value = inner * (-1 if node["opcode"] == "-" else 1)
+        limits = _integer_range(node)
+        return value if limits is not None and limits[0] <= value <= limits[1] else None
     return None
 
 

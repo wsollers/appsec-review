@@ -16,7 +16,8 @@ FUNCTIONS = (relay.TEST_NAME, relay.CONTROL_NAME)
 
 def _integer(value):
     if isinstance(value, int) and value < 0:
-        return {"kind": "UnaryOperator", "opcode": "-", "inner": [_integer(-value)]}
+        return {"kind": "UnaryOperator", "opcode": "-", "type": {"qualType": "int"},
+                "inner": [_integer(-value)]}
     return {"kind": "IntegerLiteral", "value": str(value), "type": {"qualType": "int"}}
 
 
@@ -243,3 +244,65 @@ def test_a_trailing_newline_is_not_part_of_an_admitted_function_name():
     answer = WriterAnswer.from_result(relay.answer(
         test_name="poc_valid\n", test="void poc_valid\n() {}", includes=())["result"])
     assert "name" in {v.rule for v in check_answer(answer, poc_support.settings(), None)}
+
+
+def _typed_negation(value, operand_type, cast_type=None):
+    expr = {"kind": "UnaryOperator", "opcode": "-", "type": {"qualType": operand_type},
+            "inner": [{"kind": "IntegerLiteral", "value": str(value), "type": {"qualType": operand_type}}]}
+    if cast_type:
+        expr = {"kind": "ImplicitCastExpr", "castKind": "IntegralCast",
+                "type": {"qualType": cast_type}, "inner": [expr]}
+    return expr
+
+
+@pytest.mark.parametrize(("operand_type", "value", "compare", "limit", "step", "allowed"), [
+    ("unsigned int", 1, ">", 0, -1, False),
+    ("unsigned long long", 1, ">", 0, -1, False),
+    ("int", 1, "<", 3, 1, True),
+    ("unsigned int", 0, "<", 4, 1, True),
+    ("int", 0, "<", 4, 1, True),
+], ids=["unsigned-wrap", "unsigned-wide-wrap", "signed-progression", "unsigned-zero", "signed-zero"])
+def test_typed_negation_cannot_hide_a_large_loop_initial_value(
+    operand_type, value, compare, limit, step, allowed,
+):
+    loop = _loop(compare=compare, limit=limit, step=step, type_name="long long")
+    loop["inner"][0]["inner"][0]["inner"] = [_typed_negation(value, operand_type, "long long")]
+    found = _check(_loop_document(loop), cap=4)
+    if allowed:
+        assert found == []
+    else:
+        assert "unbounded_loop" in {v.rule for v in found}
+
+
+@pytest.mark.parametrize(("operand_type", "value", "cast_type", "required", "present"), [
+    ("unsigned int", 1, None, -1, False),
+    ("unsigned int", 1, "long long", -1, False),
+    ("int", 1, "unsigned int", -1, False),
+    ("int", 1, "long long", -1, True),
+    ("unsigned int", 0, "long long", 0, True),
+], ids=["unsigned-negation", "unsigned-to-signed", "signed-to-unsigned", "signed-conversion", "unsigned-zero"])
+def test_typed_negation_and_conversion_keep_trigger_evidence_representable(
+    operand_type, value, cast_type, required, present,
+):
+    doc = _document(_call(), _typed_negation(value, operand_type, cast_type))
+    requirement = policy.Requirement("==", required, None, f"exactly {required}")
+    found = _check(doc, triggers=(requirement,))
+    if present:
+        assert found == []
+    else:
+        assert "trigger_absent" in {v.rule for v in found}
+
+
+def test_uncertain_numeric_expression_still_checks_its_actual_calls():
+    expr = {"kind": "UnaryOperator", "opcode": "-", "type": {"qualType": "unsigned int"}, "inner": [_call()]}
+    assert _check(_document(expr)) == []
+
+
+def test_representable_integral_cast_preserves_loop_and_trigger_evidence():
+    expr = {"kind": "ImplicitCastExpr", "castKind": "IntegralCast", "type": {"qualType": "long long"},
+            "inner": [{"kind": "IntegerLiteral", "value": "1", "type": {"qualType": "unsigned int"}}]}
+    loop = _loop(compare=">", limit=0, step=-1, type_name="long long")
+    loop["inner"][0]["inner"][0]["inner"] = [expr]
+    assert _check(_loop_document(loop), cap=1) == []
+    requirement = policy.Requirement("==", 1, None, "exactly 1")
+    assert _check(_document(_call(), expr), triggers=(requirement,)) == []

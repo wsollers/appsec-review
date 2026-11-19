@@ -177,6 +177,10 @@ All of them are deterministic and fail closed; any violation is `policy_denied`.
   refused. Since the reduced AST has no target integer-width metadata, the proof uses the portable minimum range of
   the declared/desugared builtin integer type, including the final step before the failed condition. Unknown types
   cannot establish a bound. This intentionally rejects some loops that a target-specific analysis could prove safe.
+  Unary signs and integral conversions preserve the AST's result type: `-1u` is an unproven unsigned wrap, not
+  mathematical `-1`, even when subsequently converted to `long long`. Such a value cannot establish a loop bound
+  or certify a negative trigger; the operand is not substituted as evidence. Representable signed conversions
+  and unsigned negation of zero remain supported without guessing a target width.
 - Numeric constraints support signed decimal (including leading zeros, e.g. `08`) and explicit hexadecimal integers,
   simple comparisons and inclusive `between` ranges. Non-numeric, fractional, malformed, compound, negated or reversed
   constraints remain in the validation record's `unchecked_triggers`, rather than being partially parsed or crashing
