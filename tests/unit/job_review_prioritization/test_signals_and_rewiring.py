@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from copy import deepcopy
 import gzip
 import hashlib
 import json
+import math
 from pathlib import Path
 import shutil
 from types import SimpleNamespace
@@ -23,11 +25,18 @@ from appsec_review.jobs.job_review_prioritization import (
     load_accepted_prioritization,
 )
 from appsec_review.jobs.job_review_prioritization.datasets import CONTRACT
+from appsec_review.jobs.job_review_prioritization.composite import apply_composite_prioritization
+from appsec_review.jobs.job_review_prioritization import scoring
+from appsec_review.indexing.store import ShardSet
 from appsec_review.jobs.job_review_prioritization.heuristics import Extractor
 from appsec_review.jobs.job_review_prioritization.languages import SPECS
 from appsec_review.jobs.job_review_prioritization.inputs import read_json
 from appsec_review.jobs.job_review_prioritization.job import JOB_ID
 from appsec_review.jobs.job_review_prioritization.syntax import Node, SourceFile, build_tree
+from appsec_review.review.lead_families import LeadCollection
+from appsec_review.review.ranking import RankWeights
+from appsec_review.review.scope import SourceFile as ReviewSourceFile, accept_manifest
+from appsec_review.review.units import build_units, rank_units
 from appsec_review.retrieval import (
     EntityKind,
     EntityRecord,
@@ -37,8 +46,9 @@ from appsec_review.retrieval import (
     SourceLocation,
     write_manifest,
 )
-from appsec_review.storage import atomic_json, file_sha256
+from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from tests.handoff_fixture import write_fixture_handoff
+from tests.unit.job_review_prioritization.test_contract import _job_context, _seed_upstream_run
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -49,6 +59,13 @@ BASE_CONFIG = load_config(ROOT / "appsec-review.toml")
 SIGNALS_SCHEMA = json.loads(
     (ROOT / "docs" / "schemas" / "review-prioritization" / "prioritization-signals.schema.json").read_text(encoding="utf-8")
 )
+
+
+def _sources(*enabled: str) -> dict[str, bool]:
+    return {key: key in enabled for key in (
+        "history", "semgrep", "codeql", "change_context", "test_coverage", "profile_data",
+        "ci_configuration", "artifact_security", "dependency_intelligence", "sast_silence_hunt",
+    )}
 
 
 class _Events:
@@ -630,6 +647,11 @@ def test_end_to_end_engineering_signal_rewiring_and_sast_silence_hunt(tmp_path: 
 
     ranking = read_json(run_root, result["outputs"]["prioritize.score"]["artifact"])
     files_by_path = {f["path"]: f for f in ranking["files"]}
+    assert ranking["score_normalization"]["maximum"] == 1.87
+    for item in [*ranking["files"], *ranking["functions"], *signals_doc["hunt_queue"]]:
+        assert item["raw_score"] == round(item["base_score"] + math.fsum(item["composite_modifiers"].values()), 6)
+        assert item["score"] == item["raw_score"] / 1.87
+        assert 0.0 <= item["score"] <= 1.0
 
     rust_mods = files_by_path["rust/src/lib.rs"]["composite_modifiers"]
     assert rust_mods["change_context_boost"] > 0.0
@@ -657,3 +679,234 @@ def test_end_to_end_engineering_signal_rewiring_and_sast_silence_hunt(tmp_path: 
     assert completed_events[0]["leads_promoted_artifact"] == 1
     assert completed_events[0]["leads_promoted_sca_reachable"] == 1
     assert completed_events[0]["sast_silence_hunt_units"] == telemetry["sast_silence_hunt_units"]
+
+
+def _review_units_from_priority(run_root: Path, target: Path, result: dict[str, Any]):
+    manifest = result["outputs"]["publish.publish_handoff"]["index_manifest"]
+    scope = accept_manifest(run_root, manifest_path=run_root / manifest["path"],
+                            manifest_sha256=manifest["sha256"])
+    ranking = read_json(run_root, result["outputs"]["prioritize.score"]["artifact"])
+    sources = tuple(ReviewSourceFile(
+        item["path"],
+        LogicalIdentity.derive(EntityKind.SOURCE_FILE, scope.target_snapshot, {
+            "path": item["path"], "sha256": file_sha256(target / item["path"]),
+        }).value,
+        item["language"],
+    ) for item in ranking["files"])
+    scope = replace(scope, source_files=sources)
+    units = build_units(scope, LeadCollection((), (), {}, None), unit_max_files=1)
+    return ranking, scope, units
+
+
+@pytest.mark.parametrize("boost", [0.0, 0.4, 0.5, 0.6, 1.5], ids=["zero", "below", "at", "above", "large"])
+def test_composite_priority_publication_preserves_review_order(tmp_path: Path, boost: float) -> None:
+    """T-5084: consume real published scores on both sides of the old 1.0 discontinuity."""
+    run_root, target, snapshot, handoffs = _seed_upstream_run(
+        tmp_path, golden_paths=("go/server/handler.go", "go/store/store.go"))
+    changed = "go/store/store.go"
+    change_ref = _artifact_ref(run_root, run_root / "fixture" / "change-context.json", {
+        "schema": "appsec-review/change-context-analysis/1",
+        "priority": {"top": {"files": [{"path": changed, "score": 1.0}]}},
+    })
+    handoffs["job_change_context_analysis"] = _publish_handoff(
+        run_root, "job_change_context_analysis", {"publish.publish_handoff": {"artifact": change_ref}})
+    settings = BASE_CONFIG.job(JOB_ID).settings
+    override = {
+        "priority_weights": {"public_api": 1.0, "cyclomatic": 1.0},
+        "sources": _sources("change_context"),
+        "composite_weights": {
+            **{key: 0.0 for key in CompositePrioritizationSettings().weights_dict()},
+            "change_context_boost": boost,
+        },
+        "index": {**settings["index"], "file_top_count": 2, "max_indexed_items": 2},
+    }
+    result = build_job().execute(_job_context(tmp_path, run_root, target, snapshot, handoffs,
+                                              settings_override=override))
+    ranking, scope, units = _review_units_from_priority(run_root, target, result)
+    items = {item["path"]: item for item in ranking["files"]}
+    assert items[changed]["base_score"] == 0.5
+    assert items[changed]["raw_score"] == pytest.approx(0.5 + boost)
+    assert items[changed]["score"] == pytest.approx((0.5 + boost) / (1.0 + boost))
+    normalization = ranking["score_normalization"]
+    assert normalization["maximum"] == 1.0 + boost
+    assert normalization["rule"] == "appsec-review/composite-prioritization-score/1"
+    published = read_json(run_root, result["outputs"]["publish.publish_handoff"]["artifact"])
+    assert published["identities"]["score"] == normalization["rule"]
+    assert published["score_normalization"] == normalization
+    assert len(normalization["configuration_sha256"]) == 64
+    assert normalization["configuration_sha256"] == hashlib.sha256(
+        canonical_json({**settings, **override})).hexdigest()
+    points = {unit.paths[0]: next(s.value for s in unit.signals if s.signal == "lps") for unit in units}
+    if boost:
+        assert points[changed] > points["go/server/handler.go"]
+    else:
+        assert points[changed] == points["go/server/handler.go"]
+    assert [ranked.unit.paths[0] for ranked in rank_units(reversed(units))] == [
+        item["path"] for item in ranking["files"]]
+    for unit in units:
+        expected = LogicalIdentity.derive(EntityKind.PRIORITY_ITEM, snapshot,
+                                          {"item_id": items[unit.paths[0]]["item_id"]}).value
+        contexts = [entry for entry in unit.context if entry.role == "priority"]
+        assert [entry.id for entry in contexts] == [expected]
+        assert contexts[0].shard_sha256 == scope.producer("review_prioritization").shards[0]["sha256"]
+        assert unit.source_ids == (scope.source_for(unit.paths[0]).identity,)
+    for weight in (0, 250, 1000):
+        weighted = build_units(scope, LeadCollection((), (), {}, None), unit_max_files=1,
+                               weights=RankWeights(lps=weight))
+        for unit in weighted:
+            [lps] = [signal for signal in unit.signals if signal.signal == "lps"]
+            assert lps.value == round(items[unit.paths[0]]["score"] * weight)
+            assert 0 <= lps.value <= weight
+
+
+@pytest.mark.parametrize("weight,disabled", [
+    (0.0, False), (2.0, False), (1e307, False), (0.00000051, False), (2.0, True),
+], ids=["zero", "large", "large-finite", "rounded", "disabled"])
+def test_composite_maximum_matches_attainable_factor_bounds(tmp_path: Path, weight: float, disabled: bool) -> None:
+    """Use real loaders and scoring; every multiplier can reach one for files and functions."""
+    run_root = tmp_path / "run"
+    path = "src/parser.c"
+    upstream = (
+        ("job_change_context_analysis", "publish.publish_handoff", "artifact", {
+            "schema": "appsec-review/change-context-analysis/1",
+            "files": [{"path": path, "score": 1.0}],
+        }),
+        ("job_test_coverage", "acceptance.publish_handoff", "artifact", {
+            "schema": "appsec-review/test-coverage-handoff/1",
+            "files": [{"path": path, "totals": {"lines_total": 1, "lines_covered": 0}}],
+        }),
+        ("job_profile_data", "acceptance.publish_handoff", "artifact", {
+            "schema": "appsec-review/profile-data-handoff/1",
+            "rows": [{"source": path, "symbol": "parse", "line": 1, "hotness_rank": 1, "hotness_population": 1}],
+        }),
+        ("job_dependency_intelligence", "acceptance.publish_handoff", "sca_reachability", {
+            "schema": "appsec-review/sca-reachability/1",
+            "advisories": [{"advisory_id": "test", "package": "parser", "reachability": "symbol_reachable",
+                           "call_sites": [{"path": path, "line": 1}]}],
+        }),
+    )
+    for job, output, key, document in upstream:
+        ref = _artifact_ref(run_root, run_root / "fixture" / f"{job}.json", document)
+        _publish_handoff(run_root, job, {output: {key: ref}})
+    weights = {key: weight for key in CompositePrioritizationSettings().weights_dict()}
+    settings = {**BASE_CONFIG.job(JOB_ID).settings, "composite_weights": weights,
+                "sources": _sources() if disabled else _sources(
+                    "change_context", "test_coverage", "profile_data", "dependency_intelligence", "sast_silence_hunt")}
+
+    def ranked(scope: str) -> list[dict[str, Any]]:
+        return scoring.rank([{
+            "item_id": f"{scope}:{path}", "scope": scope, "path": path, "name": "parse",
+            "language": "C", "start_line": 1, "end_line": 1,
+            "features": {"cyclomatic": 12, "ingress": 1, "public_api": 1, "sink": 1},
+        }], {"cyclomatic": 1.0}, scoring.FEATURES, population="run")
+
+    files, functions, signals = apply_composite_prioritization(
+        run_root, target_snapshot="a" * 64, settings=settings, semantic_doc={},
+        ranked_files=ranked("file"), ranked_functions=ranked("function"))
+    maximum_boost = 0.0 if disabled else round(weight, 6)
+    maximum = round(1.0 + 5 * maximum_boost, 6)
+    assert signals["score_normalization"]["maximum"] == maximum
+    for item in [*files, *functions]:
+        assert item["base_score"] == 0.5
+        assert set(item["composite_modifiers"].values()) == {maximum_boost}
+        assert item["raw_score"] == round(0.5 + 5 * maximum_boost, 6)
+        assert item["score"] == item["raw_score"] / maximum
+        assert 0 <= item["score"] <= 1
+    jsonschema.validate(signals, SIGNALS_SCHEMA)
+
+
+def test_normalization_is_configuration_bound_not_availability_bound(tmp_path: Path) -> None:
+    run_root, target, snapshot, handoffs = _seed_upstream_run(
+        tmp_path, golden_paths=("go/server/handler.go", "go/store/store.go"))
+    settings = BASE_CONFIG.job(JOB_ID).settings
+    override = {"priority_weights": {"public_api": 1.0, "cyclomatic": 1.0},
+                "sources": _sources("change_context"),
+                "composite_weights": {"change_context_boost": 1.5},
+                "index": {**settings["index"], "file_top_count": 2, "max_indexed_items": 2}}
+    built = build_job()
+    before = built.execute(_job_context(tmp_path, run_root, target, snapshot, handoffs,
+                                        settings_override=override, attempt_id="before"))
+    before_ranking, _, before_units = _review_units_from_priority(run_root, target, before)
+    assert before_ranking["engineering_sources"]["change_context"] == "UNAVAILABLE"
+    ref = _artifact_ref(run_root, run_root / "fixture" / "change-context.json", {
+        "schema": "appsec-review/change-context-analysis/1",
+        "files": [{"path": "go/store/store.go", "score": 1.0},
+                  {"path": "go/server/handler.go", "score": 0.5}],
+    })
+    handoffs["job_change_context_analysis"] = _publish_handoff(
+        run_root, "job_change_context_analysis", {"publish.publish_handoff": {"artifact": ref}})
+    after = built.execute(_job_context(tmp_path, run_root, target, snapshot, handoffs,
+                                       settings_override=override, attempt_id="after"))
+    after_ranking, _, after_units = _review_units_from_priority(run_root, target, after)
+    assert before_ranking["score_normalization"] == after_ranking["score_normalization"]
+    assert before_ranking["score_normalization"]["maximum"] == 2.5
+    assert [item["raw_score"] for item in after_ranking["files"]] == [2.0, 1.25]
+    assert [item["score"] for item in after_ranking["files"]] == [0.8, 0.5]
+    assert [ranked.unit.score for ranked in rank_units(before_units)] == [200, 200]
+    assert [ranked.unit.score for ranked in rank_units(after_units)] == [800, 500]
+    assert before["outputs"]["publish.index_priority"]["index_identity"]["fingerprint"] != (
+        after["outputs"]["publish.index_priority"]["index_identity"]["fingerprint"])
+
+
+def test_priority_consumer_keeps_missing_and_unknown_contracts_unknown(tmp_path: Path, monkeypatch) -> None:
+    run_root, target, snapshot, handoffs = _seed_upstream_run(
+        tmp_path, golden_paths=("go/server/handler.go", "go/store/store.go"))
+    settings = BASE_CONFIG.job(JOB_ID).settings
+    override = {"sources": _sources(),
+                "index": {**settings["index"], "file_top_count": 1, "max_indexed_items": 1}}
+    result = build_job().execute(_job_context(tmp_path, run_root, target, snapshot, handoffs,
+                                              settings_override=override))
+    _, scope, units = _review_units_from_priority(run_root, target, result)
+    assert sorted(s.state for u in units for s in u.signals if s.signal == "lps") == ["available", "unknown"]
+    assert [s.reason for u in units for s in u.signals if s.signal == "lps" and s.value is None] == ["no_record"]
+    original_entities = ShardSet.entities
+    patches = [
+        {"score_identity": "appsec-review/llm-prioritization-score/1", "score": 0.8},
+        {"score_identity": "appsec-review/llm-prioritization-score/1", "score": 1.1},
+        {"score_identity": "unknown"},
+        {"score_normalization": None},
+        {"score_normalization": {"rule": "appsec-review/composite-prioritization-score/1"}},
+        {"raw_score": None}, {"raw_score": float("inf")}, {"raw_score": -1},
+        {"score": 0.123456},
+        {"score": None}, {"score": True}, {"score": -0.1}, {"score": 1.1},
+        {"score": float("nan")}, {"score": float("inf")},
+    ]
+    for patch in patches:
+        def entities(store, shards, *, kinds=()):
+            for row in original_entities(store, shards, kinds=kinds):
+                if row["kind"] == "priority_item":
+                    row = {**row, "payload": {**row["payload"], **patch}}
+                yield row
+        monkeypatch.setattr(ShardSet, "entities", entities)
+        consumed = build_units(scope, LeadCollection((), (), {}, None), unit_max_files=1)
+        assert all(s.state == "unknown" and s.reason == "no_record"
+                   for u in consumed for s in u.signals if s.signal == "lps"), patch
+    missing = replace(scope, producers=tuple(
+        replace(p, shards=()) if p.producer == "review_prioritization" else p for p in scope.producers))
+    assert all(s.state == "unknown" and s.reason == "producer_unavailable"
+               for u in build_units(missing, LeadCollection((), (), {}, None), unit_max_files=1)
+               for s in u.signals if s.signal == "lps")
+
+
+@pytest.mark.parametrize("change", ["legacy", "configuration"], ids=["old-raw", "other-run-settings"])
+def test_publication_refuses_cached_ranking_with_different_score_contract(tmp_path: Path, change: str) -> None:
+    run_root, target, snapshot, handoffs = _seed_upstream_run(tmp_path, golden_paths=("go/store/store.go",))
+    ctx = _job_context(tmp_path, run_root, target, snapshot, handoffs)
+    built = build_job()
+    result = built.execute(ctx)
+    outputs = deepcopy(result["outputs"])
+    ranking = read_json(run_root, outputs["prioritize.score"]["artifact"])
+    if change == "legacy":
+        ranking["identity"] = "appsec-review/llm-prioritization-score/1"
+        ranking.pop("score_normalization")
+        for item in [*ranking["files"], *ranking["functions"]]:
+            item["score"] = item["raw_score"]
+    else:
+        ranking["score_normalization"]["configuration_sha256"] = "0" * 64
+    outputs["prioritize.score"]["artifact"] = _artifact_ref(
+        run_root, run_root / "fixture" / "cached-ranking.json", ranking)
+    for unit_id in ("publish.index_priority", "publish.publish_handoff"):
+        unit = next(unit for unit in built.units if unit.unit_id == unit_id)
+        with pytest.raises(ValueError, match="ranking score contract"):
+            unit.handler(SimpleNamespace(job=ctx, unit_id=unit_id,
+                                         unit_root=ctx.attempt_root / unit_id, output=outputs.__getitem__))

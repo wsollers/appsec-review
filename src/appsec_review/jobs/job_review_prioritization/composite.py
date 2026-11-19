@@ -19,6 +19,7 @@ from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 import hashlib
+import math
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from .inputs import accepted_handoff, has_handoff, producer_entities, read_json
 
 
 PRIORITIZATION_SIGNALS_SCHEMA = "appsec-review/review-prioritization-signals/1"
+COMPOSITE_SCORE_IDENTITY = "appsec-review/composite-prioritization-score/1"
 HUNT_PRIORITY_REASON_ZERO_SAST = "high_surface_zero_sast_coverage"
 _SEVERITIES = ("critical", "high", "medium", "low")
 _SURFACE_FEATURES = (
@@ -60,6 +62,12 @@ class CompositePrioritizationSettings:
     enable_artifact_security: bool = True
     enable_dependency_intelligence: bool = True
     enable_sast_silence_hunt: bool = True
+
+    def __post_init__(self) -> None:
+        if any(not math.isfinite(getattr(self, name)) or getattr(self, name) < 0
+               for name in self.weights_dict()):
+            raise ValueError("review prioritization composite weights must be finite and non-negative")
+        self.score_maximum()
 
     @classmethod
     def from_settings(cls, settings: Mapping[str, Any]) -> CompositePrioritizationSettings:
@@ -94,6 +102,32 @@ class CompositePrioritizationSettings:
             "sca_reachability_boost": round(self.sca_reachability_boost, 6),
             "sast_silence_hunt_boost": round(self.sast_silence_hunt_boost, 6),
         }
+
+    def boost_maxima(self) -> dict[str, float]:
+        # Every contributing factor is in [0, 1], including all three silence-hunt multipliers.
+        # Use the same six-decimal precision as the emitted modifiers, not observed availability.
+        enabled = {"change_context_boost": self.enable_change_context,
+                   "uncovered_risk_boost": self.enable_test_coverage,
+                   "profile_hotpath_boost": self.enable_profile_data,
+                   "sca_reachability_boost": self.enable_dependency_intelligence,
+                   "sast_silence_hunt_boost": self.enable_sast_silence_hunt}
+        return {key: value if enabled[key] else 0.0 for key, value in self.weights_dict().items()}
+
+    def score_maximum(self) -> float:
+        try:
+            maximum = round(math.fsum((1.0, *self.boost_maxima().values())), 6)
+        except OverflowError as exc:
+            raise ValueError("review prioritization composite maximum must be finite") from exc
+        if not math.isfinite(maximum):
+            raise ValueError("review prioritization composite maximum must be finite")
+        return maximum
+
+
+def score_normalization(settings: Mapping[str, Any]) -> dict[str, Any]:
+    cfg = CompositePrioritizationSettings.from_settings(settings)
+    return {"rule": COMPOSITE_SCORE_IDENTITY, "maximum": cfg.score_maximum(),
+            "boost_maxima": cfg.boost_maxima(),
+            "configuration_sha256": hashlib.sha256(canonical_json(dict(settings))).hexdigest()}
 
 
 def _norm_path(raw: Any) -> str:
@@ -660,7 +694,7 @@ def _rerank(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ordered = sorted(
         items,
         key=lambda item: (
-            -item["score"],
+            -item["raw_score"],
             -item["boundary_total"],
             -item["feature_coverage"],
             item["path"],
@@ -684,6 +718,7 @@ def apply_composite_prioritization(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Apply engineering-signal modifiers, promote CI/artifact/SCA leads, and build the SAST-silence hunt queue."""
     cfg = CompositePrioritizationSettings.from_settings(settings)
+    normalization = score_normalization(settings)
     sources = settings.get("sources") if isinstance(settings.get("sources"), Mapping) else {}
 
     cc_status, cc_files, cc_func_names, cc_func_spans = _load_change_context(run_root, cfg.enable_change_context)
@@ -762,8 +797,9 @@ def apply_composite_prioritization(
                 comp_mul = min(1.0, max(cyc, cog) / 10.0)
                 hunt_boost = round(cfg.sast_silence_hunt_boost * reach_mul * surf_mul * max(0.5, comp_mul), 6)
 
-        total_boost = round(cc_boost + uncov_boost + prof_boost + sca_boost + hunt_boost, 6)
         base_score = float(item["score"])
+        if not math.isfinite(base_score) or not 0.0 <= base_score <= 1.0:
+            raise ValueError("review prioritization base score must be finite and in [0, 1]")
         item["base_score"] = base_score
         item["composite_modifiers"] = {
             "change_context_boost": cc_boost,
@@ -772,9 +808,12 @@ def apply_composite_prioritization(
             "sca_reachability_boost": sca_boost,
             "sast_silence_hunt_boost": hunt_boost,
         }
+        total_boost = round(math.fsum(item["composite_modifiers"].values()), 6)
+        item["raw_score"] = round(math.fsum((base_score, *item["composite_modifiers"].values())), 6)
+        # Do not round the quotient again: distinct raw priorities must not acquire artificial ties.
+        item["score"] = item["raw_score"] / normalization["maximum"]
         if total_boost > 0.0:
             boosted_units += 1
-            item["score"] = round(base_score + total_boost, 6)
         if hunt_boost > 0.0:
             item["hunt_priority_reason"] = HUNT_PRIORITY_REASON_ZERO_SAST
             hunt_candidates.append({
@@ -787,7 +826,9 @@ def apply_composite_prioritization(
                 "start_line": item.get("start_line"),
                 "end_line": item.get("end_line"),
                 "score": item["score"],
+                "raw_score": item["raw_score"],
                 "base_score": base_score,
+                "composite_modifiers": dict(item["composite_modifiers"]),
                 "sast_silence_hunt_boost": hunt_boost,
                 "hunt_priority_reason": HUNT_PRIORITY_REASON_ZERO_SAST,
             })
@@ -805,7 +846,7 @@ def apply_composite_prioritization(
             hc["rank"] = rank_by_id[hc["item_id"]]
     hunt_queue = sorted(
         hunt_candidates,
-        key=lambda x: (-x["score"], 0 if x["scope"] == "function" else 1, x["path"], x.get("start_line") or 0, x["item_id"]),
+        key=lambda x: (-x["raw_score"], 0 if x["scope"] == "function" else 1, x["path"], x.get("start_line") or 0, x["item_id"]),
     )
     promoted_leads = [*ci_leads, *art_leads, *sca_leads]
     telemetry = {
@@ -818,6 +859,7 @@ def apply_composite_prioritization(
     signals_doc = {
         "schema": PRIORITIZATION_SIGNALS_SCHEMA,
         "target_snapshot": target_snapshot,
+        "score_normalization": normalization,
         "composite_weights": cfg.weights_dict(),
         "engineering_sources": {
             "change_context": cc_status,

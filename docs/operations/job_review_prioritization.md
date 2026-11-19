@@ -456,15 +456,22 @@ and source custody; it does not dispatch an LLM despite the score's historical n
    Keep unavailable semantic/history dimensions null and retain their disposition.
 2. Normalize each available feature to a zero-anchored mid-rank percentile in the configured
    population, separately for file and function items. Compute the weighted mean over available
-   features and record the share of configured weight actually covered.
-3. Order by descending score, boundary count and feature coverage, then stable source/name
+   features as `base_score` and record the share of configured weight actually covered.
+3. Add the engineering modifiers into `raw_score`, then divide by the fixed configured maximum
+   to publish `score` in `[0, 1]` without clipping ([T-5084](../TODO.md)).
+   `score_normalization` records the versioned rule, enabled boost maxima and exact settings hash;
+   missing upstream data never changes the divisor. See the
+   [score contract](review-prioritization.md#composite-score-contract).
+4. Order by descending raw score, boundary count and feature coverage, then stable source/name
    tie-breakers. Select file and function prefixes under the shared index ceiling; retain the
    full ranking document.
 
 ### `publish`
 
 1. In `publish.index_priority`, fingerprint syntax, dependency, semantic and ranking artifacts,
-   settings and rule identities. Build or reuse the immutable `priority` shard.
+   settings and rule identities, including the composite normalization contract. Refuse a cached
+   ranking with an older score identity or different settings before building or reusing the
+   immutable `priority` shard.
 2. Add selected priority items, bounded resolving evidence and dependency context, preserving
    location/mapping identities. Record a dependency-context cap rather than silently claiming
    the full graph was indexed.

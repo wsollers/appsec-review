@@ -14,6 +14,7 @@ from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import asdict
 import hashlib
+import math
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any
@@ -35,9 +36,11 @@ from appsec_review.retrieval.source_resolution import read_source_bytes, source_
 
 from . import scoring
 from .composite import (
+    COMPOSITE_SCORE_IDENTITY,
     PRIORITIZATION_SIGNALS_SCHEMA,
     CompositePrioritizationSettings,
     apply_composite_prioritization,
+    score_normalization,
 )
 from .complexity import COGNITIVE_DEVIATIONS, COGNITIVE_IDENTITY, CYCLOMATIC_IDENTITY, file_summary, function_units
 from .dependencies import GRAPH_IDENTITY, GraphBuilder, extract, import_modules
@@ -102,7 +105,12 @@ def _identity(prefix: str, *values: Any) -> str:
 
 
 def _number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def _settings(context) -> Mapping[str, Any]:
@@ -132,6 +140,10 @@ def _settings(context) -> Mapping[str, Any]:
             raise ValueError(f"review prioritization weight is invalid: {key}")
     if not any(float(value) > 0 for value in weights.values()):
         raise ValueError("review prioritization needs at least one positive weight")
+    try:
+        math.fsum(weights.values())
+    except OverflowError as exc:
+        raise ValueError("review prioritization weights must have a finite total") from exc
     index = settings.get("index")
     if not isinstance(index, Mapping) or set(index) != set(INDEX_SETTINGS):
         raise ValueError("review prioritization index settings are invalid")
@@ -162,12 +174,20 @@ def _settings(context) -> Mapping[str, Any]:
                 or not set(composite_weights) <= allowed_cw
                 or any(not _number(v) or float(v) < 0 for v in composite_weights.values())):
             raise ValueError("review prioritization composite_weights are invalid")
+    CompositePrioritizationSettings.from_settings(settings)
     reservation = settings.get("syntax_metrics_reservation")
     if not isinstance(reservation, Mapping) or set(reservation) != set(RESERVATION_SETTINGS) or any(
             type(reservation[key]) is not int or not low <= reservation[key] <= high
             for key, (low, high) in RESERVATION_SETTINGS.items()):
         raise ValueError("review prioritization syntax_metrics_reservation is invalid")
     return settings
+
+
+def _validate_score_contract(ranking: Mapping[str, Any], settings: Mapping[str, Any]) -> None:
+    if (ranking.get("identity") != COMPOSITE_SCORE_IDENTITY
+            or ranking.get("base_score_identity") != scoring.SCORE_IDENTITY
+            or ranking.get("score_normalization") != score_normalization(settings)):
+        raise ValueError("review prioritization ranking score contract does not match the run configuration")
 
 
 def _validate(context, _result) -> None:
@@ -705,7 +725,9 @@ def build_job() -> Job:
                                                 count=int(index["function_top_count"]),
                                                 ceiling=max(0, ceiling - file_count))
         gaps = list(history_gaps)
-        document = {"schema": "appsec-review/review-prioritization-ranking/1", "identity": scoring.SCORE_IDENTITY,
+        document = {"schema": "appsec-review/review-prioritization-ranking/1", "identity": COMPOSITE_SCORE_IDENTITY,
+                    "base_score_identity": scoring.SCORE_IDENTITY,
+                    "score_normalization": signals_doc["score_normalization"],
                     "authority": "a high score means review first; it is never a vulnerability finding",
                     "weights": weights, "population": population, "history_status": history_status,
                     "engineering_sources": signals_doc["engineering_sources"],
@@ -741,6 +763,7 @@ def build_job() -> Job:
         semantic_output = unit.output("extract.semantic_evidence")
         facts = syntax_doc(unit)["files"]
         ranking = read_json(unit.job.run_root, ranking_output["artifact"])
+        _validate_score_contract(ranking, settings)
         graph = read_json(unit.job.run_root, graph_output["artifact"])
         semantic = read_json(unit.job.run_root, semantic_output["artifact"])
         files = catalog_files(unit)
@@ -761,7 +784,8 @@ def build_job() -> Job:
                 *(value["artifact"] for value in (syntax_output, graph_output, semantic_output, ranking_output)),
                 *([ranking_output["signals_artifact"]] if "signals_artifact" in ranking_output else []),
             ],
-            tool_identity={"job": JOB_ID, "score": scoring.SCORE_IDENTITY, "rules": RULES_IDENTITY,
+            tool_identity={"job": JOB_ID, "score": COMPOSITE_SCORE_IDENTITY, "rules": RULES_IDENTITY,
+                           "score_normalization": ranking["score_normalization"],
                            "config": hashlib.sha256(canonical_json(dict(settings))).hexdigest()},
             parser_identity="tree-sitter-accepted-shards", normalizer_identity=MAPPING_IDENTITY + "+" + POLICY_IDENTITY,
             mapping_identity=GRAPH_IDENTITY)
@@ -867,7 +891,8 @@ def build_job() -> Job:
                         f"{item['name']} top features " + " ".join(f"{name}={item['features'][name]}" for name, _ in top))
                 linked = item["evidence"][:evidence_limit]
                 payload = {**item, "evidence": linked, "evidence_truncated": max(0, len(item["evidence"]) - evidence_limit),
-                           "score_identity": scoring.SCORE_IDENTITY, "weights": ranking["weights"],
+                           "score_identity": ranking["identity"], "base_score_identity": scoring.SCORE_IDENTITY,
+                           "score_normalization": ranking["score_normalization"], "weights": ranking["weights"],
                            "population": ranking["population"],
                            "authority": "review-first ordering; never a vulnerability finding"}
                 builder.add_entity(EntityRecord(identity, item["item_id"], item["name"], text, payload, location))
@@ -977,10 +1002,12 @@ def build_job() -> Job:
         indexed = unit.output("publish.index_priority")
         syntax = syntax_doc(unit)
         ranking = read_json(unit.job.run_root, ranking_output["artifact"])
+        _validate_score_contract(ranking, settings)
 
         def summary(item: Mapping[str, Any]) -> dict[str, Any]:
             base = {key: item.get(key) for key in ("item_id", "scope", "path", "function_id", "name", "language",
-                                                   "start_line", "rank", "score", "base_score", "feature_coverage",
+                                                   "start_line", "rank", "score", "base_score", "raw_score",
+                                                   "feature_coverage",
                                                    "missing_features", "composite_modifiers")}
             if item.get("hunt_priority_reason"):
                 base["hunt_priority_reason"] = item["hunt_priority_reason"]
@@ -1011,8 +1038,10 @@ def build_job() -> Job:
                          "vulnerability finding; missing coverage is a named gap, never a clean result",
             "identities": {"cyclomatic": CYCLOMATIC_IDENTITY, "cognitive": COGNITIVE_IDENTITY,
                            "cognitive_deviations": list(COGNITIVE_DEVIATIONS), "import_graph": GRAPH_IDENTITY,
-                           "rules": RULES_IDENTITY, "language_map": MAPPING_IDENTITY, "score": scoring.SCORE_IDENTITY,
+                           "rules": RULES_IDENTITY, "language_map": MAPPING_IDENTITY, "score": COMPOSITE_SCORE_IDENTITY,
+                           "base_score": scoring.SCORE_IDENTITY,
                            "prioritization_signals": PRIORITIZATION_SIGNALS_SCHEMA},
+            "score_normalization": ranking["score_normalization"],
             "inputs": {"catalog_handoff_sha256": loaded["inputs"]["catalog_handoff_sha256"],
                        "tree_sitter_handoff_sha256": loaded["inputs"]["tree_sitter_handoff_sha256"],
                        "optional": loaded["optional"]},

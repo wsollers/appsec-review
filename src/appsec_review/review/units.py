@@ -27,6 +27,7 @@ import math
 from typing import Any
 
 from appsec_review.retrieval.model import LogicalIdentity
+from appsec_review.jobs.job_review_prioritization.composite import COMPOSITE_SCORE_IDENTITY
 from appsec_review.review.dispositions import FIRST_PARTY
 from appsec_review.review.lead_families import ADVISORY_FAMILIES, Lead, LeadCollection
 from appsec_review.review.ranking import DEFAULT_RANK_WEIGHTS, MAX_SIGNAL_POINTS, RankWeights
@@ -194,6 +195,35 @@ def _unit_score(value: Any, weight: int = MAX_SIGNAL_POINTS) -> int | None:
     except (TypeError, ValueError):
         return None
     return _points(number, float(weight) if number <= 1.0 else weight / 100, cap=weight)
+
+
+def _priority_score(payload: Mapping[str, Any], weight: int) -> int | None:
+    # Unversioned legacy signals retain their existing conversion. Versioned composite artifacts
+    # must declare the normalized contract: a raw v1 composite cannot be inferred from its magnitude.
+    if "score_identity" not in payload and not any(
+            name in payload for name in ("base_score", "raw_score", "composite_modifiers", "score_normalization")):
+        return _unit_score(payload.get("score"), weight)
+    if payload.get("score_identity") != COMPOSITE_SCORE_IDENTITY:
+        return None
+    normalization = payload.get("score_normalization")
+    if not isinstance(normalization, Mapping) or normalization.get("rule") != COMPOSITE_SCORE_IDENTITY:
+        return None
+    configuration = normalization.get("configuration_sha256")
+    if (not isinstance(configuration, str) or len(configuration) != 64
+            or any(char not in "0123456789abcdef" for char in configuration)):
+        return None
+    maximum, raw = normalization.get("maximum"), payload.get("raw_score")
+    if type(maximum) not in (int, float) or type(raw) not in (int, float):
+        return None
+    try:
+        if not math.isfinite(maximum) or maximum < 1 or not 0 <= raw <= maximum:
+            return None
+    except OverflowError:
+        return None
+    value = payload.get("score")
+    if type(value) not in (int, float) or not 0 <= value <= 1 or value != raw / maximum:
+        return None
+    return _points(value, float(weight), cap=weight)
 
 
 def _path(row: Mapping[str, Any]) -> str | None:
@@ -433,7 +463,7 @@ def _signal_rows(scope: AcceptedScope, weights: RankWeights = DEFAULT_RANK_WEIGH
     for shard in scope.producer("review_prioritization").shards:
         for row in store.entities((shard,), kinds=("priority_item",)):
             rows["lps"].append({"identity": row["identity"], "path": _path(row), "role": "priority",
-                                "value": _unit_score(row["payload"].get("score"), weights.lps),
+                                "value": _priority_score(row["payload"], weights.lps),
                                 "shard_sha256": scope.shard_sha256(shard)})
     for shard in scope.producer("source_history").shards:
         for row in store.entities((shard,), kinds=("history_signal", "hotspot")):

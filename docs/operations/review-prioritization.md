@@ -110,6 +110,50 @@ Through the MCP gateway the same calls are `search`, `find`, `trace`, and `cover
 `missing_features`, `feature_coverage`, `rank`, `score`, and bounded `evidence`; read
 `missing_features` and the coverage rows before treating a low rank as low risk.
 
+## Composite score contract
+
+[T-5084](../TODO.md) defines `appsec-review/composite-prioritization-score/1`. The base
+weighted-percentile score retains `appsec-review/llm-prioritization-score/1`; it is not a percentage.
+For one frozen run configuration:
+
+```text
+raw_score = base_score + sum(composite_modifiers)
+maximum = 1 + sum(enabled configured boost maxima)
+score = raw_score / maximum
+```
+
+Each boost's factor is in `[0, 1]`, and each can reach one:
+
+| Boost | Factor bound |
+|---|---|
+| change context | clamped upstream change score, including its security bonus |
+| uncovered risk | uncovered ratio times clamped complexity/surface factor |
+| profile hot path | clamped rank/population or count/max-count factor; function fallbacks only reduce it |
+| SCA reachability | clamped reachability/FFI factor; function fallbacks only reduce it |
+| SAST-silence hunt | reach, surface and complexity multipliers, each at most one |
+
+Use the enabled weights rounded to the existing six-decimal modifier precision for the maxima
+and sum them with the base maximum of one. Disabled sources contribute zero; enabled-but-missing
+sources retain their configured maximum. With all default boosts enabled the divisor is `1.87`,
+even when an upstream artifact is unavailable. Invalid/nonfinite weights or an overflowing
+configured total are rejected. There is no new arbitrary weight ceiling.
+Within that fixed configuration, increasing a contribution cannot reduce the score. Scores from
+different configurations have different divisors and are not absolute cross-run comparisons.
+
+The producer retains `base_score`, every `composite_modifiers` term and `raw_score` for attribution,
+orders by raw score with its existing deterministic tie-breakers, and does not round the normalized
+quotient again. The ranking, indexed items, summary and hunt queue carry the normalized score.
+`score_normalization` records the rule, maximum, per-boost maxima and SHA-256 of the exact job
+settings. This metadata and the rule participate in the immutable index fingerprint; indexing and
+summary publication reject cached rankings from another score rule or configuration.
+
+Review units scale this explicitly versioned normalized score linearly to `ranking.lps`, retaining
+the configured per-signal bound and existing integer-point rounding/tie-breakers. They never infer
+this score's scale from whether it exceeds one. Unsupported versioned scores, including old raw
+composite items (even those below one), remain unknown rather than being silently reinterpreted.
+The existing unversioned legacy-signal conversion and history-signal conversion are unchanged.
+Recompute old composite artifacts through the normal admitted rerun; do not relabel or edit them.
+
 ## Coverage limits
 
 - Scored languages: C, C++, Java, C#, Go, JavaScript, TypeScript/TSX, Rust, PHP, Ruby

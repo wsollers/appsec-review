@@ -20,6 +20,17 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
+    "score_normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "maximum", "boost_maxima", "configuration_sha256"],
+      "properties": {
+        "rule": {"const": "appsec-review/composite-prioritization-score/1"},
+        "maximum": {"type": "number", "minimum": 1.0},
+        "boost_maxima": {"$ref": "#/properties/composite_weights"},
+        "configuration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
     "engineering_sources": {
       "type": "object",
       "additionalProperties": {
@@ -182,6 +193,13 @@
             "type": "number",
             "minimum": 0.0
           },
+          "raw_score": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "composite_modifiers": {
+            "$ref": "#/properties/composite_weights"
+          },
           "sast_silence_hunt_boost": {
             "type": "number",
             "minimum": 0.0
@@ -265,5 +283,23 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"required": ["score_normalization"]},
+      "then": {
+        "properties": {
+          "hunt_queue": {
+            "items": {
+              "required": ["raw_score", "composite_modifiers"],
+              "properties": {
+                "score": {"maximum": 1.0},
+                "base_score": {"maximum": 1.0}
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
