@@ -188,7 +188,7 @@ def test_contract_topology_and_dataset_declarations_match_bounded_workflow() -> 
     assert by_kind["profile_data"].step == "index"
     assert by_kind["profile_data"].indexes == ("analysis",)
     assert by_kind["profile_data"].shard_prefixes == ("profile-data-",)
-    assert by_kind["profile_data"].query_route == "query_precomputed query_set=profile_data"
+    assert by_kind["profile_data"].query_route == "query_engineering_signals signal_family=profile"
     assert by_kind["profile_data_handoff"].step == "acceptance"
     assert by_kind["profile_data_handoff"].schema == PROFILE_DATA_HANDOFF_SCHEMA
 

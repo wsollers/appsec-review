@@ -2037,12 +2037,32 @@ class RetrievalCore:
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
                 with self._database(shard, deadline) as database:
-                    for row in database.execute(
-                        "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
-                        "ORDER BY e.identity"
-                    ):
+                    query = "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
+                    arguments: list[Any] = []
+                    if fam == "profile":
+                        filters = []
+                        if norm_path is not None:
+                            filters.append(
+                                "COALESCE(NULLIF(l.path, ''), NULLIF(json_extract(e.payload_json, '$.subject_path'), ''), "
+                                "NULLIF(json_extract(e.payload_json, '$.path'), ''), "
+                                "json_extract(e.payload_json, '$.source')) = ?")
+                            arguments.append(norm_path)
+                        if subject is not None:
+                            filters.append("(e.identity = ? OR json_extract(e.payload_json, '$.subject_identity') = ?)")
+                            arguments.extend((subject, subject))
+                        if filters:
+                            query += "WHERE " + " AND ".join(filters) + " "
+                        # Filter before bounding: reported profile paths are not verified locations.
+                        query += "ORDER BY e.identity LIMIT ?"
+                        arguments.append(offset + limit + 1)
+                    else:
+                        query += "ORDER BY e.identity"
+                    for row in database.execute(query, arguments):
+                        self._check_deadline(deadline)
                         payload = json.loads(row["payload_json"])
                         row_path = row["path"] or payload.get("subject_path") or payload.get("path")
+                        if fam == "profile":
+                            row_path = row_path or payload.get("source")
                         if norm_path is not None and row_path != norm_path:
                             continue
                         if subject is not None and row["identity"] != subject and payload.get("subject_identity") != subject:
@@ -2051,6 +2071,14 @@ class RetrievalCore:
                         item["shard_id"] = shard_id
                         item["signal_family"] = fam
                         found.append(item)
+                    if fam == "profile":
+                        gaps.extend(
+                            f"{idx_name}/{shard_id}: {row['gap'] or row['area'] + ' coverage is ' + row['status']}"
+                            for row in database.execute(
+                                "SELECT area, status, gap FROM coverage WHERE status != 'complete' "
+                                "ORDER BY area, status, gap"))
+                if fam == "profile":
+                    gaps.extend(f"{idx_name}/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
             found.sort(key=lambda item: (item["signal_family"], item["identity"], item["shard_id"]))
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
 

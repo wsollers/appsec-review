@@ -91,7 +91,7 @@ def _engineering_context(scope: AcceptedScope
             entry = context_entry(row["identity"], PROFILE_ROLE, sha)
             if isinstance(payload.get("source"), str) and payload["source"]:
                 by_path[payload["source"]].append(entry)
-            if isinstance(payload.get("build_unit_id"), str):
+            elif isinstance(payload.get("build_unit_id"), str):
                 by_build[payload["build_unit_id"]].append(entry)
     dependencies_context: list[ContextEntry] = []
     dependencies = scope.producer("dependency_intelligence")

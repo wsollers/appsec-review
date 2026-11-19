@@ -92,6 +92,7 @@ calls=1 1
     )
     by_sym_src_line = {
         (row.symbol, row.event, row.source, row.line): row.count for row in document.rows
+        if row.cost_kind == "self"
     }
     assert by_sym_src_line[("handle", "Ir", "src/main.c", 12)] == 88
     assert by_sym_src_line[("handle", "Ir", "src/main.c", 13)] == 20
@@ -99,10 +100,13 @@ calls=1 1
     assert by_sym_src_line[("second", "Ir", None, None)] == 4
     assert by_sym_src_line[("hot_ref", "Ir", "src/ref.c", 10)] == 7
     assert by_sym_src_line[("hot_ref", "Ir", "src/ref.c", 11)] == 3
-    assert by_sym_src_line[("caller", "Ir", None, 5)] == 6
-    assert by_sym_src_line[("callee_ref", "Ir", "src/callee.c", 6)] == 11
-    assert by_sym_src_line[("callee_ref", "Ir", "src/callee.c", 7)] == 4
-    assert by_sym_src_line[("plain_callee", "Ir", "src/plain_callee.c", 8)] == 9
+    assert ("caller", "Ir", None, 5) not in by_sym_src_line
+    assert {(row.symbol, row.source, row.line, row.callsite_line, row.count)
+            for row in document.rows if row.cost_kind == "call_inclusive" and row.event == "Ir"} == {
+        ("callee_ref", "src/callee.c", 1, 6, 11),
+        ("callee_ref", "src/callee.c", 1, 7, 4),
+        ("plain_callee", "src/plain_callee.c", 1, 8, 9),
+    }
     gap_text = "\n".join(document.gaps)
     assert "ambiguous_line" in gap_text
     assert "ambiguous_source" in gap_text
@@ -122,6 +126,7 @@ cold:3:0
         "llvm-sample",
     )
     assert [(row.symbol, row.count) for row in document.rows] == [("cold", 3), ("ns::hot", 120)]
+    assert document.gaps == ("malformed_llvm_header: row 6 is not a supported function header",)
 
 
 @pytest.mark.parametrize(("fmt", "payload", "kwargs", "match"), [

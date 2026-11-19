@@ -8,7 +8,7 @@ DATASETS = (
     indexed("profile_data", "index", "build", "appsec-review/retrieval-index/2",
             "Accepted execution-profile samples and context-only within-build hotness ranks.",
             indexes=("analysis",), prefixes=("profile-data-",),
-            route="query_precomputed query_set=profile_data"),
+            route="query_engineering_signals signal_family=profile"),
     artifact_only("profile_data_handoff", "acceptance", "build",
                   "appsec-review/profile-data-handoff/1",
                   "Accepted profile reports, normalized row accounting, and explicit gaps.",

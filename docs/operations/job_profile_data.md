@@ -222,18 +222,29 @@ binding omissions in the generated inventory remain [T-147](../TODO.md).
    remain unparsed reports, not empty successful profiles.
 3. Parse within input-line, line-byte, frame and normalized-row bounds. Malformed input is a gap;
    preserve parser truncation and unresolved symbol/source/line reasons. Attach report hash, build
-   unit, origin and context-only semantics to each row.
+   unit, origin and context-only semantics to each row. UTF-8 detection tolerates incomplete code
+   points at its prefix boundary; the parser still validates the entire admitted text.
+   Perf periods are not event identities or sample weights. Callgrind self and call-inclusive costs
+   remain distinct; call rows retain callee coordinates and separate caller `callsite_*` fields.
+   Malformed LLVM top-level headers leave explicit partial gaps alongside valid function totals.
 4. Rank rows within each build unit by descending count, then event, symbol, module, source, line
-   and report hash. Record `hotness_population`; no rows means unavailable, rows plus gaps partial.
+   and stable cost/callsite/report tie breakers. Record `hotness_population`; no rows means
+   unavailable, rows plus gaps partial. Report path participates in identity and tie-breaking:
+   identical bytes at different paths retain all their original report attributions.
    The ordering does not make different events or workloads statistically comparable.
 
 ### `index`
 
 1. Verify the inherited manifest; replace only prior `profile-data-` analysis shards.
 2. Fingerprint each build unit's report identities with snapshot, parser, normalizer, mapping and
-   upstream manifest. Reuse an existing fingerprint-addressed file or write hotspot entities and
+   upstream manifest, plus the normalized rows/report metadata/coverage digest. Reuse an existing
+   fingerprint-addressed file or write hotspot entities and
    one profile-data coverage row. Rows carry names and optional reported paths, not source citations.
 3. Write and verify the composed `profile-data-<attempt>.json` retrieval manifest.
+4. Retrieve with `query_engineering_signals signal_family=profile`. Filter optional paths against
+   actual reported sources before pagination; retain producer and coverage gaps, without upgrading
+   reported coordinates to verified locations. Review context routes located profiles only to that
+   file and unlocated profiles to their build unit.
 
 ### `acceptance`
 
@@ -252,6 +263,8 @@ flowchart LR
   normalize --> rows["ranked context-only rows"]
   rows --> index["index.profile_data: analysis shards"]
   index --> publish["acceptance.publish_handoff: profile_data_handoff"]
+  index --> query["query_engineering_signals: profile + reported source filter + gaps"]
+  index --> context["review context: file-specific or unlocated same-build"]
   normalize -. "absent / unsupported / bounded / malformed" .-> gaps["legacy reasons + coverage"]
   gaps --> publish
   load -. "identity mismatch" .-> stop["integrity exception; no successful publication"]
@@ -270,8 +283,10 @@ classification or permission to accept missing coverage.
   `ambiguous_profile_identity`; no converter is launched.
 - Coverage missing or failed: `artifact_count_truncation`, `artifact_byte_bound`,
   `profile_row_truncation`, parser `row_truncation` and `frame_truncation`, `ambiguous_symbol`,
-  `ambiguous_source`, `ambiguous_line`, and `malformed_profile`. Malformed includes invalid UTF-8,
+  `ambiguous_source`, `ambiguous_line`, `missing_call_cost`, `malformed_llvm_header`, and
+  `malformed_profile`. Malformed includes invalid UTF-8,
   NULs, overlong lines, invalid counts and empty/unrecognized sample structures.
+  Unsupported Callgrind position layouts are named explicitly rather than fabricated source lines.
 - Invalid origin, missing/escaping/symlinked report, changed hash or accepted snapshot disagreement
   raises `ProfileIntegrityError`; it is not an accepted gap document.
 
@@ -297,8 +312,8 @@ workload or sample population recorded.
 There is no converter or model checkpoint. Runtime unit reuse follows
 [jobs and runtime](../architecture/jobs-and-runtime.md#wave-1-resumability). Per-unit shard identity
 binds snapshot, report paths/hashes, parser/normalizer/mapping identities and upstream artifact
-manifest. Changed reports or those identities rebuild the affected shard. The local index
-fingerprint does **not** explicitly include ingestion bounds; do not assume changing a bound alone
-invalidates an existing shard (see `index` in the handler). Existing files are hashed, not reparsed
-before local reuse. The accepted loader verifies the publication, semantic tag and complete
+manifest, plus a digest of normalized rows/report metadata/coverage. Changed reports or normalized
+meaning rebuild the affected shard; identical normalized inputs reuse it without rewriting.
+Frozen run configuration still prevents same-run bounds edits. Existing files are attested before
+local reuse. The accepted loader verifies the publication, semantic tag and complete
 [retrieval manifest](../architecture/python-and-retrieval.md#accepted-index-sets).

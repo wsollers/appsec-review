@@ -9,6 +9,7 @@ from __future__ import annotations
 from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 
 from collections.abc import Mapping, Sequence
+import codecs
 from dataclasses import asdict, dataclass
 import hashlib
 import json
@@ -24,6 +25,7 @@ from appsec_review.retrieval import (
     write_manifest,
 )
 from appsec_review.retrieval.index import load_verified_manifest
+from appsec_review.retrieval.model import canonical_json
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 
@@ -142,7 +144,8 @@ def detect_profile_format(path: str, data: bytes, declared_format: str | None = 
     if name.endswith(".profdata"):
         return None, f"unsupported_profile_format: {path}: opaque LLVM indexed profile"
     try:
-        prefix = data[:65536].decode("utf-8-sig", errors="strict")
+        prefix = codecs.getincrementaldecoder("utf-8-sig")(errors="strict").decode(
+            data[:65536], final=len(data) <= 65536)
     except UnicodeError:
         return None, f"unsupported_profile_format: {path}: unrecognized opaque profile"
     matches: list[str] = []
@@ -204,7 +207,13 @@ def ingest_profile_artifacts(run_root: Path, receipts: Sequence[Mapping[str, Any
             if path.stat().st_size > bounds.max_artifact_bytes:
                 gaps.append(f"artifact_byte_bound: {label} exceeds {bounds.max_artifact_bytes} bytes")
                 continue
-            data = path.read_bytes()
+            with path.open("rb") as stream:
+                data = stream.read(bounds.max_artifact_bytes + 1)
+            if len(data) > bounds.max_artifact_bytes:
+                gaps.append(f"artifact_byte_bound: {label} exceeds {bounds.max_artifact_bytes} bytes")
+                continue
+            if hashlib.sha256(data).hexdigest() != candidate.get("sha256"):
+                raise ProfileIntegrityError(f"profile artifact {label} identity changed")
             format_name, format_gap = detect_profile_format(
                 label, data, str(candidate.get("profile_format", "")) or None)
             if format_gap:
@@ -240,7 +249,10 @@ def ingest_profile_artifacts(run_root: Path, receipts: Sequence[Mapping[str, Any
         ordered = sorted(range(len(rows)), key=lambda i: (
             -int(rows[i]["count"]), str(rows[i]["event"]), str(rows[i]["symbol"]),
             str(rows[i].get("module") or ""), str(rows[i].get("source") or ""),
-            int(rows[i].get("line") or 0), str(rows[i]["report_sha256"])))
+            int(rows[i].get("line") or 0), str(rows[i].get("cost_kind") or ""),
+            str(rows[i].get("callsite_symbol") or ""), str(rows[i].get("callsite_source") or ""),
+            int(rows[i].get("callsite_line") or 0),
+            str(rows[i]["report_sha256"]), str(rows[i]["report_path"])))
         for rank, index in enumerate(ordered, 1):
             rows[index]["hotness_rank"] = rank
             rows[index]["hotness_population"] = len(rows)
@@ -332,7 +344,8 @@ def build_job() -> Job:
                         raw["name"] == "analysis" and str(raw.get("shard_id", "")).startswith("profile-data-"))]
         current: list[IndexIdentity] = []
         for value in normalized["units"]:
-            producer_artifacts = [{"build_unit_id": value["build_unit_id"]}, *(
+            producer_artifacts = [{"build_unit_id": value["build_unit_id"],
+                                   "normalized_sha256": hashlib.sha256(canonical_json(value)).hexdigest()}, *(
                 {"path": item.get("path"), "sha256": item.get("sha256")} for item in value["reports"])]
             fingerprint = index_fingerprint(
                 name="analysis", target_snapshot=unit.job.source_fingerprint,
@@ -349,7 +362,9 @@ def build_job() -> Job:
                                        target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
                 for row in value["rows"]:
                     native = {key: row.get(key) for key in (
-                        "build_unit_id", "report_sha256", "symbol", "event", "module", "source", "line")}
+                        "build_unit_id", "report_path", "report_sha256", "symbol", "event",
+                        "module", "source", "line", "cost_kind",
+                        "callsite_symbol", "callsite_source", "callsite_line")}
                     identity = LogicalIdentity.derive(EntityKind.HOTSPOT, unit.job.source_fingerprint, native)
                     builder.add_entity(EntityRecord(
                         identity, json.dumps(native, sort_keys=True), str(row["symbol"]),

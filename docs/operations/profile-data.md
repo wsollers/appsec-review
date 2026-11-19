@@ -16,12 +16,10 @@ The configured topology is `load.accepted_inputs`, `normalize.profile_data`,
 `index.profile_data`, then `acceptance.publish_handoff`. Central bounds limit accepted artifacts,
 bytes per artifact, rows per artifact, bytes per line, and frames per sample. Changing a parser,
 normalizer, mapping identity, report hash or target snapshot changes the corresponding shard
-identity. Bounds and admitted inputs also participate in run/attempt identity, but the local shard
-key does not explicitly include bounds or normalized row content. A bounds-only same-run edit is
-refused by frozen configuration; no admitted stale-reuse path has been established. See the
-[conditional identity analysis](../architecture/scanners-and-evidence-collection.md#as-built-today)
-and [canonical job page](job_profile_data.md), rather than assuming every local key includes every
-bound. Do not put these values in a target file or prompt. The identity values in the settings
+identity. Local shard keys also bind normalized rows, report metadata and coverage. Bounds and
+admitted inputs participate in run/attempt identity; frozen configuration still forbids bounds-only
+same-run edits. See the [canonical job page](job_profile_data.md).
+Do not put these values in a target file or prompt. The identity values in the settings
 must equal the code constants (`job_profile_data/job.py`); any other value fails configuration
 loading rather than invalidating shards.
 
@@ -38,6 +36,13 @@ An accepted receipt may set `profile_format` to `folded-stacks`, `perf-script`, 
 `llvm-sample` when a conventional filename is unavailable. The declared value is still untrusted
 and restricted to the closed parser set. Preserve `artifact_origin`: a preexisting deterministic
 fixture is `accepted-input`; a report emitted during the accepted build is `build-output`.
+Identical bytes at different retained paths remain separately attributed reports, not conflicting
+hotspot identities. Neither origin proves that the current review executed a workload.
+
+Perf counts are sample/frame occurrences, not sampling-period sums; event qualifiers remain
+part of the event name. Callgrind supports line-position layouts and keeps self costs separate
+from inclusive call costs. A call row's reported source/line is the callee's; `callsite_*` fields
+retain the caller. Do not sum self and call-inclusive costs into a single total.
 
 Do not rename opaque data to resemble a text report. `gmon.out`, pprof protobuf, `.profraw`, and
 `.profdata` require a future pinned conversion workflow and currently produce explicit gaps.
@@ -47,12 +52,18 @@ Do not rename opaque data to resemble a text report. `gmon.out`, pprof protobuf,
 The accepted summary is beneath the attempt's `artifacts/profile-data/` directory, while immutable
 analysis shards and the composed manifest are beneath `data/indices/`. Use the accepted loader for
 programmatic access. A successful parse does not assert that the workload was representative.
+For bounded indexed access use `query_engineering_signals signal_family=profile`, optionally with
+an exact reported source `path`. Returned profile rows remain artifact-backed context, not verified
+source citations. Review units receive located rows only for that source, with unlocated rows
+remaining available to the same build. Query responses retain partial/unavailable coverage reasons.
 
 Expected gap prefixes include:
 
 - `missing_profile_data`: an accepted build has no profile artifact;
 - `unsupported_profile_format`: opaque, unknown, or undeclared input cannot be parsed safely;
 - `malformed_profile`: the selected parser rejected the text;
+- `malformed_llvm_header`: valid function totals were retained but a top-level header was omitted;
+- `missing_call_cost`: a Callgrind call declaration lacks its following cost row;
 - `artifact_byte_bound`, `artifact_count_truncation`, `row_truncation`,
   `profile_row_truncation`, or `frame_truncation`: a configured bound was reached;
 - `ambiguous_profile_format`, `ambiguous_profile_identity`, or `ambiguous_symbol`: identity or
@@ -70,8 +81,12 @@ coverage, churn, and dependency exposure. Always inspect cold security-boundary 
 paths separately. Rank is context only: do not turn it into a vulnerability finding or probability
 and do not lower severity or review scope because a function is absent or cold.
 
-For development verification, run:
+For focused parser development verification, run:
 
 ```text
-python -m pytest -q tests/test_profile_data.py --basetemp=test/tmp/profile-data
+python -m pytest -q tests/unit/job_profile_data/test_parsers.py --basetemp=test/tmp/profile-parsers
 ```
+
+Offline report-to-publication-to-query regressions are in
+`tests/unit/job_profile_data/test_semantics.py`; use the bounded unit-test wrapper for combined
+selections. Passing units do not establish real profiler or live-review quality.
