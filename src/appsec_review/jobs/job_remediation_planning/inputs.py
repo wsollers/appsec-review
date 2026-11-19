@@ -53,6 +53,16 @@ def retrieval_core(run_root: Path, review: Mapping[str, Any]) -> Any:
     return source_context_core(run_root, {"path": scope["manifest_path"], "sha256": scope["manifest_sha256"]})
 
 
+def optional_builds(run_root: Path) -> AcceptedBuilds:
+    """Planning's optional build is usable only through its typed, admitted input."""
+    from appsec_review.jobs.job_language_build import load_accepted_language_build
+
+    def loader(root: Path) -> Mapping[str, Any]:
+        return load_accepted_language_build(root, required=False)
+
+    return AcceptedBuilds(run_root, loader=loader)
+
+
 class SourceReader:
     """Only indexed, evidence-related paths are readable; never reads a user target checkout."""
 

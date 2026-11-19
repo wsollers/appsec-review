@@ -23,6 +23,18 @@ only an explicit reachability determination supplies true/false. Entry-point, Po
 presence alone leaves `reachability_not_established`; missing finding/claim identities remain null
 with named gaps rather than synthetic identifiers.
 
+Native build context is optional: planning reads only a build admitted by its typed input contract
+and exact upstream pin. An absent or unsupplied build yields
+`run_owned_source_unavailable:<path>:no_native_build`, not a required-input violation or a fallback
+to target files. Supplied builds still undergo accepted-handoff and source-identity verification;
+undeclared, foreign or tampered inputs remain errors. Required-build consumers are unchanged.
+
+Source gaps discovered before writing remain on the finding outcome and in the published summary,
+including when the writer times out, returns invalid output, or proposes an invalid exact patch.
+The bounded failure reason is retained alongside those gaps; a null plan does not erase source
+coverage facts. Source context and writer receipts remain protected attempt artifacts. These
+outcomes do not claim a validated fix or runtime coverage (T-5169, T-5170).
+
 <!-- generated:begin job=job_remediation_planning -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

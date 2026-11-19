@@ -21,7 +21,7 @@ from .contracts import STATUSES, PlanAnswer, verify_patch_scope, verify_plan
 from .datasets import CONTRACT, DATASETS
 from .inputs import (
     CoreFactory, SourceReader, binding, confirmed_findings, evidence_relations, load_review,
-    retrieval_core, writer_task,
+    optional_builds, retrieval_core, writer_task,
 )
 from .model import emit_model_event, guidance, run_model
 from .patches import PatchError
@@ -75,7 +75,7 @@ def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], Ac
         configured, root = settings(unit), unit.job.run_root
         document = loaded(unit)
         review = document["review"]
-        builds = (builds_factory or AcceptedBuilds)(root)
+        builds = (builds_factory or optional_builds)(root)
         core = None
         text, guidance_sha = "", ""
         rows = []
@@ -97,6 +97,7 @@ def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], Ac
                         core = (core_factory or retrieval_core)(root, review)
                     reader = SourceReader(builds, core, relations, configured.bounds)
                     reader.resolve()
+                    gap_ids.extend(reader.gaps)
                     source_context = {"finding": identity, "adjudication_id": finding["adjudication_id"],
                                       "relations": relations, "files": list(reader.files.values()),
                                       "gaps": reader.gaps}
@@ -140,7 +141,6 @@ def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], Ac
                             verify_plan(root, reference, review_handoff=review["inputs"]["review_handoff"],
                                         finding=identity, schemas=SchemaSet(repo(unit) / SCHEMA_ROOT))
                             row.update(status=answer["status"], reason=answer["reason"], plan=reference)
-                            gap_ids.extend(reader.gaps)
             if row["status"] != "proposal_generated":
                 gap_ids.append(f"remediation_planning:{finding['claim_id']}:{row['status']}")
             rows.append(row)
