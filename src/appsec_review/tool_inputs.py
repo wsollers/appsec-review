@@ -184,6 +184,19 @@ def not_applicable_summary(decisions: Iterable[InputDecision | Mapping[str, Any]
             "items": values[:MAX_RECORDED_ITEMS], "truncated": len(values) > MAX_RECORDED_ITEMS}
 
 
+def merge_not_applicable_summaries(summaries: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """Sum full tool-input counts, not the bounded samples used to explain them."""
+    summaries = list(summaries)
+    result = not_applicable_summary(item for summary in summaries for item in summary.get("items", ()))
+    reasons: Counter[str] = Counter()
+    for summary in summaries:
+        reasons.update(summary["by_reason"])
+    result.update(count=sum(summary["count"] for summary in summaries),
+                  by_reason=dict(sorted(reasons.items())),
+                  truncated=result["truncated"] or any(summary["truncated"] for summary in summaries))
+    return result
+
+
 def _shebang_interpreter(head: bytes) -> str | None:
     if not head.startswith(b"#!"):
         return None

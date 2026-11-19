@@ -21,6 +21,53 @@ unsupported, disabled or failed scanner as evidence that the target is clean.
 corroboration (5000 by default). It accepts integers from 1 to 1000000; invalid values
 are rejected instead of coerced or silently raised.
 
+## Native reports, submitted scope and corroboration
+
+The EC-01/02/03/04/05/07 repairs ([T-5132–T-5134](../TODO.md)) distinguish a recognized
+empty native report from a parseable error document. Each adapter requires its native result
+collection or XML root. Known non-file diagnostics (including PHPStan errors, Go loader errors,
+PMD processing errors and SpotBugs analysis errors) remain coverage gaps with native selectors.
+An incompatible report fails the invocation and retains its exact diagnostic bytes; a report
+with usable observations and diagnostics is partial, not clean.
+
+Gitleaks and source Syft scan a run-owned, hash-checked copy containing **only** the accepted
+selected paths. Syft's natural directory selection includes all cataloged files, not only
+manifest names; the accepted plan can still narrow it. The source inventory remains paired
+with the exact Syft output used by Grype and dependency intelligence. No broader target mount,
+input grant or built-artifact coverage is implied. Cppcheck project mode lists only the source
+paths present in its sanitized compile database as submitted. Missing selected paths have an
+explicit count/sample gap, not an unsupported-input disposition; discarded driver, macro,
+include-path and flag context is separately named. It does not execute captured commands.
+
+```mermaid
+flowchart LR
+  selected["Accepted selected paths"] --> submit["Hash-checked directory snapshot / submitted compile units"]
+  submit --> native["Bounded native report + retention receipt"]
+  native --> pertool["Normalized per-tool count/byte caps"]
+  native --> replay["Verified successful-report replay, no scanner execution"]
+  replay --> group["Canonical CWE/location connected groups"]
+  group --> rank["Cross-scanner agreement / trace / severity ranking"]
+  rank --> cap["Frozen per-scope cap + omitted-cluster count"]
+```
+
+Final corroboration replays only the successfully decoded native reports identified by each
+source scanner's evidence envelope, including partial reports but not failed retry diagnostics.
+It preserves selectors, source hashes and field bounds before applying cross-scanner ranking
+and the configured scope cap. The existing per-tool 5000-record/8 MiB publication bounds and
+native-output byte limits are unchanged; their lossy projections are not corroboration inputs.
+No additional uncapped artifact is published. Historical envelopes without replay references
+retain their bounded records and original gaps, rather than inventing lost agreement.
+
+Same-file/CWE spans are canonically ordered and grouped by connected overlapping five-line
+buckets or the existing two-line proximity tolerance. Severity, trace choice and native
+reference ordering are deterministic; scanner counts count distinct scanners, not rule hits.
+Telemetry records pre-cap and omitted counts, and a final scope-cap omission is a named gap.
+This correlation remains a review signal, not independent proof of a vulnerability.
+
+Final `not_applicable_inputs` sums complete per-tool counts and reason counters while retaining
+at most 200 detail items. Any upstream truncation remains visible; bounded samples never replace
+the totals or become evidence of complete coverage.
+
 <!-- generated:begin job=job_evidence_collection -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

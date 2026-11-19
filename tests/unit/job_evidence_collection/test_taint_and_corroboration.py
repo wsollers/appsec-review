@@ -325,6 +325,8 @@ def test_pre_cap_cross_scanner_corroboration_prevents_eviction_and_validates_sch
         "corroborated_clusters": 1,
         "taint_traces_preserved": 1,
         "post_dedupe_capped_count": 2,
+        "pre_cap_record_count": 2,
+        "omitted_record_count": 0,
     }
 
     # Cross-envelope corroboration across Semgrep + OpenGrep + Gosec + Bandit + Cppcheck + PMD
@@ -405,4 +407,6 @@ def test_pre_cap_cross_scanner_corroboration_prevents_eviction_and_validates_sch
         "corroborated_clusters": 1,
         "taint_traces_preserved": 1,
         "post_dedupe_capped_count": 2,
+        "pre_cap_cluster_count": 2,
+        "omitted_cluster_count": 0,
     }

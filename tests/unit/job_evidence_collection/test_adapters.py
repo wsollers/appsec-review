@@ -22,6 +22,7 @@ from appsec_review.jobs.job_evidence_collection.adapters import (
     semgrep_rule_languages,
     semgrep_unscanned_inputs,
 )
+from .support import EMPTY_REPORTS
 
 
 def _cat(
@@ -78,7 +79,7 @@ def test_every_registered_adapter_has_applicability_argv_exit_parser_and_fixture
             if adapter.tool_id == "tool-spotbugs"
             else b"<results><errors/></results>"
             if adapter.tool_id == "tool-cppcheck"
-            else b"{}"
+            else json.dumps(EMPTY_REPORTS[adapter.tool_id]).encode()
         )
         assert isinstance(adapter.parse(payload), list)
         assert adapter.adapter_identity == "undeclared"
@@ -131,7 +132,8 @@ def test_low_level_decoders_semgrep_languages_and_list_records_edge_cases(tmp_pa
     (ziz_rec,) = ADAPTERS["tool-zizmor"].parse(list_doc)
     assert ziz_rec["rule_id"] == "unpinned-uses"
     assert ziz_rec["path"] == ".github/workflows/ci.yml" and ziz_rec["start_line"] == 9
-    assert _list_records(b"{}", "configuration") == []
+    with pytest.raises(ValueError, match="requires results"):
+        _list_records(b"{}", "configuration")
 
 
 def test_gitleaks_semgrep_opengrep_gosec_and_mobsfscan_adapters() -> None:
@@ -435,7 +437,8 @@ def test_syft_osv_grype_hadolint_checkov_trivy_and_blint_adapters(tmp_path: Path
         },
     ]).encode()
     assert checkov_unreported_inputs(ckv_report, planned.files) == ["CMakePresets.json"]
-    assert checkov_unreported_inputs(b'{"passed":0}', planned.files) == sorted(planned.files)
+    with pytest.raises(ValueError, match="requires results"):
+        checkov_unreported_inputs(b'{"passed":0}', planned.files)
     ckv_parsed = ckv_adapter.parse(ckv_report)
     assert len(ckv_parsed) == 1 and ckv_parsed[0]["rule_id"] == "CKV_3"
 

@@ -37,6 +37,19 @@ _BASE_RESOLVED_BYTES = _BASE_CONFIG.resolved_json
 _BASE_RESOLVED_SHA256 = _BASE_CONFIG.resolved_sha256
 
 
+EMPTY_REPORTS = {
+    "tool-gitleaks": [], "tool-semgrep": {"results": []}, "tool-opengrep": {"results": []},
+    "tool-gosec": {"Issues": []}, "tool-mobsfscan": {"results": {}},
+    "tool-shellcheck": {"comments": []}, "tool-phpcs": {"files": {}},
+    "tool-phpstan": {"files": {}, "errors": []}, "tool-psalm": [],
+    "tool-pmd": {"files": []}, "tool-syft": {"artifacts": []},
+    "tool-osv-scanner": {"results": []}, "tool-grype": {"matches": []},
+    "tool-hadolint": [], "tool-checkov": {"results": {"failed_checks": [], "passed_checks": []}},
+    "tool-trivy": {"Results": []}, "tool-zizmor": [],
+    "tool-blint": {"findings": [], "analyzed": ["app"]},
+}
+
+
 class FakeExecutor:
     """Deterministic fake ContainerExecutor that never invokes Docker."""
 
@@ -57,7 +70,7 @@ class FakeExecutor:
         stdout = request.scratch_root / "raw" / "stdout.bin"
         stderr = request.scratch_root / "raw" / "stderr.bin"
         stdout.parent.mkdir(parents=True, exist_ok=True)
-        payload = b"{}"
+        payload = json.dumps(EMPTY_REPORTS.get(request.tool_id, {})).encode()
         stdout.write_bytes(payload)
         stderr.write_bytes(b"")
         output_names = {
@@ -227,6 +240,7 @@ def make_unit_context(
         tool_retries=int(settings["tool_retries"]),
         osv_memory=str(settings["osv_memory"]),
         osv_max_lockfiles_per_invocation=int(settings["osv_max_lockfiles_per_invocation"]),
+        max_findings_per_scope=int(settings.get("max_findings_per_scope", 5000)),
     )
     releases = (
         {

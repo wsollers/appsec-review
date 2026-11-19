@@ -60,6 +60,14 @@
         "post_dedupe_capped_count": {
           "type": "integer",
           "minimum": 0
+        },
+        "pre_cap_cluster_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "omitted_cluster_count": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     }

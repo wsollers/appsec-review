@@ -21,7 +21,7 @@ from appsec_review.provenance import json_selector, retain_native_output, select
 
 
 def test_text_redacts_assignments_and_enforces_utf8_byte_bounds() -> None:
-    assert NORMALIZER_IDENTITY == "static-evidence/4"
+    assert NORMALIZER_IDENTITY == "static-evidence/5"
     assert _text(None, 32) == ("", False)
     rendered, truncated = _text("api_key = 's3cr3tValue' and token: abc123", 200)
     assert not truncated

@@ -15,6 +15,7 @@ from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest,
 from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff, feed_input_identity
 from appsec_review.provenance import (
     consume_native_references, retain_native_output, select_native, validate_observation_provenance,
+    verify_native_reference,
 )
 from appsec_review.jobs.job_evidence_collection.adapters import (
     Applicability,
@@ -51,7 +52,7 @@ from appsec_review.osv_offline import (
     no_packages_declared, offline_database_mounts, snapshot_ecosystems,
 )
 from appsec_review.tool_inputs import (
-    TOOL_INPUT_SUPPORT, InputDecision, bounded_diagnostic, not_applicable_summary,
+    TOOL_INPUT_SUPPORT, InputDecision, bounded_diagnostic, not_applicable_summary, merge_not_applicable_summaries,
     osv_ecosystem, osv_missing_ecosystem_gap, osv_missing_ecosystems, partition_paths,
 )
 from appsec_review.swift_policy import (
@@ -334,6 +335,16 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
         compile_database.parent.mkdir(parents=True, exist_ok=True)
         tool_input_json(compile_database, sanitized)
         mounts.append(Mount(compile_database, "/inputs/compile_commands.json", True))
+        submitted = tuple(sorted({entry["file"].removeprefix("/target/") for entry in sanitized}))
+        missing = sorted(cataloged - set(submitted))
+        gaps = [*selection.gaps, "compile database flags, include paths, macros and driver were sanitized; "
+                "original build context was not submitted"]
+        if missing:
+            sample = ", ".join(missing[:20])
+            gaps.append(f"{len(missing)} selected C/C++ input(s) absent from the compile database "
+                        f"were not submitted: {sample}" + (f" (+{len(missing) - 20} more)" if len(missing) > 20 else ""))
+        selection = Applicability(True, selection.reason, submitted, selection.coverage_kind,
+                                  tuple(gaps), selection.families)
     if adapter.tool_id == "tool-osv-scanner":
         try:
             identity = verify_current(unit.job.repository_root / "data" / "feeds" / "osv", "osv")
@@ -480,7 +491,8 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                     terminal_status: str, gaps: tuple[str, ...],
                     not_applicable: tuple[InputDecision, ...] = (),
                     include_limitations: bool = True,
-                    source_inventory: Path | None = None) -> tuple[dict[str, Any], Path]:
+                    source_inventory: Path | None = None,
+                    native_observation_sources: tuple[Mapping[str, Any], ...] = ()) -> tuple[dict[str, Any], Path]:
     destination = unit.unit_root / "evidence.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     envelope = build_envelope(
@@ -495,6 +507,8 @@ def _write_evidence(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
         source_hashes={str(item["path"]): str(item["sha256"]) for item in catalog.files if item.get("sha256")},
     )
     envelope["not_applicable_inputs"] = not_applicable_summary(not_applicable)
+    if adapter.capability == "source_sast":
+        envelope["native_observation_sources"] = list(native_observation_sources)
     if source_inventory is not None:
         envelope["source_inventory"] = _artifact(unit.job.run_root, source_inventory)
         if envelope["source_inventory"] not in envelope["raw_artifacts"]:
@@ -538,6 +552,7 @@ class _InvocationOutcome:
     error_class: str | None = None
     attempt: int = 0
     native_outputs: list[dict[str, Any]] = field(default_factory=list)
+    observation_source: dict[str, Any] | None = None
 
 
 def osv_project_groups(paths: Iterable[str],
@@ -603,6 +618,7 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
         safety.check_running()
         outcome.attempt = attempt
         outcome.observations = []
+        outcome.observation_source = None
         if invocation.project_root is None:
             scratch = unit.unit_root / "scratch" / f"attempt_{attempt + 1:02d}"
             invocation_key = f"{attempt + 1}"
@@ -624,20 +640,24 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, destination)
         execution_target = unit.job.target_root or Path()
-        if swift_present and not unit.job.tools.enable_swift and adapter.tool_id not in {
-                "tool-spotbugs", "tool-blint", "tool-grype"}:
+        if adapter.tool_id in {"tool-gitleaks", "tool-syft"} or (
+                swift_present and not unit.job.tools.enable_swift and adapter.tool_id not in {
+                    "tool-spotbugs", "tool-blint", "tool-grype"}):
             stage_id = hashlib.sha256(canonical_json({
                 "tool": adapter.tool_id, "files": list(selection.files),
                 "catalog": catalog.handoff_sha256,
             })).hexdigest()[:16]
-            staged_target = unit.job.run_root / ".scratch" / "swift-policy-targets" / stage_id
+            staged_target = unit.job.run_root / ".scratch" / "scanner-inputs" / stage_id
             staged_target.mkdir(parents=True, exist_ok=True)
+            if staged_target.is_symlink() or any(path.is_symlink() for path in staged_target.rglob("*")):
+                raise ValueError("staged scanner inputs contain a symlink")
             hashes = {str(item["path"]): str(item.get("sha256", "")) for item in catalog.files}
             for relative in selection.files:
                 if relative not in hashes:
-                    continue
-                source = (execution_target / relative).resolve()
-                if (execution_target.resolve() not in source.parents or source.is_symlink()
+                    raise ValueError(f"scanner input is not in the accepted catalog: {relative}")
+                source = execution_target / relative
+                if (execution_target.resolve() not in source.resolve().parents
+                        or any(path.is_symlink() for path in (source, *source.parents))
                         or not source.is_file() or file_sha256(source) != hashes[relative]):
                     raise ValueError(f"accepted scanner input changed or escapes the target: {relative}")
                 destination = staged_target / relative
@@ -647,6 +667,12 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                         raise ValueError(f"staged scanner input identity changed: {relative}")
                 else:
                     shutil.copyfile(source, destination)
+                if file_sha256(destination) != hashes[relative]:
+                    raise ValueError(f"staged scanner input identity changed: {relative}")
+            staged_files = {path.relative_to(staged_target).as_posix()
+                            for path in staged_target.rglob("*") if path.is_file() or path.is_symlink()}
+            if staged_files != set(selection.files):
+                raise ValueError("staged scanner inputs differ from the accepted selection")
             execution_target = staged_target
         gaps: list[str] = []
         native_start = len(outcome.native_outputs)
@@ -816,6 +842,7 @@ def _run_invocation(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalo
                                    f"({type(exc).__name__})") from exc
             outcome.output = output
             outcome.observations = observations
+            outcome.observation_source = retained.as_dict()
             outcome.not_applicable = reported_not_applicable
             outcome.gaps.extend(gaps)
             outcome.error_class = None
@@ -1006,7 +1033,10 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
         failed = [outcome for outcome in outcomes if outcome.error_class is not None]
         # One failed project is a named gap beside the others' evidence; FAILED only when none ran.
         error_class = failed[-1].error_class if len(failed) == len(outcomes) else None
-        terminal = "FAILED" if error_class is not None else ("PARTIAL" if failed or gaps else "SUCCEEDED")
+        terminal = "FAILED" if error_class is not None else (
+            "PARTIAL" if failed or gaps or (
+                adapter.tool_id == "tool-cppcheck" and selection.families.get("compile_database") and selection.gaps)
+            else "SUCCEEDED")
         results = [outcome.result for outcome in outcomes if outcome.result is not None]
         result = results[-1] if results else None
         outputs = [outcome.output for outcome in outcomes if outcome.output is not None]
@@ -1028,6 +1058,8 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
             raw_artifacts=raw_paths, observations=observations, terminal_status=terminal, gaps=tuple(gaps),
             not_applicable=(*not_applicable, *reported_not_applicable),
             source_inventory=output if adapter.tool_id == "tool-syft" else None,
+            native_observation_sources=tuple(
+                outcome.observation_source for outcome in outcomes if outcome.observation_source is not None),
         )
         output_value = {
             "tool_id": adapter.tool_id, "capability": adapter.capability,
@@ -1232,6 +1264,44 @@ def unsupported_source_coverage(catalog: ScanCatalog) -> dict[str, Any]:
             "paths": paths[:200], "truncated": len(paths) > 200, "gap": gap}
 
 
+def _corroboration_envelope(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
+                            evidence: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Rehydrate only successfully parsed, retained reports before lossy publication caps."""
+    sources = evidence.get("native_observation_sources")
+    if sources is None:
+        # Older envelopes remain bounded evidence; their omission gaps are not erased.
+        return evidence
+    if (evidence["target_fingerprint"] != catalog.source_fingerprint
+            or evidence["tool"].get("id") != adapter.tool_id):
+        raise ValueError("corroboration source identity differs from the accepted scanner evidence")
+    observations = []
+    for source in sources:
+        consume_native_references(unit.job.run_root, (source,))
+        path = verify_native_reference(unit.job.run_root, source)
+        if source["parser_identity"] != adapter.parser_identity:
+            raise ValueError("corroboration native parser identity changed")
+        for record in adapter.parse(path.read_bytes()):
+            if record.get("gap_only"):
+                continue
+            record["_native_refs"] = [select_native(source, record["_native_selector"]).as_dict()]
+            observations.append(record)
+    reject_swift_derived(observations, enabled=unit.job.tools.enable_swift,
+                         context=f"{adapter.tool_id} corroboration")
+    files = filter_swift_files(catalog.files, enabled=unit.job.tools.enable_swift)
+    records: list[dict[str, Any]] = []
+    normalized = build_envelope(
+        tool=evidence["tool"], target_fingerprint=catalog.source_fingerprint,
+        applicability=evidence["applicability"], coverage_scope=evidence["coverage_scope"],
+        gaps=(), raw_artifacts=(), parser_identity=adapter.parser_identity,
+        observations=observations, cataloged_paths=(str(item["path"]) for item in files),
+        terminal_status=evidence["terminal_status"], run_root=unit.job.run_root,
+        source_hashes={str(item["path"]): str(item["sha256"]) for item in files if item.get("sha256")},
+        pre_cap_sink=records.append)
+    validate_observation_provenance(unit.job.run_root, records, parser_identity=adapter.parser_identity,
+                                    events=unit.job.events, unit_id=unit.unit_id)
+    return {**normalized, "records": records, "record_count": len(records)}
+
+
 def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mapping[str, Any]:
     manifest_path, manifest_sha = resolve_context_manifest(unit.job)
     upstream, _ = load_verified_manifest(unit.job.run_root, manifest_path, manifest_sha)
@@ -1240,6 +1310,7 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
     shards: list[IndexIdentity] = []
     not_applicable: list[Mapping[str, Any]] = []
     sast_envelopes: dict[str, Mapping[str, Any]] = {}
+    catalog = load_target_catalog(unit.job.run_root)
     for unit_id in index_units:
         output = unit.output(unit_id)
         tool_id = str(output["tool_id"])
@@ -1250,7 +1321,7 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
                              "shard_id": output["index_identity"]["shard_id"],
                              "gaps": output.get("gaps", []),
                              "not_applicable_input_count": int(skipped.get("count", 0))})
-        not_applicable.extend(skipped.get("items", ()))
+        not_applicable.append(skipped)
         gaps.extend(str(item) for item in output.get("gaps", []))
         shards.append(IndexIdentity(**{**output["index_identity"],
                                        "gaps": tuple(output["index_identity"].get("gaps", ()))}))
@@ -1258,7 +1329,8 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
         if tool_id in SOURCE_ANALYZERS and isinstance(ev_ref, Mapping) and ev_ref.get("path"):
             ev_path = unit.job.run_root / str(ev_ref["path"])
             if ev_path.is_file():
-                sast_envelopes[tool_id] = _read_artifact(unit.job.run_root, ev_ref)
+                sast_envelopes[tool_id] = _corroboration_envelope(
+                    unit, adapter_registry()[tool_id], catalog, _read_artifact(unit.job.run_root, ev_ref))
     max_per_scope = _settings(unit).max_findings_per_scope
     corroborated = corroborate_sast_records(
         sast_envelopes, target_fingerprint=unit.job.source_fingerprint, max_findings_per_scope=max_per_scope
@@ -1268,8 +1340,11 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
     atomic_json(corroborated_path, corroborated)
     corroborated_artifact = _artifact(unit.job.run_root, corroborated_path)
     telemetry = dict(corroborated["telemetry"])
+    if telemetry["omitted_cluster_count"]:
+        gaps.append(f"corroborated SAST scope cap omitted {telemetry['omitted_cluster_count']} "
+                    f"of {telemetry['pre_cap_cluster_count']} clusters after cross-scanner ranking")
     unit.job.events.write("SAST_CORROBORATION_COMPLETED", unit_id=unit.unit_id, **telemetry)
-    unsupported = unsupported_source_coverage(load_target_catalog(unit.job.run_root))
+    unsupported = unsupported_source_coverage(catalog)
     if unsupported["count"]:
         # No declared source analyzer supports these files: a named coverage gap, never clean.
         gaps.append(unsupported["gap"])
@@ -1289,7 +1364,7 @@ def _assemble_manifest(unit: UnitContext, index_units: tuple[str, ...]) -> Mappi
             "shards": [__import__("dataclasses").asdict(item) for item in shards],
             "item_count": sum(item["record_count"] for item in dispositions),
             "dispositions": dispositions, "gaps": list(dict.fromkeys(gaps)),
-            "not_applicable_inputs": not_applicable_summary(not_applicable),
+            "not_applicable_inputs": merge_not_applicable_summaries(not_applicable),
             "unsupported_coverage": unsupported}
 
 

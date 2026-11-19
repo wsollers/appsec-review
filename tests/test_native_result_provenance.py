@@ -158,7 +158,7 @@ def test_json_pointer_array_indices_require_rfc6901_ascii_digits(tmp_path, owner
      "/Results/1/Misconfigurations/0"),
     ("tool-mobsfscan", {"results": {"r/~": {"files": [{"file_path": "one"}, {"file_path": "two"}]}}},
      "/results/r~1~0/files/1"),
-    ("tool-checkov", [{}, {"results": {"failed_checks": [{"check_id": "b"}]}}],
+    ("tool-checkov", [{"results": {"failed_checks": []}}, {"results": {"failed_checks": [{"check_id": "b"}]}}],
      "/1/results/failed_checks/0"),
     ("tool-gitleaks", [{"RuleID": "a"}, {"RuleID": "b"}], "/1"),
     ("tool-shellcheck", {"comments": [{"code": 1071, "message": "unsupported shell"},
@@ -175,7 +175,7 @@ def test_static_selectors_keep_original_result_ordinals(tmp_path, owner, tool, p
 
 
 def test_xml_expanded_tag_and_original_matching_ordinal(tmp_path, owner):
-    payload = (b'<BugCollection xmlns="urn:bugs"><BugInstance priority="3"/>'
+    payload = (b'<BugCollection xmlns="urn:bugs"><BugInstance type="FIRST" priority="3"/>'
                b'<BugInstance type="X" priority="1"><SourceLine sourcepath="A.java"/></BugInstance></BugCollection>')
     records = parse_spotbugs(payload)
     selector = records["findings"][1]["_native_selector"]
@@ -187,7 +187,8 @@ def test_xml_expanded_tag_and_original_matching_ordinal(tmp_path, owner):
     assert static[1]["_native_selector"] == selector
     _, findings = scan_records({"capability": "spotbugs", "fingerprint": "a" * 64, "artifact": {},
                                "observation": records, "native_output": native.as_dict(), "gaps": []})
-    finding, = findings
+    first, finding = findings
+    assert first.payload["common"]["evidence_refs"][0]["selector"]["value"]["ordinal"] == 0
     assert finding.payload["common"]["observation_class"] == "source_sast"
     assert finding.payload["common"]["reported_severity"]["value"] == "high"
     assert finding.payload["common"]["evidence_refs"][0]["selector"] == selector

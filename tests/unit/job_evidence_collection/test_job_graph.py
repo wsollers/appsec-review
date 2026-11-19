@@ -459,6 +459,8 @@ def test_normalize_index_assemble_manifest_and_publish_handoff_end_to_end_units(
                     "gaps": [],
                     "not_applicable_inputs": {
                         "count": 1,
+                        "by_reason": {"OUTSIDE_DECLARED_SUPPORT": 1},
+                        "truncated": False,
                         "items": [{
                             "path": "foo.bat",
                             "tool": tool_id,

@@ -130,8 +130,10 @@ class ToolAdapter:
 
     def parse(self, payload: bytes) -> list[dict[str, Any]]:
         try:
-            return self.parser(payload)
-        except (UnicodeError, json.JSONDecodeError, ET.ParseError, TypeError, ValueError, KeyError) as exc:
+            diagnostics = _validate_report(self.tool_id, payload)
+            return [*self.parser(payload), *diagnostics]
+        except (UnicodeError, json.JSONDecodeError, ET.ParseError, TypeError, ValueError, KeyError,
+                AttributeError, IndexError) as exc:
             raise ValueError(f"{self.tool_id} output parser failed: {type(exc).__name__}") from exc
 
 
@@ -170,10 +172,9 @@ def _gitleaks(catalog: ScanCatalog) -> Applicability:
 
 
 def _syft(catalog: ScanCatalog) -> Applicability:
-    manifests = _paths(catalog, lambda path, item: PurePosixPath(path).name in MANIFEST_NAMES)
     gaps = ("directory coverage only; no cataloged OCI/archive artifact",)
     return Applicability(bool(catalog.files), "cataloged directory is available" if catalog.files else
-                         "target catalog contains no directory inputs", manifests or catalog.paths,
+                         "target catalog contains no directory inputs", catalog.paths,
                          "directory", gaps if catalog.files else ())
 
 
@@ -323,6 +324,92 @@ def _json(payload: bytes) -> Any:
     return json.loads(payload.decode("utf-8"))
 
 
+def _collection(document: Any, key: str, expected: type, *, nullable: bool = False) -> Any:
+    if not isinstance(document, Mapping) or key not in document:
+        raise ValueError(f"native report requires {key}")
+    value = document[key]
+    if nullable and value is None:
+        return expected()
+    if not isinstance(value, expected):
+        raise ValueError(f"native report has invalid {key}")
+    return value
+
+
+def _validate_report(tool_id: str, payload: bytes) -> list[dict[str, Any]]:
+    """Recognize empty native reports; valid JSON/XML alone is not successful coverage."""
+    if tool_id in {"tool-cppcheck", "tool-spotbugs"}:
+        root = ET.fromstring(payload.decode("utf-8"))
+        expected = "results" if tool_id == "tool-cppcheck" else "BugCollection"
+        if root.tag.rsplit("}", 1)[-1] != expected:
+            raise ValueError(f"expected native {expected} report")
+        if tool_id == "tool-cppcheck" and not any(
+                child.tag.rsplit("}", 1)[-1] == "errors" for child in root):
+            raise ValueError("Cppcheck report requires errors collection")
+        return []
+    document = _json(payload)
+    if tool_id in {"tool-gitleaks", "tool-hadolint", "tool-psalm", "tool-zizmor", "tool-shellcheck"}:
+        keys = ("comments",) if tool_id == "tool-shellcheck" else ("results", "findings", "comments")
+        if isinstance(document, list):
+            items = document
+        else:
+            key = next((key for key in keys if isinstance(document, Mapping) and key in document), keys[0])
+            items = _collection(document, key, list)
+        if not all(isinstance(item, Mapping) for item in items):
+            raise ValueError("native result must be an object")
+    elif tool_id == "tool-checkov":
+        documents = document if isinstance(document, list) else [document]
+        for item in documents:
+            results = _collection(item, "results", dict)
+            if not any(key in results for key in ("failed_checks", "passed_checks", "skipped_checks")) and not results.get("parsing_errors"):
+                raise ValueError("Checkov report requires check collections")
+            for key in ("failed_checks", "passed_checks", "skipped_checks", "parsing_errors"):
+                if key in results:
+                    _collection(results, key, list, nullable=True)
+    elif tool_id in {"tool-semgrep", "tool-opengrep"} and isinstance(document, Mapping) and "runs" in document:
+        for run in _collection(document, "runs", list):
+            _collection(run, "tool", dict)
+            _collection(run, "results", list)
+    else:
+        key, expected = {
+            "tool-semgrep": ("results", list), "tool-opengrep": ("results", list),
+            "tool-gosec": ("Issues", list), "tool-mobsfscan": ("results", dict),
+            "tool-syft": ("artifacts", list), "tool-grype": ("matches", list),
+            "tool-osv-scanner": ("results", list), "tool-trivy": ("Results", list),
+            "tool-phpcs": ("files", dict), "tool-phpstan": ("files", dict),
+            "tool-pmd": ("files", list), "tool-blint": ("findings", list),
+        }[tool_id]
+        # Trivy omits Results when no configuration was recognized.
+        empty_trivy = (tool_id == "tool-trivy" and isinstance(document, Mapping)
+                       and "Results" not in document and type(document.get("SchemaVersion")) is int
+                       and isinstance(document.get("ArtifactName"), str)
+                       and isinstance(document.get("ArtifactType"), str))
+        empty_php_files = (tool_id in {"tool-phpcs", "tool-phpstan"}
+                           and isinstance(document, Mapping) and document.get("files") == [])
+        if not empty_trivy and not empty_php_files:
+            _collection(document, key, expected, nullable=tool_id in {"tool-gosec", "tool-osv-scanner", "tool-trivy"})
+    diagnostics = []
+    if isinstance(document, Mapping):
+        keys = ["error"]
+        if tool_id not in {"tool-semgrep", "tool-opengrep"}:
+            keys.extend(("errors", "Errors", "processingErrors"))
+        if tool_id == "tool-gosec":
+            keys.append("Golang errors")
+        for key in keys:
+            value = document.get(key)
+            if not value:
+                continue
+            entries = (list(enumerate(value)) if isinstance(value, list) else
+                       list(value.items()) if isinstance(value, Mapping) else [(None, value)])
+            for part, error in entries:
+                if not error:
+                    continue
+                selector = json_selector(key, part) if part is not None else json_selector(key)
+                detail = " ".join(str(error).split())[:300]
+                diagnostics.append({"gap_only": True, "_native_selector": selector.as_dict(),
+                                    "coverage_gap": f"{tool_id} reported {key}: {detail}"})
+    return diagnostics
+
+
 def _record(item: Mapping[str, Any], *, rule: Iterable[str], message: Iterable[str],
             severity_keys: Iterable[str] = ("severity", "level"), path_keys: Iterable[str] = ("path", "file", "filename"),
             line_keys: Iterable[str] = ("line", "start_line", "lineNumber"), category: str) -> dict[str, Any]:
@@ -359,8 +446,9 @@ CATEGORY_CONFIG_LINT, CATEGORY_CI_SECURITY = "config_lint", "ci_security"
 
 def _list_records(payload: bytes, category: str) -> list[dict[str, Any]]:
     value = _json(payload)
-    key = next((key for key in ("results", "findings", "comments") if key in value), "results")
-    items = value if isinstance(value, list) else value.get(key, [])
+    key = next((key for key in ("results", "findings", "comments")
+                if isinstance(value, Mapping) and key in value), "results")
+    items = value if isinstance(value, list) else _collection(value, key, list)
     # Gitleaks reports File/StartLine/EndLine in capitalised keys; read them as well as the lowercase spellings.
     # The category is the scanner's class, never a field of the scanner output.
     return [{**_record(item, rule=("rule_id", "RuleID", "check_id", "id", "code"),
@@ -793,7 +881,7 @@ def _shellcheck_parser(payload: bytes) -> list[dict[str, Any]]:
 
 def _gosec_parser(payload: bytes) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    for index, item in enumerate(_json(payload).get("Issues", [])):
+    for index, item in enumerate(_json(payload).get("Issues") or []):
         rec = {
             **_record(item, rule=("rule_id",), message=("details",), path_keys=("file",),
                       line_keys=("line",), category=CATEGORY_SOURCE_SAST),
@@ -838,6 +926,7 @@ def _checkov_parsing_errors(documents: Iterable[Any]) -> list[str]:
 
 
 def _checkov_reported_paths(payload: bytes) -> set[str]:
+    _validate_report("tool-checkov", payload)
     value = _json(payload)
     documents = value if isinstance(value, list) else [value]
     reported: set[str] = set()
@@ -874,7 +963,7 @@ def checkov_unreported_inputs(payload: bytes, inputs: Iterable[str]) -> list[str
 
 def _trivy_parser(payload: bytes) -> list[dict[str, Any]]:
     result = []
-    for section_index, section in enumerate(_json(payload).get("Results", [])):
+    for section_index, section in enumerate(_json(payload).get("Results") or []):
         for index, item in enumerate(section.get("Misconfigurations") or []):
             target = str(section.get("Target", "")).replace("/scratch/inputs/", "")
             result.append({"rule_id": item.get("ID"), "message": item.get("Message") or item.get("Title"),
@@ -915,7 +1004,7 @@ def _grype_parser(payload: bytes) -> list[dict[str, Any]]:
 
 def _osv_parser(payload: bytes) -> list[dict[str, Any]]:
     records = []
-    for result_index, result in enumerate(_json(payload).get("results", [])):
+    for result_index, result in enumerate(_json(payload).get("results") or []):
         for package_index, package in enumerate(result.get("packages", [])):
             for index, vulnerability in enumerate(package.get("vulnerabilities", [])):
                 records.append({"rule_id": vulnerability.get("id"), "message": vulnerability.get("summary") or vulnerability.get("id"),
@@ -946,6 +1035,16 @@ def _spotbugs_parser(payload: bytes) -> list[dict[str, Any]]:
                         "start_line": source.get("start") if source is not None else 1,
                         "end_line": source.get("end") if source is not None else 1,
                         "_native_selector": selector})
+    for error, selector in _xml_results(root, "Errors"):
+        if list(error) or any(int(error.get(key, "0")) > 0 for key in ("errors", "totalErrors", "missingClasses")):
+            detail = " ".join(" ".join(error.itertext()).split())[:300]
+            records.append({"gap_only": True, "_native_selector": selector,
+                            "coverage_gap": f"SpotBugs reported analysis errors: {detail or error.attrib}"})
+    for tag in ("Error", "MissingClass"):
+        for error, selector in _xml_results(root, tag):
+            detail = " ".join(" ".join(error.itertext()).split())[:300]
+            records.append({"gap_only": True, "_native_selector": selector,
+                            "coverage_gap": f"SpotBugs reported {tag}: {detail or error.attrib}"})
     return records
 
 
@@ -1040,7 +1139,7 @@ def _pmd_parser(payload: bytes) -> list[dict[str, Any]]:
 
 def _phpstan_parser(payload: bytes) -> list[dict[str, Any]]:
     records = []
-    for path, value in _json(payload).get("files", {}).items():
+    for path, value in (_json(payload).get("files") or {}).items():
         for index, message in enumerate(value.get("messages", [])):
             records.append({"rule_id": message.get("identifier", "phpstan"), "message": message.get("message"),
                             "severity": "ERROR", "category": "source_sast", "path": path,
@@ -1051,7 +1150,7 @@ def _phpstan_parser(payload: bytes) -> list[dict[str, Any]]:
 
 def _phpcs_parser(payload: bytes) -> list[dict[str, Any]]:
     records = []
-    for path, value in _json(payload).get("files", {}).items():
+    for path, value in (_json(payload).get("files") or {}).items():
         for index, message in enumerate(value.get("messages", [])):
             records.append({"rule_id": message.get("source", "phpcs"), "message": message.get("message"),
                             "severity": message.get("type", "WARNING"), "category": "source_sast", "path": path,

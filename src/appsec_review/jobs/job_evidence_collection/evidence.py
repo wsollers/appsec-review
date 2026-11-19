@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import hashlib
 from pathlib import Path, PurePosixPath
 import re
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.storage.shared import reference
@@ -12,7 +12,7 @@ from appsec_review.provenance import common_metadata, merge_native_references
 
 
 SECRET_FIELDS = {"secret", "match", "password", "token", "apikey", "api_key", "private_key"}
-NORMALIZER_IDENTITY = "static-evidence/4"
+NORMALIZER_IDENTITY = "static-evidence/5"
 _ASSIGNMENT = re.compile(
     r"(?i)(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*([\"']?)([^\s,;\"']+)\2"
 )
@@ -253,7 +253,8 @@ def _spans_corroborate(loc_a: Mapping[str, Any], loc_b: Mapping[str, Any], *, bu
         return False
     a_start, a_end = int(loc_a.get("start_line") or 1), int(loc_a.get("end_line") or 1)
     b_start, b_end = int(loc_b.get("start_line") or 1), int(loc_b.get("end_line") or 1)
-    if line_bucket_for_location(loc_a, bucket_size=bucket_size) == line_bucket_for_location(loc_b, bucket_size=bucket_size):
+    if ((a_start - 1) // bucket_size <= (b_end - 1) // bucket_size
+            and (b_start - 1) // bucket_size <= (a_end - 1) // bucket_size):
         return True
     return a_start <= b_end + 2 and b_start <= a_end + 2
 
@@ -263,7 +264,14 @@ def _prefer_trace(existing: dict[str, Any] | None, incoming: dict[str, Any] | No
         return incoming
     if incoming is None:
         return existing
-    return incoming if len(incoming.get("steps") or ()) > len(existing.get("steps") or ()) else existing
+    return min((existing, incoming), key=lambda trace: (-len(trace.get("steps") or ()), canonical_json(trace)))
+
+
+def _record_order(record: Mapping[str, Any]) -> tuple[Any, ...]:
+    location = record.get("location") or {}
+    return (not bool(location), str(location.get("path") or ""), str(extract_cwe_family(record) or ""),
+            int(location.get("start_line") or 0), int(location.get("end_line") or 0),
+            canonical_json({key: value for key, value in record.items() if key != "common"}))
 
 
 def build_envelope(
@@ -272,6 +280,7 @@ def build_envelope(
     parser_identity: str, observations: Iterable[Mapping[str, Any]], cataloged_paths: Iterable[str],
     terminal_status: str, run_root: Path, bounds: EvidenceBounds = EvidenceBounds(),
     source_hashes: Mapping[str, str] | None = None,
+    pre_cap_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     paths = set(cataloged_paths)
     default_tool_id = str(tool.get("id") or tool.get("name") or "unknown")
@@ -280,6 +289,7 @@ def build_envelope(
     exact_by_id: dict[str, dict[str, Any]] = {}
     corroborable_by_path_cwe: dict[tuple[str, str], list[dict[str, Any]]] = {}
     raw_scanner_findings = 0
+    normalized = []
 
     for observation in observations:
         raw_scanner_findings += 1
@@ -324,7 +334,12 @@ def build_envelope(
             bounded_gaps.append("location_unresolved: native source path is not in the accepted catalog")
             location_gaps = ("location_unresolved",)
         record["evidence_id"] = "evidence-" + hashlib.sha256(canonical_json(record)).hexdigest()[:24]
+        normalized.append((record, references, obs_tool_id, location_gaps))
 
+    # Ascending intervals form connected components, including a late bridge between buckets.
+    for record, references, obs_tool_id, location_gaps in sorted(
+            normalized, key=lambda item: (_record_order(item[0]), item[2], canonical_json(item[1]))):
+        location, trace = record["location"], record.get("dataflow_trace")
         rule_tag = f"{obs_tool_id}:{record['native_rule_id']}"
         cwe_family = extract_cwe_family(record) if record["category"] == "source_sast" else None
 
@@ -340,8 +355,8 @@ def build_envelope(
 
         matched_cluster: dict[str, Any] | None = None
         if location is not None and cwe_family is not None:
-            for candidate in corroborable_by_path_cwe.get((location["path"], cwe_family), ()):
-                if _spans_corroborate(candidate["record"]["location"], location):
+            for candidate in corroborable_by_path_cwe.get((location["path"], cwe_family), ())[-1:]:
+                if _spans_corroborate(candidate["match_location"], location):
                     matched_cluster = candidate
                     break
 
@@ -358,11 +373,14 @@ def build_envelope(
             existing_loc = existing_rec["location"]
             existing_loc["start_line"] = min(int(existing_loc["start_line"]), int(location["start_line"]))
             existing_loc["end_line"] = max(int(existing_loc["end_line"]), int(location["end_line"]))
+            matched_cluster["match_location"] = {**location, "end_line": existing_loc["end_line"]}
+            exact_by_id[record["evidence_id"]] = matched_cluster
             continue
 
         entry = {
             "record": record, "ref_batches": [references], "scanners": {obs_tool_id},
             "rule_ids": {rule_tag}, "cwe_family": cwe_family, "location_gaps": location_gaps,
+            "match_location": dict(location) if location is not None else None,
         }
         clusters.append(entry)
         exact_by_id[record["evidence_id"]] = entry
@@ -393,6 +411,9 @@ def build_envelope(
             record_kind="observation" if record["category"] == "software_inventory" else "finding",
             gaps=entry["location_gaps"],
         )
+        if pre_cap_sink is not None:
+            pre_cap_sink({**record, "common": {
+                **common, "evidence_refs": merge_native_references(*entry["ref_batches"])}})
         if len(records) >= bounds.max_records:
             bounded_gaps.append("normalized record count bound reached")
             continue
@@ -427,6 +448,8 @@ def build_envelope(
             "corroborated_clusters": corroborated_clusters,
             "taint_traces_preserved": taint_traces_preserved,
             "post_dedupe_capped_count": len(records),
+            "pre_cap_record_count": len(clusters),
+            "omitted_record_count": len(clusters) - len(records),
         },
     }
 
@@ -443,75 +466,80 @@ def corroborate_sast_records(
     by_path_cwe: dict[tuple[str, str], list[dict[str, Any]]] = {}
     exact_fallback: dict[tuple[str, str, int, str], dict[str, Any]] = {}
     raw_scanner_findings = 0
-
+    inputs = []
     for tool_id in sorted(tool_envelopes):
         envelope = tool_envelopes[tool_id]
         env_records = list(envelope.get("records") or ())
         env_telemetry = envelope.get("telemetry") if isinstance(envelope.get("telemetry"), Mapping) else {}
         raw_scanner_findings += max(len(env_records), int(env_telemetry.get("raw_scanner_findings", len(env_records))))
-        for rec in env_records:
-            if not isinstance(rec, Mapping) or rec.get("category") != "source_sast":
-                continue
-            loc = rec.get("location") if isinstance(rec.get("location"), Mapping) else None
-            cwe_family = extract_cwe_family(rec)
-            rule_id = str(rec.get("native_rule_id") or rec.get("rule_id") or "unknown")
-            scanners = set(rec.get("corroborating_scanners") or [tool_id])
-            scanners.add(tool_id)
-            rule_ids = set(rec.get("scanner_rule_ids") or [f"{tool_id}:{rule_id}"])
-            rule_ids.add(f"{tool_id}:{rule_id}")
-            trace = rec.get("dataflow_trace") if isinstance(rec.get("dataflow_trace"), Mapping) else None
-            refs = list((rec.get("common") or {}).get("evidence_refs") or ())
+        inputs.extend((tool_id, rec) for rec in env_records if isinstance(rec, Mapping))
+    for tool_id, rec in sorted(inputs, key=lambda item: (_record_order(item[1]), item[0])):
+        if rec.get("category") != "source_sast":
+            continue
+        loc = rec.get("location") if isinstance(rec.get("location"), Mapping) else None
+        cwe_family = extract_cwe_family(rec)
+        rule_id = str(rec.get("native_rule_id") or rec.get("rule_id") or "unknown")
+        scanners = set(rec.get("corroborating_scanners") or [tool_id])
+        scanners.add(tool_id)
+        rule_ids = set(rec.get("scanner_rule_ids") or [f"{tool_id}:{rule_id}"])
+        rule_ids.add(f"{tool_id}:{rule_id}")
+        trace = rec.get("dataflow_trace") if isinstance(rec.get("dataflow_trace"), Mapping) else None
+        refs = list((rec.get("common") or {}).get("evidence_refs") or ())
 
-            if loc is not None and cwe_family is not None:
-                path_str = str(loc.get("path") or "")
-                matched = None
-                for candidate in by_path_cwe.get((path_str, cwe_family), ()):
-                    if _spans_corroborate(candidate["location"], loc):
-                        matched = candidate
-                        break
-                if matched is not None:
-                    matched["scanners"].update(scanners)
-                    matched["rule_ids"].update(rule_ids)
-                    if _SEVERITY_RANK.get(str(rec.get("severity")), 0) > _SEVERITY_RANK.get(matched["severity"], 0):
-                        matched["severity"] = str(rec.get("severity"))
-                    matched["dataflow_trace"] = _prefer_trace(matched["dataflow_trace"], dict(trace) if trace else None)
-                    matched["location"]["start_line"] = min(int(matched["location"]["start_line"]), int(loc.get("start_line") or 1))
-                    matched["location"]["end_line"] = max(int(matched["location"]["end_line"]), int(loc.get("end_line") or 1))
-                    matched["evidence_refs"] = merge_native_references(matched["evidence_refs"], refs)
-                    continue
-                cluster = {
-                    "cwe_family": cwe_family, "severity": str(rec.get("severity") or "UNKNOWN"),
-                    "category": "source_sast", "message": str(rec.get("message") or ""),
-                    "location": dict(loc), "language": rec.get("language"),
-                    "rule_mapping": dict(rec["rule_mapping"]) if isinstance(rec.get("rule_mapping"), Mapping) else None,
-                    "scanners": scanners, "rule_ids": rule_ids,
-                    "dataflow_trace": dict(trace) if trace is not None else None,
-                    "evidence_refs": merge_native_references(refs),
-                }
-                clusters.append(cluster)
-                by_path_cwe.setdefault((path_str, cwe_family), []).append(cluster)
-            else:
-                path_str = str(loc.get("path") or "") if loc is not None else ""
-                start_line = int(loc.get("start_line") or 1) if loc is not None else 0
-                fb_key = (path_str, rule_id, start_line, str(rec.get("message") or ""))
-                if fb_key in exact_fallback:
-                    existing = exact_fallback[fb_key]
-                    existing["scanners"].update(scanners)
-                    existing["rule_ids"].update(rule_ids)
-                    existing["dataflow_trace"] = _prefer_trace(existing["dataflow_trace"], dict(trace) if trace else None)
-                    existing["evidence_refs"] = merge_native_references(existing["evidence_refs"], refs)
-                    continue
-                cluster = {
-                    "cwe_family": cwe_family, "severity": str(rec.get("severity") or "UNKNOWN"),
-                    "category": "source_sast", "message": str(rec.get("message") or ""),
-                    "location": dict(loc) if loc is not None else None, "language": rec.get("language"),
-                    "rule_mapping": dict(rec["rule_mapping"]) if isinstance(rec.get("rule_mapping"), Mapping) else None,
-                    "scanners": scanners, "rule_ids": rule_ids,
-                    "dataflow_trace": dict(trace) if trace is not None else None,
-                    "evidence_refs": merge_native_references(refs),
-                }
-                clusters.append(cluster)
-                exact_fallback[fb_key] = cluster
+        if loc is not None and cwe_family is not None:
+            path_str = str(loc.get("path") or "")
+            matched = None
+            for candidate in by_path_cwe.get((path_str, cwe_family), ())[-1:]:
+                if _spans_corroborate(candidate["match_location"], loc):
+                    matched = candidate
+                    break
+            if matched is not None:
+                matched["scanners"].update(scanners)
+                matched["rule_ids"].update(rule_ids)
+                if _SEVERITY_RANK.get(str(rec.get("severity")), 0) > _SEVERITY_RANK.get(matched["severity"], 0):
+                    matched["severity"] = str(rec.get("severity"))
+                matched["dataflow_trace"] = _prefer_trace(matched["dataflow_trace"], dict(trace) if trace else None)
+                matched["location"]["start_line"] = min(int(matched["location"]["start_line"]), int(loc.get("start_line") or 1))
+                matched["location"]["end_line"] = max(int(matched["location"]["end_line"]), int(loc.get("end_line") or 1))
+                matched["match_location"] = {**loc, "end_line": matched["location"]["end_line"]}
+                matched["evidence_refs"] = merge_native_references(matched["evidence_refs"], refs)
+                continue
+            cluster = {
+                "cwe_family": cwe_family, "severity": str(rec.get("severity") or "UNKNOWN"),
+                "category": "source_sast", "message": str(rec.get("message") or ""),
+                "location": dict(loc), "language": rec.get("language"),
+                "match_location": dict(loc),
+                "rule_mapping": dict(rec["rule_mapping"]) if isinstance(rec.get("rule_mapping"), Mapping) else None,
+                "scanners": scanners, "rule_ids": rule_ids,
+                "dataflow_trace": dict(trace) if trace is not None else None,
+                "evidence_refs": merge_native_references(refs),
+            }
+            clusters.append(cluster)
+            by_path_cwe.setdefault((path_str, cwe_family), []).append(cluster)
+        else:
+            path_str = str(loc.get("path") or "") if loc is not None else ""
+            start_line = int(loc.get("start_line") or 1) if loc is not None else 0
+            fb_key = (path_str, rule_id, start_line, str(rec.get("message") or ""))
+            if fb_key in exact_fallback:
+                existing = exact_fallback[fb_key]
+                existing["scanners"].update(scanners)
+                existing["rule_ids"].update(rule_ids)
+                if _SEVERITY_RANK.get(str(rec.get("severity")), 0) > _SEVERITY_RANK.get(existing["severity"], 0):
+                    existing["severity"] = str(rec["severity"])
+                existing["dataflow_trace"] = _prefer_trace(existing["dataflow_trace"], dict(trace) if trace else None)
+                existing["evidence_refs"] = merge_native_references(existing["evidence_refs"], refs)
+                continue
+            cluster = {
+                "cwe_family": cwe_family, "severity": str(rec.get("severity") or "UNKNOWN"),
+                "category": "source_sast", "message": str(rec.get("message") or ""),
+                "location": dict(loc) if loc is not None else None, "language": rec.get("language"),
+                "rule_mapping": dict(rec["rule_mapping"]) if isinstance(rec.get("rule_mapping"), Mapping) else None,
+                "scanners": scanners, "rule_ids": rule_ids,
+                "dataflow_trace": dict(trace) if trace is not None else None,
+                "evidence_refs": merge_native_references(refs),
+            }
+            clusters.append(cluster)
+            exact_fallback[fb_key] = cluster
 
     by_scope: dict[str, list[dict[str, Any]]] = {}
     for cluster in clusters:
@@ -573,6 +601,8 @@ def corroborate_sast_records(
             "corroborated_clusters": corroborated_clusters,
             "taint_traces_preserved": taint_traces_preserved,
             "post_dedupe_capped_count": len(emitted),
+            "pre_cap_cluster_count": len(clusters),
+            "omitted_cluster_count": len(clusters) - len(emitted),
         },
     }
 
