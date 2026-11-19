@@ -42,7 +42,7 @@ def model_distinct(verifier: ActorRecord, reds: Iterable[ActorRecord]) -> bool:
 
 
 def verify_independence(verifier_actor: ActorRecord, other_actors: Iterable[ActorRecord],
-                        verifier_request_bytes: bytes, forbidden_markers: Iterable[str | bytes],
+                        verifier_request_bytes: bytes | None, forbidden_markers: Iterable[str | bytes],
                         verifier_relations: Iterable[EvidenceRelation],
                         required_predicates: Collection[Predicate], verifier_receipts: Collection[str], *,
                         claim_id: str, require_distinct_provider: bool = False,
@@ -51,6 +51,9 @@ def verify_independence(verifier_actor: ActorRecord, other_actors: Iterable[Acto
 
     ``forbidden_markers`` are red/blue narrative, disposition, and identity strings that must not
     occur in the stored verifier request bytes; every other actor's id is always forbidden too.
+    ``None`` means request-check evidence is unavailable, never a marker-free request. A caller
+    replaying a successful persisted check may supply empty bytes only after validating that check
+    against the original cell, attempt and complete marker set.
     """
     others = list(other_actors)
     reasons: list[tuple[str, Predicate | None]] = []
@@ -70,7 +73,9 @@ def verify_independence(verifier_actor: ActorRecord, other_actors: Iterable[Acto
         if not encoded:
             raise ValueError("forbidden markers must be non-empty")
         markers.add(encoded)
-    if any(marker in verifier_request_bytes for marker in markers):
+    if verifier_request_bytes is None:
+        reasons.append(("verifier_request_check_unavailable", None))
+    elif any(marker in verifier_request_bytes for marker in markers):
         reasons.append(("verifier_request_contains_forbidden_marker", None))
     receipts = set(verifier_receipts)
     supported: set[Predicate] = set()

@@ -1744,6 +1744,8 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, ..
     result.gaps.extend(failed)
     result.requests.extend(_requests(verifier, claim.claim_id, verifier.outcome.result.get("evidence_requests", ())))
     others = [_actor(cell) for cell in (*group["cells"], *blues)]
+    # Persist the same identity checks R6 applies to fresh bytes, not just narrative checks.
+    markers.extend(other.actor_id for other in others)
     marker_digest = sha256_hex(sorted(set(markers)))
     request_bytes = _verifier_request_bytes(ctx, verifier, markers, marker_digest)
     independent, gaps = verify_independence(
@@ -1767,19 +1769,22 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, ..
         "shared_actor_cache_absent": actor.cache_key is None or all(
             actor.cache_key != other.cache_key for other in others),
         "request_check": ({"path": check_path.relative_to(ctx.run_root).as_posix(),
-                           "sha256": file_sha256(check_path)} if check_path.is_file() else None),
+                           "sha256": file_sha256(check_path)}
+                          if request_bytes is not None and check_path.is_file() else None),
         "request_markers_absent": (not any(
             marker.encode("utf-8") in request_bytes for marker in [*markers, *(other.actor_id for other in others)])
             if verifier.requests else None),
     }
 
 
-def _verifier_request_bytes(ctx: ReviewContext, verifier: _Cell, markers: Sequence[str], digest: str) -> bytes:
+def _verifier_request_bytes(ctx: ReviewContext, verifier: _Cell, markers: Sequence[str],
+                            digest: str) -> bytes | None:
     """The verifier's stored request bytes for the R6 check.
 
     A fresh run checks the exact request bytes and records the result next to the cell receipt
     (hashes only). A reused cell sent no request; its recorded check is used when the forbidden
-    markers are unchanged, and otherwise the check fails closed.
+    markers (including other actors' identities) are unchanged. Missing, invalid or failed checks
+    return ``None`` so R6 records an explicit independence gap, even with no narrative markers.
     """
     sidecar = ctx.receipts_root / verifier.cell_id / f"independence-attempt-{verifier.record.attempts}.json"
     if verifier.requests:
@@ -1794,9 +1799,19 @@ def _verifier_request_bytes(ctx: ReviewContext, verifier: _Cell, markers: Sequen
         check = json.loads(sidecar.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         check = None
-    if not check or check.get("markers_sha256") != digest or check.get("contains_forbidden_marker"):
-        # Fail closed: the forbidden marker itself stands in for unverifiable request bytes.
-        return markers[0].encode("utf-8") if markers else b"\x00unverified-verifier-request"
+    if (not isinstance(check, dict)
+            or set(check) != {"schema", "cell_id", "attempt", "markers_sha256",
+                              "request_sha256s", "contains_forbidden_marker"}
+            or check["schema"] != "appsec-review/verifier-request-check/1"
+            or check["cell_id"] != verifier.cell_id
+            or type(check["attempt"]) is not int or check["attempt"] != verifier.record.attempts
+            or check["markers_sha256"] != digest
+            or check["contains_forbidden_marker"] is not False
+            or not isinstance(check["request_sha256s"], list) or not check["request_sha256s"]
+            or any(not isinstance(value, str) or len(value) != 64
+                   or any(character not in "0123456789abcdef" for character in value)
+                   for value in check["request_sha256s"])):
+        return None
     _consume_check(sidecar)
     return b""
 

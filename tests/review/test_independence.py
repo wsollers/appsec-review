@@ -42,6 +42,16 @@ def test_blind_fresh_verifier_with_own_evidence_is_independent() -> None:
     assert check() == (True, [])
 
 
+def test_unavailable_request_check_never_counts_as_blindness() -> None:
+    assert reasons(check(request=None)) == {"verifier_request_check_unavailable"}
+    independent, gaps = verify_independence(
+        VERIFIER, [], None, [], [rel(p) for p in ALWAYS_REQUIRED], ALWAYS_REQUIRED, [RECEIPT],
+        claim_id=CLAIM,
+    )
+    assert not independent
+    assert [gap.reason for gap in gaps] == ["verifier_request_check_unavailable"]
+
+
 def test_same_actor_is_not_independent() -> None:
     same = ActorRecord("actor-red", "claude-cli", "opus", "conv-new")
     assert "verifier_actor_not_distinct" in reasons(check(verifier=same))

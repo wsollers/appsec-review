@@ -144,6 +144,18 @@ Every finding package records `independence.provider_distinct` and
 `independence.verifier_model_distinct`, so a run that uses one model for every role is labelled as
 such.
 
+Confirmation also requires actual blindness and evidence lineage (T-5144): the verifier must
+support each required predicate with complete, admissible evidence tied to its own retrieval
+receipt. Fresh requests are checked for red/blue narrative markers and other actors' identities.
+A reused cell must have a well-formed `verifier-request-check/1` for the same cell, attempt and
+complete marker set, with nonempty request hashes and an explicit passing check. Missing,
+malformed, stale or failed checks produce `independence_gap: verifier_request_check_unavailable`;
+they never count as a clean request, even when every narrative is too short to supply a marker.
+Existing admissible support remains supported rather than confirmed, and citation/source gaps
+remain explicit. Older checks that did not bind actor markers cannot establish replayed
+independence. The final publication gate preserves the accepted adjudication; it does not repair
+missing upstream blindness evidence or rerun R5/R6.
+
 ### Configuring a distinct verifier
 
 `[...settings.verification].require_distinct_model_for_ship_blocking` (default `true`) requires the
