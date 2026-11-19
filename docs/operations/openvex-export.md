@@ -53,6 +53,38 @@ Static import/call matching cannot certify complete executable-path coverage; ev
 statements are not additional adjudicated finding packages and do not change primary export
 eligibility, counts or ship-block decisions.
 
+The dependency product uses the same repository/snapshot/full-configuration identity as the
+primary product; each admitted package PURL is a subcomponent, not the top-level product.
+A producer-valid row with nullable version/ecosystem retains its supplied PURL. A row without
+a supported supplied PURL instead produces a `producer-gap/1` accounting record identifying
+the advisory, package and original coordinates, with the sized, hash-bound SCA artifact as
+evidence. The exporter does not guess a package coordinate from its name or ecosystem.
+Such a row has no dependency statement; it does not prevent unrelated primary findings or
+projectable dependency rows from being exported. Missing required SCA fields or a missing,
+foreign or changed admitted artifact still fail verification.
+
+Upstream SCA and publication gaps survive independently of statement status, including empty
+and all-`affected` companions. Structured producer gaps retain their identities and fields;
+legacy text remains the reason, and legacy objects retain all fields as canonical JSON in
+the reason of a typed gap. Exact duplicates are removed, not distinct failures. A companion
+with any retained gap completes with `COMPLETED_WITH_GAPS`, even when its document is null.
+Positive statements retain the original upstream reasons in their coverage notes.
+
+Dependency handoff, publication and SCA bytes join the same unique-path/hash input inventory
+as gate/review/configuration and schema snapshots. `max_bindings` and
+`max_total_input_bytes` apply to that union during load and reproof, not separate subtotals.
+`OPENVEX_INPUTS_VERIFIED` reports this complete inventory. The dependency document uses
+`max_document_bytes`; its accounting result uses the existing 1 MiB result bound.
+Both limits apply before the respective file is written and when acceptance rereads it.
+
+After output reproof, `OPENVEX_EXPORT_COMPLETED` exposes separate
+`openvex.cve_statements_by_status`, `openvex.cve_total_statements` and
+`openvex.cve_coverage_gap_statements` counters derived from the verified dependency accounting.
+No companion means no dependency measurement; an admitted empty companion measures zero.
+These are domain-completion observations, not proof of runtime acceptance. The accepted
+metrics aggregator currently remains primary-only; accepted dependency aggregation and
+deduplication are still tracked by [T-5151](../TODO.md#t-5151-preserve-dependency-openvex-identity-gaps-nullable-coordinates-and-telemetry).
+
 The pinned OpenVEX specification requires an individual/organization author; the automatic
 local policy instead truthfully names the tool, without inventing human/vendor authority.
 Schema validation does not establish that author requirement or authorize supplier issuance.
@@ -74,6 +106,7 @@ flowchart TD
     Config --> Verify
     Review --> Verify
     Gate --> Verify
+    Dependencies["Optional admitted dependency intelligence / SCA"] --> Verify
     Schema["Pinned local upstream schema and validation profile"] --> Assemble["Assemble and validate canonical bytes"]
     Verify --> Assemble
     Assemble --> Vex["openvex.json: nonempty affected statements only"]
@@ -198,8 +231,9 @@ Accepted acquisition is authenticated and bound if present, but never supplies a
 external repository, publisher or release URL in automatic mode.
 
 `H` is SHA-256 over canonical JSON bytes. This is not a shipped binary hash, release,
-version range or assertion about all builds of the repository. No dependency purls,
-SBOM-to-release guesses, product hashes or subcomponents are emitted in v1. An explicit
+version range or assertion about all builds of the repository. The primary findings document
+emits no dependency PURLs, SBOM-to-release guesses, product hashes or subcomponents;
+dependency subcomponents belong only to the separately accounted companion. An explicit
 operator IRI instead records `operator_declared` or `accepted_acquisition` basis, with strict
 agreement when acquisition establishes an external IRI; neither mode invents a Git commit.
 A mismatch between an acquired tree
@@ -266,10 +300,12 @@ Use the accepted job handoff's references, not a guessed attempt path or newest-
 | Artifact | Meaning |
 | --- | --- |
 | `verified-inputs.json` | Bounded, verified input identities from the load unit. |
-| `schemas/` under the load task | Nine hash-pinned schema/license/lock snapshots, including transitive PoC-item definitions; no report data input. |
+| `schemas/` under the load task | Ten hash-pinned schema/license/lock snapshots, including transitive PoC-item definitions; no report data input. |
 | `openvex.json` | Nonempty upstream-schema-valid document with `affected` statements; absent when no statements qualify. Tool-authored local output is not authenticated supplier issuance. |
 | `openvex-manifest.json` | Protected companion: provenance, source qualification, exact certified capabilities/attachments, per-package inclusion/exclusion, statement-to-evidence mapping, separate scores/independence/ship-block context, limitations, bindings and exact counts. |
 | `openvex-result.json` | Accepted handoff's artifact: outcome, gate identity, manifest reference, document reference or null, counts and gaps. |
+| `openvex-dependencies.json` | Optional nonempty dependency statements with snapshot/configuration product identity and supplied package PURLs; absent for an empty or wholly unprojectable advisory set. |
+| `openvex-dependencies-result.json` | Admitted dependency/gate references, exact status counts and retained upstream/coordinate/projection gaps; present even when the dependency document is absent. |
 
 Every gate package must appear once in the companion as `included`,
 `gate_verification_backlog` or `gate_withheld`. Counts and actual identity sets must agree:

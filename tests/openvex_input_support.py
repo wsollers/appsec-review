@@ -38,7 +38,7 @@ class AcceptedInputDisk:
 
     def __init__(self, root: Path, monkeypatch: pytest.MonkeyPatch, *,
                  buckets: tuple[str, ...] = ("publishable",), settings: OpenVexExportSettings | None = None,
-                 acquisition: str | None = None) -> None:
+                 acquisition: str | None = None, snapshot: str | None = None) -> None:
         self.root = root / "run-openvex-inputs"
         self.root.mkdir()
         self.settings = settings or enabled_settings()
@@ -59,7 +59,7 @@ class AcceptedInputDisk:
         typed = parse_inference_review_settings(review_settings)
         semantic = semantic_settings_sha256(typed)
         policy = policy_sha256(typed.ship_block, typed.verification.require_distinct_model_for_ship_blocking)
-        self.snapshot = c.json_sha256("accepted snapshot only, never current target")
+        self.snapshot = snapshot or c.json_sha256("accepted snapshot only, never current target")
         manifest = {
             "schema": "appsec-review/index-manifest/1", "run_id": self.root.name,
             "target_snapshot": self.snapshot, "target_root": "DO-NOT-ACCESS-TARGET",

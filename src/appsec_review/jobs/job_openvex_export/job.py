@@ -209,19 +209,24 @@ def build_job(*, repository_root: Path | None = None) -> Job:
             return None
         prefix = unit.job.attempt_root / "steps" / "export" / "tasks" / "assemble"
 
-        def persist(name: str, data: bytes) -> dict[str, str]:
+        def persist(name: str, data: bytes, *, max_bytes: int) -> dict[str, str]:
+            if len(data) > max_bytes:
+                raise ExportError("dependency export artifact exceeds its byte bound",
+                                  reason=Reason.BOUND_EXCEEDED,
+                                  phase=ExportPhase.ASSEMBLE if create else ExportPhase.ACCEPT)
             path = prefix / name
             ref = ArtifactRef(path.relative_to(unit.job.run_root).as_posix(), hashlib.sha256(data).hexdigest())
             if create:
                 _write(unit, path, data)
-            elif read_output(unit.job.run_root, ref, settings, max_bytes=settings.max_document_bytes) != data:
+            elif read_output(unit.job.run_root, ref, settings, max_bytes=max_bytes) != data:
                 raise ExportError("dependency export bytes changed", reason=Reason.INPUT_TAMPERED, phase=ExportPhase.ACCEPT)
             return ref.to_json()
 
-        document_ref = None if payload is None else persist(dependencies.DOCUMENT_NAME, payload)
+        document_ref = None if payload is None else persist(
+            dependencies.DOCUMENT_NAME, payload, max_bytes=settings.max_document_bytes)
         result["document"] = document_ref
         schema_validator("openvex-dependencies.schema.json", repository_root=repo(unit)).validate(result)
-        result_ref = persist(dependencies.RESULT_NAME, canonical_bytes(result))
+        result_ref = persist(dependencies.RESULT_NAME, canonical_bytes(result), max_bytes=MAX_RESULT_BYTES)
         return {"artifact": result_ref, "document": document_ref, "gaps": result["gaps"],
                 "statements_by_status": result["statements_by_status"]}
 
@@ -253,7 +258,8 @@ def build_job(*, repository_root: Path | None = None) -> Job:
                             "OPENVEX_EXPORT_COMPLETED", invocation_id=unit.job.attempt_id,
                             outcome=document["outcome"], result_reference=reference.to_json(),
                             document_present=document["document"] is not None,
-                            document_bytes=0 if document["document"] is None else document["document"]["size_bytes"])
+                            document_bytes=0 if document["document"] is None else document["document"]["size_bytes"],
+                            **dependencies.telemetry(result.get("dependencies")))
                     return result
             except Exception as exc:
                 reason = (exc.reason if isinstance(exc, ExportError) else Reason.IO_ERROR if isinstance(exc, OSError)

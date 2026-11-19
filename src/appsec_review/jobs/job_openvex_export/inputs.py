@@ -645,6 +645,11 @@ def verify_inputs(run_root: Path, settings: OpenVexExportSettings, repository_ro
             gate["review"]["package_manifest_sha256"], gate["review"]["ledger_head_sha256"],
             gate["review"]["projection_sha256"], policy,
         )
+        from .dependencies import read_dependency_inputs
+        read_dependency_inputs(
+            reader, repository_root, resolved_config_sha256=config_ref.sha256,
+            target_snapshot=source.target_snapshot,
+        )
         # Upstream authorities may use validation admissions. Re-read bounded bytes, not their cache.
         reader.reprove()
         reader.check_deadline()
