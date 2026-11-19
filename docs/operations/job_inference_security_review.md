@@ -18,6 +18,12 @@ claim predicates by themselves. Deterministic evidence/adjudication rules distin
 from confirmed findings; publication, scoring, judge agreement and compile-only PoC eligibility
 are separate decisions.
 
+The typed input contract admits `job_code_graph_index/alternate_cpg_index`
+(`appsec-review/alternate-cpg/1`) as optional producer evidence. Reading its
+`analysis/alternate-cpg` shard still requires the exact admitted producer handoff and unchanged
+shard bytes; availability alone grants no read permission. Missing graph coverage remains a gap,
+not evidence of safety. This closes the downstream declaration omission tracked by T-5080.
+
 <!-- generated:begin job=job_inference_security_review -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

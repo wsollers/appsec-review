@@ -106,6 +106,8 @@ CONTRACT = JobContract(
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_code_graph_index", "code_graph_facts",
                          "appsec-review/graph-fact/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_code_graph_index", "alternate_cpg_index",
+                         "appsec-review/alternate-cpg/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_code_graph_index", "code_graph_stages",
                          "appsec-review/code-graph-stage/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_code_graph_index", "code_graph_checkpoints",

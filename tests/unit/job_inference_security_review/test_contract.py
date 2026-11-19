@@ -1,7 +1,7 @@
 """Contract, input-validator, and helper unit tests for job_inference_security_review."""
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 import json
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
@@ -251,3 +251,151 @@ def test_sources_index_names_and_package_works_tamper_guard(tmp_path: Path) -> N
     }
     with pytest.raises(IntegrityError, match="review package changed after assembly"):
         package_works(run_root, bad_doc)
+
+
+def _alternate_cpg_inputs(tmp_path: Path, consumer_id: str):
+    """Publish a tiny real graph product; stub only unrelated producer execution."""
+    from appsec_review.jobs.bound_artifacts import artifact_ref
+    from appsec_review.jobs.job_code_graph_index.alternate_cpg import (
+        publish_alternate_cpg, synthesize_alternate_cpg,
+    )
+    from appsec_review.jobs.job_tree_sitter_ast.cfg import synthesize_file_cfg
+    from appsec_review.retrieval import IndexBuilder, IndexIdentity, RetrievalCore, write_manifest
+    from appsec_review.runtime import Job, JobRunner, Unit, UnitExecutor
+    from appsec_review.runtime.contracts import JobContract
+    from tests.downstream_contract_fixture import configuration
+    from tests.unit.job_code_graph_index.test_alternate_cpg import _make_two_fn_ast
+
+    config = configuration(tmp_path)
+    runner = JobRunner(config)
+    registry = builtin_registry()
+    consumer = registry.build(consumer_id)
+    target = tmp_path / "source"
+    target.mkdir()
+    source = target / "app.py"
+    source.write_text("# inert source fixture\n" * 20, encoding="utf-8")
+    snapshot = "target-sha256:" + file_sha256(source)
+    ast = _make_two_fn_ast(
+        fn_type="function_definition", body_type="block", if_type="if_statement",
+        ret_type="return_statement", call_type="call", entry_name="handle",
+        helper_name="parse", guard_expr="input_val is not None", sink_call="eval",
+    )
+    cfg = synthesize_file_cfg(ast, language="python", path="app.py")
+    published = {}
+
+    def graph_output(unit):
+        root = unit.job.run_root
+        cpg = synthesize_alternate_cpg(
+            tree_sitter_files=[cfg], run_id=unit.job.run_id, target_snapshot=snapshot,
+            route_entrypoints=[{"handler_symbol": "handle", "path": "app.py", "line": 2,
+                                "language": "python", "route_pattern": "/", "http_method": "POST",
+                                "framework": "fixture"}],
+        )
+        _, identity = publish_alternate_cpg(
+            root, unit.unit_root, cpg, job_id=unit.job.config.job_id, unit_id=unit.unit_id,
+            file_shas={"app.py": file_sha256(source)},
+        )
+        manifest = unit.unit_root / "manifest.json"
+        write_manifest(manifest, run_id=unit.job.run_id, target_snapshot=snapshot,
+                       target_root=target, indexes=(identity,))
+        published.update(shard=asdict(identity), manifest=manifest)
+        return {"index_manifest": artifact_ref(root, manifest),
+                "index_identity": asdict(identity),
+                "artifacts": [artifact_ref(root, root / identity.relative_path)]}
+
+    def unrelated_output(unit):
+        declarations = registry.build(unit.job.config.job_id).datasets
+        identities = []
+        for declaration in declarations:
+            if not declaration.required:
+                continue
+            [index] = declaration.indexes
+            path = unit.unit_root / f"{index}.sqlite"
+            builder = IndexBuilder(path, name=index, fingerprint="a" * 64,
+                                   target_snapshot=snapshot)
+            builder.add_coverage("fixture", "unavailable", "unrelated producer execution is stubbed")
+            identities.append(IndexIdentity(
+                index, declaration.schema, builder.build(), "a" * 64,
+                path.relative_to(unit.job.run_root).as_posix(),
+                {"job": unit.job.config.job_id, "unit": unit.unit_id},
+            ))
+        manifest = unit.unit_root / "manifest.json"
+        write_manifest(manifest, run_id=unit.job.run_id, target_snapshot=snapshot,
+                       target_root=target, indexes=identities)
+        output = {"index_manifest": artifact_ref(unit.job.run_root, manifest),
+                  "artifacts": [artifact_ref(unit.job.run_root, unit.job.run_root / item.relative_path)
+                                for item in identities]}
+        if identities:
+            [identity] = identities
+            output["index_identity"] = asdict(identity)
+        return output
+
+    pins = {}
+    run_id = None
+    required = {item.producer for item in consumer.contract.inputs
+                if item.output_kind == "handoff" and item.required(set())}
+    for producer_id in ["job_code_graph_index", *sorted(required - {"job_code_graph_index"})]:
+        registered = registry.build(producer_id)
+        required_steps = {item.step for item in registered.datasets if item.required}
+        unit_id = ("acceptance.publish_handoff" if producer_id == "job_code_graph_index"
+                   else next(unit.unit_id for unit in registered.units
+                             if not required_steps or unit.unit_id.split(".")[0] in required_steps))
+        units = (Unit(unit_id, graph_output if producer_id == "job_code_graph_index"
+                      else unrelated_output),)
+        producer = Job(
+            producer_id, registered.name, UnitExecutor(units).execute, units=units,
+            datasets=registered.datasets, contract=JobContract(),
+        )
+        outcome = runner.run(producer, run_id=run_id, target_root=target, source_fingerprint=snapshot)
+        run_id = outcome["status"]["run_id"]
+        pins[producer_id] = outcome["handoff_sha256"]
+    root = runner.runs.resolve(run_id)
+    context = SimpleNamespace(
+        config=config.job(consumer_id), contract=consumer.contract, run_root=root,
+        upstream_handoffs=pins, evidence_target_snapshot=snapshot, external_input_selection=None,
+    )
+    core = RetrievalCore(root.parent, run_id, manifest_path=published["manifest"],
+                         manifest_sha256=file_sha256(published["manifest"]))
+    return context, core, published["shard"]
+
+
+@pytest.mark.parametrize("consumer_id", (
+    "job_inference_security_review", "job_review_package_assembly", "job_owasp_control_assessment",
+))
+def test_alternate_cpg_is_admitted_and_read_without_sticky_violation(tmp_path, consumer_id):
+    from appsec_review.runtime.consume import accepted_upstream
+    from appsec_review.runtime.inputs import admit_inputs, input_read_scope
+
+    context, core, shard = _alternate_cpg_inputs(tmp_path, consumer_id)
+    admission = admit_inputs(context, set(context.upstream_handoffs))
+    with input_read_scope(context) as reads:
+        accepted = accepted_upstream(context.run_root, "job_code_graph_index")
+        result = core.query_call_paths()
+        assert result["results"], "the admitted graph must be usable, not just declared"
+        assert reads.violation is None
+    [receipt] = [row for row in reads.document()["reads"] if row["output_kind"] == "alternate_cpg_index"]
+    assert receipt["sha256"] == shard["sha256"]
+    assert receipt["handoff_sha256"] == accepted.sha256
+    assert receipt["read"] is True and receipt["cited"] is None
+    [supplied] = [row for row in admission["requirements"] if row["output_kind"] == "alternate_cpg_index"]
+    assert supplied["available"] and supplied["supplied"] and not supplied["read"]
+
+
+@pytest.mark.parametrize("consumer_id", (
+    "job_inference_security_review", "job_review_package_assembly", "job_owasp_control_assessment",
+))
+@pytest.mark.parametrize("defect", ("unadmitted", "missing"))
+def test_alternate_cpg_refuses_unadmitted_or_missing_bytes(tmp_path, consumer_id, defect):
+    from appsec_review.runtime.inputs import input_read_scope
+
+    context, core, shard = _alternate_cpg_inputs(tmp_path, consumer_id)
+    if defect == "unadmitted":
+        context.upstream_handoffs.pop("job_code_graph_index")
+    else:
+        (context.run_root / shard["relative_path"]).unlink()
+    with pytest.raises(ValueError, match="input contract violation"):
+        with input_read_scope(context) as reads:
+            with pytest.raises((ValueError, OSError)):
+                core.query_call_paths()
+            assert reads.violation is not None
+    assert not any(row["output_kind"] == "alternate_cpg_index" for row in reads.document()["reads"])

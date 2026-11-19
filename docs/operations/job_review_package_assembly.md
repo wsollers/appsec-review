@@ -16,6 +16,12 @@ packages. This job establishes bounded membership and resolving context, not fin
 `review_packages` are upstream routing material; the inference job subsequently assembles its own
 lane-specific review packages and adjudicates claims separately.
 
+Coverage and analysis-context reads may include the graph producer's `analysis/alternate-cpg`
+shard. The typed contract explicitly admits `job_code_graph_index/alternate_cpg_index`
+(`appsec-review/alternate-cpg/1`) as optional producer evidence (T-5080). The admitted handoff,
+dataset authority and shard digest are checked at the read boundary; absent or unadmitted data
+does not become usable merely because it appears in a manifest.
+
 <!-- generated:begin job=job_review_package_assembly -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

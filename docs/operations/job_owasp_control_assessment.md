@@ -17,6 +17,12 @@ runtime/manual evidence or compliance certification. Qualification fixtures rema
 synthetic and cannot produce lead-eligible customer findings; assessment uses independent review
 and preserves dissent.
 
+Accepted evidence can include `job_code_graph_index/alternate_cpg_index`
+(`appsec-review/alternate-cpg/1`), explicitly declared as optional producer evidence (T-5080).
+Its `analysis/alternate-cpg` shard is readable only through the admitted producer handoff and
+verified bytes. This permission does not establish a satisfied control, complete graph coverage
+or a model citation; unavailable evidence remains a named gap.
+
 <!-- generated:begin job=job_owasp_control_assessment -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract
