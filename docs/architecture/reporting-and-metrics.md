@@ -253,7 +253,7 @@ boundary; this subsystem observes and projects it rather than widening it.
   Measured zero remains numeric. Markdown, HTML and LaTeX use the same report radar; SVG/TikZ
   geometry omits unknown vertices rather than joining or filling through them.
   See [coverage and metric qualifications](../operations/final-report.md#domain-coverage-and-unknown-measurements-t-5088).
-- **Executive Report (`appsec-review/final-report/3`) & Finding Dossiers (`appsec-review/dossier/1`)**:
+- **Executive Report (`appsec-review/final-report/4`) & Finding Dossiers (`appsec-review/dossier/1`)**:
   `job_final_report_publication` renders an executive risk narrative, exploitability funnel,
   multi-step attack-chain summaries, top remediation choke-points, OWASP/CWE posture matrix, and
   named coverage gaps. Active chains use certified `component_claim_ids` and count each publishable
@@ -287,7 +287,7 @@ flowchart TD
   review --> gate["job_final_publication_gate"]
   engineering --> gate
   dossiers --> gate
-  gate --> report["job_final_report_publication: appsec-review/final-report/3 + SARIF 2.1.0"]
+  gate --> report["job_final_report_publication: appsec-review/final-report/4 + SARIF 2.1.0"]
   report --> radar["appsec-review/security-radar-tracker/2: 12 axes; unknown metrics remain N/A"]
   gate --> vex["job_openvex_export: affected findings; optional dependency companion"]
   dependencies["Admitted job_dependency_intelligence: static SCA symbol-use evidence"] --> vex

@@ -6296,7 +6296,7 @@
           "completeness_reviewer"
         ]
       },
-      "schema": "appsec-review/final-report/3",
+      "schema": "appsec-review/final-report/4",
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_final_report_publication.datasets",
       "stage": "artifact_only",

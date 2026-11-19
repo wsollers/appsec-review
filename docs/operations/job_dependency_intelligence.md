@@ -30,27 +30,27 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L685) |
-| `inputs` | `inputs.load_accepted` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L314) |
-| `publication` | `publication.native_advisory_lookup` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L465) |
-| `publication` | `publication.publish_context` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L546) |
-| `publication` | `publication.publish_sbom` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L733) |
-| `repositories` | `repositories.deduplicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L392) |
-| `resolution` | `resolution.curate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L725) |
-| `resolution` | `resolution.detect_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L332) |
-| `resolution` | `resolution.infer_repositories` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L363) |
-| `resolution` | `resolution.investigate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L727) |
-| `scorecards` | `scorecards.fetch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L400) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L694) |
+| `inputs` | `inputs.load_accepted` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L315) |
+| `publication` | `publication.native_advisory_lookup` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L466) |
+| `publication` | `publication.publish_context` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L547) |
+| `publication` | `publication.publish_sbom` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L742) |
+| `repositories` | `repositories.deduplicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L393) |
+| `resolution` | `resolution.curate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L734) |
+| `resolution` | `resolution.detect_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L333) |
+| `resolution` | `resolution.infer_repositories` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L364) |
+| `resolution` | `resolution.investigate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L736) |
+| `scorecards` | `scorecards.fetch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L401) |
 
 ### Accepted input declarations
 
 | Producer | Dataset | Schema | Channel | Availability | Missing policy |
 | --- | --- | --- | --- | --- | --- |
-| `job_artifact_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_artifact_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_artifact_indexing` | `artifact_catalog` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `archive_members` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `artifact_relationships` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_artifact_indexing` | `artifact_index_summary` | `appsec-review/artifact-indexing/1` | handoff | optional | gap |
+| `job_artifact_indexing` | `artifact_index_summary` | `appsec-review/artifact-indexing/1` | handoff | required | reject |
 | `job_cpp_compiled_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_cpp_compiled_analysis` | `cpp_build_graph` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_cpp_compiled_analysis` | `clang_ast` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
@@ -60,24 +60,24 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_cpp_compiled_analysis` | `cpp_blocked_branches` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_cpp_compiled_analysis` | `cpp_plan_and_summary` | `appsec-review/cpp-compiled-analysis/2` | handoff | optional | gap |
 | `job_cpp_compiled_analysis` | `cpp_case_material` | `application/octet-stream` | handoff | optional | gap |
-| `job_evidence_collection` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_evidence_collection` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_evidence_collection` | `static_tool_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_evidence_collection` | `static_tool_evidence` | `appsec-review/static-tool-evidence/2` | handoff | optional | gap |
 | `job_evidence_collection` | `static_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
-| `job_language_build` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_language_build` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_language_build` | `topology_refinement_inputs` | `appsec-review/build-topology-refinement/1` | handoff | optional | gap |
 | `job_language_build` | `build_actions` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_language_build` | `jvm_build_actions` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_language_build` | `language_build_receipts` | `appsec-review/language-build-handoff/2` | handoff | optional | gap |
+| `job_language_build` | `language_build_receipts` | `appsec-review/language-build-handoff/2` | handoff | required | reject |
 | `job_language_build` | `build_workspaces` | `application/octet-stream` | handoff | optional | gap |
-| `job_target_catalog` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_target_catalog` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_target_catalog` | `target_artifact_inputs` | `appsec-review/target-artifact-intake/1` | handoff | optional | gap |
 | `job_target_catalog` | `source_files` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `declaration_symbols` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `components` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `target_documents` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `build_units` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_target_catalog` | `catalog_documents` | `appsec-review/target-catalog/1` | handoff | optional | gap |
+| `job_target_catalog` | `catalog_documents` | `appsec-review/target-catalog/1` | handoff | required | reject |
 | `job_third_party_data_sync` | `feed_snapshot` | `appsec-review/public-feed-use/1` | external | optional | gap |
 
 ### Published dataset declarations
@@ -148,7 +148,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | None declared |
 | integration | `tests/integration/job_dependency_intelligence/test_native_sbom_job.py`<br>`tests/integration/test_dependency_job_acceptance.py` |
 | live | None declared |
-| unit | `tests/unit/job_dependency_intelligence/test_contract.py`<br>`tests/unit/job_dependency_intelligence/test_datasets.py`<br>`tests/unit/job_dependency_intelligence/test_dependency_intelligence.py`<br>`tests/unit/job_dependency_intelligence/test_edge_branches.py`<br>`tests/unit/job_dependency_intelligence/test_job_graph.py`<br>`tests/unit/job_dependency_intelligence/test_native_component_curation.py`<br>`tests/unit/job_dependency_intelligence/test_native_discovery.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_runtime.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_wiring.py`<br>`tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py`<br>`tests/unit/job_dependency_intelligence/test_native_advisories.py`<br>`tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py`<br>`tests/unit/job_dependency_intelligence/test_native_spdx.py`<br>`tests/unit/job_dependency_intelligence/test_sca_reachability.py`<br>`tests/unit/job_dependency_intelligence/test_unity_inventory.py` |
+| unit | `tests/unit/job_dependency_intelligence/test_publication_contract.py`<br>`tests/unit/job_dependency_intelligence/test_contract.py`<br>`tests/unit/job_dependency_intelligence/test_datasets.py`<br>`tests/unit/job_dependency_intelligence/test_dependency_intelligence.py`<br>`tests/unit/job_dependency_intelligence/test_edge_branches.py`<br>`tests/unit/job_dependency_intelligence/test_job_graph.py`<br>`tests/unit/job_dependency_intelligence/test_native_component_curation.py`<br>`tests/unit/job_dependency_intelligence/test_native_discovery.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_runtime.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_wiring.py`<br>`tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py`<br>`tests/unit/job_dependency_intelligence/test_native_advisories.py`<br>`tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py`<br>`tests/unit/job_dependency_intelligence/test_native_spdx.py`<br>`tests/unit/job_dependency_intelligence/test_sca_reachability.py`<br>`tests/unit/job_dependency_intelligence/test_unity_inventory.py` |
 
 ### Dagster placement
 

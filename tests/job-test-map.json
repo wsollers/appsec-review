@@ -262,6 +262,7 @@
     },
     "job_dependency_intelligence": {
       "unit": [
+        "tests/unit/job_dependency_intelligence/test_publication_contract.py",
         "tests/unit/job_dependency_intelligence/test_contract.py",
         "tests/unit/job_dependency_intelligence/test_datasets.py",
         "tests/unit/job_dependency_intelligence/test_dependency_intelligence.py",
@@ -344,6 +345,8 @@
     },
     "job_final_report_publication": {
       "unit": [
+        "tests/unit/job_final_report_publication/test_report_outcomes.py",
+        "tests/test_final_report.py::test_schemas_are_valid_draft_2020_12_with_the_final_report_id",
         "tests/unit/job_final_report_publication/test_contract_and_settings.py",
         "tests/unit/job_final_report_publication/test_job_units.py",
         "tests/unit/job_final_report_publication/test_report_and_render.py",
@@ -392,6 +395,7 @@
         "tests/unit/job_inference_security_review/test_contract.py::test_sources_index_names_and_package_works_tamper_guard",
         "tests/unit/job_inference_security_review/test_contract.py::test_status_artifact_and_read_integrity_guards",
         "tests/unit/job_inference_security_review/test_handlers.py",
+        "tests/unit/job_inference_security_review/test_t173_evidence_and_budgets.py",
         "tests/unit/job_inference_security_review/test_stages_and_schemas.py",
         "tests/unit/observability_findings/test_actionability_evidence.py",
         "tests/unit/review/test_schema_set_messages.py",

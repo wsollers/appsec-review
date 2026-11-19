@@ -74,7 +74,7 @@ flowchart TB
     inf --> gate
     poc --> gate
     rem --> gate
-    gate --> rep["job_final_report_publication: appsec-review/final-report/3 + radar/2 + SARIF 2.1.0"]
+    gate --> rep["job_final_report_publication: appsec-review/final-report/4 + radar/2 + SARIF 2.1.0"]
     gate --> vex["job_openvex_export: CVE-bound reachability VEX"]
   end
 ```

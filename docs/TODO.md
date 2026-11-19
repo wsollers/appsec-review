@@ -358,8 +358,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5124 | [Do not cache failed CPG exports or retain failed intermediates](#t-5124-do-not-cache-failed-cpg-exports-or-retain-failed-intermediates) | graph | open |
 | T-5125 | [Preserve debug range lookup bounds and public-only PDB symbols](#t-5125-preserve-debug-range-lookup-bounds-and-public-only-pdb-symbols) | binary | open |
 | T-5126 | [Preserve package coordinates across dependency consumers](#t-5126-preserve-package-coordinates-across-dependency-consumers) | evidence | open |
-| T-5127 | [Fingerprint dependency reachability and its advisory snapshot](#t-5127-fingerprint-dependency-reachability-and-its-advisory-snapshot) | evidence | open |
-| T-5128 | [Align dependency input requirements with actual required reads](#t-5128-align-dependency-input-requirements-with-actual-required-reads) | pipeline | open |
+| T-5127 | [Fingerprint dependency reachability and its advisory snapshot](#t-5127-fingerprint-dependency-reachability-and-its-advisory-snapshot) | evidence | done (2026-11-19, 023cb1e007f610c2bca289dd11e15d2020354a60) |
+| T-5128 | [Align dependency input requirements with actual required reads](#t-5128-align-dependency-input-requirements-with-actual-required-reads) | pipeline | done (2026-11-19, 023cb1e007f610c2bca289dd11e15d2020354a60) |
 | T-5129 | [Read real catalog documents once with custody and parse gaps](#t-5129-read-real-catalog-documents-once-with-custody-and-parse-gaps) | evidence | open |
 | T-5130 | [Preserve route-local guards authentication methods and operation context](#t-5130-preserve-route-local-guards-authentication-methods-and-operation-context) | evidence | open |
 | T-5131 | [Deliver document drift through the actual inference retrieval path](#t-5131-deliver-document-drift-through-the-actual-inference-retrieval-path) | review | open |
@@ -370,11 +370,11 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5136 | [Bind every verified unit context into the durable publication snapshot](#t-5136-bind-every-verified-unit-context-into-the-durable-publication-snapshot) | evidence | open |
 | T-5137 | [Reject contradictory certified buckets and counts](#t-5137-reject-contradictory-certified-buckets-and-counts) | evidence | open |
 | T-5138 | [Export only evidence-backed SARIF flows fixes classifications and severity](#t-5138-export-only-evidence-backed-sarif-flows-fixes-classifications-and-severity) | review | open |
-| T-5139 | [Carry certified reachable supply-chain facts into the report](#t-5139-carry-certified-reachable-supply-chain-facts-into-the-report) | review | open |
-| T-5140 | [Conserve report bounds completion metrics and renderer outcomes](#t-5140-conserve-report-bounds-completion-metrics-and-renderer-outcomes) | review | open |
+| T-5139 | [Carry certified reachable supply-chain facts into the report](#t-5139-carry-certified-reachable-supply-chain-facts-into-the-report) | review | done (2026-11-19, e80e099908d74e4f1fca7714c8bcd99e7dce76ce) |
+| T-5140 | [Conserve report bounds completion metrics and renderer outcomes](#t-5140-conserve-report-bounds-completion-metrics-and-renderer-outcomes) | review | done (2026-11-19, e80e099908d74e4f1fca7714c8bcd99e7dce76ce) |
 | T-5141 | [Update only active required image pins by default](#t-5141-update-only-active-required-image-pins-by-default) | images | open |
 | T-5142 | [Verify declared preinstalled CodeQL runtime identities at readiness](#t-5142-verify-declared-preinstalled-codeql-runtime-identities-at-readiness) | images | open |
-| T-5143 | [Honor evidence request wire shapes and zero retrieval budgets](#t-5143-honor-evidence-request-wire-shapes-and-zero-retrieval-budgets) | review | open |
+| T-5143 | [Honor evidence request wire shapes and zero retrieval budgets](#t-5143-honor-evidence-request-wire-shapes-and-zero-retrieval-budgets) | review | done (2026-11-19, d6e7b56c398525abe058d8d06b7a6143994e18a1) |
 | T-5144 | [Require verifier blindness evidence for independent confirmation](#t-5144-require-verifier-blindness-evidence-for-independent-confirmation) | review | done (2026-11-19, c1343965c1af975f7cb786e2657c852b099c9823) |
 | T-5145 | [Keep failed judges distinct from intentionally not-convened judges](#t-5145-keep-failed-judges-distinct-from-intentionally-not-convened-judges) | review | open |
 | T-5146 | [Honor disabled model profiles throughout inference dispatch](#t-5146-honor-disabled-model-profiles-throughout-inference-dispatch) | review | open |
@@ -4395,21 +4395,29 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5127 — Fingerprint dependency reachability and its advisory snapshot
 
-- **State:** open
+- **State:** done (2026-11-19, 023cb1e007f610c2bca289dd11e15d2020354a60)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: DI-08. Inventory fingerprint excludes the reachability output and its OSV snapshot.
 - **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`; follow-up to closed T-170 (not reopened).
+  Inventory identity binds actual SCA document bytes, verified OSV snapshot and effective
+  settings/comparator identities before immutable publication. Main: 19 passed/9.63 s,
+  two workers, seed 5127, no skips or slow cases; includes static registry/direct-Dagster
+  definition parity, not a Dagster run.
 
 ### T-5128 — Align dependency input requirements with actual required reads
 
-- **State:** open
+- **State:** done (2026-11-19, 023cb1e007f610c2bca289dd11e15d2020354a60)
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: DI-09. Required loader reads disagree with optional input declarations.
 - **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/datasets.py`, `src/appsec_review/jobs/job_dependency_intelligence/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`.
+  Shares the 19-case main selection with T-5127. Four framework envelopes and three required
+  summary datasets now match unconditional accepted readers. Empty/partial build outputs,
+  optional C/C++/Syft/OSV inputs and actual consumption receipts retain their distinctions;
+  no successful native build or additional input authority is required.
 
 ### T-5129 — Read real catalog documents once with custody and parse gaps
 
@@ -4504,21 +4512,31 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5139 — Carry certified reachable supply-chain facts into the report
 
-- **State:** open
+- **State:** done (2026-11-19, e80e099908d74e4f1fca7714c8bcd99e7dce76ce)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: FR-F08. Reachable supply-chain count is permanently zero because its input is forbidden.
 - **Scope:** `src/appsec_review/jobs/job_final_report_publication/report.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
+  The false zero is repaired in report `/4`: absent gate-certified reachability is `null`
+  with `certified_reachability_unavailable`, rendered N/A with an explanation. No proxy or new
+  input was introduced; positive certified reachability counting remains unavailable, not
+  claimed implemented. Historical numeric reports retain their original semantics. Main report
+  and static schema selection: 122 passed/11.46 s, two workers, seed 5139, no skips or slow cases.
 
 ### T-5140 — Conserve report bounds completion metrics and renderer outcomes
 
-- **State:** open
+- **State:** done (2026-11-19, e80e099908d74e4f1fca7714c8bcd99e7dce76ce)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: FR-F09, FR-F10. Legal chain volume can make final report assembly fail its own schema; Completion summary drops new report metrics and disabled-PDF outcomes.
 - **Scope:** `src/appsec_review/jobs/job_final_report_publication/job.py`, `src/appsec_review/jobs/job_final_report_publication/report.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
+  Shares the 122-case main selection with T-5139. Report `/4` represents all admitted chains
+  and derived gaps; prior schemas remain unchanged. Completion retains nullable snapshot
+  measurements without summing ratios, and distinguishes rendered/failed/disabled PDF outcomes.
+  The inherited static schema inventory omitted SARIF; its name was restored without weakening
+  assertions or executing heavy legacy fixtures. Native rendering/live validation was not run.
 
 ### T-5141 — Update only active required image pins by default
 
@@ -4540,12 +4558,16 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5143 — Honor evidence request wire shapes and zero retrieval budgets
 
-- **State:** open
+- **State:** done (2026-11-19, d6e7b56c398525abe058d8d06b7a6143994e18a1)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: ISR-F01, ISR-F05. Round-2 fulfillment consumes incompatible request and retrieval wire formats; Configured zero retrieval queries silently becomes one.
 - **Scope:** `src/appsec_review/jobs/job_inference_security_review/evidence_fulfillment.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_inference_security_review.md`; follow-up to closed T-173 (not reopened).
+  Canonical obligation questions and real retrieval rows retain shard/manifest/content
+  identities, locations and partial qualifications. Delivery is not semantic satisfaction.
+  Team and chain cells preserve zero-query profiles and final-only execution without widening
+  grants. Main: 74 passed/3.95 s, two workers, seed 5143, no skips or slow cases.
 
 ### T-5144 — Require verifier blindness evidence for independent confirmation
 

@@ -29,11 +29,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L215) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L217) |
 | `load` | `load.accepted_gate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L103) |
 | `report` | `report.assemble` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L117) |
-| `report` | `report.render` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L168) |
-| `report` | `report.render_pdf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L195) |
+| `report` | `report.render` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L170) |
+| `report` | `report.render_pdf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L197) |
 
 ### Accepted input declarations
 
@@ -46,7 +46,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
-| `final_report_publications` | `acceptance` | `appsec-review/final-report/3` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `final_report_publications` | `acceptance` | `appsec-review/final-report/4` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `final_report_sarif` | `report` | `application/sarif+json;version=2.1.0` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `final_report_sarif_accounting` | `report` | `appsec-review/sarif-export-result/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
@@ -63,7 +63,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | `tests/test_final_report.py::test_report_json_is_schema_valid_and_contains_the_required_sections` |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/unit/job_final_report_publication/test_contract_and_settings.py`<br>`tests/unit/job_final_report_publication/test_job_units.py`<br>`tests/unit/job_final_report_publication/test_report_and_render.py`<br>`tests/unit/job_final_report_publication/test_report_custody.py` |
+| unit | `tests/unit/job_final_report_publication/test_report_outcomes.py`<br>`tests/test_final_report.py::test_schemas_are_valid_draft_2020_12_with_the_final_report_id`<br>`tests/unit/job_final_report_publication/test_contract_and_settings.py`<br>`tests/unit/job_final_report_publication/test_job_units.py`<br>`tests/unit/job_final_report_publication/test_report_and_render.py`<br>`tests/unit/job_final_report_publication/test_report_custody.py` |
 
 ### Dagster placement
 
@@ -87,7 +87,7 @@ flowchart LR
   producer1 --> input1 --> job
   input1 -. schema .-> input_schema1
   output0["final_report_publications"]
-  output_schema0["appsec-review/final-report/3"]
+  output_schema0["appsec-review/final-report/4"]
   job --> output0
   output0 -. schema .-> output_schema0
   output1["final_report_sarif"]
@@ -130,9 +130,11 @@ The [handler](../../src/appsec_review/jobs/job_final_report_publication/job.py) 
    configured, invoke the pinned PDF tool. Unknown metrics remain N/A in the source; the receipt
    distinguishes rendered, disabled and failed outcomes.
 
-The current report is `final-report/3` with `security-radar-tracker/2` (T-5088). Unknown
+The current report is `final-report/4` with `security-radar-tracker/2` (T-5088, T-5139, T-5140). Unknown
 exposure/inspection/corroboration and undefined derived metrics are `null` with named reasons, displayed
 as **N/A** across formats and omitted from chart geometry. Measured zero remains numeric.
+Advisory reachability likewise remains unavailable without a gate-certified measurement; neither
+finding confirmation nor imported packages is substituted for that missing input.
 The gate supplies no per-domain exposure/inspection telemetry; package density and lane-B
 coverage-cell counts cannot substitute for it, and report assembly gains no new upstream read.
 Accepted package counts likewise cannot establish scanner-lead corroboration. Missing corroboration
