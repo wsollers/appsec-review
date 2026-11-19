@@ -413,16 +413,19 @@ def test_dual_seeded_fusion_codeql_sarif_clangd_routes_and_resolution_tiers() ->
             ],
         }
     ]
+    for fact in codeql_facts:
+        fact["producer"] = {"name": "codeql-export"}
     clangd_symbols = [
-        {"identity": "c:@F@cpp_entry", "name": "cpp_entry", "path": "src/native.cpp", "start_line": 2, "end_line": 8},
-        {"identity": "c:@F@cpp_exec", "name": "cpp_exec", "path": "src/native.cpp", "start_line": 10, "end_line": 15},
+        {"identity": "c:@F@cpp_entry", "kind": "Function", "name": "cpp_entry", "path": "src/native.cpp", "start_line": 2, "end_line": 8},
+        {"identity": "c:@F@cpp_exec", "kind": "Function", "name": "cpp_exec", "path": "src/native.cpp", "start_line": 10, "end_line": 15},
     ]
     clangd_relations = [
         {
             "kind": "CALLS",
             "source_id": "c:@F@cpp_entry",
             "target_id": "c:@F@cpp_exec",
-            "payload": {"line": 7},
+            "payload": {"locations": [{"path": "src/native.cpp", "line": 7, "column": 1}],
+                        "occurrences": 1},
         }
     ]
     route_entrypoints = [
@@ -660,7 +663,8 @@ def test_sqlite_publication_and_retrieval_queries_cpg_slice_and_call_paths(tmp_p
         guard_expr="input_val is None",
         sink_call="cursor.execute",
     )
-    ts_py = synthesize_file_cfg(py_ast, language="python", path="auth/login.py")
+    ts_py = synthesize_file_cfg(py_ast, language="python", path="auth/login.py",
+                               file_sha256=file_sha256(login_file))
     cpg = synthesize_alternate_cpg(
         tree_sitter_files=[ts_py],
         route_entrypoints=[
@@ -691,9 +695,9 @@ def test_sqlite_publication_and_retrieval_queries_cpg_slice_and_call_paths(tmp_p
     assert summary_doc["counts"]["alternate_cpg_edges"] >= 6
     assert summary_doc["counts"]["entrypoints_linked"] >= 1
     assert summary_doc["counts"]["reachable_sink_paths_precomputed"] >= 1
-    assert (run_root / "data/code-graph/alternate-cpg/cpg-nodes.jsonl").is_file()
-    assert (run_root / "data/code-graph/alternate-cpg/cpg-edges.jsonl").is_file()
-    assert (run_root / "data/code-graph/alternate-cpg/cpg-paths.jsonl").is_file()
+    assert (run_root / summary_doc["artifacts"]["nodes"]).is_file()
+    assert (run_root / summary_doc["artifacts"]["edges"]).is_file()
+    assert (run_root / summary_doc["artifacts"]["paths"]).is_file()
     assert (unit_root / "alternate-cpg-summary.json").is_file()
 
     manifest_path = run_root / "data" / "indices" / "manifest.json"

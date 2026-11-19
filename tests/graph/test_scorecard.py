@@ -80,6 +80,18 @@ def test_scorecard_paths_carry_endpoints_eligibility_producers_and_correlation(t
     assert section["correlation"] == {"bridged": 1, "partial": 0, "broken": 0, "uncorrelated": 0}
 
 
+def test_totals_do_not_depend_on_display_samples(tmp_path, monkeypatch):
+    from appsec_review.graph import scorecard
+    _, _, _, full = _graph(tmp_path / "full")
+    monkeypatch.setattr(scorecard, "MAX_FUNCTIONS", 1)
+    monkeypatch.setattr(scorecard, "MAX_PATHS", 0)
+    _, _, _, sample = _graph(tmp_path / "sample")
+    complete = assemble_scorecard(run_id="r", target_snapshot=SNAPSHOT, scopes=[full], catalog=CATALOG)
+    truncated = assemble_scorecard(run_id="r", target_snapshot=SNAPSHOT, scopes=[sample], catalog=CATALOG)
+    assert truncated["totals"] == complete["totals"]
+    assert sample["functions_omitted"] == 2 and sample["paths_omitted"] == 1
+
+
 def test_dispositions_decide_which_functions_are_first_party(tmp_path) -> None:
     _, _, _, section = _graph(tmp_path, dispositions=SourceDispositions(vendored=("src/net.c",)))
     assert section["functions"] == []

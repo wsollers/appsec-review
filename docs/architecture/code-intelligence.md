@@ -223,12 +223,23 @@ artifact, dependency and imported execution-evidence story; shared mechanisms re
 runs (`enabled = false` in `appsec-review.toml`, `manual = true` in `containers/catalog.toml`) to
 eliminate whole-program OOM failures on large targets while preserving explicit operator opt-in.
 
-Instead, every run synthesizes a bounded, queryable Alternate CPG/CFG (`appsec-review/alternate-cpg/1`)
+When `settings.alternate_cpg.enabled` is true, the job synthesizes an Alternate CPG/CFG (`appsec-review/alternate-cpg/1`)
 in `job_code_graph_index` by fusing `job_tree_sitter_ast` (`appsec-review/tree-sitter-cfg/1`),
 `job_codeql_analysis` graph exports, and (for C/C++ builds) `job_cpp_compiled_analysis`,
-`job_cpp_symbol_index`, and `job_clang_static_analysis`. Each function/call edge records its exact
-`resolution_tier` (`codeql_clang`, `codeql_treesitter`, `clang_treesitter`, or `treesitter_only`),
-precomputes bounded 8?12 hop entry-to-sink paths and backward/forward program slices, and exposes
+`job_cpp_symbol_index`, and `job_clang_static_analysis` through their accepted graph projections.
+Each function/call edge records its producer
+`resolution_tier` (`codeql_semantic`, `clangd_semantic`, `hybrid_fused`, or `syntactic_fallback`).
+The tier is not an exactness or admissibility verdict: original producer qualifiers, disputed
+cross-checks, source identities and occurrence spans remain attached. Non-call symbols and
+`REFERENCES` are not invocation edges. Qualified functions, overload signatures and translation-unit
+identities are not merged by nearby line numbers.
+
+The job precomputes bounded entry-to-sink paths (default 10 call hops; maximum 16) and exposes
+on-demand backward/forward program slices. Traversals bound states, frontier and edge inspections
+separately from output limits; cut branches are gaps, not evidence that no path exists.
+Content-derived paths keep alternate JSONL and SQLite publications immutable across equal-count
+rebuilds. See [the operating contract](../operations/code-graph-index.md#alternate-graph-context).
+The syntax and graph producers expose
 `query_cfg_function`, `query_guard_dominators`, `query_cpg_slice`, and `query_call_paths` through
 `RetrievalCore`.
 
@@ -246,10 +257,10 @@ flowchart LR
   builds --> codeql
   codeql --> sarif["native SARIF + scanner observations"]
   codeql --> exports["raw bounded graph exports + seed ledger"]
-  syntax -->|intra-procedural CFG + guards| graph["job_code_graph_index: appsec-review/alternate-cpg/1"]
+  syntax -->|intra-procedural CFG + guards| graph["job_code_graph_index: primary facts + optional alternate context"]
   exports --> graph
   compiled -->|AST / IR cross-check| graph
-  symbols --> graph
+  symbols -->|"typed symbols; CALLS != REFERENCES; occurrence locations"| graph
   clang -->|diagnostics / sink corroboration| graph
   svf -. "optional alias cross-check" .-> graph
   cpg -. "optional seeded CPG context" .-> graph

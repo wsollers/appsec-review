@@ -72,6 +72,56 @@ attached; and the first-party exclusion counts. The report renders the text in i
 (`reporting/graph_quality.py`). It is a measurement of the published graph, never evidence about the
 target. [Smoke runs](test-targets.md#smoke-runs) says how to read it.
 
+Function and path detail arrays are bounded samples (5,000 functions and 1,000 paths per scope).
+Run totals count all analyzed functions and eligible paths, not just displayed rows; the
+`functions_omitted` and `paths_omitted` counts describe display omissions.
+SARIF correlation requires monotonically ordered step matches, including endpoints. An exact span
+found earlier in a candidate path does not corroborate a reversed scanner trace. Integer range
+bounds are parsed as integers directly, including values outside binary floating-point precision.
+
+## Alternate graph context
+
+The optional `analysis/alternate-cpg` shard is a context projection, not a replacement for the
+primary graph's admissibility rules (T-5098/T-5099).
+
+- `enabled=false` bypasses input harvesting and synthesis and publishes an empty shard with an
+  explicit disabled gap. Primary graph work is unaffected.
+- Tree-sitter fallback consumes the actual normalized `syntax`, `grammar_native_type`, `cfg`,
+  `cfg_nodes` and `cfg_edges` fields. Distinct CFG node identities remain distinct even when
+  they refer to one AST location.
+- clangd variable symbols stay non-call symbols. `REFERENCES` stays a reference; only `CALLS`
+  contributes invocation reachability, and each available occurrence keeps its producer location.
+  Missing occurrences, unresolved overloads and ambiguous enclosing/guard contexts are gaps.
+- Canonical nested `result.caller` and `result.callee` identities determine calls. Each occurrence
+  keeps its own location and guards; a caller/callee pair alone never merges two branch conditions.
+  Original producer, coverage, cross-check and admissibility qualifiers survive projection and
+  SQLite round-tripping. A resolution tier alone never makes a disputed edge exact.
+- Flat SARIF steps are grouped by flow/thread and ordered by ordinal. Unmapped steps break the
+  projected chain rather than introducing a flow across missing evidence.
+- Source hashes come only from accepted source locations/catalog rows. Original bytes, coordinates
+  and backing metadata are retained. Line-only projections are ambiguous; absent identities
+  publish no fabricated source location and carry `source_identity_unavailable`.
+- Alternate JSONL files live under `data/code-graph/alternate-cpg/<content-fingerprint>/`; the
+  SQLite name also uses a content fingerprint covering graph content, source identities and
+  synthesis settings. Publication never unlinks a previously named SQLite shard.
+- Indexed records retain the legacy JSON-string representation when it fits the index's existing
+  sanitizer unchanged. Larger or redacted records use additive structured payload fields instead
+  of truncated JSON strings. Any structural redaction/truncation is a named
+  `alternate_cpg_projection_limited` gap and cannot retain an exact projected edge/path; the full
+  portable JSONL artifact remains available. Readers accept both representations under the same
+  declared schema version.
+- Path traversal bounds are 1,024 visited states, 1,024 frontier states and 16,384 edge inspections,
+  independent of configured path/hop limits. Slice seeds obey the node bound; reaching depth,
+  node, path or work bounds records cut metadata and named gaps. Counts describe unexamined
+  branches, not a claimed count of all omitted complete paths.
+
+The summary records synthesis cuts and publication gaps. Query adapters retain the most restrictive
+saved `max_slice_depth` when composing accepted shards, check the query deadline during loading and
+Python traversal, and forward cut gaps and truncation even when no path was found. Slice query
+pagination cannot enlarge the traversal beyond 1,024 nodes. Legacy shards without saved limits
+remain readable using the pre-existing query bounds; missing evidence qualifiers are never treated
+as exactness.
+
 ## Units
 
 | Unit | Work |

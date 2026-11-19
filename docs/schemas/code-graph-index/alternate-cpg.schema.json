@@ -4,6 +4,15 @@
   "title": "appsec-review/alternate-cpg/1",
   "description": "Universal multi-language Alternate CPG and inter-procedural CFG/dataflow synthesis fusing Tree-sitter AST/CFG, CodeQL semantic exports/SARIF, symbol declarations, framework entrypoints, and clangd across all 9 target languages (T-169).",
   "$defs": {
+    "evidence": {
+      "description": "Original accepted producer qualifiers; not new evidence authority.",
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "location": {
+      "description": "Original accepted source span or producer occurrence; null when unavailable.",
+      "type": ["object", "null"]
+    },
     "resolution_tier": {
       "type": "string",
       "enum": [
@@ -136,6 +145,26 @@
           "minimum": 1,
           "maximum": 16
         },
+        "max_slice_depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "gaps": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "traversal": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "visited_states": {"type": "integer", "minimum": 0},
+            "inspected_edges": {"type": "integer", "minimum": 0},
+            "truncated": {"type": "boolean"},
+            "cuts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+            "gaps": {"type": "array", "items": {"type": "string"}}
+          }
+        },
         "counts": {
           "type": "object",
           "additionalProperties": false,
@@ -221,6 +250,7 @@
           "type": "string",
           "enum": [
             "function",
+            "symbol",
             "cfg_block",
             "call_site",
             "entrypoint",
@@ -324,6 +354,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
         }
       }
     },
@@ -354,6 +390,7 @@
           "type": "string",
           "enum": [
             "CALLS",
+            "REFERENCES",
             "FLOWS_TO",
             "GUARDS",
             "DEF_USE",
@@ -418,6 +455,18 @@
           "items": {
             "type": "string"
           }
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "occurrence": {
+          "type": ["string", "null"]
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
+        "exact": {
+          "type": "boolean"
         }
       }
     },
@@ -475,6 +524,9 @@
           "maximum": 16
         },
         "entrypoint_linked": {
+          "type": "boolean"
+        },
+        "exact": {
           "type": "boolean"
         },
         "resolution_tier": {
@@ -541,6 +593,19 @@
                   "integer",
                   "null"
                 ]
+              },
+              "edge_id": {
+                "type": ["string", "null"]
+              },
+              "exact": {
+                "type": "boolean"
+              },
+              "evidence": {
+                "$ref": "#/$defs/evidence"
+              },
+              "guard_dominators": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/guard_dominator"}
               }
             }
           }

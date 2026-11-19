@@ -476,6 +476,7 @@ def _load_accepted_alternate_cpg(
     merged_nodes: dict[str, dict[str, Any]] = {}
     merged_edges: dict[str, dict[str, Any]] = {}
     merged_paths: dict[str, dict[str, Any]] = {}
+    slice_depth: int | None = None
     with ExitStack() as stack:
         for shard in shards:
             core._check_deadline(deadline)
@@ -488,7 +489,10 @@ def _load_accepted_alternate_cpg(
                         + (f": {row['gap']}" if row["gap"] else "")
                     )
             gaps.extend(f"analysis/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
-            loaded = load_cpg_from_sqlite(database)
+            loaded = load_cpg_from_sqlite(database, check_deadline=lambda: core._check_deadline(deadline))
+            if "max_slice_depth" in loaded:
+                depth = int(loaded["max_slice_depth"])
+                slice_depth = depth if slice_depth is None else min(slice_depth, depth)
             for node in loaded["nodes"]:
                 merged_nodes.setdefault(str(node["node_id"]), node)
             for edge in loaded["edges"]:
@@ -501,6 +505,7 @@ def _load_accepted_alternate_cpg(
             "nodes": [merged_nodes[k] for k in sorted(merged_nodes)],
             "edges": [merged_edges[k] for k in sorted(merged_edges)],
             "paths": [merged_paths[k] for k in sorted(merged_paths)],
+            **({"max_slice_depth": slice_depth} if slice_depth is not None else {}),
         },
         gaps,
     )
@@ -520,7 +525,9 @@ def query_cpg_slice(
     cursor: str | None = None,
 ) -> dict[str, Any]:
     """Run a bounded backward or forward slice against the accepted ``alternate-cpg`` shard."""
-    from appsec_review.jobs.job_code_graph_index.alternate_cpg import CPG_EDGE_KINDS, compute_cpg_slice
+    from appsec_review.jobs.job_code_graph_index.alternate_cpg import (
+        CPG_EDGE_KINDS, MAX_PATH_STATES, compute_cpg_slice,
+    )
 
     if direction not in {"backward", "forward"}:
         raise ValueError("schema_violation: direction must be 'backward' or 'forward'")
@@ -570,8 +577,10 @@ def query_cpg_slice(
             direction=direction,
             max_depth=max_depth,
             edge_kinds=kinds_tuple,
-            max_nodes=max(offset + limit + 1, 100),
+            max_nodes=min(max(offset + limit + 1, 100), MAX_PATH_STATES),
+            check_deadline=lambda: core._check_deadline(deadline),
         )
+        gaps.extend(slice_doc.get("gaps", ()))
         nodes = slice_doc["nodes"]
         if not nodes:
             gaps.append("no Alternate CPG node matched the slice criterion")
@@ -631,11 +640,12 @@ def query_call_paths(
     request_hash = core._request_hash(QUERY_CALL_PATHS, parameters)
     offset = core._offset(cursor, request_hash)
 
-    def operation(deadline: float) -> tuple[list[dict[str, Any]], list[str], bool, int]:
+    def operation(deadline: float) -> tuple[list[dict[str, Any]], list[str], bool, int, bool]:
         cpg, gaps = _load_accepted_alternate_cpg(core, deadline)
         if cpg is None:
-            return [], gaps, False, offset
+            return [], gaps, False, offset, False
         core._check_deadline(deadline)
+        diagnostics: dict[str, Any] = {}
         paths = find_interprocedural_paths(
             cpg,
             source=source,
@@ -645,14 +655,17 @@ def query_call_paths(
             language=language,
             max_hops=max_hops,
             max_paths=max(offset + limit + 1, 50),
+            diagnostics=diagnostics,
+            check_deadline=lambda: core._check_deadline(deadline),
         )
+        gaps.extend(diagnostics.get("gaps", ()))
         if not paths:
             gaps.append(
                 f"no Alternate CPG inter-procedural path matched within max_hops={max_hops}; "
                 "absence beyond the hop bound or unresolved dynamic dispatch is not excluded"
             )
         has_more = len(paths) > offset + limit
-        return paths[offset : offset + limit], gaps, has_more, offset
+        return paths[offset : offset + limit], gaps, has_more, offset, bool(diagnostics.get("truncated"))
 
     return core._execute(QUERY_CALL_PATHS, parameters, operation)
 

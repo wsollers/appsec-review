@@ -23,7 +23,7 @@ across all 9 target languages (``cpp``, ``java``, ``javascript``, ``python``,
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 import hashlib
 import json
@@ -32,7 +32,8 @@ import re
 import sqlite3
 from typing import Any
 
-from appsec_review.indexing.store import ShardSet
+from appsec_review.indexing.store import ShardSet, open_shard
+from appsec_review.graph.correlate import _flow_groups
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime.consume import accepted_upstream
 from appsec_review.runtime.inputs import observe_output, observe_shard
@@ -47,11 +48,15 @@ from appsec_review.retrieval.model import (
     SourceLocation,
     canonical_json,
     normalize_relative_path,
+    sanitize_producer_data,
 )
 from appsec_review.storage import atomic_bytes, atomic_json, file_sha256
 
 ALTERNATE_CPG_SCHEMA = "appsec-review/alternate-cpg/1"
 ALTERNATE_CPG_SHARD_ID = "alternate-cpg"
+MAX_PATH_STATES = 1024
+MAX_PATH_FRONTIER = 1024
+MAX_TRAVERSAL_EDGES = 16384
 
 SUPPORTED_LANGUAGES: tuple[str, ...] = (
     "cpp",
@@ -80,6 +85,7 @@ _TIER_RANK: dict[str, int] = {
 
 CPG_NODE_KINDS: tuple[str, ...] = (
     "function",
+    "symbol",
     "cfg_block",
     "call_site",
     "entrypoint",
@@ -88,6 +94,7 @@ CPG_NODE_KINDS: tuple[str, ...] = (
 
 CPG_EDGE_KINDS: tuple[str, ...] = (
     "CALLS",
+    "REFERENCES",
     "FLOWS_TO",
     "GUARDS",
     "DEF_USE",
@@ -264,6 +271,96 @@ class AlternateCpgSettings:
 
 def _cpg_digest(prefix: str, payload: Mapping[str, Any]) -> str:
     return f"{prefix}:" + hashlib.sha256(canonical_json(payload)).hexdigest()[:24]
+
+
+def _evidence(row: Mapping[str, Any]) -> dict[str, Any]:
+    payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else row
+    evidence = {"identity": row.get("identity") or row.get("relation_id"), **{
+        key: payload[key] for key in (
+            "producer", "exact", "coverage_status", "cross_check", "admissibility", "scope",
+            "kind", "signature", "qualified_name", "linkage", "translation_unit", "translation_unit_id",
+            "source_identity", "build_unit_id", "project_id", "gaps",
+            "query_identity", "rule_id", "scope_id", "translation_scope_id",
+            "upstream", "authority",
+        ) if key in payload}}
+    if row.get("accepted_shard"):
+        evidence["accepted_shard"] = dict(row["accepted_shard"])
+    if isinstance(payload.get("result"), Mapping):
+        evidence["result"] = {key: value for key, value in payload["result"].items()
+                              if key in {"caller", "callee", "source", "sink", "argument_count", "in_loop"}}
+    return evidence
+
+
+def _producer(row: Mapping[str, Any]) -> str:
+    value = _evidence(row).get("producer", {})
+    name = value.get("name", "") if isinstance(value, Mapping) else str(value)
+    return "codeql" if name == "codeql-export" else name or "unattributed"
+
+
+def _exact_evidence(evidence: Mapping[str, Any]) -> bool:
+    admission = evidence.get("admissibility", {})
+    return (evidence.get("exact") is True
+            and evidence.get("coverage_status", "complete") == "complete"
+            and (evidence.get("cross_check") or {}).get("state", "not_covered") in {"agree", "not_covered"}
+            and admission.get("direct_eligible", True) is True)
+
+
+def _source_location(location: Mapping[str, Any]) -> dict[str, Any]:
+    result = dict(location)
+    if "producer_location_json" in result:
+        result["producer_location"] = json.loads(result.pop("producer_location_json") or "{}")
+    result["ambiguous"] = bool(result.get("ambiguous", False))
+    return result
+
+
+def _located_entities(shards: ShardSet, *, kinds: Sequence[str] = ()) -> Iterable[dict[str, Any]]:
+    """Keep the original location provenance omitted by the generic row projection."""
+    for shard in shards.shards:
+        sql = ("SELECT l.entity_id, l.target_snapshot, l.producer_location_json FROM locations l "
+               "JOIN entities e ON e.identity=l.entity_id")
+        if kinds:
+            sql += " WHERE e.kind IN (" + ",".join("?" for _ in kinds) + ")"
+        with open_shard(shards.run_root, shard) as database:
+            native = {row["entity_id"]: {
+                "target_snapshot": row["target_snapshot"],
+                "producer_location": json.loads(row["producer_location_json"]),
+            } for row in database.execute(sql, tuple(kinds))}
+        for row in shards.entities((shard,), kinds=kinds):
+            if row["location"] is not None:
+                row["location"].update(native[row["identity"]])
+            row["accepted_shard"] = {"name": shard["name"], "shard_id": shard.get("shard_id", "default"),
+                                     "sha256": shard["sha256"]}
+            yield row
+
+
+def _relations_with_provenance(shards: ShardSet) -> Iterable[dict[str, Any]]:
+    for shard in shards.shards:
+        with open_shard(shards.run_root, shard) as database:
+            for record in database.execute(
+                "SELECT relation_id, kind, source_id, target_id, exact, confidence, ambiguity, payload_json "
+                "FROM relations ORDER BY relation_id"
+            ):
+                row = dict(record)
+                row["payload"] = json.loads(row.pop("payload_json"))
+                row["exact"] = bool(row["exact"])
+                row["accepted_shard"] = {"name": shard["name"], "shard_id": shard.get("shard_id", "default"),
+                                         "sha256": shard["sha256"]}
+                yield row
+
+
+def _cfg_location(record: Mapping[str, Any], snapshot: str) -> dict[str, Any] | None:
+    if not re.fullmatch(r"[0-9a-f]{64}", str(record.get("file_sha256") or "")):
+        return None
+    return {
+        "target_snapshot": snapshot, "path": record["path"], "file_sha256": record["file_sha256"],
+        "start_byte": int(record.get("start_byte") or 0), "end_byte": int(record.get("end_byte") or 0),
+        "start_line": int(record.get("start_line") or 1), "end_line": int(record.get("end_line") or 1),
+        "start_column": 1, "end_column": 1, "confidence": 0.75, "ambiguous": True,
+        "mapping_method": "tree-sitter-cfg-byte-span-columns-unavailable",
+        "producer_location": {**dict(record.get("producer_location") or {}),
+                              "source_identity": record.get("source_identity"),
+                              "function_id": record.get("function_id"), "ast_identity": record.get("ast_identity")},
+    }
 
 
 def _safe_rel_path(raw: Any) -> str:
@@ -507,6 +604,18 @@ def synthesize_alternate_cpg(
 ) -> dict[str, Any]:
     """Build the universal Alternate CPG across all 9 target languages."""
     cfg = settings or AlternateCpgSettings()
+    if not cfg.enabled:
+        return {
+            "schema": ALTERNATE_CPG_SCHEMA, "run_id": run_id, "target_snapshot": target_snapshot,
+            "max_hops": cfg.max_hops, "max_slice_depth": cfg.max_slice_depth,
+            "settings": asdict(cfg),
+            "nodes": [], "edges": [], "paths": [], "languages": [], "resolution_breakdown": {},
+            "counts": {key: 0 for key in ("alternate_cpg_nodes", "alternate_cpg_edges", "semantic_edges_count",
+                                        "syntactic_fallback_edges_count", "entrypoints_linked",
+                                        "reachable_sink_paths_precomputed")},
+            "gaps": ["alternate_cpg_disabled: disabled by configuration"],
+        }
+    gaps: list[str] = []
     nodes_by_id: dict[str, dict[str, Any]] = {}
     edges_by_id: dict[str, dict[str, Any]] = {}
 
@@ -530,6 +639,9 @@ def synthesize_alternate_cpg(
         parameters: Sequence[str] = (),
         external_id: str | None = None,
         decorators_text: str = "",
+        location: Mapping[str, Any] | None = None,
+        evidence: Mapping[str, Any] | None = None,
+        node_kind: str = "function",
     ) -> str:
         norm_path = _safe_rel_path(path)
         lang = canonical_cpg_language(language, norm_path)
@@ -541,7 +653,20 @@ def synthesize_alternate_cpg(
         for existing_id in fns_by_path_name.get((norm_path, simple), ()):
             existing = nodes_by_id[existing_id]
             ex_s, ex_e = int(existing["start_line"]), int(existing["end_line"])
-            if (s_line <= ex_e + 2 and e_line >= ex_s - 2) or ex_s == s_line:
+            same_external = external_id and external_id_to_fn.get(external_id) == existing_id
+            same_span = (location and existing.get("location") and
+                         all(location.get(key) == existing["location"].get(key)
+                             for key in ("file_sha256", "start_byte", "end_byte", "start_column", "end_column")))
+            same_qualifiers = not evidence or not existing.get("evidence") or all(
+                evidence.get(key) == existing["evidence"][0].get(key)
+                for key in ("signature", "linkage", "translation_unit", "translation_unit_id", "scope", "build_unit_id"))
+            if same_external or (
+                node_kind == existing["node_kind"] and qname == existing["qualified_name"]
+                and ex_s == s_line and ex_e == e_line and same_qualifiers
+                and (same_span or (not location and not existing.get("location")))
+                and (not external_id or not existing.get("evidence") or
+                     existing["evidence"][0].get("identity") in (None, external_id))
+            ):
                 if producer not in existing["producers"]:
                     existing["producers"] = sorted({*existing["producers"], producer})
                 existing["resolution_tier"] = _merge_tier(existing["producers"])
@@ -561,11 +686,14 @@ def synthesize_alternate_cpg(
                         )
                 if external_id:
                     external_id_to_fn[external_id] = existing_id
+                if evidence and dict(evidence) not in existing["evidence"]:
+                    existing["evidence"].append(dict(evidence))
                 return existing_id
 
         fn_id = _cpg_digest(
             "cpg:fn",
-            {"path": norm_path, "name": simple, "start_line": s_line, "lang": lang},
+            {"path": norm_path, "qualified_name": qname, "start_line": s_line, "end_line": e_line,
+             "lang": lang, "location": location, "evidence": evidence, "kind": node_kind},
         )
         if fn_id in nodes_by_id:
             existing = nodes_by_id[fn_id]
@@ -575,19 +703,19 @@ def synthesize_alternate_cpg(
                 external_id_to_fn[external_id] = fn_id
             return fn_id
 
-        ep_flag = is_syntactic_entrypoint(simple, qname, norm_path, decorators_text)
+        ep_flag = node_kind == "function" and is_syntactic_entrypoint(simple, qname, norm_path, decorators_text)
         node = {
             "schema": ALTERNATE_CPG_SCHEMA,
             "record_type": "cpg_node",
             "node_id": fn_id,
-            "node_kind": "function",
+            "node_kind": node_kind,
             "name": simple,
             "qualified_name": qname,
             "language": lang,
             "path": norm_path,
             "start_line": s_line,
             "end_line": e_line,
-            "function_id": fn_id,
+            "function_id": fn_id if node_kind == "function" else None,
             "block_kind": None,
             "guard_expression": None,
             "guard_polarity": None,
@@ -601,12 +729,15 @@ def synthesize_alternate_cpg(
             "sink_class": None,
             "resolution_tier": _merge_tier([producer]),
             "producers": [producer],
+            "location": dict(location) if location else None,
+            "evidence": [dict(evidence)] if evidence else [],
         }
         nodes_by_id[fn_id] = node
-        fns_by_path_name[(norm_path, simple)].append(fn_id)
-        fns_by_lang_qname[(lang, qname)].append(fn_id)
-        fns_by_lang_name[(lang, simple)].append(fn_id)
-        fns_by_name[simple].append(fn_id)
+        if node_kind == "function":
+            fns_by_path_name[(norm_path, simple)].append(fn_id)
+            fns_by_lang_qname[(lang, qname)].append(fn_id)
+            fns_by_lang_name[(lang, simple)].append(fn_id)
+            fns_by_name[simple].append(fn_id)
         if external_id:
             external_id_to_fn[external_id] = fn_id
         return fn_id
@@ -624,6 +755,9 @@ def synthesize_alternate_cpg(
         variable: str | None = None,
         callee_name: str | None = None,
         guard_dominators: Sequence[Mapping[str, Any]] = (),
+        location: Mapping[str, Any] | None = None,
+        occurrence: str | None = None,
+        evidence: Mapping[str, Any] | None = None,
     ) -> str:
         key_payload: dict[str, Any] = {
             "kind": edge_kind,
@@ -631,7 +765,8 @@ def synthesize_alternate_cpg(
             "src": source_id,
             "dst": target_id,
             "var": variable or "",
-            "line": int(line or 0) if edge_kind == "CALLS" else 0,
+            "line": int(line or 0),
+            "path": path, "location": location, "occurrence": occurrence,
         }
         edge_id = _cpg_digest("cpg:edge", key_payload)
         cleaned_doms = [
@@ -643,6 +778,10 @@ def synthesize_alternate_cpg(
             existing = edges_by_id[edge_id]
             existing["producers"] = sorted({*existing["producers"], producer})
             existing["resolution_tier"] = _merge_tier(existing["producers"])
+            if evidence and dict(evidence) not in existing["evidence"]:
+                existing["evidence"].append(dict(evidence))
+            existing["exact"] = edge_kind in {"CALLS", "REFERENCES"} and bool(existing["evidence"]) and all(
+                _exact_evidence(e) for e in existing["evidence"])
             if cleaned_doms:
                 seen_g = {(g["node_id"], g["branch"]) for g in existing["guard_dominators"]}
                 for dom in cleaned_doms:
@@ -669,6 +808,10 @@ def synthesize_alternate_cpg(
             "resolution_tier": _merge_tier([producer]),
             "guard_dominators": cleaned_doms,
             "producers": [producer],
+            "location": dict(location) if location else None,
+            "occurrence": occurrence,
+            "evidence": [dict(evidence)] if evidence else [],
+            "exact": edge_kind in {"CALLS", "REFERENCES"} and bool(evidence) and _exact_evidence(evidence),
         }
         return edge_id
 
@@ -687,6 +830,9 @@ def synthesize_alternate_cpg(
                         "start_line": fn.start_line,
                         "end_line": fn.end_line,
                         "parameters": list(fn.parameters),
+                        "location": _cfg_location(fn.to_summary(), target_snapshot),
+                        "evidence": {"producer": "tree_sitter", "identity": fn.function_id,
+                                     "source_identity": fn.source_identity},
                     }
                     for fn in getattr(ts_file, "functions", ())
                 ],
@@ -720,6 +866,8 @@ def synthesize_alternate_cpg(
                 parameters=[str(p) for p in fn.get("parameters", ()) if str(p)],
                 external_id=str(fn.get("function_id")) if fn.get("function_id") else None,
                 decorators_text=dec_text,
+                location=fn.get("location"),
+                evidence=fn.get("evidence"),
             )
             if fn.get("function_id"):
                 ts_fn_to_cpg[str(fn["function_id"])] = cpg_fn_id
@@ -798,6 +946,7 @@ def synthesize_alternate_cpg(
                 "sink_class": None,
                 "resolution_tier": "syntactic_fallback",
                 "producers": ["tree_sitter"],
+                "location": _cfg_location(raw_n, target_snapshot),
             }
             nodes_by_id[cpg_nid] = blk_node
             fn_blocks[cpg_fn_id].append(blk_node)
@@ -818,6 +967,7 @@ def synthesize_alternate_cpg(
                         "language": flang,
                         "guard_dominators": doms,
                         "uses": uses_list,
+                        "location": _cfg_location(raw_n, target_snapshot),
                     }
                 )
 
@@ -888,6 +1038,8 @@ def synthesize_alternate_cpg(
                                 "language": flang,
                                 "guard_dominators": [],
                                 "uses": [],
+                                "location": call_rec.get("location"),
+                                "occurrence": call_rec.get("identity"),
                             }
                         )
                         break
@@ -915,12 +1067,15 @@ def synthesize_alternate_cpg(
             language=str(payload.get("language") or sym.get("language") or ""),
             producer="syntactic",
             external_id=str(sym.get("identity")) if sym.get("identity") else None,
+            location=loc if loc.get("file_sha256") else None,
+            evidence=_evidence(sym),
         )
 
     def _enclosing_fn_and_guards(path: str, line: int) -> tuple[str | None, list[dict[str, Any]], str | None]:
         norm_p = _safe_rel_path(path)
         best_fn: str | None = None
         best_span = 10**9
+        tied_functions = False
         for fid, node in nodes_by_id.items():
             if node["node_kind"] != "function" or node["path"] != norm_p:
                 continue
@@ -929,18 +1084,30 @@ def synthesize_alternate_cpg(
                 if span < best_span:
                     best_span = span
                     best_fn = fid
+                    tied_functions = False
+                elif span == best_span:
+                    tied_functions = True
         if best_fn is None:
+            return None, [], None
+        if tied_functions:
+            gaps.append(f"ambiguous_enclosing_function: {norm_p}:{line}")
             return None, [], None
         best_blk: dict[str, Any] | None = None
         best_blk_span = 10**9
+        tied_blocks = False
         for blk in fn_blocks.get(best_fn, ()):
             if blk["start_line"] <= line <= blk["end_line"]:
                 bspan = blk["end_line"] - blk["start_line"]
-                if bspan <= best_blk_span:
+                if bspan < best_blk_span:
                     best_blk_span = bspan
                     best_blk = blk
-        if best_blk is not None:
+                    tied_blocks = False
+                elif bspan == best_blk_span:
+                    tied_blocks = True
+        if best_blk is not None and not tied_blocks:
             return best_fn, list(best_blk.get("guard_dominators", ())), best_blk["node_id"]
+        if tied_blocks:
+            gaps.append(f"ambiguous_guard_context: {norm_p}:{line}")
         return best_fn, [], None
 
     for csym in clangd_symbols:
@@ -963,31 +1130,44 @@ def synthesize_alternate_cpg(
             language="cpp",
             producer="clangd",
             external_id=str(csym.get("identity") or csym.get("symbol_id") or ""),
+            location=loc if loc.get("file_sha256") else None,
+            evidence=_evidence(csym),
+            node_kind="function" if str(payload.get("kind") or "").lower() in {
+                "function", "method", "staticmethod", "instancemethod", "classmethod", "constructor",
+                "destructor", "conversionfunction",
+            } else "symbol",
         )
 
     semantic_call_pairs: set[tuple[str, str]] = set()
     for crel in clangd_relations:
-        if not isinstance(crel, Mapping) or str(crel.get("kind") or "CALLS") not in {"CALLS", "REFERENCES"}:
+        if not isinstance(crel, Mapping) or str(crel.get("kind") or "") not in {"CALLS", "REFERENCES"}:
             continue
         src_fn = external_id_to_fn.get(str(crel.get("source_id") or ""))
         dst_fn = external_id_to_fn.get(str(crel.get("target_id") or ""))
-        if src_fn and dst_fn and src_fn != dst_fn:
+        if src_fn and dst_fn:
             rpayload = crel.get("payload") if isinstance(crel.get("payload"), Mapping) else {}
-            cline = int(rpayload.get("line") or nodes_by_id[src_fn]["start_line"])
-            _, doms, _ = _enclosing_fn_and_guards(nodes_by_id[src_fn]["path"], cline)
-            _add_edge(
-                edge_kind="CALLS",
-                source_id=src_fn,
-                target_id=dst_fn,
-                language="cpp",
-                producer="clangd",
-                edge_subtype="clangd_call",
-                path=nodes_by_id[src_fn]["path"],
-                line=cline,
-                callee_name=nodes_by_id[dst_fn]["name"],
-                guard_dominators=doms,
-            )
-            semantic_call_pairs.add((src_fn, dst_fn))
+            kind = str(crel["kind"])
+            if kind == "CALLS" and any(nodes_by_id[n]["node_kind"] != "function" for n in (src_fn, dst_fn)):
+                gaps.append(f"clangd_noncallable_target: {crel.get('relation_id')}")
+                kind = "REFERENCES"
+            locations = list(rpayload.get("locations") or ())
+            if not locations and rpayload.get("line"):
+                locations = [{"path": nodes_by_id[src_fn]["path"], "line": rpayload["line"]}]
+            if int(rpayload.get("occurrences") or len(locations)) > len(locations) or not locations:
+                gaps.append(f"clangd_occurrences_unavailable: {crel.get('relation_id')}")
+            for index, occurrence_loc in enumerate(locations or [None]):
+                cline = int(occurrence_loc.get("line") or 0) if occurrence_loc else None
+                cpath = str(occurrence_loc.get("path") or nodes_by_id[src_fn]["path"]) if occurrence_loc else None
+                _add_edge(
+                    edge_kind=kind, source_id=src_fn, target_id=dst_fn, language="cpp", producer="clangd",
+                    edge_subtype="clangd_call" if kind == "CALLS" else "clangd_reference",
+                    path=cpath, line=cline, callee_name=nodes_by_id[dst_fn]["name"],
+                    location=occurrence_loc, occurrence=f"{crel.get('relation_id')}:{index}",
+                    evidence={**_evidence(crel), "exact": bool(crel.get("exact")) and bool(occurrence_loc),
+                              "ambiguity": crel.get("ambiguity")},
+                )
+            if kind == "CALLS":
+                semantic_call_pairs.add((src_fn, dst_fn))
 
     codeql_entity_by_id: dict[str, Mapping[str, Any]] = {}
     for fact in codeql_facts:
@@ -1018,11 +1198,17 @@ def synthesize_alternate_cpg(
                 start_line=sline,
                 end_line=eline,
                 language=flang,
-                producer="codeql",
+                producer=_producer(fact),
                 external_id=fid or None,
+                location=loc if loc.get("file_sha256") else None,
+                evidence=_evidence(fact),
+                node_kind="function" if str(payload.get("kind", "function")).lower() in {
+                    "function", "method", "constructor", "destructor",
+                } else "symbol",
             )
 
     semantic_sink_locs: set[tuple[str, int, str]] = set()
+    handled_calls: set[str] = set()
     for fact in codeql_facts:
         if not isinstance(fact, Mapping):
             continue
@@ -1042,6 +1228,8 @@ def synthesize_alternate_cpg(
             scope_blk.get("language") or payload.get("language") or fact.get("language"), fpath
         )
 
+        fact_producer = _producer(fact)
+        fact_evidence = _evidence(fact)
         if kind == "entry_point" and fpath != "unknown":
             enc_fn, _, _ = _enclosing_fn_and_guards(fpath, sline)
             if enc_fn is None and (fact.get("name") or result_blk.get("handler")):
@@ -1052,7 +1240,9 @@ def synthesize_alternate_cpg(
                     start_line=sline,
                     end_line=sline,
                     language=flang,
-                    producer="codeql",
+                    producer=fact_producer,
+                    location=loc if loc.get("file_sha256") else None,
+                    evidence=fact_evidence,
                 )
             ep_id = _cpg_digest("cpg:ep", {"path": fpath, "line": sline, "name": str(fact.get("name") or "entry")})
             nodes_by_id[ep_id] = {
@@ -1078,8 +1268,10 @@ def synthesize_alternate_cpg(
                 "is_entrypoint": True,
                 "entrypoint_sources": ["codeql_entry_point"],
                 "sink_class": None,
-                "resolution_tier": "codeql_semantic",
-                "producers": ["codeql"],
+                "resolution_tier": _merge_tier([fact_producer]),
+                "producers": [fact_producer],
+                "location": loc if loc.get("file_sha256") else None,
+                "evidence": [fact_evidence],
             }
             if enc_fn:
                 fn_n = nodes_by_id[enc_fn]
@@ -1090,16 +1282,17 @@ def synthesize_alternate_cpg(
                     source_id=ep_id,
                     target_id=enc_fn,
                     language=flang,
-                    producer="codeql",
+                    producer=fact_producer,
                     path=fpath,
                     line=sline,
+                    evidence=fact_evidence,
                 )
         elif kind == "sink_site" and fpath != "unknown":
             enc_fn, doms, blk_id = _enclosing_fn_and_guards(fpath, sline)
             sclass = str(result_blk.get("sink_class") or payload.get("sink_class") or "generic_sink")
             sname = str(fact.get("name") or result_blk.get("callee") or sclass)
             sink_id = _cpg_digest("cpg:sink", {"path": fpath, "line": sline, "class": sclass, "name": sname})
-            prods = ["codeql", "tree_sitter"] if blk_id else ["codeql"]
+            prods = [fact_producer, "tree_sitter"] if blk_id else [fact_producer]
             nodes_by_id[sink_id] = {
                 "schema": ALTERNATE_CPG_SCHEMA,
                 "record_type": "cpg_node",
@@ -1125,6 +1318,8 @@ def synthesize_alternate_cpg(
                 "sink_class": sclass,
                 "resolution_tier": _merge_tier(prods),
                 "producers": prods,
+                "location": loc if loc.get("file_sha256") else None,
+                "evidence": [fact_evidence],
             }
             if fid:
                 external_id_to_fn[fid] = sink_id
@@ -1141,6 +1336,9 @@ def synthesize_alternate_cpg(
                         line=sline,
                         callee_name=sname,
                         guard_dominators=doms,
+                        evidence=fact_evidence,
+                        occurrence=fid or None,
+                        location=loc if loc.get("file_sha256") else None,
                     )
             if blk_id:
                 _add_edge(
@@ -1148,55 +1346,92 @@ def synthesize_alternate_cpg(
                     source_id=blk_id,
                     target_id=sink_id,
                     language=flang,
-                    producer="codeql",
+                    producer=fact_producer,
                     edge_subtype="sink_invocation",
                     path=fpath,
                     line=sline,
                     guard_dominators=doms,
+                    evidence=fact_evidence,
                 )
         elif kind == "call_site" and fpath != "unknown":
-            caller_fn = external_id_to_fn.get(str(result_blk.get("caller_id") or payload.get("caller_id") or ""))
+            caller = result_blk.get("caller") if isinstance(result_blk.get("caller"), Mapping) else {}
+            callee = result_blk.get("callee") if isinstance(result_blk.get("callee"), Mapping) else {}
+            caller_fn = external_id_to_fn.get(str(caller.get("symbol") or result_blk.get("caller_id")
+                                                   or payload.get("caller_id") or ""))
             if caller_fn is None:
                 caller_fn, doms, _ = _enclosing_fn_and_guards(fpath, sline)
             else:
                 _, doms, _ = _enclosing_fn_and_guards(fpath, sline)
-            callee_fn = external_id_to_fn.get(str(result_blk.get("callee_id") or payload.get("callee_id") or ""))
-            callee_name = str(result_blk.get("callee") or payload.get("callee_name") or fact.get("name") or "")
+            callee_fn = external_id_to_fn.get(str(callee.get("symbol") or result_blk.get("callee_id")
+                                                   or payload.get("callee_id") or ""))
+            callee_name = str(callee.get("display") or (result_blk.get("callee") if not callee else "")
+                              or payload.get("callee_name") or fact.get("name") or "")
             if callee_fn is None and callee_name:
                 tpath = _safe_rel_path(result_blk.get("target_path") or payload.get("target_path") or "")
                 tline = int(result_blk.get("target_line") or payload.get("target_line") or 0)
                 if tpath != "unknown" and tline >= 1:
-                    callee_fn = _register_function(
+                    existing = [n for n in fns_by_path_name.get((tpath, _simple_symbol(callee_name)), ())
+                                if nodes_by_id[n]["start_line"] == tline]
+                    callee_fn = existing[0] if len(existing) == 1 else _register_function(
                         name=callee_name,
                         qualified_name=callee_name,
                         path=tpath,
                         start_line=tline,
                         end_line=tline,
                         language=flang,
-                        producer="codeql",
+                        producer=_producer(fact),
                     )
                 else:
                     cands = fns_by_path_name.get((fpath, _simple_symbol(callee_name))) or fns_by_lang_name.get(
                         (flang, _simple_symbol(callee_name)), []
                     )
-                    if cands:
+                    if len(cands) == 1 and not callee:
                         callee_fn = cands[0]
-            if caller_fn and callee_fn and caller_fn != callee_fn:
+                    elif len(cands) > 1:
+                        gaps.append(f"ambiguous_call_target: {fid or f'{fpath}:{sline}'}")
+            if caller_fn and callee_fn and all(
+                nodes_by_id[n]["node_kind"] == "function" for n in (caller_fn, callee_fn)
+            ):
                 _add_edge(
                     edge_kind="CALLS",
                     source_id=caller_fn,
                     target_id=callee_fn,
                     language=flang,
-                    producer="codeql",
+                    producer=_producer(fact),
                     edge_subtype="codeql_call",
                     path=fpath,
                     line=sline,
                     callee_name=nodes_by_id[callee_fn]["name"],
                     guard_dominators=doms,
+                    location=loc if loc.get("file_sha256") else None,
+                    occurrence=fid or None,
+                    evidence=_evidence(fact),
                 )
                 semantic_call_pairs.add((caller_fn, callee_fn))
-            if fid and caller_fn:
-                external_id_to_fn[fid] = caller_fn
+            else:
+                unresolved_id = _cpg_digest("cpg:call", {"identity": fid, "location": loc,
+                                                         "path": fpath, "line": sline})
+                nodes_by_id[unresolved_id] = {
+                    "schema": ALTERNATE_CPG_SCHEMA, "record_type": "cpg_node",
+                    "node_id": unresolved_id, "node_kind": "call_site", "name": callee_name,
+                    "qualified_name": callee_name, "language": flang, "path": fpath,
+                    "start_line": sline, "end_line": int(loc.get("end_line") or sline),
+                    "function_id": caller_fn, "resolution_tier": _merge_tier([fact_producer]),
+                    "producers": [fact_producer], "evidence": [fact_evidence],
+                    "location": loc if loc.get("file_sha256") else None,
+                    "guard_dominators": doms, "is_entrypoint": False,
+                }
+                gaps.append(f"unresolved_call_context: {fid or f'{fpath}:{sline}'}")
+                if caller_fn:
+                    _add_edge(
+                        edge_kind="REFERENCES", edge_subtype="unresolved_call_context",
+                        source_id=caller_fn, target_id=unresolved_id, language=flang,
+                        producer=fact_producer, path=fpath, line=sline,
+                        location=loc if loc.get("file_sha256") else None,
+                        occurrence=fid or None, evidence={**fact_evidence, "exact": False},
+                    )
+            if fid:
+                handled_calls.add(fid)
         elif kind == "dataflow_path":
             steps = result_blk.get("steps") or payload.get("steps") or ()
             prev_fn: str | None = None
@@ -1207,6 +1442,8 @@ def synthesize_alternate_cpg(
                 spath = _safe_rel_path(sloc.get("path"))
                 s_ln = int(sloc.get("start_line") or sloc.get("line") or 0)
                 if spath == "unknown" or s_ln < 1:
+                    gaps.append(f"dataflow_unmapped_step: {fid}:{step.get('n')}")
+                    prev_fn = None
                     continue
                 step_fn, doms, _ = _enclosing_fn_and_guards(spath, s_ln)
                 if prev_fn and step_fn and prev_fn != step_fn:
@@ -1215,14 +1452,20 @@ def synthesize_alternate_cpg(
                         source_id=prev_fn,
                         target_id=step_fn,
                         language=flang,
-                        producer="codeql",
+                        producer=_producer(fact),
                         edge_subtype="codeql_dataflow",
                         path=spath,
                         line=s_ln,
                         guard_dominators=doms,
+                        location=sloc,
+                        occurrence=f"{fid}:{step.get('n')}",
+                        evidence=_evidence(fact),
                     )
                 if step_fn:
                     prev_fn = step_fn
+                else:
+                    gaps.append(f"dataflow_unmapped_step: {fid}:{step.get('n')}")
+                    prev_fn = None
 
     callsite_callers: dict[str, list[str]] = defaultdict(list)
     callsite_targets: dict[str, list[str]] = defaultdict(list)
@@ -1230,6 +1473,8 @@ def synthesize_alternate_cpg(
         if not isinstance(rel, Mapping):
             continue
         rkind, src_id, dst_id = str(rel.get("kind") or ""), str(rel.get("source_id") or ""), str(rel.get("target_id") or "")
+        if src_id in handled_calls or dst_id in handled_calls:
+            continue
         if rkind == "CONTAINS" and src_id in external_id_to_fn:
             callsite_callers[dst_id].append(external_id_to_fn[src_id])
         elif rkind == "CALLS":
@@ -1240,18 +1485,16 @@ def synthesize_alternate_cpg(
                     and nodes_by_id.get(s_fn, {}).get("node_kind") == "function"
                     and nodes_by_id.get(d_fn, {}).get("node_kind") == "function"
                 ):
-                    _, doms, _ = _enclosing_fn_and_guards(nodes_by_id[s_fn]["path"], nodes_by_id[s_fn]["start_line"])
+                    gaps.append(f"call_occurrence_unavailable: {rel.get('relation_id')}")
                     _add_edge(
                         edge_kind="CALLS",
                         source_id=s_fn,
                         target_id=d_fn,
                         language=nodes_by_id[s_fn]["language"],
-                        producer="codeql",
+                        producer=_producer(rel),
                         edge_subtype="codeql_call",
-                        path=nodes_by_id[s_fn]["path"],
-                        line=nodes_by_id[s_fn]["start_line"],
                         callee_name=nodes_by_id[d_fn]["name"],
-                        guard_dominators=doms,
+                        evidence={**_evidence(rel), "exact": False},
                     )
                     semantic_call_pairs.add((s_fn, d_fn))
             elif dst_id in external_id_to_fn:
@@ -1276,12 +1519,15 @@ def synthesize_alternate_cpg(
                         source_id=c_fn,
                         target_id=t_fn,
                         language=nodes_by_id[c_fn]["language"],
-                        producer="codeql",
+                        producer=_producer(cs_fact),
                         edge_subtype="codeql_call",
                         path=cs_path if cs_path != "unknown" else nodes_by_id[c_fn]["path"],
                         line=cs_line,
                         callee_name=nodes_by_id[t_fn]["name"],
                         guard_dominators=doms,
+                        location=cs_loc if cs_loc.get("file_sha256") else None,
+                        occurrence=cs_id,
+                        evidence=_evidence(cs_fact),
                     )
                     semantic_call_pairs.add((c_fn, t_fn))
 
@@ -1289,7 +1535,13 @@ def synthesize_alternate_cpg(
         if not isinstance(obs, Mapping):
             continue
         payload = obs.get("payload") if isinstance(obs.get("payload"), Mapping) else obs
-        for flow in payload.get("code_flows") or payload.get("flows") or ():
+        groups, unindexed = _flow_groups(payload)
+        if unindexed:
+            gaps.append(f"sarif_unindexed_steps: {obs.get('identity')}: {unindexed}")
+        flows = [{"steps": steps} for _, steps in sorted(groups.items())]
+        if not payload.get("flows"):
+            flows = list(payload.get("code_flows") or ())
+        for flow_index, flow in enumerate(flows):
             steps = (
                 flow.get("steps")
                 if isinstance(flow, Mapping)
@@ -1303,6 +1555,8 @@ def synthesize_alternate_cpg(
                 spath = _safe_rel_path(sloc.get("path"))
                 sline = int(sloc.get("start_line") or sloc.get("line") or 0)
                 if spath == "unknown" or sline < 1:
+                    gaps.append(f"sarif_unmapped_step: {obs.get('identity')}:{flow_index}")
+                    prev_fn = None
                     continue
                 step_fn, doms, _ = _enclosing_fn_and_guards(spath, sline)
                 if prev_fn and step_fn and prev_fn != step_fn:
@@ -1316,9 +1570,16 @@ def synthesize_alternate_cpg(
                         path=spath,
                         line=sline,
                         guard_dominators=doms,
+                        location=sloc,
+                        occurrence=f"{obs.get('identity')}:{flow_index}:{step.get('ordinal')}",
+                        evidence={"identity": obs.get("identity"), "producer": "codeql-sarif",
+                                  "exact": False},
                     )
                 if step_fn:
                     prev_fn = step_fn
+                else:
+                    gaps.append(f"sarif_unmapped_step: {obs.get('identity')}:{flow_index}:{sline}")
+                    prev_fn = None
 
     for route in route_entrypoints:
         if not isinstance(route, Mapping):
@@ -1478,16 +1739,24 @@ def synthesize_alternate_cpg(
             cands = [fid for fid in fns_by_lang_name[(clang, simple_callee)] if fid != caller_fn]
             if len(cands) <= 4:
                 targets = sorted(cands, key=lambda fid: (nodes_by_id[fid]["path"], nodes_by_id[fid]["start_line"]))
+            else:
+                gaps.append(f"syntactic_call_candidates_omitted: {cpath}:{cline}: {len(cands)} candidates")
 
         if targets:
-            for tgt_fn in targets[:4]:
+            if len(targets) > 1:
+                gaps.append(f"ambiguous_syntactic_call: {cpath}:{cline}: {len(targets)} candidates")
+            if len(targets) > 4:
+                gaps.append(f"syntactic_call_candidates_omitted: {cpath}:{cline}: {len(targets) - 4}")
+            for tgt_fn in sorted(targets)[:4]:
                 upgraded = False
                 for ex_edge in edges_by_id.values():
                     if (
                         ex_edge["edge_kind"] == "CALLS"
                         and ex_edge["source_id"] == caller_fn
                         and ex_edge["target_id"] == tgt_fn
-                        and (ex_edge["line"] == cline or (caller_fn, tgt_fn) in semantic_call_pairs)
+                        and ex_edge["path"] == cpath
+                        and ex_edge["line"] == cline
+                        and ex_edge.get("occurrence") == (call_item.get("occurrence") or blk_id)
                     ):
                         ex_edge["producers"] = sorted({*ex_edge["producers"], "tree_sitter"})
                         ex_edge["resolution_tier"] = _merge_tier(ex_edge["producers"])
@@ -1511,12 +1780,14 @@ def synthesize_alternate_cpg(
                         line=cline,
                         callee_name=nodes_by_id[tgt_fn]["name"],
                         guard_dominators=doms,
+                        location=call_item.get("location"),
+                        occurrence=call_item.get("occurrence") or blk_id,
                     )
                 callee_params = nodes_by_id[tgt_fn].get("parameters", ())
                 if callee_params and (call_item["uses"] or nodes_by_id[caller_fn].get("parameters")):
                     src_data_node = blk_id or caller_fn
                     dst_data_node = fn_entry_block.get(tgt_fn, tgt_fn)
-                    prod = "codeql" if (caller_fn, tgt_fn) in semantic_call_pairs else "tree_sitter"
+                    prod = "tree_sitter"
                     _add_edge(
                         edge_kind="ARG_TO_PARAM",
                         source_id=src_data_node,
@@ -1608,17 +1879,23 @@ def synthesize_alternate_cpg(
         "run_id": run_id,
         "target_snapshot": target_snapshot,
         "max_hops": cfg.max_hops,
+        "max_slice_depth": cfg.max_slice_depth,
+        "settings": asdict(cfg),
         "nodes": sorted_nodes,
         "edges": sorted_edges,
     }
     has_entrypoints = any(n["node_kind"] == "function" and n["is_entrypoint"] for n in sorted_nodes)
+    traversal: dict[str, Any] = {}
     precomputed_paths = find_interprocedural_paths(
         cpg_base,
         entrypoint_only=has_entrypoints,
         max_hops=cfg.max_hops,
         max_paths=cfg.max_precomputed_paths,
+        diagnostics=traversal,
     )
     cpg_base["paths"] = precomputed_paths
+    cpg_base["gaps"] = list(dict.fromkeys([*gaps, *traversal.get("gaps", ())]))
+    cpg_base["traversal"] = traversal
 
     resolution_breakdown: dict[str, int] = {tier: 0 for tier in RESOLUTION_TIERS}
     for edge in sorted_edges:
@@ -1669,12 +1946,17 @@ def find_interprocedural_paths(
     language: str | None = None,
     max_hops: int = 10,
     max_paths: int = 50,
+    diagnostics: dict[str, Any] | None = None,
+    check_deadline: Callable[[], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Deterministic, cycle-safe bounded inter-procedural call+dataflow path finder."""
     if isinstance(max_hops, bool) or not isinstance(max_hops, int) or not 1 <= max_hops <= 16:
         raise ValueError("max_hops must be an integer between 1 and 16")
     if isinstance(max_paths, bool) or not isinstance(max_paths, int) or max_paths < 1:
         raise ValueError("max_paths must be >= 1")
+    cuts: dict[str, int] = defaultdict(int)
+    stats = diagnostics if diagnostics is not None else {}
+    stats.update(visited_states=0, inspected_edges=0, cuts={}, gaps=[], truncated=False)
 
     nodes = {str(n["node_id"]): n for n in cpg.get("nodes", ()) if isinstance(n, Mapping)}
     if not nodes:
@@ -1684,6 +1966,8 @@ def find_interprocedural_paths(
     inter_kinds = {"CALLS", "TAINT_STEP", "FN_TO_SINK", "ENTRYPOINT_TO_FN"}
     adj: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for edge in cpg.get("edges", ()):
+        if check_deadline:
+            check_deadline()
         if not isinstance(edge, Mapping) or edge.get("edge_kind") not in inter_kinds:
             continue
         src_id = str(edge.get("source_id") or "")
@@ -1740,13 +2024,23 @@ def find_interprocedural_paths(
         start_ids,
         key=lambda i: (str(nodes[i].get("path") or ""), int(nodes[i].get("start_line") or 0), i),
     ):
+        if len(queue) >= MAX_PATH_FRONTIER:
+            cuts["frontier_limit"] += 1
+            continue
         queue.append((sid, frozenset({sid}), (sid,), (), 0))
 
     while queue and len(results) < max_paths:
+        if check_deadline:
+            check_deadline()
+        if stats["visited_states"] >= MAX_PATH_STATES:
+            cuts["work_limit"] += len(queue)
+            break
+        stats["visited_states"] += 1
         curr_id, visited, node_chain, edge_chain, call_hops = queue.popleft()
         if edge_chain and curr_id in target_ids:
-            if node_chain not in seen_signatures:
-                seen_signatures.add(node_chain)
+            signature = tuple(str(e.get("edge_id")) for e in edge_chain)
+            if signature not in seen_signatures:
+                seen_signatures.add(signature)
                 start_node = nodes[node_chain[0]]
                 end_node = nodes[curr_id]
                 hops_out: list[dict[str, Any]] = []
@@ -1769,6 +2063,10 @@ def find_interprocedural_paths(
                             "resolution_tier": etier,
                             "path": edge.get("path") or s_n.get("path"),
                             "line": edge.get("line") or s_n.get("start_line"),
+                            "edge_id": edge.get("edge_id"),
+                            "exact": bool(edge.get("exact")),
+                            "evidence": list(edge.get("evidence", ())),
+                            "guard_dominators": list(edge.get("guard_dominators", ())),
                         }
                     )
                     for dom in edge.get("guard_dominators", ()):
@@ -1786,7 +2084,7 @@ def find_interprocedural_paths(
                 ep_linked = bool(
                     start_node.get("is_entrypoint") or start_node.get("node_kind") == "entrypoint"
                 )
-                path_id = _cpg_digest("cpg:path", {"chain": list(node_chain)})
+                path_id = _cpg_digest("cpg:path", {"chain": list(node_chain), "edges": list(signature)})
                 results.append(
                     {
                         "schema": ALTERNATE_CPG_SCHEMA,
@@ -1804,18 +2102,29 @@ def find_interprocedural_paths(
                         "guard_polarities": polarities,
                         "guard_dominators": doms_out,
                         "hops": hops_out,
+                        "exact": all(bool(edge.get("exact")) for edge in edge_chain),
                     }
                 )
             if nodes[curr_id]["node_kind"] == "sink":
                 continue
 
         for edge in adj.get(curr_id, ()):
+            if check_deadline:
+                check_deadline()
+            if stats["inspected_edges"] >= MAX_TRAVERSAL_EDGES:
+                cuts["edge_work_limit"] += 1
+                break
+            stats["inspected_edges"] += 1
             nxt_id = str(edge["target_id"])
             if nxt_id in visited:
                 continue
             ekind = str(edge.get("edge_kind") or "CALLS")
             next_call_hops = call_hops + (0 if ekind in {"ENTRYPOINT_TO_FN", "FN_TO_SINK"} else 1)
             if next_call_hops > max_hops or len(edge_chain) + 1 > 16:
+                cuts["hop_limit"] += 1
+                continue
+            if len(queue) >= MAX_PATH_FRONTIER:
+                cuts["frontier_limit"] += 1
                 continue
             queue.append(
                 (
@@ -1827,6 +2136,11 @@ def find_interprocedural_paths(
                 )
             )
 
+    if queue and len(results) >= max_paths:
+        cuts["path_limit"] += len(queue)
+    stats.update(cuts=dict(cuts), truncated=bool(cuts),
+                 gaps=[f"alternate_cpg_{kind}: {count} unexamined traversal branches"
+                       for kind, count in sorted(cuts.items())])
     return results
 
 
@@ -1841,6 +2155,7 @@ def compute_cpg_slice(
     max_depth: int = 8,
     edge_kinds: Sequence[str] | None = None,
     max_nodes: int = 100,
+    check_deadline: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """Compute a deterministic backward or forward program slice over Alternate CPG."""
     if direction not in {"backward", "forward"}:
@@ -1849,6 +2164,7 @@ def compute_cpg_slice(
         raise ValueError("max_depth must be an integer between 1 and 16")
     if isinstance(max_nodes, bool) or not isinstance(max_nodes, int) or max_nodes < 1:
         raise ValueError("max_nodes must be >= 1")
+    max_depth = min(max_depth, int(cpg.get("max_slice_depth", 16)))
 
     allowed_kinds = set(edge_kinds) if edge_kinds else set(CPG_EDGE_KINDS)
     unknown_kinds = sorted(allowed_kinds - set(CPG_EDGE_KINDS))
@@ -1899,6 +2215,8 @@ def compute_cpg_slice(
 
     adj: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for edge in cpg.get("edges", ()):
+        if check_deadline:
+            check_deadline()
         if not isinstance(edge, Mapping) or edge.get("edge_kind") not in allowed_kinds:
             continue
         src, dst = str(edge.get("source_id") or ""), str(edge.get("target_id") or "")
@@ -1934,32 +2252,47 @@ def compute_cpg_slice(
     slice_edges: list[dict[str, Any]] = []
     seen_edge_ids: set[str] = set()
     queue: deque[tuple[str, int]] = deque()
-    for sid in sorted(seeds):
+    cuts: dict[str, int] = defaultdict(int)
+    if len(seeds) > max_nodes:
+        cuts["seed_limit"] = len(seeds) - max_nodes
+    seeds = sorted(seeds)[:max_nodes]
+    for sid in seeds:
         distances[sid] = 0
         via_edge_kind[sid] = "criterion"
         via_tier[sid] = str(nodes[sid].get("resolution_tier") or "syntactic_fallback")
         queue.append((sid, 0))
 
-    truncated = False
+    inspected_edges = 0
     while queue:
+        if check_deadline:
+            check_deadline()
         curr, dist = queue.popleft()
         if dist >= max_depth:
+            cuts["depth_limit"] += sum(
+                str(e["target_id"] if direction == "forward" else e["source_id"]) not in distances
+                for e in adj.get(curr, ()))
             continue
         for edge in adj.get(curr, ()):
+            if check_deadline:
+                check_deadline()
+            if inspected_edges >= MAX_TRAVERSAL_EDGES:
+                cuts["edge_work_limit"] += 1
+                break
+            inspected_edges += 1
             neighbor = str(edge["target_id"] if direction == "forward" else edge["source_id"])
             eid = str(edge.get("edge_id") or "")
-            if not eid.startswith("bridge:") and eid not in seen_edge_ids:
-                seen_edge_ids.add(eid)
-                slice_edges.append(dict(edge))
             if neighbor not in distances:
                 if len(distances) >= max_nodes:
-                    truncated = True
-                    break
+                    cuts["node_limit"] += 1
+                    continue
                 distances[neighbor] = dist + 1
                 via_edge_kind[neighbor] = str(edge.get("edge_kind") or "FLOWS_TO")
                 via_tier[neighbor] = str(edge.get("resolution_tier") or "syntactic_fallback")
                 queue.append((neighbor, dist + 1))
-        if truncated:
+            if not eid.startswith("bridge:") and eid not in seen_edge_ids:
+                seen_edge_ids.add(eid)
+                slice_edges.append(dict(edge))
+        if cuts.get("edge_work_limit"):
             break
 
     ordered_ids = sorted(
@@ -2001,12 +2334,16 @@ def compute_cpg_slice(
         "edges": slice_edges,
         "guard_dominators": doms_out,
         "resolution_tiers": sorted(tiers_seen),
-        "truncated": truncated,
+        "truncated": any(cuts.values()),
+        "cuts": {kind: count for kind, count in cuts.items() if count},
+        "gaps": [f"alternate_cpg_{kind}: {count} unexamined slice branches"
+                 for kind, count in sorted(cuts.items()) if count],
     }
 
 
 _NODE_ENTITY_KIND: dict[str, EntityKind] = {
     "function": EntityKind.SYMBOL,
+    "symbol": EntityKind.SYMBOL,
     "cfg_block": EntityKind.AST_NODE,
     "call_site": EntityKind.CALL_SITE,
     "entrypoint": EntityKind.ENTRY_POINT,
@@ -2015,6 +2352,7 @@ _NODE_ENTITY_KIND: dict[str, EntityKind] = {
 
 _EDGE_RELATION_KIND: dict[str, RelationKind] = {
     "CALLS": RelationKind.CALLS,
+    "REFERENCES": RelationKind.REFERENCES,
     "FLOWS_TO": RelationKind.FLOWS_TO,
     "GUARDS": RelationKind.GUARDS,
     "DEF_USE": RelationKind.FLOWS_TO,
@@ -2098,6 +2436,8 @@ def _extract_tree_sitter_files(
     *, target_snapshot: str, gaps: list[str],
 ) -> list[dict[str, Any]]:
     """Load only the admitted scope CFG artifacts and verified analysis shards."""
+    from appsec_review.jobs.job_tree_sitter_ast.cfg import FUNCTION_NODE_TYPES
+
     by_path: dict[str, dict[str, Any]] = {}
 
     cfg_records = _accepted_cfg(run_root, ts_shards, target_snapshot, gaps)
@@ -2134,8 +2474,20 @@ def _extract_tree_sitter_files(
                             "start_line": int(rec.get("start_line") or 1),
                             "end_line": int(rec.get("end_line") or rec.get("start_line") or 1),
                             "parameters": list(rec.get("defs", ())) if (rec.get("block_kind") or rec.get("kind")) == "entry" else [],
+                            "location": _cfg_location(rec, target_snapshot),
+                            "evidence": {"producer": "tree_sitter", "identity": fn_id,
+                                         "source_identity": rec.get("source_identity")},
                         }
                     )
+                for fn_item in entry["functions"]:
+                    if fn_item["function_id"] == fn_id:
+                        fn_item["start_line"] = min(fn_item["start_line"], int(rec.get("start_line") or 1))
+                        fn_item["end_line"] = max(fn_item["end_line"], int(rec.get("end_line") or 1))
+                        loc = fn_item.get("location")
+                        if loc:
+                            loc.update(start_line=fn_item["start_line"], end_line=fn_item["end_line"],
+                                       start_byte=min(loc["start_byte"], int(rec.get("start_byte") or 0)),
+                                       end_byte=max(loc["end_byte"], int(rec.get("end_byte") or 0)))
                 if (rec.get("block_kind") or rec.get("kind")) == "entry" and rec.get("defs"):
                     for fn_item in entry["functions"]:
                         if fn_item["function_id"] == fn_id and not fn_item["parameters"]:
@@ -2152,7 +2504,7 @@ def _extract_tree_sitter_files(
     # 2. Enrich / fallback from accepted job_tree_sitter_ast SQLite analysis shards.
     if ts_shards:
         shard_set = ShardSet(run_root, [s for s in ts_shards if not str(s.get("shard_id", "")).startswith("tree-sitter-coverage-")])
-        for ent in shard_set.entities(shard_set.shards, kinds=("ast_node",)):
+        for ent in _located_entities(shard_set, kinds=("ast_node",)):
             payload = ent.get("payload") if isinstance(ent.get("payload"), Mapping) else {}
             loc = ent.get("location") if isinstance(ent.get("location"), Mapping) else {}
             fpath = _safe_rel_path(loc.get("path") or payload.get("path"))
@@ -2172,23 +2524,35 @@ def _extract_tree_sitter_files(
                     "_fn_seen": set(),
                 },
             )
-            ntype = str(payload.get("node_type") or "")
+            syntax = payload.get("syntax") if isinstance(payload.get("syntax"), Mapping) else {}
+            cfg_blk = payload.get("cfg") if isinstance(payload.get("cfg"), Mapping) else {}
+            native_type = str(payload.get("grammar_native_type") or "")
+            ntype = ("function" if cfg_blk.get("function_id") or native_type in FUNCTION_NODE_TYPES.get(flang, ())
+                     else str(syntax.get("category") or ""))
+            if not ntype:
+                ntype = str(payload.get("grammar_native_type") or "")
+            written_name = str(cfg_blk.get("function_name") or syntax.get("written_name")
+                               or payload.get("name") or "")
+            native = loc.get("producer_location") or {}
+            entry["_source_native"] = {key: native[key] for key in ("source_domain", "source_backing")
+                                        if key in native}
             sline = int(loc.get("start_line") or payload.get("start_line") or 1)
             eline = int(loc.get("end_line") or payload.get("end_line") or sline)
-            if ntype == "function":
-                cfg_blk = payload.get("cfg") if isinstance(payload.get("cfg"), Mapping) else {}
+            if ntype in {"function", "function_definition", "function_declaration", "method_declaration"}:
                 fn_id = str(cfg_blk.get("function_id") or ent.get("identity") or f"{fpath}:{sline}")
                 if fn_id not in entry["_fn_seen"]:
                     entry["_fn_seen"].add(fn_id)
                     entry["functions"].append(
                         {
                             "function_id": fn_id,
-                            "name": str(ent.get("name") or payload.get("name") or "anonymous"),
-                            "qualified_name": str(payload.get("qualified_name") or ent.get("name") or "anonymous"),
+                            "name": written_name or "anonymous",
+                            "qualified_name": str(cfg_blk.get("qualified_name") or written_name or "anonymous"),
                             "start_line": sline,
                             "end_line": eline,
                             "parameters": list(cfg_blk.get("parameters") or payload.get("parameters") or ()),
                             "signature": str(payload.get("signature") or ""),
+                            "location": _source_location(loc),
+                            "evidence": _evidence(ent),
                         }
                     )
                 else:
@@ -2198,16 +2562,26 @@ def _extract_tree_sitter_files(
                             fn_item["end_line"] = max(int(fn_item["end_line"]), eline)
                             if cfg_blk.get("parameters") and not fn_item["parameters"]:
                                 fn_item["parameters"] = list(cfg_blk["parameters"])
-                if not entry["cfg_nodes"] and cfg_blk.get("nodes"):
-                    for cn in cfg_blk.get("nodes", ()):
+                            fn_item["location"] = _source_location(loc)
+                            fn_item["evidence"] = _evidence(ent)
+                existing_nodes = {str(n.get("node_id")) for n in entry["cfg_nodes"]}
+                if payload.get("cfg_nodes"):
+                    for cn in payload.get("cfg_nodes", ()):
+                        if str(cn.get("node_id")) in existing_nodes:
+                            continue
                         if isinstance(cn, Mapping):
                             entry["cfg_nodes"].append({**cn, "function_id": fn_id, "path": fpath, "language": flang})
-                    for ce in cfg_blk.get("edges", ()):
-                        if isinstance(ce, Mapping):
+                    existing_edges = {str(e.get("edge_id")) for e in entry["cfg_edges"]}
+                    for ce in payload.get("cfg_edges", ()):
+                        if isinstance(ce, Mapping) and str(ce.get("edge_id")) not in existing_edges:
                             entry["cfg_edges"].append({**ce, "function_id": fn_id, "path": fpath, "language": flang})
-            elif ntype == "call":
+                gaps.extend(str(gap) for gap in cfg_blk.get("gaps", ()))
+                if cfg_blk.get("truncated"):
+                    gaps.append(f"tree_sitter_cfg_partial: {fpath}:{sline}: truncated")
+            elif ntype in {"call", "call_expression", "method_invocation", "invocation_expression"}:
                 entry["calls"].append(
-                    {"name": str(ent.get("name") or payload.get("callee") or ""), "start_line": sline}
+                    {"name": written_name, "start_line": sline, "identity": ent["identity"],
+                     "location": _source_location(loc)}
                 )
             elif ntype == "route_candidate":
                 entry["route_candidates"].append({"name": str(ent.get("name") or ""), "start_line": sline})
@@ -2216,6 +2590,10 @@ def _extract_tree_sitter_files(
     for fpath in sorted(by_path):
         rec = dict(by_path[fpath])
         rec.pop("_fn_seen", None)
+        native = rec.pop("_source_native", {})
+        for block in rec["cfg_nodes"]:
+            if native:
+                block["producer_location"] = {**dict(block.get("producer_location") or {}), **native}
         out.append(rec)
     return out
 
@@ -2230,6 +2608,8 @@ def build_run_alternate_cpg(
     settings: AlternateCpgSettings | None = None,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """Harvest accepted shards from a run and synthesize the universal Alternate CPG."""
+    if settings is not None and not settings.enabled:
+        return synthesize_alternate_cpg(run_id=run_id, target_snapshot=target_snapshot, settings=settings), {}
     ts_shards = [s for s in upstream_shards if (s.get("producer") or {}).get("job") == "job_tree_sitter_ast"]
     cat_shards = [
         s
@@ -2254,30 +2634,30 @@ def build_run_alternate_cpg(
     symbol_decls: list[Mapping[str, Any]] = []
     if cat_shards:
         cat_set = ShardSet(run_root, cat_shards)
-        for sf in cat_set.entities(cat_set.shards, kinds=("source_file",)):
+        for sf in _located_entities(cat_set, kinds=("source_file",)):
             loc = sf.get("location") if isinstance(sf.get("location"), Mapping) else {}
             p = _safe_rel_path(loc.get("path") or sf.get("name"))
             sha = str(loc.get("file_sha256") or (sf.get("payload") or {}).get("sha256") or "")
             if p != "unknown" and re.fullmatch(r"[0-9a-f]{64}", sha):
                 file_shas[p] = sha
-        symbol_decls.extend(cat_set.entities(cat_set.shards, kinds=("symbol",)))
+        symbol_decls.extend(_located_entities(cat_set, kinds=("symbol",)))
 
     clangd_syms: list[Mapping[str, Any]] = []
     clangd_rels: list[Mapping[str, Any]] = []
     if clangd_shards:
         cl_set = ShardSet(run_root, clangd_shards)
-        clangd_syms.extend(cl_set.entities(cl_set.shards, kinds=("symbol",)))
-        clangd_rels.extend(cl_set.relations(cl_set.shards))
+        clangd_syms.extend(_located_entities(cl_set, kinds=("symbol",)))
+        clangd_rels.extend(_relations_with_provenance(cl_set))
 
     sarif_obs: list[Mapping[str, Any]] = []
     if obs_shards:
         ob_set = ShardSet(run_root, obs_shards)
-        sarif_obs.extend(ob_set.entities(ob_set.shards, kinds=("tool_observation",)))
+        sarif_obs.extend(_located_entities(ob_set, kinds=("tool_observation",)))
 
     routes: list[Mapping[str, Any]] = []
     if prio_shards:
         pr_set = ShardSet(run_root, prio_shards)
-        routes.extend(pr_set.entities(pr_set.shards, kinds=("review_signal", "priority_item")))
+        routes.extend(_located_entities(pr_set, kinds=("review_signal", "priority_item")))
     fact_shards = [
         s
         for s in graph_shards
@@ -2287,8 +2667,24 @@ def build_run_alternate_cpg(
     cql_rels: list[Mapping[str, Any]] = []
     if fact_shards:
         g_set = ShardSet(run_root, fact_shards)
-        cql_facts.extend(g_set.entities(g_set.shards))
-        cql_rels.extend(g_set.relations(g_set.shards))
+        cql_facts.extend(_located_entities(g_set))
+        cql_rels.extend(_relations_with_provenance(g_set))
+
+    for row in [*clangd_syms, *cql_facts, *symbol_decls, *routes, *sarif_obs]:
+        loc = row.get("location") or {}
+        path, sha = loc.get("path"), loc.get("file_sha256")
+        if path and sha:
+            if path in file_shas and file_shas[path] != sha:
+                raise IntegrityError(f"alternate CPG conflicting accepted source identity: {path}")
+            file_shas[path] = sha
+    for file in ts_files:
+        for fn in file.get("functions", ()):
+            loc = fn.get("location") or {}
+            path, sha = loc.get("path"), loc.get("file_sha256")
+            if path and sha:
+                if path in file_shas and file_shas[path] != sha:
+                    raise IntegrityError(f"alternate CPG conflicting accepted source identity: {path}")
+                file_shas[path] = sha
 
     cpg = synthesize_alternate_cpg(
         tree_sitter_files=ts_files,
@@ -2303,7 +2699,7 @@ def build_run_alternate_cpg(
         target_snapshot=target_snapshot,
         settings=settings,
     )
-    cpg["gaps"] = list(dict.fromkeys(gaps))
+    cpg["gaps"] = list(dict.fromkeys([*gaps, *cpg.get("gaps", ())]))
     return cpg, file_shas
 
 
@@ -2318,17 +2714,33 @@ def publish_alternate_cpg(
 ) -> tuple[dict[str, Any], IndexIdentity]:
     """Write portable Alternate CPG JSONL/JSON artifacts and the indexed SQLite shard."""
     snapshot = str(cpg.get("target_snapshot") or "").strip() or ("0" * 64)
-    if not re.fullmatch(r"[0-9a-f]{64}", snapshot):
-        snapshot_hex = hashlib.sha256(snapshot.encode("utf-8")).hexdigest()
-    else:
-        snapshot_hex = snapshot
     shas = file_shas or {}
+    gaps = list(cpg.get("gaps", ()))
+    fingerprint = hashlib.sha256(canonical_json({
+        "schema": INDEX_SCHEMA, "index": "analysis", "shard_id": ALTERNATE_CPG_SHARD_ID,
+        "graph": cpg, "file_shas": dict(shas),
+    })).hexdigest()
 
-    out_dir = run_root / "data" / "code-graph" / "alternate-cpg"
+    out_dir = run_root / "data" / "code-graph" / "alternate-cpg" / fingerprint
     out_dir.mkdir(parents=True, exist_ok=True)
     nodes_path = out_dir / "cpg-nodes.jsonl"
     edges_path = out_dir / "cpg-edges.jsonl"
     paths_path = out_dir / "cpg-paths.jsonl"
+
+    def record_payload(name: str, record: Any, label: str) -> tuple[dict[str, Any], bool]:
+        encoded = json.dumps(record, sort_keys=True, separators=(",", ":"))
+        if sanitize_producer_data(encoded) == encoded:
+            return {name + "_json": encoded}, False
+        # An opaque JSON string is subject to the index's string limit/redaction. Use
+        # structured producer data rather than storing truncated, unparseable JSON.
+        bounded = sanitize_producer_data({name: record})[name]
+        limited = bounded != record
+        if limited:
+            gaps.append(f"alternate_cpg_projection_limited: {label}; full record retained in JSONL")
+            for item in bounded if isinstance(bounded, list) else [bounded]:
+                if isinstance(item, dict) and "exact" in item:
+                    item["exact"] = False
+        return {name: bounded}, limited
 
     node_logical_ids: dict[str, LogicalIdentity] = {}
     enriched_nodes: list[dict[str, Any]] = []
@@ -2347,10 +2759,15 @@ def publish_alternate_cpg(
         if npath != "unknown":
             try:
                 rel_p = normalize_relative_path(npath)
-                fsha = shas.get(rel_p) or hashlib.sha256(f"{snapshot_hex}:{rel_p}".encode("utf-8")).hexdigest()
+                original = n.get("location") or {}
+                fsha = original.get("file_sha256") or shas.get(rel_p)
+                if not fsha:
+                    raise ValueError("source_identity_unavailable")
+                if original.get("file_sha256") and shas.get(rel_p, fsha) != fsha:
+                    raise IntegrityError(f"alternate CPG conflicting source identity: {rel_p}")
                 sline = max(1, int(n.get("start_line") or 1))
                 eline = max(sline, int(n.get("end_line") or sline))
-                loc_obj = SourceLocation(
+                location_data = dict(
                     target_snapshot=snapshot,
                     path=rel_p,
                     file_sha256=fsha,
@@ -2361,12 +2778,20 @@ def publish_alternate_cpg(
                     start_column=1,
                     end_column=1,
                     producer_location={"node_id": str(n["node_id"])},
-                    mapping_method="alternate_cpg",
-                    confidence=0.95 if n.get("resolution_tier") != "syntactic_fallback" else 0.75,
+                    mapping_method="alternate-cpg-line-only",
+                    confidence=0.5,
+                    ambiguous=True,
                 )
-            except ValueError:
+                location_data.update({k: v for k, v in _source_location(original).items()
+                                      if k in SourceLocation.__dataclass_fields__})
+                loc_obj = SourceLocation(**location_data)
+                if not original:
+                    gaps.append(f"source_span_unavailable: {npath}:{sline}: line-only alternate projection")
+            except ValueError as exc:
                 loc_obj = None
+                gaps.append(f"source_identity_unavailable: {npath}:{n.get('start_line')}: {exc}")
 
+        node_payload, _ = record_payload("cpg_node", n, str(n["node_id"]))
         payload = {
             "schema": ALTERNATE_CPG_SCHEMA,
             "cpg_record": "cpg_node",
@@ -2383,7 +2808,9 @@ def publish_alternate_cpg(
             "sink_class": n.get("sink_class"),
             "is_entrypoint": n.get("is_entrypoint", False),
             "resolution_tier": n["resolution_tier"],
-            "cpg_node_json": json.dumps(n, sort_keys=True, separators=(",", ":")),
+            **node_payload,
+            "cpg_settings": {"max_slice_depth": int(cpg.get("max_slice_depth", 8)),
+                             "max_hops": int(cpg.get("max_hops", 10))},
         }
         search_text = f"{n['node_kind']} {n['name']} {n.get('qualified_name', '')} {n['language']} {npath}"
         entity_records.append(
@@ -2412,7 +2839,8 @@ def publish_alternate_cpg(
     for (rkind, src_val, dst_val), elist in sorted(grouped_edges.items(), key=lambda kv: (kv[0][0].value, kv[0][1], kv[0][2])):
         elist.sort(key=lambda e: str(e["edge_id"]))
         best_tier = min((str(e["resolution_tier"]) for e in elist), key=lambda t: _TIER_RANK.get(t, 9))
-        exact = best_tier != "syntactic_fallback"
+        edge_payload, limited = record_payload("cpg_edges", elist, f"{src_val}->{dst_val}")
+        exact = not limited and all(bool(edge.get("exact")) for edge in elist)
         relation_records.append(
             RelationRecord(
                 kind=rkind,
@@ -2420,12 +2848,12 @@ def publish_alternate_cpg(
                 target_id=dst_val,
                 exact=exact,
                 confidence=0.95 if exact else 0.70,
-                ambiguity=None if exact else "syntactic_fallback_resolution",
+                ambiguity=None if exact else "alternate_context_only: inexact, disputed, or unverified projection",
                 payload={
                     "schema": ALTERNATE_CPG_SCHEMA,
                     "cpg_edge_kind": elist[0]["edge_kind"],
                     "resolution_tier": best_tier,
-                    "cpg_edges_json": json.dumps(elist, sort_keys=True, separators=(",", ":")),
+                    **edge_payload,
                 },
             )
         )
@@ -2435,6 +2863,7 @@ def publish_alternate_cpg(
         plid = LogicalIdentity.derive(
             EntityKind.DATAFLOW_PATH, snapshot, {"cpg_path_id": str(prec["path_id"])}
         )
+        path_payload, _ = record_payload("cpg_path", prec, str(prec["path_id"]))
         entity_records.append(
             EntityRecord(
                 identity=plid,
@@ -2449,7 +2878,7 @@ def publish_alternate_cpg(
                     "resolution_tier": prec["resolution_tier"],
                     "entrypoint_linked": prec["entrypoint_linked"],
                     "sink_class": prec.get("sink_class"),
-                    "cpg_path_json": json.dumps(prec, sort_keys=True, separators=(",", ":")),
+                    **path_payload,
                 },
                 location=None,
             )
@@ -2468,20 +2897,7 @@ def publish_alternate_cpg(
         "".join(json.dumps(p, sort_keys=True) + "\n" for p in raw_paths).encode("utf-8"),
     )
 
-    fingerprint = hashlib.sha256(
-        canonical_json(
-            {
-                "schema": INDEX_SCHEMA,
-                "index": "analysis",
-                "shard_id": ALTERNATE_CPG_SHARD_ID,
-                "snapshot": snapshot,
-                "counts": cpg.get("counts", {}),
-            }
-        )
-    ).hexdigest()
     shard_path = run_root / "data" / "indices" / "analysis" / ALTERNATE_CPG_SHARD_ID / f"{fingerprint}.sqlite"
-    if shard_path.exists():
-        shard_path.unlink()
     builder = IndexBuilder(
         shard_path,
         name="analysis",
@@ -2499,7 +2915,7 @@ def publish_alternate_cpg(
         if rel.relation_id not in seen_rel:
             seen_rel.add(rel.relation_id)
             builder.add_relation(rel)
-    gaps = tuple(cpg.get("gaps", ()))
+    gaps = tuple(dict.fromkeys(gaps))
     builder.add_coverage("alternate_cpg", "partial" if gaps else "complete", "; ".join(gaps) or None)
     shard_sha = builder.build()
 
@@ -2528,6 +2944,9 @@ def publish_alternate_cpg(
         "max_hops": int(cpg.get("max_hops") or 10),
         "counts": dict(cpg.get("counts", {})),
         "resolution_breakdown": dict(cpg.get("resolution_breakdown", {})),
+        "gaps": list(gaps),
+        "max_slice_depth": int(cpg.get("max_slice_depth", 8)),
+        "traversal": dict(cpg.get("traversal", {})),
         "artifacts": {
             "nodes": nodes_path.relative_to(run_root).as_posix(),
             "edges": edges_path.relative_to(run_root).as_posix(),
@@ -2540,29 +2959,47 @@ def publish_alternate_cpg(
     return summary_doc, shard_identity
 
 
-def load_cpg_from_sqlite(database: sqlite3.Connection) -> dict[str, Any]:
+def load_cpg_from_sqlite(database: sqlite3.Connection, *,
+                         check_deadline: Callable[[], None] | None = None) -> dict[str, Any]:
     """Reconstruct the Alternate CPG graph from an opened ``alternate-cpg`` SQLite shard."""
     nodes: list[dict[str, Any]] = []
     paths: list[dict[str, Any]] = []
+    settings: dict[str, int] = {}
     for row in database.execute("SELECT identity, payload_json FROM entities ORDER BY identity"):
+        if check_deadline:
+            check_deadline()
         payload = json.loads(row["payload_json"])
         rec_type = payload.get("cpg_record")
-        if rec_type == "cpg_node" and isinstance(payload.get("cpg_node_json"), str):
-            node = json.loads(payload["cpg_node_json"])
+        if rec_type == "cpg_node" and (isinstance(payload.get("cpg_node_json"), str)
+                                       or isinstance(payload.get("cpg_node"), Mapping)):
+            node = (dict(payload["cpg_node"]) if isinstance(payload.get("cpg_node"), Mapping)
+                    else json.loads(payload["cpg_node_json"]))
             node.setdefault("logical_id", row["identity"])
+            limits = payload.get("cpg_settings", {})
+            for key, value in limits.items():
+                settings[key] = min(settings.get(key, int(value)), int(value))
             nodes.append(node)
-        elif rec_type == "cpg_path" and isinstance(payload.get("cpg_path_json"), str):
-            paths.append(json.loads(payload["cpg_path_json"]))
+        elif rec_type == "cpg_path" and (isinstance(payload.get("cpg_path_json"), str)
+                                         or isinstance(payload.get("cpg_path"), Mapping)):
+            paths.append(dict(payload["cpg_path"]) if isinstance(payload.get("cpg_path"), Mapping)
+                         else json.loads(payload["cpg_path_json"]))
 
     edges: list[dict[str, Any]] = []
     for row in database.execute("SELECT payload_json FROM relations ORDER BY relation_id"):
+        if check_deadline:
+            check_deadline()
         if not row["payload_json"]:
             continue
         payload = json.loads(row["payload_json"])
-        if isinstance(payload.get("cpg_edges_json"), str):
-            edges.extend(json.loads(payload["cpg_edges_json"]))
+        if isinstance(payload.get("cpg_edges_json"), str) or isinstance(payload.get("cpg_edges"), list):
+            records = payload["cpg_edges"] if isinstance(payload.get("cpg_edges"), list) else json.loads(
+                payload["cpg_edges_json"])
+            for edge in records:
+                edge.setdefault("exact", False)
+                edge.setdefault("evidence", [])
+                edges.append(edge)
 
     nodes.sort(key=lambda n: str(n["node_id"]))
     edges.sort(key=lambda e: str(e["edge_id"]))
     paths.sort(key=lambda p: str(p["path_id"]))
-    return {"schema": ALTERNATE_CPG_SCHEMA, "nodes": nodes, "edges": edges, "paths": paths}
+    return {"schema": ALTERNATE_CPG_SCHEMA, "nodes": nodes, "edges": edges, "paths": paths, **settings}

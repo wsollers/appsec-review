@@ -98,6 +98,19 @@ def _symbol(result, name: str) -> str:
     return record.identity.value
 
 
+@pytest.mark.parametrize("bound", ["9007199254740993", "-9223372036854775807", "18446744073709551615"])
+def test_integral_range_export_preserves_exact_large_integer(bound):
+    exports = _exports()
+    document = exports["ranges"]
+    rows = _rows(document)
+    row = next(item for item in rows if item["applicability"] == "integral")
+    row.update(lower=bound, upper=bound)
+    _set_rows(document, rows)
+    result = _normalize(exports)
+    intervals = [fact.payload["result"]["interval"] for fact in _family(result, "range_fact")]
+    assert {"lower": int(bound), "upper": int(bound)} in intervals
+
+
 @pytest.fixture(scope="module")
 def synthetic():
     return _normalize()

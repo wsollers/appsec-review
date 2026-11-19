@@ -183,6 +183,7 @@ def scope_scorecard(*, scope: Mapping[str, Any], facts: Sequence[GraphFact], sym
                                                 (s.value for s in CrossCheckState)},
                        "secondary_only": secondary_only, "unattributed": dict(sorted(unattributed.items()))},
         "paths": path_rows[:MAX_PATHS], "paths_omitted": max(0, len(path_rows) - MAX_PATHS),
+        "_paths_eligible_total": sum(row["direct_eligible"] for row in path_rows),
         "correlation": {"bridged": correlation.get("bridged", 0), "partial": correlation.get("partial", 0),
                         "broken": correlation.get("broken", 0), "uncorrelated": correlation.get(UNCORRELATED, 0)},
         "sinks": {"total": len(sinks), "classified": len(sinks) - by_class.get("unclassified", 0),
@@ -199,12 +200,13 @@ def assemble_scorecard(*, run_id: str, target_snapshot: str, scopes: Sequence[Ma
     """The run scorecard over every scope section; validated against the closed schema."""
     sections = sorted((dict(item) for item in scopes), key=lambda item: item["scope_id"])
     totals = {
-        "scopes": len(sections), "first_party_functions": sum(len(item["functions"]) for item in sections),
+        "scopes": len(sections), "first_party_functions": sum(
+            len(item["functions"]) + item["functions_omitted"] for item in sections),
         "call_sites": sum(item["call_sites"]["total"] for item in sections),
         "call_sites_agreed": sum(item["call_sites"]["agree"] for item in sections),
         "call_sites_codeql_only": sum(item["call_sites"]["not_covered"] for item in sections),
         "paths": sum(len(item["paths"]) + item["paths_omitted"] for item in sections),
-        "paths_eligible": sum(1 for item in sections for path in item["paths"] if path["direct_eligible"]),
+        "paths_eligible": sum(item.pop("_paths_eligible_total") for item in sections),
         "sinks_unclassified": sum(item["sinks"]["unclassified"] for item in sections),
         "excluded_facts": sum(count for item in sections for family in item["exclusions"].values()
                               for count in family.values()),

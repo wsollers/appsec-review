@@ -52,6 +52,16 @@ def test_exact_endpoints_and_span_matched_middle_steps_are_bridged(tmp_path) -> 
     assert not [r for r in result.relations if r.kind is RelationKind.SAME_AS]
 
 
+def test_reversed_intermediates_do_not_claim_an_ordered_bridge(tmp_path):
+    reversed_middle = (PATH_STEPS[0], PATH_STEPS[2], PATH_STEPS[1], PATH_STEPS[3])
+    fixture, facts, rows, _ = _setup(tmp_path, [{"key": "reversed", "flows": _flow(reversed_middle)}])
+    result = correlate(facts, rows, sources=fixture.sources)
+    [flow] = result.correlations
+    assert flow.state is CorrelationState.PARTIAL
+    assert flow.unmatched_steps == (3,)
+    assert all(not relation.exact for relation in result.relations)
+
+
 def _setup_facts(fixture):
     return [fixture.entry(*ENTRY), fixture.sink(*SINK)]
 

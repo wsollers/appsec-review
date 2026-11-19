@@ -158,8 +158,8 @@ def _ordered_match(step: _Span | None, path_steps: Sequence[tuple[int, _Span | N
     exact = [n for n, span in path_steps if _match(step, span) == "span"]
     if exact:
         later = [n for n in exact if n > previous]
-        return "span", [later[0] if later else exact[0]]
-    lines = [n for n, span in path_steps if _match(step, span) == "line"]
+        return ("span", [later[0]]) if later else (None, [])
+    lines = [n for n, span in path_steps if n > previous and _match(step, span) == "line"]
     return ("line", lines) if lines else (None, [])
 
 
@@ -181,6 +181,11 @@ def _correlate_flow(steps: Sequence[Mapping[str, Any]], path: GraphFact,
         if index in (0, last):
             # Endpoints already matched the entry point / sink by exact span; bind them to the path ends.
             n = path_steps[0][0] if index == 0 and path_steps else path_steps[-1][0] if path_steps else index
+            if n <= previous:
+                unmatched.append(ordinal)
+                per_step.append((None, []))
+                continue
+            previous = n
             matched.append({"ordinal": ordinal, "path_step": n, "method": METHOD_SPAN,
                             "role": "source" if index == 0 else "sink"})
             per_step.append(("span", [n]))
@@ -191,6 +196,7 @@ def _correlate_flow(steps: Sequence[Mapping[str, Any]], path: GraphFact,
             previous = found[0]
             matched.append({"ordinal": ordinal, "path_step": found[0], "method": METHOD_SPAN})
         elif method == "line":
+            previous = found[0]
             ambiguous.append({"ordinal": ordinal, "path_steps": found, "method": METHOD_LINE})
         else:
             unmatched.append(ordinal)

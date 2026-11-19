@@ -447,7 +447,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         rendering_path = unit.unit_root / "graph-quality-scorecard.txt"
         rendering_path.write_text(render_scorecard(scorecard), encoding="utf-8", newline="\n")
         alt_counts = alt_summary["counts"]
-        gaps = [*published["gaps"], *alt_cpg.get("gaps", ())]
+        gaps = [*published["gaps"], *alt_shard.gaps]
         counts = {"scopes": len(published["scopes"]), "databases": len(published["scopes"]), "shards": len(indexes),
                   "reused_scopes": published["reused_count"],
                   "facts": sum(int(scope["counts"]["facts"]) for scope in published["scopes"]),

@@ -398,15 +398,16 @@ def _bool(value: Any) -> bool | str:
     return True if value == "true" else False if value == "false" else "unknown"
 
 
-def _bound(value: Any) -> int | float | str:
-    text = str(value or "").strip()
+def _bound(value: Any) -> int | str:
+    text = str(value if value is not None else "").strip()
     if not text or text == "unknown":
         return "unknown"
     try:
-        number = float(text)
+        if re.fullmatch(r"[+-]?[0-9]+\.0+", text):
+            return int(text.split(".", 1)[0])
+        return int(text)
     except ValueError:
         return text
-    return int(number) if number.is_integer() else number
 
 
 def _sha(value: Any) -> str:

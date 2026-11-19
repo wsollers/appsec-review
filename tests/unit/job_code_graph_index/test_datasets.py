@@ -10,7 +10,7 @@ from appsec_review.runtime.datasets import validate_declarations
 A = "data/jobs/job_code_graph_index/attempts/attempt_0001/steps"
 S = "data/code-graph/scopes/codeql-unit-5991e47ff8fd0c7b6c705817"
 
-# Paths observed on smoke-cpp run 2026-11-14-0005 plus the scorecard the job publishes since T-5016.
+# Observed primary paths plus scorecard and content-addressed alternate artifacts.
 OBSERVED = [
     f"{A}/load/tasks/accepted_inputs/code-graph-inputs.json",
     f"{A}/acceptance/tasks/publish_handoff/code-graph-summary.json",
@@ -20,9 +20,9 @@ OBSERVED = [
     f"{S}/work/crosschecked.json",
     f"{S}/checkpoint.json",
     f"{A}/acceptance/tasks/publish_handoff/alternate-cpg-summary.json",
-    "data/code-graph/alternate-cpg/cpg-nodes.jsonl",
-    "data/code-graph/alternate-cpg/cpg-edges.jsonl",
-    "data/code-graph/alternate-cpg/cpg-paths.jsonl",
+    f"data/code-graph/alternate-cpg/{'a' * 64}/cpg-nodes.jsonl",
+    f"data/code-graph/alternate-cpg/{'a' * 64}/cpg-edges.jsonl",
+    f"data/code-graph/alternate-cpg/{'a' * 64}/cpg-paths.jsonl",
 ]
 
 
