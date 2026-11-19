@@ -363,7 +363,7 @@ inherited shards are integrity-verified and carried forward, never queried. For 
 | Entity | Located | Content |
 | --- | --- | --- |
 | `binary_function` | Yes, in `@binary/<sha256>/<address>.c` | Address, name, signature, flags, decompile status; retrieval text is the name and bounded pseudo-C |
-| `binary_call_site` | On the one pseudo-C line that names the callee, else ambiguous or unlocated | Caller, callee, call address, call kind |
+| `binary_call_site` | At a unique lexical call expression; ambiguous or unreliable matches have no location | Caller, callee, call address, call kind |
 | `binary_import` | Never | Library, name, thunk address |
 | `binary_string` | Never | Address, bounded value, referencing functions |
 
@@ -372,6 +372,14 @@ the callee function or import, which gives call neighbourhoods and import caller
 thunk to import). Each decompiled function's pseudo-C is detached into
 `data/binary-evidence/sources/` in the run, hash-pinned, so `read_excerpt` and citation
 re-resolution read it like any other accepted source.
+
+External targets use the exported library plus symbol-within-library identity; external-space
+offsets are never treated as ordinary program addresses. Legacy names resolve only when unique
+across the entire import table. Pseudo-C mapping excludes declarations, comments, literals and
+unevaluated operands; repeated call expressions retain ambiguity without selecting a source
+line. Neither import presence nor a decompiled call establishes a vulnerability.
+Published relation counts measure the stored SQLite edges (also on shard reuse), not the number
+of observations before duplicate caller-to-callee edges merge.
 
 Every record keeps the binary hash, function address, and `provenance: binary-derived`. Workers
 query the index through the existing retrieval and MCP tools (`search`, `find`, `trace`, `read_excerpt`, `coverage`)
@@ -385,6 +393,8 @@ unavailable binary, and managed-code program is a named coverage gap, and the jo
 `COMPLETED_WITH_GAPS`. With no configured binaries it returns `NOT_APPLICABLE` and publishes no
 binary-function facts; the shared scope publisher can still add a coverage-only shard. See the
 [canonical job page](../operations/job_binary_evidence_indexing.md) for counts and composition.
+String value truncation at export or indexing is retained in the entity and reported as an
+address-scoped `string_value_truncated` gap; a bounded prefix is not complete string coverage.
 
 **Managed-code routing.** When the publication's coverage marks managed code, the job indexes no
 pseudo-C for it and records a gap naming the suitable decompiler: ILSpy for CIL, jadx or CFR for

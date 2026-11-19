@@ -423,6 +423,12 @@ public class AppsecExportProgram extends HeadlessScript {
 		return "ok";
 	}
 
+	private String externalName(ExternalLocation location) {
+		String name = location.getSymbol().getName(true);
+		String prefix = location.getLibraryName() + "::";
+		return name.startsWith(prefix) ? name.substring(prefix.length()) : name;
+	}
+
 	private int writeCalls() throws Exception {
 		FunctionManager manager = currentProgram.getFunctionManager();
 		Listing listing = currentProgram.getListing();
@@ -449,7 +455,8 @@ public class AppsecExportProgram extends HeadlessScript {
 								((ExternalReference) reference).getExternalLocation();
 							edge.addProperty("to", (String) null);
 							edge.addProperty("to_name", clip(location.getLabel(), MAX_NAME_CHARS));
-							edge.addProperty("resolved_name", clip(location.getLabel(), MAX_NAME_CHARS));
+							edge.addProperty("resolved_name", clip(externalName(location), MAX_NAME_CHARS));
+							edge.addProperty("resolved_library", clip(location.getLibraryName(), MAX_NAME_CHARS));
 							edge.addProperty("resolved_external", true);
 						}
 						else {
@@ -475,6 +482,15 @@ public class AppsecExportProgram extends HeadlessScript {
 								edge.addProperty("to_name", clip(target.getName(true), MAX_NAME_CHARS));
 								edge.addProperty("resolved_name", clip(end.getName(true), MAX_NAME_CHARS));
 								edge.addProperty("resolved_external", end.isExternal());
+								if (end.isExternal()) {
+									ExternalLocation location =
+										currentProgram.getExternalManager().getExternalLocation(end.getSymbol());
+									if (location != null) {
+										edge.addProperty("resolved_name", clip(externalName(location), MAX_NAME_CHARS));
+										edge.addProperty("resolved_library",
+											clip(location.getLibraryName(), MAX_NAME_CHARS));
+									}
+								}
 							}
 						}
 						edge.addProperty("kind", type.isCall() ? "call" : "jump");
@@ -512,11 +528,13 @@ public class AppsecExportProgram extends HeadlessScript {
 					continue;
 				}
 				JsonObject record = new JsonObject();
-				record.addProperty("name", clip(symbol.getName(), MAX_NAME_CHARS));
-				record.addProperty("library", clip(symbol.getParentNamespace().getName(), MAX_NAME_CHARS));
 				record.addProperty("kind", type == SymbolType.FUNCTION ? "function" : "data");
 				ExternalLocation location =
 					currentProgram.getExternalManager().getExternalLocation(symbol);
+				record.addProperty("name", clip(location == null
+					? symbol.getName() : externalName(location), MAX_NAME_CHARS));
+				record.addProperty("library", clip(location == null
+					? symbol.getParentNamespace().getName() : location.getLibraryName(), MAX_NAME_CHARS));
 				if (location != null) {
 					record.addProperty("original_name",
 						clip(location.getOriginalImportedName(), MAX_NAME_CHARS));

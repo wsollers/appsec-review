@@ -137,14 +137,23 @@ the catalog supplies the retrieval manifest, not the binary's authority.
 1. Re-read frozen intake; reject a changed resolved-ID set. For each sorted binary, load verified
    functions, calls, imports, strings and publication-gap tables. Cap functions, call sites,
    imports, strings, string cross-references and searchable text.
-2. Create unlocated import entities and thunk mappings. For native functions with pseudo-C,
+2. Create unlocated import entities and thunk mappings. External calls resolve by the exported
+   library and symbol-within-library pair, not by an external address's numeric offset. Older
+   publications without the library field resolve a qualified or bare spelling only when it
+   identifies one import across the full import table, including rows omitted by index bounds.
+   Missing or ambiguous external targets remain unresolved. For native functions with pseudo-C,
    recheck bytes, detach immutable run-owned backing, and bind locations under
    `@binary/<sha256>/<address>.c`. Preserve decompile/truncation metadata. Managed routing suppresses
    pseudo-C locations and points to the appropriate managed decompiler without running it.
-3. For calls from retained functions, require a valid call-site address. Match a callee spelling
-   to pseudo-C call lines: one match is located, several are marked ambiguous, none is unlocated.
+3. For calls from retained functions, require a valid call-site address. Lexically match a callee
+   to an expression inside a pseudo-C body, excluding comments, literals, declarations and
+   unevaluated operands. One expression is located; several (even on one line) retain
+   `line_match: ambiguous` without a source location; no reliable expression is unlocated.
+   This is a conservative derived-text anchor, not an instruction-to-source map.
    Relate callers/sites/callees when resolved; record unresolved computed calls.
-4. Create unlocated string entities and bounded function-reference edges. Carry publication gaps
+4. Create unlocated string entities and bounded function-reference edges. Value clipping by
+   either the exporter or indexer emits `string_value_truncated` with the string address,
+   retaining the payload's `truncated` flag. Carry publication gaps
    and coverage flags, then build or reuse one binary shard. Zero configured entries is
    not-applicable; unavailable entries or any reason prevents clean coverage.
 
@@ -154,6 +163,8 @@ the catalog supplies the retrieval manifest, not the binary's authority.
    shards and unavailable-scope coverage with the accepted retrieval manifest.
 2. Publish `binary-evidence-index-summary.json` with counts for functions, located functions, call
    sites, located call sites, imports, strings and relations; item count is function count.
+   Relation counts come from the persisted SQLite shard, on both creation and reuse. Repeated
+   caller-to-callee observations can merge into one edge while site-specific edges remain distinct.
 
 ## Dataflow
 
@@ -182,8 +193,8 @@ non-retryable bit is not advisory classification.
 - Coverage missing or failed: inherited `publication_gap` and `publication_coverage` flags
   (analysis timeout, functions/strings not exported); `functions_truncated`, `call_sites_truncated`,
   `imports_truncated`, `strings_truncated`, `pseudo_c_truncated`, `string_xrefs_truncated`,
-  `call_site_unaddressed` and `unresolved_call`. String clipping is also retained in payload
-  `truncated`; ambiguous/unlocated calls must be inspected even without a separate gap string.
+  `string_value_truncated`, `call_site_unaddressed` and `unresolved_call`.
+  Ambiguous/unlocated calls must be inspected even without a separate gap string.
 - Store escape, changed publication/manifest/binary hash, changed pseudo-C or changed planned
   entry set raises an exception. It is not evidence of a successfully published unavailable shard.
 
@@ -194,8 +205,9 @@ The walk must separately approve any expected cause and its lost binary coverage
 1. **A. Inputs:** Compare consumed intake identity and each frozen binary SHA, publication identity
    and manifest hash; verify the catalog manifest used for composition separately.
 2. **B. Independent comparison:** Count verified publication-table rows and retained prefixes;
-   compare import/function/site counts to the SQLite entities. Independently hash detached pseudo-C,
-   inspect one uniquely located and one ambiguous call, and verify managed functions have no native
+   compare import/function/site counts to the SQLite entities and relation counts to stored edges.
+   Independently hash detached pseudo-C, inspect one uniquely located and one unlocated ambiguous
+   call, and verify managed functions have no native
    pseudo-C locations. Imports and strings must not acquire citations.
 3. **C. Gaps:** Group verified outcome records by canonical code plus retained reason; reconcile
    unavailable binaries, export flags, truncation and unresolved calls against publication tables
@@ -212,6 +224,12 @@ mapping limits. The binary-ID shard suffix separates identical bytes reviewed un
 Publications and pseudo-C are re-verified even when a shard file already exists. Changing one
 publication or limit rebuilds its shard; unrelated binary shards can remain usable under the
 [accepted-index contract](../architecture/python-and-retrieval.md#accepted-index-sets).
+The repaired normalizer and line-mapping identities invalidate older binary shards.
+The export script is copied into `tool-ghidra`, not supplied by an application source reload.
+Exporting explicit library identities requires an operator-authorized image rebuild (including
+its Java API compile check), new publication and intake pin. These rollout and real-Ghidra checks
+were **NOT RUN** for the T-5106/T-5107 unit repair; Python fixtures verify the publication,
+indexing and retrieval path, not Ghidra runtime behavior.
 Generated task/tool bindings remain incomplete under
 [T-147](../TODO.md);
 the source boundary is indexing, not a Ghidra invocation.

@@ -7,8 +7,8 @@ composed onto. For every resolved binary it re-verifies the publication chain, d
 and builds one ``binary`` retrieval shard with:
 
 * ``binary_function`` entities, located in ``@binary/<sha256>/<address>.c`` pseudo-C;
-* ``binary_call_site`` entities, located on the pseudo-C line that names the callee when exactly
-  one line does (otherwise ambiguous or unlocated);
+* ``binary_call_site`` entities, located only at a unique lexical pseudo-C call expression
+  (ambiguous matches retain metadata but no source location);
 * ``binary_import`` and ``binary_string`` entities, which are never located and so never cited;
 * ``CALLS`` (call neighbourhood, import callers) and ``REFERENCES`` (string uses, thunks) edges.
 
@@ -22,10 +22,12 @@ from __future__ import annotations
 from appsec_review.interchange import bounded_gap_messages
 
 from dataclasses import asdict
+from contextlib import closing
 import hashlib
 import json
 from pathlib import Path
 import re
+import sqlite3
 from typing import Any, Mapping
 
 from appsec_review.jobs.cpp_index_scopes import artifact, publish_scope_indexes
@@ -39,13 +41,14 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 
 from appsec_review.jobs.job_binary_evidence_indexing.datasets import CONTRACT, DATASETS
+from appsec_review.jobs.job_binary_evidence_indexing.call_locations import call_line as _line_of
 
 
 JOB_ID = "job_binary_evidence_indexing"
 SCHEMA = "appsec-review/binary-evidence-index/1"
 INTAKE_SCHEMA = "appsec-review/binary-evidence-intake/1"
-NORMALIZER = "binary-evidence-normalizer/1"
-MAPPING = "ghidra-pseudo-c-lines/1"
+NORMALIZER = "binary-evidence-normalizer/2"
+MAPPING = "ghidra-pseudo-c-lines/2"
 TOPOLOGY = {"load": ("accepted_publications",), "index": ("binaries",), "acceptance": ("publish_handoff",)}
 SETTINGS = ("max_functions_per_binary", "max_call_sites_per_binary", "max_imports_per_binary",
             "max_strings_per_binary", "max_string_xrefs", "max_entity_text_bytes", "max_string_chars")
@@ -131,22 +134,6 @@ def _short(name: Any) -> str:
     return str(name or "").rsplit("::", 1)[-1]
 
 
-def _line_of(text: str, callee: str) -> tuple[int, int, int, int, bool] | None:
-    """The pseudo-C line that names ``callee`` as a call: (line, start_byte, end_byte, columns, ambiguous)."""
-    if not callee or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_@$.]*", callee):
-        return None
-    pattern = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(callee) + r"\s*\(")
-    offset, found = 0, []
-    for number, line in enumerate(text.split("\n")[:-1], start=1):
-        if pattern.search(line):
-            found.append((number, offset, offset + len(line.encode("utf-8")), len(line) + 1))
-        offset += len(line.encode("utf-8")) + 1
-    if not found:
-        return None
-    number, start, end, columns = found[0]
-    return number, start, end, columns, len(found) > 1
-
-
 class _Binary:
     """Builds the shard for one verified binary publication."""
 
@@ -166,7 +153,8 @@ class _Binary:
         self.names: dict[str, str] = {}
         self.texts: dict[str, str] = {}
         self.locations: dict[str, SourceLocation] = {}
-        self.imports: dict[str, str] = {}
+        self.imports: dict[tuple[str, str], str] = {}
+        self.import_names: dict[str, set[tuple[str, str]]] = {}
         self.thunk_imports: dict[str, str] = {}
 
     def _identity(self, kind: EntityKind, native: Mapping[str, Any]) -> str:
@@ -182,7 +170,12 @@ class _Binary:
     def _relation(self, kind: RelationKind, source: str, target: str, **payload: Any) -> None:
         self.builder.add_relation(RelationRecord(kind, source, target, True, 1.0, None,
                                                  {"producer": "ghidra", **payload}))
-        self.counts["relations"] += 1
+
+    def publish(self) -> str:
+        sha, _ = self.builder.build_or_reuse()
+        with closing(sqlite3.connect(f"{self.builder.path.resolve().as_uri()}?mode=ro", uri=True)) as db:
+            self.counts["relations"] = db.execute("SELECT COUNT(*) FROM relations").fetchone()[0]
+        return sha
 
     def _bounded(self, name: str, rows: list[Mapping[str, Any]], limit: str) -> list[Mapping[str, Any]]:
         if len(rows) > self.limits[limit]:
@@ -209,6 +202,12 @@ class _Binary:
         self.gaps = list(dict.fromkeys(self.gaps))
 
     def _imports(self) -> None:
+        # Include omitted imports in ambiguity checks: a retained prefix cannot make a
+        # bare name unique by hiding the same symbol from another library.
+        for row in self.tables["imports"]:
+            key = (str(row.get("library", "")), str(row.get("name", "")))
+            for name in (key[1], "::".join(key)):
+                self.import_names.setdefault(name, set()).add(key)
         for row in self._bounded("imports", self.tables["imports"], "max_imports_per_binary"):
             name, library = str(row.get("name", "")), str(row.get("library", ""))
             identity = self._identity(EntityKind.BINARY_IMPORT, {"library": library, "name": name})
@@ -216,7 +215,7 @@ class _Binary:
             self.builder.add_entity(EntityRecord(
                 LogicalIdentity.parse(identity), f"{self.sha}:{library}::{name}", name, f"{library} {name}",
                 {**self._common(), "name": name, "library": library, "kind": row.get("kind"), "thunks": thunks}))
-            self.imports[f"{library}::{name}"] = identity
+            self.imports[library, name] = identity
             for thunk in thunks:
                 self.thunk_imports[thunk] = identity
             self.counts["imports"] += 1
@@ -264,10 +263,19 @@ class _Binary:
 
     def _callee(self, row: Mapping[str, Any]) -> str | None:
         target = row.get("to")
+        if row.get("resolved_external"):
+            name = str(row.get("resolved_name", ""))
+            if "resolved_library" in row:
+                return self.imports.get((str(row["resolved_library"]), name))
+            candidates = self.import_names.get(name, set())
+            if len(candidates) == 1:
+                return self.imports.get(next(iter(candidates)))
+            if candidates:
+                return None
         if isinstance(target, str) and target in self.thunk_imports:
             return self.thunk_imports[target]
         if row.get("resolved_external"):
-            return self.imports.get(str(row.get("resolved_name", "")))
+            return None
         return self.functions.get(target) if isinstance(target, str) else None
 
     def _calls(self) -> None:
@@ -279,19 +287,22 @@ class _Binary:
                 continue
             callee = self._callee(row)
             name = _short(row.get("resolved_name") or row.get("to_name"))
-            identity = self._identity(EntityKind.BINARY_CALL_SITE, {"call_site": site, "caller": caller,
-                                                                    "to": row.get("to")})
+            native = {"call_site": site, "caller": caller, "to": row.get("to")}
+            if row.get("resolved_external"):
+                native.update(resolved_library=row.get("resolved_library"), resolved_name=row.get("resolved_name"))
+            identity = self._identity(EntityKind.BINARY_CALL_SITE, native)
             location, ambiguous = None, False
             text = self.texts.get(caller)
             found = _line_of(text, name) if text is not None else None
             if found is not None:
                 number, start, end, columns, ambiguous = found
-                base = self.locations[caller]
-                location = SourceLocation(self.snapshot, base.path, base.file_sha256, start, end, number, number,
-                                          1, columns, base.producer_location, MAPPING,
-                                          0.6 if ambiguous else 0.9, ambiguous)
-                self.counts["located_call_sites"] += 1
+                if not ambiguous:
+                    base = self.locations[caller]
+                    location = SourceLocation(self.snapshot, base.path, base.file_sha256, start, end, number, number,
+                                              1, columns, base.producer_location, MAPPING, 0.9)
+                    self.counts["located_call_sites"] += 1
             payload = {**self._common(caller), "call_site": site, "callee_name": name, "callee_address": row.get("to"),
+                       "resolved_library": row.get("resolved_library"), "resolved_name": row.get("resolved_name"),
                        "external": bool(row.get("resolved_external")), "computed": bool(row.get("computed")),
                        "call_kind": row.get("kind"), "line_match": "ambiguous" if ambiguous else
                        "unique" if location is not None else "unlocated"}
@@ -303,7 +314,7 @@ class _Binary:
             if callee is not None:
                 self._relation(RelationKind.CALLS, identity, callee)
                 self._relation(RelationKind.CALLS, self.functions[caller], callee, call_site=site)
-            elif row.get("to") is None or row.get("computed"):
+            elif row.get("to") is None or row.get("computed") or row.get("resolved_external"):
                 self.gaps.append(f"unresolved_call: {site}")
 
     def _strings(self) -> None:
@@ -312,6 +323,9 @@ class _Binary:
             if not _ADDRESS.fullmatch(address):
                 continue
             value = str(row.get("value", ""))[:self.limits["max_string_chars"]]
+            truncated = bool(row.get("truncated")) or len(str(row.get("value", ""))) > len(value)
+            if truncated:
+                self.gaps.append(f"string_value_truncated: {address}")
             identity = self._identity(EntityKind.BINARY_STRING, {"address": address})
             xrefs = [item for item in row.get("xrefs") or () if isinstance(item, Mapping)]
             if len(xrefs) > self.limits["max_string_xrefs"] or row.get("xrefs_truncated"):
@@ -320,7 +334,7 @@ class _Binary:
             self.builder.add_entity(EntityRecord(
                 LogicalIdentity.parse(identity), f"{self.sha}@{address}", value[:256], value,
                 {**self._common(), "address": address, "value": value, "length": row.get("length"),
-                 "truncated": bool(row.get("truncated")) or len(str(row.get("value", ""))) > len(value),
+                 "truncated": truncated,
                  "xrefs": [{"from": item.get("from"), "function": item.get("function")} for item in xrefs]}))
             self.counts["strings"] += 1
             for function in sorted({str(item.get("function")) for item in xrefs if item.get("function") in self.functions}):
@@ -348,7 +362,7 @@ def index_binary(unit: UnitContext, document: Mapping[str, Any], entry: Mapping[
     status = "partial" if binary.gaps else "complete"
     builder.add_coverage(f"binary:{entry['binary_id']}"[:256], status,
                          "; ".join(bounded_gap_messages(binary.gaps, 10)) or None)
-    sha, _ = builder.build_or_reuse()
+    sha = binary.publish()
     gaps = [f"{entry['binary_id']}: {gap}" for gap in binary.gaps]
     index = IndexIdentity("binary", "appsec-review/retrieval-index/2", sha, fingerprint,
                           path.relative_to(unit.job.run_root).as_posix(),

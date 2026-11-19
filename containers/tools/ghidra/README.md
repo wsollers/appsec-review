@@ -23,6 +23,10 @@ Commands: [`docs/operations/binary-decompilation.md`](../../../docs/operations/b
 consume it through `job_review_intake` and `job_binary_evidence_indexing`. The debug-symbol script
 and `--debug-symbols` option were added after that verification; rebuild the image before relying
 on them (`docs/TODO.md`).
+The T-5106 external-reference identity repair also changes the baked export script.
+Its image rebuild, pinned-Ghidra Java compile check and real external-reference validation are
+**NOT RUN** in that repair. Application reload alone does not deploy this script; an authorized
+operator must rebuild the affected tooling image and create a new publication before intake.
 
 ## Files
 
@@ -82,12 +86,18 @@ The script writes these beneath `--output`. Addresses in the default address spa
 | `functions.jsonl` | non-external function | `address`, `name`, `name_source`, `signature`, `calling_convention`, `body_bytes`, `is_thunk`, `thunk_target`, `is_export`, `decompile_status` |
 | `decompiled.jsonl` | decompiled function | `address`, `c` (pseudo-C), `truncated` |
 | `pcode.jsonl` | decompiled function | `address`, `operations[]` of `{address, order, mnemonic, output, inputs[], callee?}`, `truncated` |
-| `calls.jsonl` | call or tail-jump edge | `from_function`, `call_site`, `to`, `to_name`, `resolved_name`, `resolved_external`, `kind`, `computed`, `unresolved?` |
+| `calls.jsonl` | call or tail-jump edge | `from_function`, `call_site`, `to`, `to_name`, `resolved_name`, `resolved_library?`, `resolved_external`, `kind`, `computed`, `unresolved?` |
 | `imports.jsonl` | external symbol | `name`, `library`, `kind`, `original_name`, `thunks[]` |
 | `exports.jsonl` | external entry point | `address`, `name`, `is_function` |
 | `strings.jsonl` | defined string | `address`, `value`, `length`, `data_type`, `memory_block`, `xrefs[]` of `{from, function}` |
 | `gaps.jsonl` | named gap | `kind`, `address`, `detail` |
 | `complete.json` | export | counts, `decompile_status` totals, gap totals, effective limits |
+
+For resolved external references, `resolved_library` and `resolved_name` match the import
+`library` and `name`; the symbol name retains namespaces within its library. Direct external
+references keep `to: null`. No external address is projected into the program address space.
+Historical publications without `resolved_library` remain readable, but ambiguous bare names
+cannot identify a library.
 
 `decompile_status` is one of `ok`, `timeout`, `failed`, `skipped_thunk`, or `unavailable`. Gap
 kinds the script emits: `analysis_timeout`, `decompiler_unavailable`, `decompile_timeout`,
