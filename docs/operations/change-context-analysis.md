@@ -78,6 +78,11 @@ Changes and review records retain their source identity and source-relative/comp
 Repeated paths or commit ids in separate repositories are not merged into one source's evidence.
 An acquired export covers the review facts it actually contains, not every commit in that
 component's history; missing approvals, timestamps, or records remain named gaps.
+Check `review-records` coverage for both `review_records_missing_for_changes` and
+`review_records_incomplete`. Individual metrics with no usable observations remain `null` and
+do not contribute rank weight; partial counts are observed lower bounds, while a measured zero
+means the flag was observed false. The 1,000-approval ceiling is reported as
+`review_approvals_bound_reached`; malformed entries add `review_approvals_rejected`.
 
 ### Exports
 
@@ -105,6 +110,12 @@ Schemas are in the architecture document.
 
 - Accepted `change-context.json`: per-source status and gaps, coverage rows, rules, weights, the
   top-ranked records per scope, pinned export copies, and the index manifest.
+- Function top records retain their name, canonical identity, exact span/location, file hash,
+  source id and snapshot commit for selective prioritization; they are not file-wide boosts.
+- `fix-on-fix.json` records `candidate_count`, `checked`, `omitted_checks`, `hunk_limit_per_check`,
+  `hunk_count`, `checked_hunks` and `omitted_hunks`. The fixed 200-hunk-per-check ceiling produces
+  `fix_on_fix_hunk_bound_reached` and partial coverage. A zero event count with that gap does not
+  establish that omitted hunks contain no repeated repair.
 - Composed output lists each source and its accepted artifact under `sources[]` and preserves
   source-local top records with `priority.scope = "per-source"`. Detailed rules, exports, and
   rankings live in the referenced source documents, not in a globally normalized ranking.

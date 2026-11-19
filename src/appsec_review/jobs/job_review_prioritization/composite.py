@@ -171,7 +171,10 @@ def _norm_unit_score(raw: Any, *, bonus: float = 0.0) -> float:
     return _clamp01(scaled + bonus)
 
 
-def _load_change_context(run_root: Path, enabled: bool) -> tuple[str, dict[str, float], dict[tuple[str, str], float], list[tuple[str, int, int, float]]]:
+def _load_change_context(run_root: Path, enabled: bool) -> tuple[
+    str, dict[str, float], dict[tuple[str, str], float],
+    list[tuple[str, int, int, int | None, int | None, float]],
+]:
     if not enabled:
         return "DISABLED", {}, {}, []
     if not has_handoff(run_root, "job_change_context_analysis"):
@@ -188,7 +191,7 @@ def _load_change_context(run_root: Path, enabled: bool) -> tuple[str, dict[str, 
 
     file_scores: dict[str, float] = {}
     func_by_name: dict[tuple[str, str], float] = {}
-    func_spans: list[tuple[str, int, int, float]] = []
+    func_spans: list[tuple[str, int, int, int | None, int | None, float]] = []
 
     def ingest_entry(item: Mapping[str, Any], scope: str) -> None:
         path = _norm_path(item.get("path") or item.get("file"))
@@ -203,15 +206,21 @@ def _load_change_context(run_root: Path, enabled: bool) -> tuple[str, dict[str, 
         val = _norm_unit_score(raw_score, bonus=sec_bonus)
         if val <= 0.0:
             return
-        file_scores[path] = max(file_scores.get(path, 0.0), val)
-        if scope == "function":
+        if scope == "file":
+            file_scores[path] = max(file_scores.get(path, 0.0), val)
+        else:
             name = str(item.get("name") or item.get("symbol") or item.get("function") or "").strip()
-            if name:
-                func_by_name[(path, name)] = max(func_by_name.get((path, name), 0.0), val)
             start = item.get("start_line") or item.get("line")
             end = item.get("end_line") or start
-            if isinstance(start, int) and isinstance(end, int) and start >= 1:
-                func_spans.append((path, start, max(start, end), val))
+            if type(start) is int and type(end) is int and 1 <= start <= end:
+                location = item.get("location") or {}
+                start_byte, end_byte = location.get("start_byte"), location.get("end_byte")
+                if start_byte is not None or end_byte is not None:
+                    if type(start_byte) is not int or type(end_byte) is not int or not 0 <= start_byte < end_byte:
+                        return
+                func_spans.append((path, start, end, start_byte, end_byte, val))
+            elif name and start is None and end is None:
+                func_by_name[(path, name)] = max(func_by_name.get((path, name), 0.0), val)
 
     top = ((doc.get("priority") or {}).get("top") or {}) if isinstance(doc.get("priority"), Mapping) else {}
     for entry in top.get("files", ()) if isinstance(top, Mapping) else ():
@@ -769,8 +778,10 @@ def apply_composite_prioritization(
                 cc_factor = max(cc_factor, cc_func_names[(path, name)])
             if isinstance(start_line, int):
                 hi = end_line if isinstance(end_line, int) and end_line >= start_line else start_line
-                for sp_path, sp_s, sp_e, sp_val in cc_func_spans:
-                    if sp_path == path and sp_s <= hi and sp_e >= start_line:
+                for sp_path, sp_s, sp_e, sp_byte_s, sp_byte_e, sp_val in cc_func_spans:
+                    if (sp_path == path and (sp_s, sp_e) == (start_line, hi)
+                            and (sp_byte_s is None or (sp_byte_s, sp_byte_e) ==
+                                 (item.get("start_byte"), item.get("end_byte")))):
                         cc_factor = max(cc_factor, sp_val)
         cc_boost = round(cfg.change_context_boost * cc_factor, 6)
 

@@ -206,7 +206,10 @@ def test_external_sources_covers_all_review_deployment_org_schedule_and_test_bra
     rev_good = data_dir / "reviews.json"
     rev_good.write_text(json.dumps({
         "schema": REVIEW_EXPORT_SCHEMA,
-        "records": {HEAD: {"pull_request": 1, "direct_push": False, "approvals": []}},
+        "records": {HEAD: {
+            "pull_request": 1, "direct_push": False, "approvals": [], "head_sha": HEAD,
+            "created_at": "2023-11-14T20:00:00Z", "merged_at": "2023-11-14T23:00:00Z",
+        }},
     }), encoding="utf-8")
     rev_bad = data_dir / "reviews-bad.json"
     rev_bad.write_text('{"schema": "wrong"}', encoding="utf-8")
@@ -298,6 +301,7 @@ def test_external_sources_covers_all_review_deployment_org_schedule_and_test_bra
     )
     out_exports = handler(u_exports)(u_exports)
     assert out_exports["terminal_status"] == "SUCCEEDED" and out_exports["gaps"] == []
+    assert document(u_exports, out_exports)["reviews"][HEAD]["complete"] is True
     assert set(out_exports["raw_exports"]) == {"review", "deployment", "organization"}
 
     # 5. github_enrichment branches: acquired_export, not available, github is None, and valid github facts

@@ -330,7 +330,8 @@ def test_ownership_aggregate_and_priority_ranking_branches() -> None:
         owner=metrics.ownership({"author-0003": 5}, 0.5), owner_status="available",
         organization=organization, identity_of=identities, classification_status="partial", settings=settings,
     )
-    assert partial_agg["availability"]["fast_review_change_count"] == "partial"
+    assert partial_agg["availability"]["fast_review_change_count"] == "unavailable"
+    assert partial_agg["metrics"]["fast_review_change_count"] is None
     assert partial_agg["availability"]["pre_deployment_change_count"] == "partial"
     assert partial_agg["metrics"]["departed_dominant_owner"] is None
 

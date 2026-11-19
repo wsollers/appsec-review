@@ -22,6 +22,7 @@ from .settings import ExportSource
 
 MAX_EXPORT_BYTES = 64 * 1024 * 1024
 MAX_RECORDS = 200_000
+MAX_APPROVALS = 1000
 REVIEW_EXPORT_SCHEMA = "appsec-review/review-records/1"
 DEPLOYMENT_EXPORT_SCHEMA = "appsec-review/deployment-events/1"
 ORGANIZATION_EXPORT_SCHEMA = "appsec-review/organization-membership/1"
@@ -89,25 +90,41 @@ def normalize_review_record(raw: Mapping[str, Any]) -> dict[str, Any]:
     direct = raw.get("direct_push") is True and pull is None
     approvals_raw = raw.get("approvals")
     approvals = None
+    approvals_complete = False
+    gaps = []
     if isinstance(approvals_raw, list):
+        approvals_complete = len(approvals_raw) <= MAX_APPROVALS
+        if not approvals_complete:
+            gaps.append("review_approvals_bound_reached")
         approvals = sorted(({"submitted_at": parse_timestamp(item.get("submitted_at")),
                              "commit_id": item.get("commit_id") if isinstance(item.get("commit_id"), str) and
                              _OBJECT_ID.fullmatch(item["commit_id"]) else None}
-                            for item in approvals_raw[:1000] if isinstance(item, Mapping)),
+                            for item in approvals_raw[:MAX_APPROVALS] if isinstance(item, Mapping)),
                            key=lambda item: (item["submitted_at"] is None, item["submitted_at"] or 0,
                                              item["commit_id"] or ""))
+        if len(approvals) != min(len(approvals_raw), MAX_APPROVALS):
+            approvals_complete = False
+            gaps.append("review_approvals_rejected")
     approved = raw.get("approved_by_other")
-    if approved not in (True, False):
-        approved = bool(approvals) if approvals is not None else None
+    if type(approved) is not bool:
+        approved = True if approvals else False if approvals_complete else None
     head = raw.get("head_sha") if isinstance(raw.get("head_sha"), str) and _OBJECT_ID.fullmatch(raw["head_sha"]) else None
     record = {
         "pull_request": pull, "direct_push": direct, "approved_by_other": None if direct else approved,
         "created_at": parse_timestamp(raw.get("created_at")), "merged_at": parse_timestamp(raw.get("merged_at")),
         "head_sha": head, "head_committed_at": parse_timestamp(raw.get("head_committed_at")),
         "approvals": approvals, "self_merged": raw.get("self_merged") if raw.get("self_merged") in (True, False) else None,
+        "approvals_complete": approvals_complete,
     }
-    record["complete"] = direct or (pull is not None and approvals is not None and record["created_at"] is not None
-                                    and record["merged_at"] is not None and head is not None)
+    record["complete"] = direct or (
+        pull is not None and approvals_complete and record["created_at"] is not None
+        and record["merged_at"] is not None and head is not None
+        and all(item["submitted_at"] is not None and item["commit_id"] is not None for item in approvals or ())
+        and (not any(item["commit_id"] == head for item in approvals or ()) or record["head_committed_at"] is not None)
+    )
+    if not record["complete"]:
+        gaps.append("review_records_incomplete")
+    record["gaps"] = sorted(set(gaps))
     return record
 
 

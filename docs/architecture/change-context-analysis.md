@@ -68,14 +68,18 @@ Its own Git work is limited to two bounded, fixed-argv operations in the hardene
 container that history already uses: `blame --porcelain` at the snapshot for the top
 `line_attribution_max_files` files (function attribution and surviving-line ownership), and, for up to
 `fix_on_fix_max_checks` fix/path pairs, `diff -U0 <parent> <fix>` followed by a ranged
-`blame --porcelain <parent>` (exact fix-on-fix lines).
+`blame --porcelain <parent>` (exact fix-on-fix lines). Each checked diff admits at most 200
+old-line hunks. Excess hunks produce `fix_on_fix_hunk_bound_reached`, not complete zero coverage;
+the artifact records observed, successfully checked and omitted hunk counts, the per-check
+limit, and omitted fix/path checks. Hunk counts cover only diffs actually acquired, not omitted
+checks or failed/truncated diffs.
 
 ## Data sources and requirements
 
 | Source | Configuration | Required for | Without it |
 |---|---|---|---|
 | Local Git (via history) | always | sprawl, repeated repairs, fix-on-fix, test churn, lifetime ownership | whole lane `unavailable` with the history reason (for example `no_git_metadata`) |
-| Review records | `review.source = "github_enrichment"` (default, including acquired review exports), `"export"` override, or `"none"` deny | fast/stale approvals, unapproved mainline changes; observed `merged_at` landing time | review metrics `unavailable` (`review_records_disabled`, `review_records_unavailable:<reason>`); missing commits make them `partial` |
+| Review records | `review.source = "github_enrichment"` (default, including acquired review exports), `"export"` override, or `"none"` deny | fast/stale approvals, unapproved mainline changes; observed `merged_at` landing time | each unobserved metric stays `null`/`unavailable`; a mix of observed and missing facts gives a `partial` lower-bound count |
 | Time zone | `schedule.time_zone` (IANA) | off-hours | `unavailable` (`time_zone_not_configured`, `time_zone_database_unavailable`) |
 | Deployment events | `deployments.enabled`, pinned export | pre-deployment proximity | `unavailable` (`deployment_disabled`, `deployment_export_*`) |
 | Test association rules | `test_association.enabled` | untested production/contract churn | `unavailable` (`test_association_disabled`) |
@@ -120,6 +124,11 @@ Export schemas:
 `approvals` lists approvals by reviewers other than the PR author. A direct push is
 `{"pull_request": null, "direct_push": true}`. Timestamps must be RFC 3339 with an explicit offset.
 Organization identities are pseudonymous hashes, so the export never needs plaintext emails.
+Approval normalization admits at most 1,000 entries per record. Truncation and rejected entries
+produce `review_approvals_bound_reached` and `review_approvals_rejected`; incomplete review metadata
+produces `review_records_incomplete`. A retained prefix never proves that an approval of the final
+head is absent or that a retained timestamp is the first approval. An observed matching head can
+still establish approval, but unknown commit ids cannot establish stale approval.
 
 Target acquisition (`start --system` or `acquire-target`) writes a review-records export and its
 hash for each GitLab merge request, Gerrit change, or Azure DevOps pull request component. Source
@@ -152,7 +161,8 @@ the normalized review record, the snapshot commit, and the classification basis.
    - `merged_head_approved` is true when an approval's `commit_id` equals the merged head;
      `stale_approval` is true when the PR was approved only on earlier heads.
    - `fast_approval` (either interval below `fast_review_seconds`, default 300) and `fast_merge`
-     (creation to merge below the same bound).
+     (creation to merge below the same bound). A known fast interval establishes `true`;
+     a slow interval does not establish `false` when another applicable interval is unknown.
    - `unapproved_mainline` is true for a direct push or a merged PR with no other-reviewer approval.
    - Status is `known`, `incomplete` (a timeline field is missing), `missing` (no record for the
      commit), or `unavailable` (source off).
@@ -197,7 +207,7 @@ under-approximation that misses changes whose lines were later rewritten.
 
 | Signal | Definition | Availability |
 |---|---|---|
-| `fast_review_change_count` | changes with `fast_approval` or `fast_merge` | review source; `partial` when any change is `missing`/`incomplete` |
+| `fast_review_change_count` | changes with `fast_approval` or `fast_merge` | per-metric usable facts: `unavailable` if none, `partial` if some, `available` if every change's flag is known |
 | `stale_approval_change_count` | changes approved only on an earlier head | same |
 | `unapproved_mainline_change_count` | direct pushes and unapproved merged PRs | same |
 | `off_hours_change_count` | changes landed off-hours | time zone |
@@ -214,6 +224,12 @@ and reports the classification basis counts (`heuristic` or `github_label`). It 
 `fix_on_fix_event_count`: the first counts fixes touching the same unit in time; the second counts
 exact same-line fix-after-fix events (`details` in `fix-on-fix.json` link both changes and the line
 count). Fix-on-fix lines introduced before the window are counted as `prior_lines_outside_window`.
+Review counts retain measured zero separately from missing facts. Direct pushes have no PR
+approval-speed/staleness anomaly and count as unapproved mainline changes. Review coverage rows
+include both source-loading and analysis-time gaps such as `review_records_missing_for_changes`.
+Test/production churn and ambiguous test associations in unit details count each source-local
+review unit once, even when several of its commits touch the unit. The priority metric
+`untested_production_change_count` remains change-count based.
 
 Ownership details also report `author_count`, `bus_factor` (fewest authors whose shares reach
 `bus_factor_share`), and, for blamed files, `surviving_line_ownership` from blame. Function ownership
@@ -291,11 +307,20 @@ Per attempt: `lifetime.json` (lifetime author counts and pseudonymous identity k
 `fix-on-fix.json`, `change-records.json`, `units.json`, `signals.json` (ranked units), and the
 accepted `change-context.json` (sources, coverage, gaps, rules, weights, top-N per scope, index
 manifest, authority).
+Top function entries retain the callable name, type, canonical node identity, line span, byte
+location, file hash, source id and snapshot commit. Review prioritization matches the composed
+path and exact callable line and byte spans (when supplied); it does not spread a function's
+score to its file, sibling functions, same-named overloads or enclosing callables. Explicit
+file scores remain file-wide.
+Name-only matching is a fallback for older entries without a span, not an alternative to a
+present span.
 
 ## Configuration and topology
 
-All thresholds, weights, sources, and bounds live in
+Configurable thresholds, weights, sources, and bounds live in
 `[jobs.job_change_context_analysis.settings]` (see the operations guide for the full table). The
+normalizer also enforces fixed safety ceilings of 1,000 approvals per record and 200 hunks per
+fix/path check, with explicit partial coverage when reached. The
 settings parser is closed: unknown keys, out-of-range bounds, malformed patterns, an enabled export
 without a path, malformed zone names, inverted business hours, unknown priority signals, negative weights,
 or no positive weight fail validation.

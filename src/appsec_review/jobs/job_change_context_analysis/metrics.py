@@ -120,20 +120,28 @@ def review_facts(record: Mapping[str, Any] | None, fast_seconds: int) -> dict[st
     approved = record.get("approved_by_other")
     head = record.get("head_sha")
     created, merged = record.get("created_at"), record.get("merged_at")
+    approvals_complete = record.get("approvals_complete", approvals is not None)
     timed = [item for item in approvals or () if item["submitted_at"] is not None]
-    first = timed[0]["submitted_at"] if timed else None
+    timeline_complete = approvals_complete and len(timed) == len(approvals or ())
+    identities_complete = approvals_complete and all(item["commit_id"] is not None for item in approvals or ())
+    first = timed[0]["submitted_at"] if timed and timeline_complete else None
     head_approvals = [item for item in timed if head is not None and item["commit_id"] == head]
-    on_head = (any(item["commit_id"] == head for item in approvals) if approvals is not None and head is not None
-               else None)
+    on_head = None
+    if approvals is not None and head is not None:
+        if any(item["commit_id"] == head for item in approvals):
+            on_head = True
+        elif identities_complete:
+            on_head = False
     creation_to_first = first - created if first is not None and created is not None else None
     head_time = record.get("head_committed_at")
     final_to_approval = (head_approvals[0]["submitted_at"] - head_time
-                         if head_approvals and head_time is not None else None)
+                         if head_approvals and head_time is not None and timeline_complete and identities_complete else None)
     creation_to_merge = merged - created if merged is not None and created is not None else None
-    fast_approval = None
-    if creation_to_first is not None or final_to_approval is not None:
-        fast_approval = any(value is not None and 0 <= value < fast_seconds
-                            for value in (creation_to_first, final_to_approval))
+    fast_approval = False if approvals_complete and approvals == [] else None
+    if any(value is not None and 0 <= value < fast_seconds for value in (creation_to_first, final_to_approval)):
+        fast_approval = True
+    elif creation_to_first is not None and (final_to_approval is not None or on_head is False):
+        fast_approval = False
     return {
         "status": "known" if record.get("complete") else "incomplete",
         "pull_request": record.get("pull_request"), "direct_push": False,
@@ -453,16 +461,24 @@ def aggregate(change_ids: list[str], records: Mapping[str, Mapping[str, Any]], *
     metrics: dict[str, Any] = {}
     availability: dict[str, str] = {}
     details: dict[str, Any] = {}
-    review_states = [item["review"]["status"] for item in members]
     review_known = [item["review"] for item in members if item["review"]["status"] in {"known", "incomplete"}]
-    review_source = "unavailable" if all(state == "unavailable" for state in review_states) else (
-        "available" if all(state == "known" for state in review_states) else "partial")
-    flags = {"fast_review_change_count": lambda item: item.get("fast_approval") or item.get("fast_merge"),
-             "stale_approval_change_count": lambda item: item.get("stale_approval"),
+    review_source = "unavailable" if not review_known else (
+        "available" if all(item["review"]["status"] == "known" for item in members) else "partial")
+
+    def fast_review(item: Mapping[str, Any]) -> bool | None:
+        values = (item.get("fast_approval"), item.get("fast_merge"))
+        if item.get("direct_push") or all(value is False for value in values):
+            return False
+        return True if any(value is True for value in values) else None
+
+    flags = {"fast_review_change_count": fast_review,
+             "stale_approval_change_count": lambda item: False if item.get("direct_push") else item.get("stale_approval"),
              "unapproved_mainline_change_count": lambda item: item.get("unapproved_mainline")}
     for signal, flagged in flags.items():
-        metrics[signal] = None if review_source == "unavailable" else sum(1 for item in review_known if flagged(item))
-        availability[signal] = review_source
+        observed = [value for item in review_known if (value := flagged(item)) is not None]
+        metrics[signal] = sum(value is True for value in observed) if observed else None
+        availability[signal] = ("unavailable" if not observed else
+                                "available" if len(observed) == len(members) else "partial")
     speeds = [item["creation_to_first_approval_seconds"] for item in review_known
               if item.get("creation_to_first_approval_seconds") is not None]
     head_speeds = [item["final_head_to_approval_seconds"] for item in review_known
@@ -516,13 +532,14 @@ def aggregate(change_ids: list[str], records: Mapping[str, Mapping[str, Any]], *
         metrics["untested_production_change_count"] = sum(
             1 for item in members if item["tests"].get("untested_production") or item["tests"].get("untested_contract"))
         availability["untested_production_change_count"] = _availability(test_states)
+    review_units = {item.get("review_unit", f"change:{item['change_id']}"): item["tests"] for item in members}
     details["tests"] = {
         "untested_changes": [item["change_id"] for item in members
                              if item["tests"].get("untested_production") or item["tests"].get("untested_contract")][:20],
-        "ambiguous_association_count": sum(int(item["tests"].get("ambiguous_association_count", 0)) for item in members),
-        "production_churn": sum(int(item["tests"].get("production_added", 0)) + int(item["tests"].get("production_deleted", 0))
-                                for item in members),
-        "associated_test_churn": sum(int(item["tests"].get("associated_test_churn", 0)) for item in members),
+        "ambiguous_association_count": sum(int(item.get("ambiguous_association_count", 0)) for item in review_units.values()),
+        "production_churn": sum(int(item.get("production_added", 0)) + int(item.get("production_deleted", 0))
+                                for item in review_units.values()),
+        "associated_test_churn": sum(int(item.get("associated_test_churn", 0)) for item in review_units.values()),
     }
     metrics["lifetime_principal_author_share"] = owner.get("principal_author_share")
     availability["lifetime_principal_author_share"] = owner_status if owner.get("principal_author_share") is not None else "unavailable"

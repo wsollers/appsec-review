@@ -44,6 +44,7 @@ from appsec_review.jobs.job_change_context_analysis.datasets import CONTRACT, DA
 SCHEMA = "appsec-review/change-context-analysis/1"
 PRODUCER = "job_change_context_analysis"
 SHARD_ID = "change-context"
+FIX_ON_FIX_MAX_HUNKS = 200
 AUTHORITY = "change-context priorities order review work; they are never vulnerability findings or evidence"
 TOPOLOGY: Mapping[str, tuple[str, ...]] = {
     "load": ("accepted_history", "external_sources"),
@@ -310,6 +311,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
             facts = _read(unit.job.run_root, loaded["github"])["facts"]
             reviews = {commit: normalize_review_record(value) for commit, value in sorted(facts.items())}
             review_gaps = [f"review_records_partial:{gap}" for gap in loaded.get("github_gaps", ())]
+        review_gaps.extend(gap for record in (reviews or {}).values() for gap in record.get("gaps", ()))
         sources["review"] = {"source": review_source, "status": _source_status(review_gaps, reviews is not None),
                              "gaps": sorted(set(review_gaps)), "record_count": len(reviews or {})}
         deployments, deployment_gaps = None, []
@@ -464,6 +466,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         gaps = ["fix_on_fix_bound_reached"] if len(candidates) > limit else []
         events: list[dict[str, Any]] = []
         unclassified = failures = 0
+        hunk_count = checked_hunks = omitted_hunks = 0
         git = runner(unit) if candidates[:limit] else None
         for index, (_, current, change, entry) in enumerate(candidates[:limit]):
             assert git is not None
@@ -475,7 +478,10 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
             if diff.exit_code != 0 or diff.timed_out or diff.truncated:
                 failures += 1
                 continue
-            hunks = parse_old_hunks(diff.stdout)[:200]
+            hunks = parse_old_hunks(diff.stdout)
+            hunk_count += len(hunks)
+            omitted_hunks += max(0, len(hunks) - FIX_ON_FIX_MAX_HUNKS)
+            hunks = hunks[:FIX_ON_FIX_MAX_HUNKS]
             if not hunks:
                 continue
             ranges = tuple(item for start, count in hunks for item in ("-L", f"{start},+{count}"))
@@ -484,6 +490,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
             if blame.exit_code != 0 or blame.timed_out or blame.truncated:
                 failures += 1
                 continue
+            checked_hunks += len(hunks)
             prior: dict[str, int] = defaultdict(int)
             for origin in parse_blame_commits(blame.stdout):
                 if (origin in fixes and origin != commit and origin in times and
@@ -496,8 +503,13 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                                "basis": "exact_line_blame_at_parent"})
         if failures:
             gaps.append("fix_on_fix_execution_failed")
+        if omitted_hunks:
+            gaps.append("fix_on_fix_hunk_bound_reached")
         document = {"schema": "appsec-review/change-context-fix-on-fix/1", "events": events,
                     "checked": min(len(candidates), limit), "candidate_count": len(candidates),
+                    "omitted_checks": max(0, len(candidates) - limit),
+                    "hunk_limit_per_check": FIX_ON_FIX_MAX_HUNKS, "hunk_count": hunk_count,
+                    "checked_hunks": checked_hunks, "omitted_hunks": omitted_hunks,
                     "prior_lines_outside_window": unclassified}
         return {"artifact": _write(unit, "fix-on-fix.json", document), "event_count": len(events),
                 "status": "partial" if gaps else "available", "gaps": gaps, "terminal_status": _status(gaps)}
@@ -521,6 +533,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
         missing = sum(1 for value in records.values() if value["review"]["status"] == "missing")
         if sources["reviews"] is not None and missing:
             gaps.append("review_records_missing_for_changes")
+        if any(value["review"]["status"] == "incomplete" for value in records.values()):
+            gaps.append("review_records_incomplete")
         document = {"schema": "appsec-review/change-context-changes/1", "rules": change_metrics.RULES_IDENTITY,
                     "snapshot_commit": loaded["snapshot_commit"], "time_zone": settings.schedule.time_zone or None,
                     "changes": records}
@@ -677,7 +691,13 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                            ("organization", "organization-membership")):
             value = sources.get(name, {"status": "unavailable", "gaps": external.get("gaps", ())})
             status = value["status"] if available else "unavailable"
-            rows.append((area, status, "; ".join(value["gaps"]) or (None if available else "no_git_history")))
+            gaps = list(value["gaps"])
+            if name == "review":
+                gaps.extend(gap for gap in unit.output("analyze.change_signals").get("gaps", ())
+                            if gap.startswith("review_"))
+                if status == "complete" and gaps:
+                    status = "partial"
+            rows.append((area, status, "; ".join(sorted(set(gaps))) or (None if available else "no_git_history")))
         attribution = unit.output("attribute.line_attribution")
         rows.append(("function-attribution",
                      "unavailable" if "artifact" not in attribution or not attribution.get("function_count") else
@@ -852,7 +872,11 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                         "coverage": signals_doc[scope][key]["priority"]["coverage"],
                         "path": signals_doc[scope][key].get("path"),
                         "component_id": signals_doc[scope][key].get("component_id"),
-                        "file_sha256": signals_doc[scope][key].get("file_sha256")}
+                        "file_sha256": signals_doc[scope][key].get("file_sha256"),
+                        "source_id": loaded.get("source", {}).get("source_id"),
+                        "snapshot_commit": loaded.get("snapshot_commit"),
+                        **({"location": signals_doc[scope][key].get("location"),
+                            **signals_doc[scope][key]["function"]} if scope == "functions" else {})}
                        for key in signals_doc.get("rankings", {}).get(scope, [])[:limit]]
                for scope, limit in limits.items()}
         document = {
