@@ -272,10 +272,11 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
             return
         executor = (executor_factory(unit, profile) if executor_factory else BuildContainerExecutor(
             profile, timeout_seconds=configured.command_timeout_seconds, output_bytes=configured.output_bytes,
-            network="none"))
+            network="none", execution_evidence_root=unit.unit_root / str(index) / "compiler-execution",
+            expected_exit_codes=frozenset({0, 1})))
         adapter_started = time.monotonic()
         build_result = compare_build(build, scratch / "baseline", scratch / "patched", executor,
-                                     output_bytes=configured.output_bytes)
+                                     output_bytes=configured.output_bytes, run_root=root)
         build_ref = write_json(unit, f"{index}/build-comparison.json", build_result)
         streams = [build_result[name] for name in ("baseline", "patched") if build_result[name] is not None]
         unit.job.events.write("REMEDIATION_VALIDATION_ADAPTER_COMPLETED", claim_id=finding["claim_id"],

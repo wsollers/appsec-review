@@ -12,6 +12,7 @@ import re
 import subprocess
 from typing import Any
 
+from appsec_review.jobs.bound_artifacts import artifact_ref
 from appsec_review.jobs.job_poc_generation.buildctx import BuildUnit
 from appsec_review.review.models import IntegrityError
 from appsec_review.storage import canonical_json
@@ -193,7 +194,7 @@ def _timeout_bytes(value: bytes | str | None) -> bytes:
 
 
 def compare_build(build: BuildUnit, baseline: Path, patched: Path, executor: Any, *,
-                  output_bytes: int) -> dict[str, Any]:
+                  output_bytes: int, run_root: Path | None = None) -> dict[str, Any]:
     """Check baseline first, then the patch, without treating a broken baseline as success.
 
     Hashes cover the executor-returned diagnostic streams before display truncation; the caller
@@ -236,6 +237,13 @@ def compare_build(build: BuildUnit, baseline: Path, patched: Path, executor: Any
         except (RuntimeError, OSError) as exc:
             result.update(status="unavailable", reason=f"{name} compiler unavailable ({type(exc).__name__})")
             return result
+        else:
+            if run_root is not None and getattr(outcome, "execution_receipt", None) is not None:
+                record["execution_evidence"] = {
+                    "outcome": artifact_ref(run_root, outcome.execution_receipt),
+                    "stdout": artifact_ref(run_root, outcome.stdout_file),
+                    "stderr": artifact_ref(run_root, outcome.stderr_file),
+                }
         result[name] = record
         if record["timed_out"] or record["exit_code"] != 0:
             result.update(status=f"{name}_failed", reason=f"{name} syntax-only compile did not succeed")

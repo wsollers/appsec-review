@@ -316,6 +316,20 @@ Wrapper-call count remains independently capped and configurable. Every retained
 complete stream files; reaching the call-count cap is a named provenance gap rather than permission
 to treat unrecorded calls as absent.
 
+Noncaptured `BuildContainerExecutor.execute` has a separate, opt-in host-only
+`execution_evidence_root` for bounded stdout/stderr and outcome receipts. It must not overlap any
+workspace, install or instrumentation mount, and cannot traverse symlinks. Remediation's
+syntax-only comparison uses this directory outside both source copies, retains it after scratch
+cleanup, and hash-binds each attempted phase's receipts. This does not change captured builds'
+complete-stream policy above. Other plain-execute callers retain their existing safety-scoped
+`.appsec-execution` placement unless they explicitly opt in.
+
+The plain executor defaults to expecting only exit `0`. Remediation alone opts into `{0, 1}`:
+compiler rejection is comparison data, not a successful check or a first-error trigger.
+The opt-in never admits Docker's reserved errors or signal exits, never bypasses admission,
+cancellation or timeouts, and still confirms container cleanup before returning separate receipts.
+It does not change `execute_captured` failure classification.
+
 A process-exec event keeps `executable` (the path passed to the kernel, which the caller cannot
 relabel the way it can `argv[0]`) and `result`. A PATH search that misses produces failed `execve`
 rows; only an event with `result` zero is evidence that a tool ran.

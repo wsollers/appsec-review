@@ -232,9 +232,17 @@ See the [handler](../../src/appsec_review/jobs/job_remediation_validation/job.py
    translation unit, compare identical pinned before/after syntax checks. Baseline failure is
    inconclusive; patched failure is rejected; unsafe replay needs manual validation.
    Both passing gives `build_checked`, with no linking or runtime regression.
+   The adapter admits compiler exit `1` as a negative comparison result under first-error
+   safety, not a review-wide stop or compile success. Abnormal exits, timeouts, transport and
+   cleanup failures, and explicit cancellation still stop; `ReviewStopped` is never swallowed.
 7. Always clean scratch state and retain cleanup/check receipts. Failed cleanup or compiler
    modification of source is an integrity failure. Preserve regression-compile and runtime
    dimensions as not performed rather than filling them with a passing value.
+   Bounded compiler streams and outcome receipts live in the protected host-only
+   `<item>/compiler-execution/<container>/` sibling of `scratch/`; each attempted phase in
+   `build-comparison.json` binds those files through `execution_evidence` references.
+   The receipt directory cannot overlap any container mount. Full baseline/patched manifest
+   comparison remains exact, including `.appsec-*` additions or modifications.
 
 ### `acceptance`
 

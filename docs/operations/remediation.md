@@ -75,6 +75,19 @@ commission a pinned `BuildProfile` yield `manual_validation_required` with
 `accepted_build_profile_uncommissioned`, not fabricated build coverage. Header/new-file/multi-unit
 changes are outside that adapter's claimed coverage.
 
+Compiler exit `1` is an expected negative syntax-check result, including under first-error
+execution safety: baseline rejection is inconclusive; patched rejection rejects the proposal.
+It is not a successful compile. Under that policy, timeouts, abnormal exits, transport/cleanup
+failures and explicit review cancellation keep their stop semantics; validation never catches `ReviewStopped`.
+The shared build executor's default remains exit `0` only.
+
+The adapter retains bounded stdout/stderr and outcome receipts in the protected, host-only
+`assess/tasks/validate/<item>/compiler-execution/<container>/` directory, alongside rather than
+inside `scratch/`. The build-comparison artifact hash-binds each attempted phase's three files.
+Receipt storage is never mounted into the compiler. Both complete source manifests are still
+compared after compilation, including every `.appsec-*` file; there is no path-name exemption.
+Scratch cleanup does not delete retained execution evidence.
+
 | Validation status | Meaning |
 | --- | --- |
 | `build_checked` | Baseline and patched selected syntax checks passed after prior checks. Not a full rebuild or a verified vulnerability fix. |

@@ -91,6 +91,7 @@ class BuildCommandResult:
     stdout_file: Path | None = None
     stderr_file: Path | None = None
     cleanup_complete: bool = False
+    execution_receipt: Path | None = None
 
 
 Runner = Callable[[Sequence[str], int], tuple[int | None, bytes, bytes, bool]]
@@ -271,13 +272,18 @@ class BuildContainerExecutor:
     def __init__(self, profile: BuildProfile, *, timeout_seconds: int, output_bytes: int,
                  runner: Runner | None = None, network: str = "bridge",
                  image_verifier: ImageSignatureVerifier | None = None,
-                 lease_directory: Path | None = None, network_offline: bool = False) -> None:
+                 lease_directory: Path | None = None, network_offline: bool = False,
+                 execution_evidence_root: Path | None = None,
+                 expected_exit_codes: frozenset[int] = frozenset({0})) -> None:
         if network not in {"bridge", "none"}:
             raise ValueError("build container network must be bridge or none")
         if type(network_offline) is not bool or network_offline and network != "none":
             raise ValueError("explicit offline execution requires network none")
         if network_offline and native_execution_requested():
             raise RuntimeError("native broker offline no-pull capability is unsupported")
+        if (not isinstance(expected_exit_codes, frozenset) or 0 not in expected_exit_codes
+                or any(type(code) is not int or not 0 <= code < 125 for code in expected_exit_codes)):
+            raise ValueError("expected exits must include zero and exclude Docker errors and signals")
         self.profile = profile
         self.timeout_seconds = timeout_seconds
         self.output_bytes = output_bytes
@@ -289,6 +295,10 @@ class BuildContainerExecutor:
         self._image_verifier = image_verifier
         self.lease_directory = lease_directory
         self._cleanup_failed = False
+        # Plain execute only: callers may classify a tool's documented rejection as data.
+        # Neither expected exits nor separate receipts bypass admission, timeout or cleanup.
+        self.execution_evidence_root = execution_evidence_root
+        self.expected_exit_codes = expected_exit_codes
 
     def _register_lease(self, command: Sequence[str], root: Path, install: Path | None) -> None:
         if self.lease_directory is None:
@@ -487,7 +497,18 @@ class BuildContainerExecutor:
                     or any(left.is_relative_to(right) or right.is_relative_to(left)
                            for index, left in enumerate(roots) for right in roots[index + 1:])):
                 raise ValueError("instrumentation and evidence require separate roots outside the workspace")
+        execution_root = self.execution_evidence_root
+        if execution_root is not None:
+            mounted = [_root, *(path for path in (instrumentation, evidence) if path is not None)]
+            if install_dir is not None:
+                mounted.append(install_dir.resolve(strict=True))
+            if (any(path.is_symlink() for path in (execution_root, *execution_root.parents))
+                    or any(execution_root.resolve().is_relative_to(path)
+                           or path.is_relative_to(execution_root.resolve()) for path in mounted)):
+                raise ValueError("execution evidence requires a separate host-owned directory outside all mounts")
+            execution_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._verify_profile_image()
+        retained = None
         try:
             _root, command = self._prepare(
                 workspace=workspace, working_directory=working_directory, environment=environment,
@@ -502,17 +523,19 @@ class BuildContainerExecutor:
             self._register_lease(command, _root, install_dir)
             with self._container(command):
                 code, stdout, stderr, timed_out = self.runner(command, self.timeout_seconds)
-                if safety.active():
-                    retained = _root / ".appsec-execution" / command[command.index("--name") + 1]
-                    retained.mkdir(parents=True)
+                if execution_root is not None or safety.active():
+                    retained = (execution_root if execution_root is not None else _root / ".appsec-execution")
+                    retained = retained / command[command.index("--name") + 1]
+                    retained.mkdir(mode=0o700, parents=True)
                     (retained / "stdout").write_bytes(stdout[:self.output_bytes])
                     (retained / "stderr").write_bytes(stderr[:self.output_bytes])
-                    atomic_json(retained / "outcome.json", {"exit_code": code, "timed_out": timed_out,
-                                                            "started_at": started_at,
-                                                            "completed_at": datetime.now(timezone.utc).isoformat(),
-                                                            "duration_ms": max(0, int((time.monotonic() - started) * 1000)),
-                                                            "cleanup": "PENDING"})
-                    safety.failed_result(timed_out or code != 0,
+                    execution_record = {"exit_code": code, "timed_out": timed_out,
+                                        "started_at": started_at,
+                                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                                        "duration_ms": max(0, int((time.monotonic() - started) * 1000)),
+                                        "cleanup": "PENDING"}
+                    atomic_json(retained / "outcome.json", execution_record)
+                    safety.failed_result(timed_out or code not in self.expected_exit_codes,
                                          f"build command failed; evidence: {retained}", action="build.execute")
                 self._stop_on_timeout(command, timed_out)
         finally:
@@ -523,6 +546,8 @@ class BuildContainerExecutor:
                 self._restrict_workspace(evidence)
             if install_dir is not None:
                 self._restrict_workspace(install_dir)
+        if execution_root is not None and retained is not None:
+            atomic_json(retained / "outcome.json", {**execution_record, "cleanup": "SUCCEEDED"})
         stdout_truncated, stderr_truncated = len(stdout) > self.output_bytes, len(stderr) > self.output_bytes
         tail_bytes = min(32768, self.output_bytes)
         return BuildCommandResult(
@@ -531,12 +556,17 @@ class BuildContainerExecutor:
             stdout_truncated=stdout_truncated, stderr_truncated=stderr_truncated,
             stdout_tail=stdout[-tail_bytes:] if stdout_truncated else b"",
             stderr_tail=stderr[-tail_bytes:] if stderr_truncated else b"",
-            cleanup_complete=install_dir is not None and not self._cleanup_failed,
+            stdout_file=retained / "stdout" if execution_root is not None and retained is not None else None,
+            stderr_file=retained / "stderr" if execution_root is not None and retained is not None else None,
+            execution_receipt=(retained / "outcome.json"
+                               if execution_root is not None and retained is not None else None),
+            cleanup_complete=(install_dir is not None or execution_root is not None) and not self._cleanup_failed,
         )
 
     def _container(self, command: Sequence[str]):
         return (tracked_container(command[command.index("--name") + 1], self.runner, label="Build")
-                if review_resources_active() or safety.active() else nullcontext())
+                if review_resources_active() or safety.active() or self.execution_evidence_root is not None
+                else nullcontext())
 
     @bounded_execution(cpu="2", memory="4g", action="build.capture")
     def execute_captured(self, argv: Sequence[str], *, workspace: Path,

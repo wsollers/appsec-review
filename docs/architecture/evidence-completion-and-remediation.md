@@ -286,6 +286,11 @@ copy. It does not validate the live target or grant access to a PoC executor.
    patched copies with identical pinned tools/configuration. Replay accepted compiler/build facts,
    not model-supplied commands. Changes that would alter executable build scripts, tool loading or
    the adapter's safety assumptions require manual validation instead of automatic replay.
+   Native syntax checks retain bounded execution receipts outside both copies in a host-only
+   attempt directory. Exact post-compiler manifests include all source paths, even `.appsec-*`;
+   executor receipt names never justify ignoring target-owned bytes. Compiler exit `1` is an
+   expected negative comparison, not a first-error stop. Real cancellation, abnormal exits,
+   timeouts and infrastructure/cleanup failures retain their stop semantics.
 4. If a safe regression-function artifact can be produced under the existing compile-only policy,
    compile-check it separately. Do not link/run the PoC or execute generated tests.
 5. Publish the exact patch hash, checks attempted, baseline/patched outcomes, diagnostic references,
