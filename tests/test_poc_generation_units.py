@@ -38,6 +38,11 @@ SETTINGS = poc_support.settings()
 IDENTITY = "claim-" + "0" * 64
 
 
+@pytest.fixture(autouse=True)
+def inert_workspace_only(monkeypatch):
+    monkeypatch.setattr(poc_support, "TARGET", poc_support.FIXTURES / "relay_source")
+
+
 # ----------------------------------------------------------------------------------------------- settings
 
 

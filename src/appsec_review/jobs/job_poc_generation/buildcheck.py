@@ -40,7 +40,7 @@ DROP_FLAGS = frozenset({"-c", "-MD", "-MMD", "-MP", "-M", "-MM", "-E", "-S", "-f
 DROP_WITH_VALUE = frozenset({"-o", "-MF", "-MT", "-MQ", "-MJ", "-include-pch"})
 DROP_PREFIXES = ("-fplugin=", "-fpass-plugin=", "-Werror=", "-fdiagnostics-color=", "-MF", "-MT", "-MQ", "-MJ")
 PLUGIN_XCLANG = frozenset({"-load", "-plugin", "-add-plugin", "-plugin-arg"})
-AST_VALUE_FLAGS = frozenset({"-I", "-isystem", "-iquote", "-idirafter", "-include", "-x"})
+AST_VALUE_FLAGS = frozenset({"-I", "-isystem", "-iquote", "-idirafter", "-include", "-x", "-D", "-U"})
 AST_ATTACHED = re.compile(r"^(?:-I.+|-isystem.+|-iquote.+|-idirafter.+|-D.+|-U.+|-std=.+|-stdlib=.+|"
                           r"-f(?:no-)?(?:exceptions|rtti|char8-type|signed-char|unsigned-char|ms-extensions)|"
                           r"-fcxx-modules|-fno-cxx-modules|-m(?:32|64))$")
@@ -126,6 +126,12 @@ def derive_ast(argv: Sequence[str], language: str, names: Names, settings: PocGe
     index = 1
     while index < len(argv):
         item = argv[index]
+        if item.startswith(("-D", "-U")):
+            operand = argv[index + 1] if item in {"-D", "-U"} and index + 1 < len(argv) else item[2:]
+            pattern = (r"[A-Za-z_][A-Za-z0-9_]*(?:\([^()\r\n]*\))?(?:=[^\x00\r\n]*)?"
+                       if item.startswith("-D") else r"[A-Za-z_][A-Za-z0-9_]*")
+            if re.fullmatch(pattern, operand) is None:
+                raise ValueError(f"the accepted command has an invalid or missing macro operand for {item[:2]}")
         if item in AST_VALUE_FLAGS and index + 1 < len(argv):
             kept += [item, argv[index + 1]]
             index += 2
@@ -259,7 +265,8 @@ def prepare(builds: AcceptedBuilds, unit: BuildUnit, parent: Path, *, name: str,
     root = Path(parent) / name
     if root.exists():
         shutil.rmtree(root)
-    builds.materialize(unit, root, byte_limit=settings.build.workspace_bytes_limit)
+    builds.materialize(unit, root, byte_limit=settings.build.workspace_bytes_limit,
+                       file_limit=settings.build.workspace_file_limit)
     directory = settings.build.scratch_directory
     suffix = ".c" if unit.command.language == "c" else ".cpp"
     names = Names(directory, f"poc{suffix}")
@@ -350,10 +357,14 @@ def check_build(executor: Executor, builds: AcceptedBuilds, unit: BuildUnit, scr
         return finish(ARTIFACT_GENERATED, "symbols could not be read from the object")
     required = parse_nm(undefined.stdout.decode("utf-8", "replace"))
     project: set[str] = set()
-    for label, flag, files in (("project_symbols", "-g", unit.objects), ("project_shared_symbols", "-D", unit.shared_libraries)):
+    outputs = sorted([(path, "project_symbols", "-g") for path in unit.objects]
+                     + [(path, "project_shared_symbols", "-D") for path in unit.shared_libraries])
+    admitted = outputs[:settings.build.object_limit]
+    for label, flag in (("project_symbols", "-g"), ("project_shared_symbols", "-D")):
+        files = [path for path, kind, _flag in admitted if kind == label]
         if not files:
             continue
-        for chunk_start in range(0, min(len(files), settings.build.object_limit), 256):
+        for chunk_start in range(0, len(files), 256):
             chunk = [f"{CONTAINER_ROOT}/{item}" for item in files[chunk_start:chunk_start + 256]]
             step = run_step(executor, label, ["nm", "-P", flag, "--defined-only", *chunk], scratch.root, cwd)
             steps.append(step)
@@ -362,8 +373,9 @@ def check_build(executor: Executor, builds: AcceptedBuilds, unit: BuildUnit, scr
                 continue
             project.update(name for name, kind in parse_nm(step.stdout.decode("utf-8", "replace"))
                            if kind not in {"U", "w", "v"})
-    if len(unit.objects) + len(unit.shared_libraries) > settings.build.object_limit:
-        gaps.append(f"only the first {settings.build.object_limit} accepted outputs were read for symbols")
+    if len(outputs) > len(admitted):
+        gaps.append(f"only the first {len(admitted)} of {len(outputs)} accepted outputs were admitted for symbols; "
+                    f"{len(outputs) - len(admitted)} omitted by build.object_limit")
     runtime: set[str] = set()
     libraries = run_step(executor, "runtime_symbols",
                          ["nm", "-P", "-D", "--defined-only", *settings.build.runtime_libraries], scratch.root, cwd)

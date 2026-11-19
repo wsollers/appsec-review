@@ -185,11 +185,12 @@ def test_review_producer_candidates_satisfy_the_consumer_schema_and_reader() -> 
     assert parsed.poc_basis.record() == basis
 
 
-def test_the_compile_record_and_provenance_written_by_the_job_satisfy_their_schemas(tmp_path) -> None:
+def test_the_compile_record_and_provenance_written_by_the_job_satisfy_their_schemas(tmp_path, monkeypatch) -> None:
     from appsec_review.jobs.job_poc_generation.candidates import parse_candidates
     from appsec_review.jobs.job_poc_generation.package import write_candidate
     from tests.test_poc_generation_units import candidate_entry
 
+    monkeypatch.setattr(poc_support, "TARGET", poc_support.FIXTURES / "relay_source")
     workspace, manifest = poc_support.relay_workspace(tmp_path / "w")
     unit = poc_support.relay_unit(workspace, manifest)
     builds = poc_support.builds(unit)

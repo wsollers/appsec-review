@@ -125,6 +125,44 @@ class MissingBuild(ValueError):
     """The run has no accepted language build at all (a gap about the run, not an integrity failure)."""
 
 
+def _owned_path(root: Path, relative: str, what: str) -> Path:
+    logical = PurePosixPath(relative)
+    if logical.is_absolute() or ".." in logical.parts or not logical.parts or "\\" in relative:
+        raise IntegrityError(f"{what} names a path outside the workspace")
+    current = root
+    for part in logical.parts:
+        current = current / part
+        if current.is_symlink():
+            raise IntegrityError(f"{what} is a substituted symlink: {relative}")
+    if any(parent.is_symlink() for parent in (root, *root.parents)) or root.resolve() not in current.resolve().parents:
+        raise IntegrityError(f"{what} is outside the workspace")
+    return current
+
+
+def workspace_bytes(workspace: Path, manifest: Mapping[str, str], relative: str, *,
+                    byte_limit: int) -> bytes | None:
+    """Read at most the byte bound plus a sentinel, then verify the exact accepted bytes.
+
+    An oversized file supplies no text. A missing, substituted or changed accepted file is an
+    integrity failure, not a retrieval miss or permission to try a different source tree.
+    """
+    source = _owned_path(workspace, relative, "accepted workspace manifest")
+    if relative not in manifest:
+        raise IntegrityError(f"source is not in the accepted workspace manifest: {relative}")
+    try:
+        if not source.is_file():
+            raise IntegrityError(f"accepted build workspace file is missing: {relative}")
+        with source.open("rb") as stream:
+            data = stream.read(byte_limit + 1)
+    except OSError as exc:
+        raise IntegrityError(f"accepted build workspace file is unavailable: {relative}") from exc
+    if len(data) > byte_limit:
+        return None
+    if hashlib.sha256(data).hexdigest() != manifest[relative]:
+        raise IntegrityError(f"accepted build workspace file changed after acceptance: {relative}")
+    return data
+
+
 class AcceptedBuilds:
     """Lookup over the run's accepted language build."""
 
@@ -157,8 +195,8 @@ class AcceptedBuilds:
     def _bound(self, reference: Any, what: str) -> Path:
         if not isinstance(reference, Mapping):
             raise IntegrityError(f"accepted build lacks its {what}")
-        path = (self.run_root / str(reference.get("path", ""))).resolve()
-        if self.run_root not in path.parents or not path.is_file() or path.is_symlink():
+        path = _owned_path(self.run_root, str(reference.get("path", "")), f"accepted build {what}")
+        if not path.is_file():
             raise IntegrityError(f"accepted build {what} is unavailable")
         if file_sha256(path) != reference.get("sha256"):
             raise IntegrityError(f"accepted build {what} changed after acceptance")
@@ -229,15 +267,19 @@ class AcceptedBuilds:
         if not receipts:
             return Located(None, "the run has no successful accepted native build", "no_native_build")
         wanted = PurePosixPath(source_path).as_posix()
+        contained = False
         for receipt in receipts:
             manifest_path = self._bound(receipt.get("workspace_manifest"), "workspace manifest")
             files = json.loads(manifest_path.read_text(encoding="utf-8")).get("files") or {}
             if wanted not in files:
                 continue
+            contained = True
             command = self._command(receipt, wanted, language)
             if command is None:
-                return Located(None, f"no captured compiler invocation covers {wanted}", "no_compile_command")
+                continue
             return Located(self._unit(receipt, files, manifest_path, command), "")
+        if contained:
+            return Located(None, f"no captured compiler invocation covers {wanted}", "no_compile_command")
         return Located(None, f"no accepted native build contains {wanted}", "no_native_build")
 
     def _command(self, receipt: Mapping[str, Any], wanted: str, language: str) -> CompileCommand | None:
@@ -269,8 +311,8 @@ class AcceptedBuilds:
 
     def _unit(self, receipt: Mapping[str, Any], files: Mapping[str, str], manifest_path: Path,
               command: CompileCommand) -> BuildUnit:
-        workspace = (self.run_root / str(receipt.get("workspace", ""))).resolve()
-        if self.run_root not in workspace.parents or not workspace.is_dir():
+        workspace = _owned_path(self.run_root, str(receipt.get("workspace", "")), "accepted build workspace")
+        if not workspace.is_dir():
             raise IntegrityError("accepted build workspace is unavailable")
         image = receipt.get("image") if isinstance(receipt.get("image"), Mapping) else {}
         gaps: list[str] = []
@@ -297,26 +339,21 @@ class AcceptedBuilds:
             derived_base_image_id(image))
 
     # -- the disposable copy -----------------------------------------------------------------------
-    def materialize(self, unit: BuildUnit, destination: Path, *, byte_limit: int) -> int:
+    def materialize(self, unit: BuildUnit, destination: Path, *, byte_limit: int,
+                    file_limit: int | None = None) -> int:
         """Copy the manifest's files into ``destination``, verifying each hash; the copy's file count."""
-        if len(unit.workspace_manifest) > self.file_limit:
+        limit = self.file_limit if file_limit is None else file_limit
+        if len(unit.workspace_manifest) > limit:
             raise ValueError(f"the accepted workspace has {len(unit.workspace_manifest)} files; the bound is "
-                             f"{self.file_limit}")
+                             f"{limit}")
         destination.mkdir(parents=True, exist_ok=True)
         total = 0
-        for relative, digest in sorted(unit.workspace_manifest.items()):
+        for relative in sorted(unit.workspace_manifest):
             logical = PurePosixPath(relative)
-            if logical.is_absolute() or ".." in logical.parts:
-                raise IntegrityError("accepted workspace manifest names a path outside the workspace")
-            source = unit.workspace.joinpath(*logical.parts)
-            if source.is_symlink() or not source.is_file():
-                raise IntegrityError(f"accepted build workspace file is missing: {relative}")
-            data = source.read_bytes()
-            if hashlib.sha256(data).hexdigest() != digest:
-                raise IntegrityError(f"accepted build workspace file changed after acceptance: {relative}")
-            total += len(data)
-            if total > byte_limit:
+            data = workspace_bytes(unit.workspace, unit.workspace_manifest, relative, byte_limit=byte_limit - total)
+            if data is None:
                 raise ValueError(f"the accepted workspace exceeds {byte_limit} bytes")
+            total += len(data)
             target = destination.joinpath(*logical.parts)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
@@ -431,12 +468,12 @@ def declarations(unit: BuildUnit, headers: Headers, names: Sequence[str], *, sou
                             for directory in headers.search_directories()))
     rows: list[dict[str, Any]] = []
     for relative in candidates[:max_files]:
-        source = unit.workspace.joinpath(*PurePosixPath(relative).parts)
+        data = workspace_bytes(unit.workspace, unit.workspace_manifest, relative, byte_limit=source_bytes)
+        if data is None:
+            continue
         try:
-            if source.stat().st_size > source_bytes:
-                continue
-            lines = source.read_text(encoding="utf-8").splitlines()
-        except (OSError, UnicodeDecodeError):
+            lines = data.decode("utf-8").splitlines()
+        except UnicodeDecodeError:
             continue
         for index, line in enumerate(lines):
             if not pattern.search(line) or line.lstrip().startswith(("//", "*", "/*")):

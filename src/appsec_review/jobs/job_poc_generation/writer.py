@@ -28,7 +28,8 @@ from appsec_review.inference.execution import Execution, RetryPolicy
 from appsec_review.inference.usage import total_reported
 from appsec_review.storage import atomic_bytes, canonical_json
 
-from .brief import ANSWER_SCHEMA, Brief
+from .brief import ANSWER_SCHEMA, Brief, BriefTooLarge, check_brief_size
+from .buildctx import workspace_bytes
 from .settings import ModelProfile, PocGenerationSettings
 from .source import answer_errors
 
@@ -311,6 +312,10 @@ def run_writer(brief: Brief, *, guidance: Guidance, settings: PocGenerationSetti
     """Run the writer to one terminal outcome, repairing per the retry policy without widening it."""
     if getattr(reader, "capabilities", None) != READER_CAPABILITIES:
         raise ExecutionContractError("PoC reader must declare the private accepted-workspace capability contract")
+    try:
+        check_brief_size(brief.document, settings.brief.max_brief_bytes)
+    except BriefTooLarge as exc:
+        return WriterOutcome("failed", None, str(exc), ())
     profile = settings.writer
     policy = RetryPolicy(settings.max_attempts, settings.retry_on_timeout,
                          settings.retry_on_provider_error, settings.retry_on_invalid_output)
@@ -357,15 +362,12 @@ class WorkspaceReader:
             return None
         if not any(d == "." or logical.as_posix().startswith(d.rstrip("/") + "/") for d in self.allowed):
             return None
-        source = self.workspace.joinpath(*logical.parts)
+        data = workspace_bytes(self.workspace, self.manifest, logical.as_posix(), byte_limit=2 * 1024 * 1024)
+        if data is None:
+            return None
         try:
-            if source.is_symlink() or source.stat().st_size > 2 * 1024 * 1024:
-                return None
-            data = source.read_bytes()
-            if hashlib.sha256(data).hexdigest() != self.manifest[logical.as_posix()]:
-                return None                      # the accepted workspace changed; nothing is shown from it
             lines = data.decode("utf-8").splitlines()
-        except (OSError, UnicodeDecodeError):
+        except UnicodeDecodeError:
             return None
         end = min(end_line, len(lines))
         return {"path": logical.as_posix(), "lines": f"{start_line}-{end}",

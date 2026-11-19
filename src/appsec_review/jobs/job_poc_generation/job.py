@@ -32,7 +32,7 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, canonical_json
 
 from . import buildcheck, inputs as review_inputs
-from .brief import Brief, build_brief
+from .brief import Brief, BriefTooLarge, build_brief
 from .buildctx import AcceptedBuilds, BuildUnit, Headers, MissingBuild, declarations
 from .candidates import PocCandidate, parse_candidates
 from .datasets import CONTRACT, DATASETS
@@ -363,8 +363,12 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
         for row in candidates:
             counts[row["status"]] += 1
         gaps = list(loaded["gaps"])
-        gaps.extend(f"{row['claim_id']}: {row['status']}: {row['reason']}"[:300] for row in candidates
-                    if row["status"] in GAP_STATUSES)
+        for row in candidates:
+            if row["gaps"]:
+                gaps.append(f"{row['claim_id']}: {row['status']}: {len(row['gaps'])} qualification entries "
+                            f"(see candidate gaps): {row['gaps'][0]}"[:300])
+            elif row["status"] in GAP_STATUSES:
+                gaps.append(f"{row['claim_id']}: {row['status']}: {row['reason']}"[:300])
         summary = {
             "schema": POC_GENERATION_SCHEMA, "run_id": document["run_id"], "upstream": document["upstream"],
             **nonexecution_assurance(),
@@ -455,8 +459,14 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
     entry["build"] = located.unit.identity()
     view = (services.view_factory or build_view)(package, core_getter(), limits)
     headers = Headers(located.unit)
-    brief = build_brief(candidate, finding=item["finding"], package=package, view=view, sink=sink,
-                        unit=located.unit, headers=headers, settings=settings)
+    try:
+        brief = build_brief(candidate, finding=item["finding"], package=package, view=view, sink=sink,
+                            unit=located.unit, headers=headers, settings=settings)
+    except BriefTooLarge as exc:
+        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, str(exc))
+        entry["brief_gaps"] = [str(exc)]
+        return entry
+    entry["brief_gaps"] = list(brief.gaps)
     unresolved = [gap for gap in brief.gaps if gap.startswith("poc_basis identity")]
     if unresolved and len(unresolved) >= len(candidate.poc_basis.entry) + len(candidate.poc_basis.path):
         entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "no poc_basis identity resolves in the package view")
@@ -464,7 +474,6 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
     document_ref = _write_json(unit, f"briefs/{candidate.claim_id}.json", brief.document)
     entry["brief"] = document_ref
     entry["brief_facts"] = brief.document["build_facts"]
-    entry["brief_gaps"] = list(brief.gaps)
     entry["expectation"] = {"sink_names": list(brief.sink_names), **dict(brief.expectation_inputs)}
     entry["package_sha256"] = record["sha256"]
     return entry
@@ -532,14 +541,14 @@ def _validate_candidate(unit: UnitContext, settings: PocGenerationSettings, serv
                                               f"{reduced.get('compiler_exit_code')}"),
                 "diagnostics": diagnostics, "build": build.identity()}
     expectation = _expectation(plan_entry, answer)
+    base["unchecked_triggers"] = list(expectation.unchecked_triggers)
     found = check_ast(reduced, settings, expectation)
     records = [item.record() for item in found]
     if found:
         return {**base, "terminal": _terminal(POLICY_DENIED, "validators refused the functions: "
                                               + "; ".join(sorted({v.rule for v in found})[:8])),
                 "violations": records, "policy_verdict": "denied", "build": build.identity()}
-    return {**base, "violations": [], "policy_verdict": "passed", "build": build.identity(),
-            "unchecked_triggers": list(expectation.unchecked_triggers)}
+    return {**base, "violations": [], "policy_verdict": "passed", "build": build.identity()}
 
 
 def _expectation(plan_entry: Mapping[str, Any], answer: WriterAnswer) -> Any:
@@ -587,6 +596,16 @@ def _package_candidate(run_root: Path, output_root: Path, settings: PocGeneratio
     candidate = parse_candidates([item["candidate"]])[0]
     terminal = compiled.get("terminal") or validated.get("terminal") or plan_entry.get("terminal")
     status, reason = terminal["status"], terminal["reason"]
+    compile_record = (read_bound_json(run_root, compiled["record"]) if compiled.get("record") else {})
+    qualifications = list(dict.fromkeys([
+        *plan_entry.get("brief_gaps", ()), *validated.get("gaps", ()), *compile_record.get("gaps", ()),
+        *(f"unchecked trigger: {value}" for value in validated.get("unchecked_triggers", ())),
+    ]))
+    # The published candidate schema permits ten short gaps; full detail stays in the protected records.
+    public_gaps = [gap[:300] for gap in qualifications]
+    if len(public_gaps) > 10:
+        public_gaps = [*public_gaps[:9], f"{len(qualifications) - 9} additional qualifications retained in "
+                       "the protected plan/brief/validation/compile records"]
     row: dict[str, Any] = {
         "claim_id": candidate.claim_id, "package_id": candidate.package_id, "state": candidate.state,
         **nonexecution_assurance(),
@@ -595,19 +614,21 @@ def _package_candidate(run_root: Path, output_root: Path, settings: PocGeneratio
                             "sha256": candidate.finding_package_sha256},
         "poc_basis_sha256": candidate.poc_basis.sha256, "status": status, "reason": reason[:300],
         "description": describe(status, None, reason), "functions": None, "files": None, "brief": plan_entry["brief"],
-        "writer_receipt": (written or {}).get("receipt"), "gaps": list(validated.get("gaps", ()))[:5]}
+        "writer_receipt": (written or {}).get("receipt"), "gaps": public_gaps}
     if status not in SOURCE_STATUSES or "answer" not in validated:
         return row
     answer = WriterAnswer.from_result({**validated["answer"], "claim": candidate.claim_id})
     source = read_bound_json(run_root, validated["source"])
-    compile_record = (read_bound_json(run_root, compiled["record"]) if compiled.get("record") else
+    compile_record = (compile_record if compiled.get("record") else
                       {"schema": buildcheck.COMPILE_SCHEMA, "claim_id": candidate.claim_id, "status": status,
                        "reason": reason, "steps": [], "objects": {}, "symbol_check": None,
                        "execution_policy": "nothing is linked into an executable and nothing is run",
                        "build_unit": validated.get("build"), "gaps": list(validated.get("gaps", ())),
                        "diagnostics": list(validated.get("diagnostics", ())),
                        "settings_sha256": settings.settings_sha256()})
-    compile_record = {**compile_record, "status": status, "reason": reason}
+    compile_record = {**compile_record, "status": status, "reason": reason,
+                      "gaps": [gap[:300] for gap in qualifications], "qualifications": qualifications,
+                      "unchecked_triggers": list(validated.get("unchecked_triggers", ()))}
     if validated.get("static_check") is not None:
         compile_record["static_check"] = validated["static_check"]
     facts = _facts(plan_entry)

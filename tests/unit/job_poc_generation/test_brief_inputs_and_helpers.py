@@ -146,22 +146,19 @@ def test_brief_expectation_rows_and_build_brief_trimming_and_gaps(tmp_path: Path
     assert len(exp.triggers) == 1
     assert len(exp.unchecked_triggers) == 1
 
-    # Tight max_brief_bytes triggers _trimmed + project_calls="any_project_function" + sink=None + unit=None
+    # A complete brief that cannot fit is refused, rather than silently dropping package evidence.
     tight_cfg = _cfg(brief={"max_brief_bytes": 400}, policy={"project_calls": "any_project_function"})
-    trimmed = brief.build_brief(
-        candidate,
-        finding={"label": "F1", "title": "Overflow", "lane": "lead"},
-        package={},
-        view=view,
-        sink=None,
-        unit=None,
-        headers=None,
-        settings=tight_cfg,
-    )
-    assert trimmed.document["limits"]["project_calls"] == "any project function"
-    assert trimmed.sink_names == ()
-    assert any("reduced to fit" in gap for gap in trimmed.gaps)
-    assert any("no prototype" in gap for gap in trimmed.gaps)
+    with pytest.raises(brief.BriefTooLarge, match="brief_byte_bound_exceeded"):
+        brief.build_brief(
+            candidate,
+            finding={"label": "F1", "title": "Overflow", "lane": "lead"},
+            package={},
+            view=view,
+            sink=None,
+            unit=None,
+            headers=None,
+            settings=tight_cfg,
+        )
 
 
 def test_inputs_identity_verify_package_sink_and_retrieval_core(tmp_path: Path) -> None:

@@ -27,6 +27,17 @@ _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _NOT_TYPES = frozenset({"std", "const", "struct", "class", "union", "enum", "void", "int", "char", "bool", "unsigned"})
 
 
+class BriefTooLarge(ValueError):
+    """The complete brief cannot fit the configured budget without dropping evidence."""
+
+
+def check_brief_size(document: Mapping[str, Any], byte_limit: int) -> None:
+    size = len(canonical_json(document))
+    if size > byte_limit:
+        raise BriefTooLarge(f"brief_byte_bound_exceeded: complete brief is {size} bytes; "
+                            f"brief.max_brief_bytes is {byte_limit}; no evidence was dropped")
+
+
 @dataclass(frozen=True, slots=True)
 class Brief:
     document: Mapping[str, Any]
@@ -127,10 +138,7 @@ def build_brief(candidate: PocCandidate, *, finding: Mapping[str, Any], package:
     }
     if answer_example is not None:
         document["answer_shape"] = dict(answer_example)
-    if len(canonical_json(document)) > settings.brief.max_brief_bytes:
-        document["package_view"] = _trimmed(view.document if view is not None else {}, settings)
-        document["gaps"] = [*gaps, "the package view was reduced to fit the brief byte bound"]
-        gaps.append("the package view was reduced to fit the brief byte bound")
+    check_brief_size(document, settings.brief.max_brief_bytes)
     return Brief(document, {"triggers": [dict(row) for row in basis.trigger], "path_calls": sorted(path_calls)},
                  sink_names, tuple(gaps))
 
@@ -147,17 +155,6 @@ def limits(settings: PocGenerationSettings) -> dict[str, Any]:
             "allowed_types": sorted(settings.policy.type_allowlist),
             "project_calls": ("the sink and the functions of the brief's call path"
                               if settings.policy.project_calls == "sink_and_path" else "any project function")}
-
-
-def _trimmed(view: Mapping[str, Any], settings: PocGenerationSettings) -> dict[str, Any]:
-    keep = ("schema", "leads", "source", "neighborhood", "build", "material_gaps", "omitted")
-    reduced = {key: view[key] for key in keep if key in view}
-    neighborhood = dict(reduced.get("neighborhood") or {})
-    for key in ("memory", "flows", "callees", "callers"):
-        if key in neighborhood:
-            neighborhood[key] = neighborhood[key][:4]
-    reduced["neighborhood"] = neighborhood
-    return reduced
 
 
 __all__ = ["ANSWER_SCHEMA", "BRIEF_SCHEMA", "Brief", "build_brief", "limits", "rows_by_label"]

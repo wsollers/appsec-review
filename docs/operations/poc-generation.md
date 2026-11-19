@@ -122,6 +122,11 @@ load.verify_inputs -> plan.briefs -> write.poc_writer -> validate.policy -> comp
    attempted gets its terminal status here: a judge verdict outside `accepted_judge_verdicts` or a sink in a file that no
    accepted native build compiled is `not_applicable`; a `poc_basis` without an entry, a path or a trigger, a package
    that names no sink function, or identities that do not resolve is `insufficient_evidence`.
+   Lookup continues past accepted workspaces that contain the same source but did not compile it.
+   The complete canonical JSON brief (including declarations, source, gaps and its terminating newline)
+   must fit `brief.max_brief_bytes`. If it cannot, planning records `brief_byte_bound_exceeded` as
+   `insufficient_evidence`, commissions no writer and publishes no oversized brief. Evidence is not
+   silently trimmed to satisfy the budget; the writer independently rechecks it before consumption.
 3. **`write.poc_writer`** runs the model (below).
 4. **`validate.policy`** assembles the file, runs the textual checks and then the AST validators in the build image.
 5. **`compile.build_check`** runs the compile check.
@@ -139,6 +144,10 @@ retrieval requests in process from the hash-verified accepted workspace: `read_s
 a file the build compiled, under the sink's include path) and `find_declaration` (prototype and type lines in the
 project's headers). A denied request returns its code and the corrected shape and costs one query; the second
 identical denial ends the attempt.
+Both retrieval paths read bounded bytes from manifest-listed files and verify their accepted SHA-256
+before decoding text. Symlinked files or path components, missing files and changed bytes fail integrity;
+they never fall back to a mutable target or another run. Headers remain limited to the selected
+translation unit's include/source directories.
 
 The answer is the compact shape of design section 5.2 or a **decline** with a status the writer may choose
 (`insufficient_evidence`, `not_applicable`, `unsafe_to_attempt`). A schema error is repaired (up to `retry.max_attempts`
@@ -193,8 +202,22 @@ the build image around the compiler and returns only the PoC file's nodes, the i
 (qualified name, kind, file) and the project's own declarations. `policy.check_ast` is a pure function of that document;
 its tests run on documents recorded once from the local build image
 (`tests/fixtures/poc_generation/record_ast.py`).
+Replay retains both attached and separated macro definitions/undefinitions (`-DFEATURE=1` or
+`-D FEATURE=1`, `-UOLD` or `-U OLD`); malformed or missing operands cannot silently change the parse context.
 
 ### The compile check
+
+`build.workspace_file_limit` and `build.workspace_bytes_limit` bound the accepted workspace copy.
+`build.object_limit` admits one deterministic path-sorted prefix across object/static-library and
+shared-library outputs, before chunking symbol-reader commands. Omitted outputs are counted explicitly.
+
+Brief, validation (including unchecked-trigger caveats) and compile qualifications are deduplicated
+into candidate coverage. For source-bearing candidates, the protected compile record retains all
+qualifications and unchecked triggers; otherwise full details remain in the protected planning and
+validation records. The existing ten-entry public gap bound uses an explicit additional-qualification
+count when needed. Even a `compile_verified` candidate makes publication `COMPLETED_WITH_GAPS` when it has
+qualifications. Compilation assurance never changes the finding state, establishes a verified
+vulnerability, or implies runtime execution.
 
 In a hash-verified scratch copy of the accepted build workspace (`steps/compile/.../scratch`, removed after each
 candidate), through the same `BuildContainerExecutor` the sanitizer job uses, with `--network none`:

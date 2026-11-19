@@ -22,6 +22,7 @@ from appsec_review.jobs.job_poc_generation import writer
 from appsec_review.jobs.job_poc_generation.brief import Brief
 from appsec_review.jobs.job_poc_generation.buildctx import Headers, declarations
 from appsec_review.jobs.job_poc_generation.settings import PocGenerationSettings
+from appsec_review.review.models import IntegrityError
 from tests import poc_support
 from tests.fixtures.poc_generation import relay
 
@@ -30,6 +31,11 @@ SCHEMAS = SchemaSet(ROOT / "docs" / "schemas" / "poc-generation")
 SETTINGS = poc_support.settings()
 CLAIM = "claim-" + "7" * 64
 BRIEF = Brief({"schema": "appsec-review/poc-writer-brief/1", "sink": {"name": relay.SINK}}, {}, (relay.SINK,), ())
+
+
+@pytest.fixture(autouse=True)
+def inert_workspace_only(monkeypatch):
+    monkeypatch.setattr(poc_support, "TARGET", poc_support.FIXTURES / "relay_source")
 
 
 class Script:
@@ -197,7 +203,8 @@ def test_the_workspace_reader_is_path_scoped_and_hash_checked(tmp_path) -> None:
     assert scoped.read_source("src/packet.cpp", 1, 3) is None                    # outside the allowed directories
     assert scoped.read_source("include/relay/missing.hpp", 1, 3) is None        # not in the manifest
     (workspace / "include" / "relay" / "relay.hpp").write_text("changed\n", encoding="utf-8")
-    assert scoped.read_source("include/relay/relay.hpp", 1, 1) is None           # no longer the accepted bytes
+    with pytest.raises(IntegrityError, match="changed after acceptance"):
+        scoped.read_source("include/relay/relay.hpp", 1, 1)
 
 
 # ------------------------------------------------------------------------------------------------ outcomes
