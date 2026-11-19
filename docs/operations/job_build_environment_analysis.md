@@ -148,9 +148,16 @@ modes; [input contracts](../architecture/job-input-contracts.md) govern actual a
 3. Traverse only bounded literal source/call references to accepted script paths. Enforce
    script count, bytes, source depth, assignment count and internal deadline. Never execute
    scripts or discover new paths outside the accepted inventory.
-4. Verify each read against its accepted hash. Parse assignments; dynamic syntax, conditions,
-   invocation-dependent sourcing and unsupported statements keep values unknown. Propagate
-   uncertainty even when a sourced script was already inspected.
+4. Verify each read against its accepted hash. Recognize shell bare/`export` assignments with
+   case-sensitive keywords, and batch `set`/`@set` assignments with case-insensitive keywords.
+   Cross-dialect forms produce unsupported-statement gaps, not declarations. Dynamic syntax,
+   conditions (including shell `until` and batch `@if`) and invocation-dependent sourcing keep
+   values unknown. Backslash shell continuations and caret batch continuations taint the script;
+   continued lines are not independent assignments or source references. This is not a syntax
+   validator or a claim that arbitrary statements have been interpreted.
+   Propagate sourcing uncertainty to already scheduled or inspected scripts even at script-count
+   or source-depth limits, without another read or traversal slot. Only new reads consume slots;
+   a blocked new source reference still produces a bound gap.
 5. Redact sensitive names and credential-bearing URLs. Keep raw source hashes and line
    locations; do not publish raw script text or claim a redacted value is known.
 6. Validate the environment document's closed schema and coverage invariants. Write bounded
@@ -178,8 +185,9 @@ flowchart LR
 ## Gaps
 
 At `environment_analysis.publish_handoff`, `gap_records` maps every bounded analysis reason
-to `producer_reported_gap`, `retryable=False`; script-path reasons retain `scope_id`, global
-reasons do not. This parser's declarations are advisory by design, but the missing coverage
+to `producer_reported_gap`, `retryable=False`; script-path reasons retain their original
+case-sensitive path as `scope_id`, including root-level uppercase script extensions. Global
+reasons have no scope. This parser's declarations are advisory by design, but the missing coverage
 still needs a walk decision.
 
 | Reason in the artifact | Emission condition |

@@ -21,7 +21,7 @@ from appsec_review.jobs.job_build_environment_analysis.job import (
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def _static(files: dict[str, str | bytes], **limits):
+def _static(files: dict[str, str | bytes], *, reads=None, **limits):
     payloads = {
         path: (data if isinstance(data, bytes) else data.encode("utf-8"))
         for path, data in files.items()
@@ -38,9 +38,14 @@ def _static(files: dict[str, str | bytes], **limits):
             for path, data in payloads.items()
         ],
     }
+    def read_document(item, bound):
+        if reads is not None:
+            reads.append(item["path"])
+        return payloads[item["path"]][: bound + 1]
+
     return analyze_environment(
         catalog,
-        lambda item, bound: payloads[item["path"]][: bound + 1],
+        read_document,
         replace(BuildEnvironmentSettings(), **limits),
     )
 
@@ -58,6 +63,84 @@ def test_static_literals_are_advisory_redacted_and_source_resolving():
     )
     assert "do-not-retain" not in json.dumps(value)
     assert "u:p@" not in json.dumps(value)
+
+
+@pytest.mark.parametrize(
+    "path,text",
+    [
+        ("setup.sh", "set CC=clang\n"),
+        ("setup.bash", '@set "CC=clang"\n'),
+        ("setup.cmd", "CC=clang\n"),
+        ("setup.bat", "export CC=clang\n"),
+        ("setup.sh", "EXPORT CC=clang\n"),
+        ("setup.BASH", "Set CC=clang\n"),
+    ],
+    ids=["shell-set", "shell-at-set", "batch-bare", "batch-export", "shell-EXPORT", "shell-Set"],
+)
+def test_assignment_grammar_rejects_other_dialects(path, text):
+    value = _static({path: text})
+    assert value["declarations"] == []
+    assert value["coverage"] == "partial"
+    assert f"{path}: unsupported_script_statement" in value["gaps"]
+    assert "secret-sentinel" not in redact(text.replace("CC=clang", "API_TOKEN=secret-sentinel"))
+
+
+@pytest.mark.parametrize(
+    "path,text",
+    [
+        ("setup.sh", "CC=clang\n"),
+        ("setup.BASH", "export CC=clang\n"),
+        ("setup.cmd", "SET CC=clang\n"),
+        ("setup.BAT", '@SeT "CC=clang"\n'),
+    ],
+    ids=["shell-bare", "shell-export", "batch-SET", "batch-quoted"],
+)
+def test_assignment_grammar_retains_supported_dialect_literals(path, text):
+    value = _static({path: text})
+    assert value["coverage"] == "complete" and not value["gaps"]
+    assert value["declarations"] == [{
+        "path": path, "sha256": hashlib.sha256(text.encode()).hexdigest(), "line": 1,
+        "name": "CC", "value": "clang", "status": "declared",
+        "reason": "static_literal_advisory_only",
+    }]
+
+
+@pytest.mark.parametrize(
+    "path,text",
+    [
+        ("setup.sh", "until true\ndo\nCC=clang\ndone\n"),
+        ("setup.cmd", "@if exist flag (\nset CC=clang\n)\n"),
+        ("setup.cmd", "@FOR /L %%i IN (1,1,2) DO (\nSET CC=clang\n)\n"),
+        ("setup.cmd", "@setlocal\nset CC=clang\n"),
+    ],
+    ids=["shell-until", "batch-at-if", "batch-at-FOR", "batch-at-setlocal"],
+)
+def test_unsupported_control_contexts_withhold_literal_values(path, text):
+    value = _static({path: text})
+    assert [(d["name"], d["status"], d["value"]) for d in value["declarations"]] == [
+        ("CC", "unknown", None),
+    ]
+    assert value["coverage"] == "partial"
+    assert f"{path}: unresolved_script_context_or_condition" in value["gaps"]
+
+
+@pytest.mark.parametrize(
+    "path,text",
+    [
+        ("setup.sh", "CC=clang\necho \\\nCXX=clang++\necho \\\nsource child.sh\n"),
+        ("setup.cmd", "set CC=clang\necho ^\nset CXX=clang++\necho ^\ncall child.sh\n"),
+    ],
+    ids=["shell-backslash", "batch-caret"],
+)
+def test_continued_command_arguments_are_not_independent_assignments(path, text):
+    reads = []
+    value = _static({path: text, "child.sh": "UNRELATED=1\n"}, reads=reads)
+    assert [(d["name"], d["line"], d["status"], d["value"]) for d in value["declarations"]] == [
+        ("CC", 1, "unknown", None),
+    ]
+    assert f"{path}: unresolved_script_context_or_condition" in value["gaps"]
+    assert f"{path}: unsupported_script_statement" in value["gaps"]
+    assert reads == [path]
 
 
 @pytest.mark.parametrize(
@@ -112,6 +195,63 @@ def test_literal_sourced_inventory_and_taint_preserve_redacted_and_other_paths()
     reverse = _static({"setup.sh": "source env-child.sh\n", "env-child.sh": "CC=clang\n"})
     child_decls = [item for item in reverse["declarations"] if item["path"] == "env-child.sh"]
     assert len(child_decls) == 1 and child_decls[0]["status"] == "unknown"
+
+
+@pytest.mark.parametrize("max_scripts", [2, 64], ids=["tight", "default"])
+@pytest.mark.parametrize("child", ["env.sh", "z-env.sh"], ids=["seen", "pending"])
+def test_sourcing_taints_selected_scripts_without_another_read_slot(max_scripts, child):
+    files = {child: "CC=clang\nAPI_TOKEN=sentinel\n", "setup.sh": f"source {child}\n"}
+    files.update({f"env-padding-{i:02}.sh": "# inert\n" for i in range(max_scripts - 2)})
+    reads = []
+    value = _static(files, reads=reads, max_scripts=max_scripts)
+    declarations = [d for d in value["declarations"] if d["path"] == child]
+    assert [(d["name"], d["status"], d["value"]) for d in declarations] == [
+        ("CC", "unknown", None), ("[REDACTED]", "redacted", None),
+    ]
+    assert declarations[0]["sha256"] == hashlib.sha256(files[child].encode()).hexdigest()
+    assert sorted(reads) == sorted(files)
+    assert value["bounds"]["inspected_scripts"] == max_scripts
+    assert f"{child}: unresolved_script_context_or_condition" in value["gaps"]
+    assert not any("source_depth_or_script_bound" in gap for gap in value["gaps"])
+    if max_scripts == 2:
+        looser = _static(files, max_scripts=3)
+        assert value["declarations"] == looser["declarations"]
+
+
+def test_source_depth_bound_still_taints_previously_inspected_target():
+    reads = []
+    value = _static({
+        "env.sh": "CC=clang\n",
+        "setup.sh": "source a.sh\n",
+        "a.sh": "source env.sh\nsource unread.sh\n",
+        "unread.sh": "UNREAD=1\n",
+    }, reads=reads, max_scripts=4, max_depth=1)
+    assert reads == ["env.sh", "setup.sh", "a.sh"]
+    assert value["bounds"]["inspected_scripts"] == 3
+    assert [(d["name"], d["status"], d["value"]) for d in value["declarations"]] == [
+        ("CC", "unknown", None),
+    ]
+    assert "env.sh: unresolved_script_context_or_condition" in value["gaps"]
+    assert "a.sh: source_depth_or_script_bound" in value["gaps"]
+
+
+def test_repeated_source_edges_do_not_consume_script_slots():
+    reads = []
+    files = {
+        "setup.sh": "source setup.sh\nsource child.sh\nsource child.sh\nsource other.sh\n",
+        "child.sh": "CC=clang\n", "other.sh": "CXX=clang++\n",
+    }
+    value = _static(files, reads=reads, max_scripts=3)
+    assert reads == ["setup.sh", "child.sh", "other.sh"]
+    assert [(d["name"], d["status"]) for d in value["declarations"]] == [
+        ("CC", "unknown"), ("CXX", "unknown"),
+    ]
+    assert not any("source_depth_or_script_bound" in gap for gap in value["gaps"])
+    limited_reads = []
+    limited = _static(files, reads=limited_reads, max_scripts=2)
+    assert limited_reads == ["setup.sh", "child.sh"]
+    assert limited["bounds"]["inspected_scripts"] == 2
+    assert "setup.sh: source_depth_or_script_bound" in limited["gaps"]
 
 
 @pytest.mark.parametrize(

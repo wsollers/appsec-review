@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from appsec_review.config import load_config
+from appsec_review.interchange import validate_unit_output
 from appsec_review.jobs.job_build_environment_analysis import job as env_job
 from appsec_review.jobs.job_build_environment_analysis.job import (
     JOB_ID,
@@ -170,3 +171,31 @@ def test_analyze_and_publish_handlers_succeed_and_translate_failures(tmp_path, m
         build_job().units[1].handler(
             _unit_ctx(run_root, target, unit_id=PUBLISH, upstream_outputs={ANALYZE: analyzed})
         )
+
+
+@pytest.mark.parametrize("suffix", [".SH", ".BASH", ".BAT", ".CMD"])
+def test_uppercase_script_gaps_preserve_scope_through_publication(tmp_path, monkeypatch, suffix):
+    target = tmp_path / "target"
+    target.mkdir()
+    path = "SETUP" + suffix
+    payload = b"source missing.sh\n" if suffix in {".SH", ".BASH"} else b"call missing.cmd\n"
+    (target / path).write_bytes(payload)
+    monkeypatch.setattr(plan_job, "_accepted_catalog", lambda _root: {
+        "source_fingerprint": "fp-1",
+        "catalog_handoff_sha256": "c" * 64,
+        "files": [{"path": path, "sha256": hashlib.sha256(payload).hexdigest(),
+                   "size_bytes": len(payload)}],
+    })
+    run_root = tmp_path / "run"
+    job = build_job()
+    analyzed = job.units[0].handler(_unit_ctx(run_root, target))
+    published = job.units[1].handler(_unit_ctx(
+        run_root, target, unit_id=PUBLISH, upstream_outputs={ANALYZE: analyzed},
+    ))
+    validate_unit_output(published, unit_id=PUBLISH, strict_gaps=True)
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert published["gaps"]
+    assert {gap["scope_id"] for gap in published["gaps"]} == {path}
+    artifact = (run_root / published["artifact"]["path"]).read_bytes()
+    assert hashlib.sha256(artifact).hexdigest() == published["artifact"]["sha256"]
+    assert json.loads(artifact) == analyzed["environment"]

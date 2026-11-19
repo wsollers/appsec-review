@@ -27,7 +27,7 @@ SCHEMA = "appsec-review/build-environment-analysis/1"
 RULES = "static-environment/1"
 SECRET = re.compile(r"(?i)(?:password|passwd|secret|token|credential|private[_-]?key|api[_-]?key)")
 URL_CREDENTIAL = re.compile(r"(?i)([a-z][a-z0-9+.-]*://)[^/\s@]+@")
-ASSIGNMENT = re.compile(r"(?i)^(?:export\s+|set\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+REDACTION_ASSIGNMENT = re.compile(r"(?i)^(?:export\s+|set\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 SUPPORTED = {".sh", ".bash", ".bat", ".cmd"}
 WORKFLOWS = {"wave1_review", "project_build_review"}
 
@@ -53,19 +53,33 @@ def gap_records(gaps, unit_id):
     records = []
     for gap in gaps:
         path, separator, reason = gap.partition(": ")
-        scope = path if separator and "/" in path or separator and path.endswith(tuple(SUPPORTED)) else None
+        scope = path if separator and ("/" in path or PurePosixPath(path).suffix.lower() in SUPPORTED) else None
         records.append(producer_gap(GapCode.PRODUCER_REPORTED_GAP, gap, unit_id=unit_id, scope_id=scope))
     return records
 
 
-def _assignment(line: str):
+def _redaction_assignment(line: str):
     declaration = line.strip()
     quoted = re.fullmatch(r'(?i)@?set\s+"([^"]*)"', declaration)
     if quoted:
         declaration = quoted[1]
     else:
         declaration = re.sub(r"(?i)^@set\s+", "set ", declaration)
-    return ASSIGNMENT.fullmatch(declaration)
+    return REDACTION_ASSIGNMENT.fullmatch(declaration)
+
+
+def _assignment(line: str, *, batch: bool):
+    declaration = line.strip()
+    if not batch:
+        return re.fullmatch(r"(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)", declaration)
+    command = re.fullmatch(r"(?i)@?set\s+(.*)", declaration)
+    if not command:
+        return None
+    declaration = command[1]
+    quoted = re.fullmatch(r'"([^"]*)"', declaration)
+    if quoted:
+        declaration = quoted[1]
+    return re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)", declaration)
 
 
 def redact(text: str) -> str:
@@ -73,7 +87,7 @@ def redact(text: str) -> str:
     for original in text.splitlines(keepends=True):
         line = original.rstrip("\r\n")
         declaration = re.sub(r"(?i)^\s*(?:ENV|ARG)\s+", "", line)
-        match = _assignment(declaration)
+        match = _redaction_assignment(declaration)
         sensitive = ((match and SECRET.search(match[1]))
                      or re.search(r"(?i)\b(?:ENV|ARG)\s+.*\b(?:password|passwd|secret|token|"
                                   r"credential|private[_-]?key|api[_-]?key)\b", line))
@@ -257,20 +271,25 @@ def analyze_environment(catalog, read_document, settings, *, clock=time.monotoni
         PurePosixPath(path).suffix.lower() == ".ps1" for path in inventory) else []
     if len(selected) > settings.max_scripts:
         gaps.append("script_count_exhausted")
-    pending = [(path, 0, False) for path in selected[:settings.max_scripts]]
-    seen, declarations = set(), []
+    pending = [(path, 0) for path in selected[:settings.max_scripts]]
+    scheduled = {path for path, _ in pending}
+    seen, tainted, declarations = set(), set(), []
+
+    def taint(target):
+        if target in tainted:
+            return
+        tainted.add(target)
+        if target in seen:
+            gaps.append(f"{target}: unresolved_script_context_or_condition")
+            for declaration in declarations:
+                if declaration["path"] == target and declaration["status"] != "redacted":
+                    declaration.update(value=None, status="unknown", reason="unresolved_script_context_or_value")
+
     while pending:
         if clock() - started >= settings.deadline_seconds:
             gaps.append("internal_environment_deadline")
             break
-        path, depth, inherited_uncertainty = pending.pop(0)
-        if path in seen:
-            if inherited_uncertainty:
-                gaps.append(f"{path}: unresolved_script_context_or_condition")
-                for declaration in declarations:
-                    if declaration["path"] == path and declaration["status"] != "redacted":
-                        declaration.update(value=None, status="unknown", reason="unresolved_script_context_or_value")
-            continue
+        path, depth = pending.pop(0)
         seen.add(path)
         item = inventory[path]
         if item.get("size_bytes", 0) > settings.max_script_bytes:
@@ -286,30 +305,43 @@ def analyze_environment(catalog, read_document, settings, *, clock=time.monotoni
         except UnicodeDecodeError:
             gaps.append(f"{path}: unsupported_script_encoding")
             continue
+        batch = PurePosixPath(path).suffix.lower() in {".bat", ".cmd"}
+        lines = text.splitlines()
+        continuation_marker = "^" if batch else "\\"
         # Relative sourcing and $0 depend on invocation context, not the defining file's location.
-        uncertain = inherited_uncertainty or bool(re.search(
-            r"(?im)^\s*(?:if\b|for\b|while\b|case\b|function\b|"
+        uncertain = path in tainted or any(line.endswith(continuation_marker) for line in lines) or bool(re.search(
+            r"(?im)^\s*@?(?:if\b|for\b|while\b|until\b|case\b|function\b|"
             r"[A-Za-z_][A-Za-z0-9_]*\s*\(\)|(?:source|\.)\s|call\s|"
             r"(?:cd|pushd|popd|eval|exec|setlocal|endlocal|goto|exit|return)\b)|[$`%;&|<>]", text))
         if uncertain:
             gaps.append(f"{path}: unresolved_script_context_or_condition")
-        for line_number, line in enumerate(text.splitlines(), 1):
+        continued = False
+        for line_number, line in enumerate(lines, 1):
             if clock() - started >= settings.deadline_seconds:
                 gaps.append("internal_environment_deadline")
                 pending.clear()
                 break
+            was_continued, continued = continued, line.endswith(continuation_marker)
+            if was_continued:
+                gaps.append(f"{path}: unsupported_script_statement")
+                continue
             source = re.match(r"(?i)^\s*(?:source|\.|call)\s+([A-Za-z0-9_./-]+)\s*$", line)
             if source:
                 target = source[1]
                 if (target in inventory and PurePosixPath(target).suffix.lower() in SUPPORTED
                         and ".." not in PurePosixPath(target).parts):
-                    if depth >= settings.max_depth or len(seen) + len(pending) >= settings.max_scripts:
+                    # Propagating uncertainty to admitted scripts consumes no read or depth budget.
+                    if target in scheduled:
+                        taint(target)
+                    elif depth >= settings.max_depth or len(scheduled) >= settings.max_scripts:
                         gaps.append(f"{path}: source_depth_or_script_bound")
                     else:
-                        pending.append((target, depth + 1, True))
+                        scheduled.add(target)
+                        taint(target)
+                        pending.append((target, depth + 1))
                 else:
                     gaps.append(f"{path}: unresolved_sourcing")
-            match = _assignment(line)
+            match = _assignment(line, batch=batch)
             if not match:
                 if line.strip() and not line.lstrip().startswith(("#", "::", "REM ", "rem ")) and not source:
                     gaps.append(f"{path}: unsupported_script_statement")

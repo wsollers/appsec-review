@@ -21,13 +21,25 @@ changed working directory retain uncertainty; a sourced file's defining director
 invocation directory. A literal declaration is advisory, never the effective recipe environment
 or native target proof.
 
+Assignment recognition is dialect-specific: shell uses bare `NAME=value` or lowercase `export`;
+batch requires case-insensitive `set` or `@set`, optionally quoting the assignment. A form from
+the other dialect is an unsupported-statement gap, not an environment declaration. Unsupported
+control flow, including `until` and `@if`, retains whole-script uncertainty. Shell backslash and
+batch caret continuations also retain uncertainty; their following lines are not parsed as
+independent assignments or source references. None of these bounded recognizers certifies full
+script syntax or execution behavior.
+
 `[jobs.job_build_environment_analysis.settings]` centrally bounds 64 scripts, 256 KiB/file,
 4096 assignments, source depth four and a 30-second internal deadline. Settings may tighten,
 not exceed, these ceilings. Long declaration values are withheld with a named gap.
+Sourcing an already scheduled or inspected script propagates uncertainty without consuming
+another read or depth slot, including at the configured bounds. Repeated edges do not crowd out
+new scripts; genuinely new reads still obey script-count and source-depth ceilings.
 Credential-bearing URLs and sensitive assignments are redacted before publication or inference.
 Literal batch `set "NAME=value"` and `@set "NAME=value"` use the same assignment boundary:
 safe bytes and line endings are preserved, sensitive values are withheld from additive evidence
 and complete caches, and the original source hash is never rewritten to accept redacted bytes.
+Redaction remains cross-dialect even where the static assignment grammar rejects a statement.
 Raw script content is not the environment output.
 
 The accepted sensitive artifact is `build-environment.json` beneath the producer's publication
@@ -76,8 +88,8 @@ and run propagate the same host orchestration identity on initial and deferred r
 
 ## Verification boundary
 
-The accompanying static-parser, lifecycle, graph-wiring and feedback units are authored but not
-run in this source-only session. The exact predecessor V1's 173 independently passed cases are
-preserved evidence, not V2 results. The actual-capture R8 replay is separately classified and
-requires explicit custody/import/environment admission; no live review or acceptance follows
-from the new defaults.
+Focused unit regressions exercise dialect-specific parsing, bounded source uncertainty,
+continuations, redaction and canonical publication scopes using inert script bytes. Publication
+and consumer tests check artifact identities and admitted read receipts. These checks do not
+execute scripts or establish integration, acceptance or live-review behavior. Actual-capture
+replay and live validation require separate explicit custody/import/environment admission.
