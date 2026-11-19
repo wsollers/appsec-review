@@ -885,6 +885,13 @@
     }
   },
   "common_contracts": {
+    "seeded-source-selection": {
+      "jobs": ["job_cpp_compiled_analysis", "job_clang_static_analysis", "job_cpg_analysis"],
+      "unit": ["tests/test_seeding_module.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
     "dossier-format-custody": {
       "jobs": ["job_dossier_publication", "job_final_publication_gate", "job_final_report_publication"],
       "unit": ["tests/unit/job_dossier_publication/test_format_custody.py"],

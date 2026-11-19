@@ -328,7 +328,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5094 | [Preserve failed and partial compiled-analysis outcomes through reuse](#t-5094-preserve-failed-and-partial-compiled-analysis-outcomes-through-reuse) | graph | done (2026-11-19, b098c02682352a487da5265ab1426c5b5d66bab0) |
 | T-5095 | [Preserve full-mode control flow under presentation and AST filtering bounds](#t-5095-preserve-full-mode-control-flow-under-presentation-and-ast-filtering-bounds) | graph | done (2026-11-19, b098c02682352a487da5265ab1426c5b5d66bab0) |
 | T-5096 | [Retain accepted native link source and compile-directory context](#t-5096-retain-accepted-native-link-source-and-compile-directory-context) | build | done (2026-11-19, b098c02682352a487da5265ab1426c5b5d66bab0) |
-| T-5097 | [Select header seeds and enforce actual include-read budgets](#t-5097-select-header-seeds-and-enforce-actual-include-read-budgets) | graph | in-progress |
+| T-5097 | [Select header seeds and enforce actual include-read budgets](#t-5097-select-header-seeds-and-enforce-actual-include-read-budgets) | graph | done (2026-11-19, a6a46b517a7965a53d62b39256f01f07ab09008d) |
 | T-5098 | [Preserve alternate graph symbol kinds identities and disputed evidence](#t-5098-preserve-alternate-graph-symbol-kinds-identities-and-disputed-evidence) | graph | done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7) |
 | T-5099 | [Keep alternate graph storage immutable and traversal honestly bounded](#t-5099-keep-alternate-graph-storage-immutable-and-traversal-honestly-bounded) | graph | done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7) |
 | T-5100 | [Preserve artifact index content and unambiguous relationship identities](#t-5100-preserve-artifact-index-content-and-unambiguous-relationship-identities) | evidence | open |
@@ -4047,12 +4047,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5097 — Select header seeds and enforce actual include-read budgets
 
-- **State:** in-progress
+- **State:** done (2026-11-19, a6a46b517a7965a53d62b39256f01f07ab09008d)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CPP-F04, K06. Header seeds through `-isystem`, `-iquote`, `-idirafter` are never selected; K06 — Medium, include scan budget not actual reads.
 - **Scope:** `src/appsec_review/seeding/plan.py`, `src/appsec_review/seeding/units.py`
 - **Done when:** All supported include flag forms select the correct TU; candidate reads and byte limits count actual work with deterministic priority. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+  Supported paired/joined include flags use accepted source/build cwd and compiler search order.
+  Candidate misses count, cached reads do not; oversized or incomplete sources remain named gaps.
+  Short reads finish within the byte bound rather than certifying a prefix. Rank-based selection
+  and CPP/Clang/CPG cache identities are consistent. Main combined selection: 147 passed/12.21 s,
+  two workers, seed 5097, no skips or slow cases; native compiler validation not run.
 
 ### T-5098 — Preserve alternate graph symbol kinds identities and disputed evidence
 
