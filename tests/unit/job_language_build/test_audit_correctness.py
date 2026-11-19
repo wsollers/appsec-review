@@ -228,6 +228,34 @@ def test_dotnet_execution_obeys_frozen_operation_policy(tmp_path, policy, comman
         assert any(policy in str(gap) for gap in receipt["gaps"])
 
 
+@pytest.mark.parametrize("operation", ["Publish", "Pack"])
+@pytest.mark.parametrize("allowed", [False, True])
+def test_dotnet_qualified_targets_obey_policy_before_executor_resolution(tmp_path, operation, allowed):
+    solution = (
+        "Microsoft Visual Studio Solution File, Format Version 12.00\n"
+        'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App", "App.csproj", '
+        '"{11111111-1111-1111-1111-111111111111}"\nEndProject\n'
+        "Global\nGlobalSection(SolutionConfigurationPlatforms) = preSolution\n"
+        "release|x64 = release|x64\nEndGlobalSection\n"
+        "GlobalSection(ProjectConfigurationPlatforms) = postSolution\n"
+        "{11111111-1111-1111-1111-111111111111}.release|x64.ActiveCfg = release|x64\n"
+        "{11111111-1111-1111-1111-111111111111}.release|x64.Build.0 = release|x64\n"
+        "EndGlobalSection\nEndGlobal\n")
+    command = ["dotnet", "msbuild", "App.sln", f"-t:App:{operation}", "-v:diag"]
+    unit, dispatch = _execution(tmp_path, "dotnet", command, files={"App.sln": solution},
+                                options={"allow_" + operation.lower(): allowed})
+    calls = []
+    if allowed:
+        receipt = _execute(unit, dispatch, calls)
+        assert calls == [tuple(command)] and receipt["commands"]
+    else:
+        def unexpected_executor(*_args):
+            pytest.fail("forbidden qualified target reached executor resolution")
+        receipt = job._execute_one(unit, dispatch, support.accepted(dispatch), unexpected_executor)
+        assert receipt["terminal_status"] == "BLOCKED" and receipt["commands"] == []
+        assert any("allow_" + operation.lower() in str(gap) for gap in receipt["gaps"])
+
+
 @pytest.mark.parametrize("required,lock", [
     (False, "absent"), (True, "absent"), (True, "accepted"), (True, "unbound"), (True, "changed"),
 ], ids=["unlocked", "required-missing", "locked", "unbound", "changed"])

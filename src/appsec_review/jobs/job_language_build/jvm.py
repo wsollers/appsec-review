@@ -591,17 +591,23 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any], setti
     })).hexdigest()
 
 
-def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
+def _index_fingerprint(unit: Any, receipt: Mapping[str, Any]) -> str:
     producer = [{"sha256": hashlib.sha256(canonical_json({
         key: receipt.get(key) for key in (
             "build_unit_id", "build_system", "commands", "tool_invocations",
             "declared_compilations", "artifacts", "terminal_status", "gaps")
     })).hexdigest()}]
-    fingerprint = index_fingerprint(name="build", target_snapshot=unit.job.source_fingerprint,
+    return index_fingerprint(name="build", target_snapshot=unit.job.source_fingerprint,
         producer_artifacts=producer, tool_identity={"executor": JVM_EXECUTOR_IDENTITY,
         "image": receipt["image"]["image_id"], "delivery_policy": POLICY_IDENTITY},
         parser_identity="jvm-provenance/3",
         normalizer_identity="jvm-build-normalizer/1", mapping_identity="jvm-workspace-path/1")
+
+
+def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
+    from appsec_review.jobs.job_project_build.enforcement import gap_text
+    fingerprint = _index_fingerprint(unit, receipt)
+    gaps = [gap_text(gap) for gap in receipt["gaps"]]
     shard = "jvm-" + str(receipt["build_unit_id"])
     path = unit.job.run_root / "data" / "indices" / "build" / f"{fingerprint}-{shard}.sqlite"
     reused = path.is_file()
@@ -663,9 +669,9 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
             for action_id in action_ids:
                 builder.add_relation(RelationRecord(RelationKind.GENERATED_FROM, identity.value,
                                                      action_id, True, 1.0))
-        complete = receipt["terminal_status"] == "SUCCEEDED" and not receipt["gaps"]
+        complete = receipt["terminal_status"] == "SUCCEEDED" and not gaps
         builder.add_coverage("jvm-build", "complete" if complete else "partial",
-                             None if complete else "; ".join(receipt["gaps"][:10]))
+                             None if complete else "; ".join(gaps[:10]))
         sha = builder.build()
     else:
         sha = IndexBuilder(path, name="build", fingerprint=fingerprint,
@@ -673,7 +679,7 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
     identity = IndexIdentity("build", "appsec-review/retrieval-index/2", sha, fingerprint,
         path.relative_to(unit.job.run_root).as_posix(),
         {"job": "job_language_build", "unit": unit.unit_id, "family": "java"},
-        tuple(receipt["gaps"]), shard)
+        tuple(gaps), shard)
     return {"identity": asdict(identity), "reused": reused}
 
 

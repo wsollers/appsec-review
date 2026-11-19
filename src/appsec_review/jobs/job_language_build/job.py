@@ -64,8 +64,8 @@ from appsec_review.jobs.artifact_kinds import binary_role, require_artifact_kind
 from appsec_review.jobs.build_bookkeeping import BookkeepingExclusions
 from appsec_review.jobs.build_output_scope import BuildOutputDispositions
 from appsec_review.jobs.build_iterations import (
-    LANGUAGE_RECEIPT_SCHEMA, BuildIterations, IterationOutcome, durable_artifacts, install_inventory,
-    product_specs, read_reference,
+    LANGUAGE_RECEIPT_SCHEMA, BuildIterations, IterationOutcome, diagnostic_tail_bytes,
+    durable_artifacts, install_inventory, product_specs, read_reference,
 )
 from appsec_review.jobs.build_workspace import BuildWorkspace, ProductSpec, WorkspacePaths
 from appsec_review.observability.spans import operation_phase
@@ -1336,7 +1336,7 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         except OSError: pass
         failed = result.timed_out or result.exit_code != 0
         limit = int(unit.job.config.settings["output_bytes"])
-        tail_limit = int(unit.job.config.settings.get(family, {}).get("diagnostic_tail_bytes", 32768))
+        tail_limit = diagnostic_tail_bytes(unit.job.config.settings, family)
         stdout_identity = _stream_identity(unit.job.run_root, stdout, result, "stdout", limit,
                                            tail_limit=tail_limit)
         stderr_identity = _stream_identity(unit.job.run_root, stderr, result, "stderr", limit,
@@ -1768,11 +1768,9 @@ def _validate_config(context, _result) -> None:
     wasm._producer_rules(wasm_settings)
 
 
-def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict[str, Any]:
-    prior_path, prior_sha = resolve_context_manifest(unit.job)
-    verified = {}
-    prior, _ = load_verified_manifest(unit.job.run_root, prior_path, prior_sha, verified=verified)
-    specialized: dict[tuple[str, str], IndexIdentity] = {}
+def _finalize_jvm_receipts(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    observed: dict[tuple[str, str], IndexIdentity] = {}
+    stale = set()
     for receipt in receipts:
         raw = receipt.get("retrieval_index")
         if raw is None:
@@ -1784,9 +1782,34 @@ def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -
                 or identity.producer.get("family") != "java"):
             raise ValueError("JVM build index identity does not match its receipt")
         key = (identity.name, identity.shard_id)
-        if key in specialized and specialized[key] != identity:
+        if key in observed and observed[key] != identity:
             raise ValueError("conflicting JVM build index identities")
-        specialized[key] = identity
+        observed[key] = identity
+        if identity.fingerprint != jvm._index_fingerprint(unit, receipt):
+            stale.add(str(receipt["build_unit_id"]))
+    if not stale:
+        return receipts
+    # Validate execution evidence before replacing its index projection. This diagnostic
+    # manifest is never linked as an accepted ancestor of the final manifest.
+    digest = hashlib.sha256(canonical_json([asdict(value) for _, value in sorted(observed.items())])).hexdigest()
+    path = (unit.job.run_root / "data" / "indices" / "manifests" /
+            f"language-build-jvm-observed-{unit.job.attempt_id}-{digest}.json")
+    write_manifest(path, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
+                   target_root=unit.job.target_root or Path(), indexes=observed.values())
+    load_verified_manifest(unit.job.run_root, path, file_sha256(path))
+    return [{**receipt, "retrieval_index": jvm._index(unit, receipt)}
+            if str(receipt["build_unit_id"]) in stale else receipt for receipt in receipts]
+
+
+def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict[str, Any]:
+    receipts = _finalize_jvm_receipts(unit, receipts)
+    prior_path, prior_sha = resolve_context_manifest(unit.job)
+    verified = {}
+    prior, _ = load_verified_manifest(unit.job.run_root, prior_path, prior_sha, verified=verified)
+    specialized = {
+        ("build", raw["identity"]["shard_id"]): IndexIdentity(
+            **{**raw["identity"], "gaps": tuple(raw["identity"].get("gaps", ()))})
+        for receipt in receipts if (raw := receipt.get("retrieval_index")) is not None}
     producer = [{"build_unit_id": receipt.get("build_unit_id"), "fingerprint": receipt.get("fingerprint"),
                  "status": receipt.get("terminal_status")} for receipt in receipts]
     fingerprint = index_fingerprint(name="build", target_snapshot=unit.job.source_fingerprint,
@@ -2171,6 +2194,7 @@ def build_job(*, executor_factory=None) -> Job:
                     "execution_graph": unit.output("iterations.dispatch").get("graph"),
                     "gaps": unique_gaps([*unit.output("iterations.dispatch").get("gaps", ()), *unsupported_gaps,
                         *(gap for result in executions for gap in result["gaps"])])}
+        document["receipts"] = _finalize_jvm_receipts(unit, document["receipts"])
         artifact = _artifact(unit, "accepted-language-builds.json", document)
         unit.job.events.write("LANGUAGE_BUILDS_RECORDED", unit_id=unit.unit_id,
             receipt=artifact, build_count=len(document["receipts"]),

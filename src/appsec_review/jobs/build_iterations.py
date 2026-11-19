@@ -45,6 +45,17 @@ def read_reference(run_root: Path, reference: Mapping[str, Any]) -> dict[str, An
     return value
 
 
+def diagnostic_tail_bytes(settings: Mapping[str, Any], family: str) -> int:
+    key = "jvm" if family == "java" else family
+    if key not in {"go", "python", "rust", "php", "node", "jvm"}:
+        return 32768
+    configured = settings.get(key)
+    limit = configured.get("diagnostic_tail_bytes") if isinstance(configured, Mapping) else None
+    if type(limit) is not int or limit < 0:
+        raise ValueError(f"{family} diagnostic_tail_bytes is missing or invalid in frozen settings")
+    return limit
+
+
 def selected_graph(actions: Sequence[Mapping[str, Any]], *, source_fingerprint: str,
                    relationships: Sequence[Mapping[str, Any]],
                    variants: Mapping[str, Mapping[str, str]],
@@ -234,10 +245,17 @@ class BuildIterations:
                     commands = receipt.get("commands", ())
                     last = commands[-1] if commands else {}
                     stderr_ref = last.get("stderr")
-                    stderr = (verify_reference(self.run_root, reference(
-                        self.run_root, self.run_root / stderr_ref["path"],
-                        expected_sha256=stderr_ref["sha256"])).read_text(errors="replace")[-32768:]
-                        if isinstance(stderr_ref, Mapping) else "")
+                    stderr = ""
+                    if isinstance(stderr_ref, Mapping):
+                        stream_identity = reference(
+                            self.run_root, self.run_root / stderr_ref["path"],
+                            expected_sha256=stderr_ref["sha256"])
+                        stream_path = verify_reference(self.run_root, stream_identity)
+                        limit = diagnostic_tail_bytes(
+                            self.configuration.get("settings", {}), request["dispatch"]["family"])
+                        with stream_path.open("rb") as stream:
+                            stream.seek(max(0, stream_identity["size_bytes"] - limit))
+                            stderr = stream.read(limit).decode("utf-8", errors="replace")
                     messages = [gap_text(gap) for gap in receipt.get("gaps", ())]
                     diagnosis = diagnose_failure(
                         exit_code=last.get("exit_code"), timed_out=last.get("timed_out", False),

@@ -57,7 +57,7 @@ def validate_recipe(recipe: Mapping[str, Any], workspace: Path | None = None, *,
                     word += ":" + words[index + 1]
                 target = re.fullmatch(r"(?:--?|/)(?:t|target|targets)[:=](.+)", word)
                 if target:
-                    requested.update(re.split(r"[;,]", target[1]))
+                    requested.update(value.rsplit(":", 1)[-1] for value in re.split(r"[;,]", target[1]))
                 properties = re.fullmatch(r"(?:--?|/)(?:p|property)[:=](.+)", word)
                 if properties:
                     for assignment in re.split(r"[;,]", properties[1]):

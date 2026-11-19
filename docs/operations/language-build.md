@@ -307,6 +307,12 @@ Acceptance composes each receipt's actual `jvm-<build-unit-id>` provenance shard
 and relation closure before publishing the manifest. JVM index fingerprints include commands,
 observed invocations, declared compilations, artifact mappings, status, and gaps; equal artifact
 bytes alone cannot reuse stale provenance.
+Before publishing the receipt set, acceptance compares that fingerprint with the final receipt.
+Late qualifications or product/transaction rejection rebuild the sanitized shard from the final
+artifact set, status, and gaps after verifying the original shard. Failed products therefore do not
+reappear through precommit provenance, and late gaps cannot retain complete coverage. The separate
+execution-evidence verification manifest is diagnostic, never an accepted ancestor. The replacement
+also overrides an inherited shard for the same unit while preserving other units and original bytes.
 The generic and JVM executor identity revisions also invalidate older family checkpoints, so
 previously accepted receipts cannot bypass these policy/provenance repairs through cache reuse.
 
@@ -718,7 +724,8 @@ only hashes, outcomes, bounded stream facts, and artifact identities.
 commands may perform their normal implicit restore. The adapter never runs tests or target
 applications. Frozen `allow_publish`, `allow_pack`, and `allow_aot` settings are checked before
 executor resolution, including explicit MSBuild targets/properties and selected native-AOT
-operations from the accepted topology. A prohibited operation produces a blocked receipt with
+operations from the accepted topology. Project-qualified solution targets such as `App:Publish`
+and `App:Pack` obey the same publish/pack settings. A prohibited operation produces a blocked receipt with
 no executed commands; permitted operations retain the existing capture and target-admission rules.
 It catalogs C#/VB/F# assemblies, portable PDBs, generated sources, NuGet packages,
 dependency/runtime configuration, native/AOT outputs, project/package/reference topology, and
@@ -1149,9 +1156,12 @@ Per-family tables. `diagnostic_tail_bytes` (shipped 32768) bounds retained prote
 tails in bytes for Go, Python, Rust, PHP, Node, and JVM. Complete captured stdout/stderr remain
 intact and independently hash-bound; a configured tail larger than the in-memory preview is read
 from the complete file without loading the whole stream. Zero disables a separate tail where
-accepted by the family settings; JVM requires a positive bound. The iteration controller's
-separate diagnosis reader still uses its fixed 32768-character window
-([T-5150](../TODO.md#t-5150-apply-configured-diagnostic-tail-bounds-to-every-build-family)).
+accepted by the family settings; JVM requires a positive bound. The iteration controller verifies
+the full stderr identity and uses the frozen dispatch family's bound for a binary seek/read before
+UTF-8 decoding (`java` selects `jvm` settings). Zero reads no diagnostic bytes; a split multibyte
+character is decoded with replacement. Native, .NET, and Wasm have no family tail option and use
+the documented 32768-byte default. Missing or invalid settings for a family that does have the
+option do not silently select that default. The original complete stream remains in failure evidence.
 
 | Table | Keys (shipped value) | Constraints |
 | --- | --- | --- |
