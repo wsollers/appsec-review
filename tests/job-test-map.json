@@ -576,6 +576,7 @@
     },
     "job_post_build_security_assessment": {
       "unit": [
+        "tests/unit/job_post_build_security_assessment/test_audit_semantics.py",
         "tests/unit/job_post_build_security_assessment/test_contract.py",
         "tests/unit/job_post_build_security_assessment/test_hardening.py",
         "tests/unit/job_post_build_security_assessment/test_assessment.py",

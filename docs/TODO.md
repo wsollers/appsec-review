@@ -391,10 +391,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5157 | [Resolve bounded PoC declarations from the correct accepted build](#t-5157-resolve-bounded-poc-declarations-from-the-correct-accepted-build) | review | done (2026-11-19, e5cc0b31a47de2447c3d9a7ed6e7bdb39b224d2b) |
 | T-5158 | [Validate actual PoC calls bounds numeric triggers and denied names](#t-5158-validate-actual-poc-calls-bounds-numeric-triggers-and-denied-names) | review | done (2026-11-19, 77d228461b7a2ee344cef5587b26ad387a4d2761) |
 | T-5159 | [Bound PoC briefs and retain nested compile qualifications](#t-5159-bound-poc-briefs-and-retain-nested-compile-qualifications) | review | done (2026-11-19, e5cc0b31a47de2447c3d9a7ed6e7bdb39b224d2b) |
-| T-5160 | [Bind hardening conclusions to the exact binary command and evidence](#t-5160-bind-hardening-conclusions-to-the-exact-binary-command-and-evidence) | evidence | open |
-| T-5161 | [Keep post-build shards immutable and rejected artifact hashes rejected](#t-5161-keep-post-build-shards-immutable-and-rejected-artifact-hashes-rejected) | evidence | open |
-| T-5162 | [Reject error-shaped post-build model assessments](#t-5162-reject-error-shaped-post-build-model-assessments) | review | open |
-| T-5163 | [Interpret PE Mach-O and truncated ELF protection evidence correctly](#t-5163-interpret-pe-mach-o-and-truncated-elf-protection-evidence-correctly) | binary | open |
+| T-5160 | [Bind hardening conclusions to the exact binary command and evidence](#t-5160-bind-hardening-conclusions-to-the-exact-binary-command-and-evidence) | evidence | done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31) |
+| T-5161 | [Keep post-build shards immutable and rejected artifact hashes rejected](#t-5161-keep-post-build-shards-immutable-and-rejected-artifact-hashes-rejected) | evidence | done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31) |
+| T-5162 | [Reject error-shaped post-build model assessments](#t-5162-reject-error-shaped-post-build-model-assessments) | review | done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31) |
+| T-5163 | [Interpret PE Mach-O and truncated ELF protection evidence correctly](#t-5163-interpret-pe-mach-o-and-truncated-elf-protection-evidence-correctly) | binary | done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31) |
 | T-5164 | [Index duplicate profile content without conflicting source identities](#t-5164-index-duplicate-profile-content-without-conflicting-source-identities) | evidence | open |
 | T-5165 | [Preserve Callgrind perf LLVM and UTF-8 profile semantics](#t-5165-preserve-callgrind-perf-llvm-and-utf-8-profile-semantics) | evidence | open |
 | T-5166 | [Route profile queries and retain source attribution and gaps](#t-5166-route-profile-queries-and-retain-source-attribution-and-gaps) | evidence | open |
@@ -4844,38 +4844,52 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5160 — Bind hardening conclusions to the exact binary command and evidence
 
-- **State:** open
+- **State:** done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: PBS-F01, PBS-F02, PBS-F04, PBS-F05, PBS-F09. Case-wide flags falsely create requested-versus-binary failures; Basename collisions produce false exact provenance.
 - **Scope:** `src/appsec_review/jobs/job_post_build_security_assessment/assessment.py`, `src/appsec_review/jobs/job_post_build_security_assessment/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 117 passed/8.78 s, two workers, seed 9160, no skips or cases over 10 s.
+  Exact producing paths/cwd/hash bindings replace basename or case-wide flag assumptions;
+  effective options retain overrides and unresolved direct/forwarded response-file uncertainty.
+  Model observations must resolve their evidence to the admitted subject. Independent review
+  corrections were verified before integration; no native/model or live execution was run.
 - **Refs:** `audit-results/job-audit-job_post_build_security_assessment.md`; follow-up to closed T-172 (not reopened).
 
 ### T-5161 — Keep post-build shards immutable and rejected artifact hashes rejected
 
-- **State:** open
+- **State:** done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: PBS-F03, PBS-F07, PBS-F11. Changed inference results reuse an old shard while advertising new source artifacts; Oversize-artifact gap records crash first-time indexing.
 - **Scope:** `src/appsec_review/jobs/job_post_build_security_assessment/assessment.py`, `src/appsec_review/jobs/job_post_build_security_assessment/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5160's 117-case selection. Verified stage contents/hashes and effective settings
+  bind immutable shard identity; changed projections cannot reuse an old shard. Rejected
+  catalog paths and post-provenance hash changes remain excluded, with indexable bounded gaps.
 - **Refs:** `audit-results/job-audit-job_post_build_security_assessment.md`.
 
 ### T-5162 — Reject error-shaped post-build model assessments
 
-- **State:** open
+- **State:** done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: PBS-F08. Error-shaped model replies become successful empty assessments.
 - **Scope:** `src/appsec_review/jobs/job_post_build_security_assessment/assessment.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5160's selection. Closed response/observation validation rejects missing or
+  error-shaped replies through existing bounded retries, rather than inventing empty success.
 - **Refs:** `audit-results/job-audit-job_post_build_security_assessment.md`.
 
 ### T-5163 — Interpret PE Mach-O and truncated ELF protection evidence correctly
 
-- **State:** open
+- **State:** done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31)
 - **Area:** binary
 - **Why:** Archived audit/feedback cases: PBS-F12, PBS-F13, PBS-F14. PE32 is incorrectly required to have 64-bit high-entropy VA; Valid Mach-O `.o` files take the COFF parser.
 - **Scope:** `src/appsec_review/jobs/job_post_build_security_assessment/assessment.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5160's selection. PE32 does not require PE32+ high-entropy VA; Mach-O magic wins
+  over object suffixes. Incomplete ELF evidence, including ambiguously classified ET_DYN,
+  produces unknown protection checks rather than false absence or non-applicability.
+  Unassigned PBS-F06/F10/F15 leads are not claimed resolved by these changes.
 - **Refs:** `audit-results/job-audit-job_post_build_security_assessment.md`.
 
 ### T-5164 — Index duplicate profile content without conflicting source identities

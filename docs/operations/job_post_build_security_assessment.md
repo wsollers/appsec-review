@@ -30,13 +30,13 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `deterministic` | `deterministic.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L303) |
-| `index` | `index.native_units` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L303) |
-| `inference` | `inference.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L303) |
-| `inspection` | `inspection.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L303) |
-| `load` | `load.accepted_cpp_build` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L273) |
-| `provenance` | `provenance.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L303) |
-| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L892) |
+| `deterministic` | `deterministic.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L338) |
+| `index` | `index.native_units` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L338) |
+| `inference` | `inference.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L338) |
+| `inspection` | `inspection.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L338) |
+| `load` | `load.accepted_cpp_build` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L308) |
+| `provenance` | `provenance.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L338) |
+| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L973) |
 
 ### Accepted input declarations
 
@@ -117,7 +117,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | None declared |
 | integration | `tests/integration/job_post_build_security_assessment/test_post_build_jobrunner.py` |
 | live | `tests/live/test_post_build_security_live.py` |
-| unit | `tests/unit/job_post_build_security_assessment/test_contract.py`<br>`tests/unit/job_post_build_security_assessment/test_hardening.py`<br>`tests/unit/job_post_build_security_assessment/test_assessment.py`<br>`tests/unit/job_post_build_security_assessment/test_binary_inspection.py`<br>`tests/unit/job_post_build_security_assessment/test_handlers.py`<br>`tests/test_family_binary_assessment.py`<br>`tests/orchestration/dagster/test_post_build_security.py` |
+| unit | `tests/unit/job_post_build_security_assessment/test_audit_semantics.py`<br>`tests/unit/job_post_build_security_assessment/test_contract.py`<br>`tests/unit/job_post_build_security_assessment/test_hardening.py`<br>`tests/unit/job_post_build_security_assessment/test_assessment.py`<br>`tests/unit/job_post_build_security_assessment/test_binary_inspection.py`<br>`tests/unit/job_post_build_security_assessment/test_handlers.py`<br>`tests/test_family_binary_assessment.py`<br>`tests/orchestration/dagster/test_post_build_security.py` |
 
 ### Dagster placement
 
