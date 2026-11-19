@@ -29,11 +29,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `audit` | `audit.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L503) |
-| `fts` | `fts.image_validation` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L468) |
+| `audit` | `audit.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L507) |
+| `fts` | `fts.image_validation` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L472) |
 | `links` | `links.cross_domain` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L364) |
 | `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L302) |
-| `matrix` | `matrix.coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L548) |
+| `matrix` | `matrix.coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L552) |
 | `precompute` | `precompute.artifact_inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L384) |
 | `precompute` | `precompute.build_provenance` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L384) |
 | `precompute` | `precompute.ci_trust` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L384) |
@@ -45,7 +45,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `precompute` | `precompute.scanner_correlation` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L384) |
 | `precompute` | `precompute.symbol_links` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L384) |
 | `precompute` | `precompute.threat_boundaries` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L384) |
-| `publish` | `publish.inventory_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L585) |
+| `publish` | `publish.inventory_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_review_data_indexing/job.py#L589) |
 
 ### Accepted input declarations
 

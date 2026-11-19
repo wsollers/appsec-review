@@ -467,7 +467,7 @@ Recorded by the implementation where the code refined or deviated from the desig
 - **Receipt schema.** Receipt validation is open-key: `job_artifact_indexing/job.py`
   `_RECEIPT_SCHEMAS` only allowlists schema names. `RECEIPT_SCHEMA` therefore stays
   `appsec-review/language-build-receipt/1`, and `build_output_dispositions` is an added field.
-  `EXECUTOR_IDENTITY` is bumped to `appsec-review/generic-language-build-executor/4`.
+  The current `EXECUTOR_IDENTITY` is `appsec-review/generic-language-build-executor/5`.
 - **`classify_tree` gains `keep_linked=False`.** This additive keyword yields a `supply_chain`
   root's linked kinds (`executable`, `shared-library`, `static-library`) as kept rows. Native
   dependency roots pass it, and Conan generator output does not. `keep` remains the explicit

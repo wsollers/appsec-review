@@ -362,11 +362,11 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5128 | [Align dependency input requirements with actual required reads](#t-5128-align-dependency-input-requirements-with-actual-required-reads) | pipeline | done (2026-11-19, 023cb1e007f610c2bca289dd11e15d2020354a60) |
 | T-5129 | [Read real catalog documents once with custody and parse gaps](#t-5129-read-real-catalog-documents-once-with-custody-and-parse-gaps) | evidence | done (2026-11-19, 4f0e40aa655e2a8bc2b16ab2ef475ee430e90da3) |
 | T-5130 | [Preserve route-local guards authentication methods and operation context](#t-5130-preserve-route-local-guards-authentication-methods-and-operation-context) | evidence | done (2026-11-19, 4f0e40aa655e2a8bc2b16ab2ef475ee430e90da3) |
-| T-5131 | [Deliver document drift through the actual inference retrieval path](#t-5131-deliver-document-drift-through-the-actual-inference-retrieval-path) | review | open |
+| T-5131 | [Deliver document drift through the actual inference retrieval path](#t-5131-deliver-document-drift-through-the-actual-inference-retrieval-path) | review | done (2026-11-19, bf0833cc7644a18ea01e3626d95b41e03ef92cac) |
 | T-5132 | [Treat parseable scanner error documents as coverage failures](#t-5132-treat-parseable-scanner-error-documents-as-coverage-failures) | scanners | done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad) |
 | T-5133 | [Corroborate before caps with order-independent evidence clustering](#t-5133-corroborate-before-caps-with-order-independent-evidence-clustering) | scanners | done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad) |
 | T-5134 | [Keep scanner submission scope and full coverage counts truthful](#t-5134-keep-scanner-submission-scope-and-full-coverage-counts-truthful) | scanners | done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad) |
-| T-5135 | [Read retained corroboration payloads rather than stripped control fields](#t-5135-read-retained-corroboration-payloads-rather-than-stripped-control-fields) | review | open |
+| T-5135 | [Read retained corroboration payloads rather than stripped control fields](#t-5135-read-retained-corroboration-payloads-rather-than-stripped-control-fields) | review | done (2026-11-19, bf0833cc7644a18ea01e3626d95b41e03ef92cac) |
 | T-5136 | [Bind every verified unit context into the durable publication snapshot](#t-5136-bind-every-verified-unit-context-into-the-durable-publication-snapshot) | evidence | done (2026-11-19, bca9e61c66c9a529155dc5177959d90004788bc9) |
 | T-5137 | [Reject contradictory certified buckets and counts](#t-5137-reject-contradictory-certified-buckets-and-counts) | evidence | done (2026-11-19, bca9e61c66c9a529155dc5177959d90004788bc9) |
 | T-5138 | [Export only evidence-backed SARIF flows fixes classifications and severity](#t-5138-export-only-evidence-backed-sarif-flows-fixes-classifications-and-severity) | review | done (2026-11-19, 9586762a38875517b0ab20652839d99581dee20f) |
@@ -378,15 +378,15 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5144 | [Require verifier blindness evidence for independent confirmation](#t-5144-require-verifier-blindness-evidence-for-independent-confirmation) | review | done (2026-11-19, c1343965c1af975f7cb786e2657c852b099c9823) |
 | T-5145 | [Keep failed judges distinct from intentionally not-convened judges](#t-5145-keep-failed-judges-distinct-from-intentionally-not-convened-judges) | review | done (2026-11-19, a588fa2247a2c4eb743753a7d84973bf1a6f0ff2) |
 | T-5146 | [Honor disabled model profiles throughout inference dispatch](#t-5146-honor-disabled-model-profiles-throughout-inference-dispatch) | review | done (2026-11-19, a588fa2247a2c4eb743753a7d84973bf1a6f0ff2) |
-| T-5147 | [Publish JVM provenance and invalidate changed command indexes](#t-5147-publish-jvm-provenance-and-invalidate-changed-command-indexes) | build | open |
-| T-5148 | [Honor Rust metadata and dotnet PHP build policies](#t-5148-honor-rust-metadata-and-dotnet-php-build-policies) | build | open |
-| T-5149 | [Keep identical compiler argv distinct across working directories](#t-5149-keep-identical-compiler-argv-distinct-across-working-directories) | build | open |
-| T-5150 | [Apply configured diagnostic tail bounds to every build family](#t-5150-apply-configured-diagnostic-tail-bounds-to-every-build-family) | build | open |
+| T-5147 | [Publish JVM provenance and invalidate changed command indexes](#t-5147-publish-jvm-provenance-and-invalidate-changed-command-indexes) | build | done (2026-11-19, ee2c095f1622c281ad87b10b34bd8f972c2da46f) |
+| T-5148 | [Honor Rust metadata and dotnet PHP build policies](#t-5148-honor-rust-metadata-and-dotnet-php-build-policies) | build | done (2026-11-19, ee2c095f1622c281ad87b10b34bd8f972c2da46f) |
+| T-5149 | [Keep identical compiler argv distinct across working directories](#t-5149-keep-identical-compiler-argv-distinct-across-working-directories) | build | done (2026-11-19, ee2c095f1622c281ad87b10b34bd8f972c2da46f) |
+| T-5150 | [Apply configured diagnostic tail bounds to every build family](#t-5150-apply-configured-diagnostic-tail-bounds-to-every-build-family) | build | done (2026-11-19, ee2c095f1622c281ad87b10b34bd8f972c2da46f) |
 | T-5151 | [Preserve dependency OpenVEX identity gaps nullable coordinates and telemetry](#t-5151-preserve-dependency-openvex-identity-gaps-nullable-coordinates-and-telemetry) | evidence | done (2026-11-19, 3dd3c1f441148caf3361796daf7897e847d4a198) |
 | T-5152 | [Enforce dependency result and aggregate OpenVEX input bounds](#t-5152-enforce-dependency-result-and-aggregate-openvex-input-bounds) | evidence | done (2026-11-19, 3dd3c1f441148caf3361796daf7897e847d4a198) |
-| T-5153 | [Reject malformed OWASP model field types within the bounded cell](#t-5153-reject-malformed-owasp-model-field-types-within-the-bounded-cell) | review | open |
-| T-5154 | [Conserve OWASP dispatch and characterization gap accounting](#t-5154-conserve-owasp-dispatch-and-characterization-gap-accounting) | review | open |
-| T-5155 | [Accept resolving OWASP prerequisite citations and adverse qualifications](#t-5155-accept-resolving-owasp-prerequisite-citations-and-adverse-qualifications) | review | open |
+| T-5153 | [Reject malformed OWASP model field types within the bounded cell](#t-5153-reject-malformed-owasp-model-field-types-within-the-bounded-cell) | review | done (2026-11-19, 033ef93d037e2a07389beef76c809275d7abf8f5) |
+| T-5154 | [Conserve OWASP dispatch and characterization gap accounting](#t-5154-conserve-owasp-dispatch-and-characterization-gap-accounting) | review | done (2026-11-19, 033ef93d037e2a07389beef76c809275d7abf8f5) |
+| T-5155 | [Accept resolving OWASP prerequisite citations and adverse qualifications](#t-5155-accept-resolving-owasp-prerequisite-citations-and-adverse-qualifications) | review | done (2026-11-19, 033ef93d037e2a07389beef76c809275d7abf8f5) |
 | T-5156 | [Make workbench filters retrieve finding-package records](#t-5156-make-workbench-filters-retrieve-finding-package-records) | review | open |
 | T-5157 | [Resolve bounded PoC declarations from the correct accepted build](#t-5157-resolve-bounded-poc-declarations-from-the-correct-accepted-build) | review | done (2026-11-19, e5cc0b31a47de2447c3d9a7ed6e7bdb39b224d2b) |
 | T-5158 | [Validate actual PoC calls bounds numeric triggers and denied names](#t-5158-validate-actual-poc-calls-bounds-numeric-triggers-and-denied-names) | review | done (2026-11-19, 77d228461b7a2ee344cef5587b26ad387a4d2761) |
@@ -398,10 +398,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5164 | [Index duplicate profile content without conflicting source identities](#t-5164-index-duplicate-profile-content-without-conflicting-source-identities) | evidence | open |
 | T-5165 | [Preserve Callgrind perf LLVM and UTF-8 profile semantics](#t-5165-preserve-callgrind-perf-llvm-and-utf-8-profile-semantics) | evidence | open |
 | T-5166 | [Route profile queries and retain source attribution and gaps](#t-5166-route-profile-queries-and-retain-source-attribution-and-gaps) | evidence | open |
-| T-5167 | [Keep canonical CMake build directories and output requirements aligned](#t-5167-keep-canonical-cmake-build-directories-and-output-requirements-aligned) | build | open |
-| T-5168 | [Admit reusable native planning records without invented image bindings](#t-5168-admit-reusable-native-planning-records-without-invented-image-bindings) | build | open |
-| T-5169 | [Handle absent optional builds without sticky admission violations](#t-5169-handle-absent-optional-builds-without-sticky-admission-violations) | review | open |
-| T-5170 | [Retain discovered source gaps when remediation writing fails](#t-5170-retain-discovered-source-gaps-when-remediation-writing-fails) | review | open |
+| T-5167 | [Keep canonical CMake build directories and output requirements aligned](#t-5167-keep-canonical-cmake-build-directories-and-output-requirements-aligned) | build | done (2026-11-19, aeb53814124562953ed5c4e77f2d9a681c67209e) |
+| T-5168 | [Admit reusable native planning records without invented image bindings](#t-5168-admit-reusable-native-planning-records-without-invented-image-bindings) | build | done (2026-11-19, aeb53814124562953ed5c4e77f2d9a681c67209e) |
+| T-5169 | [Handle absent optional builds without sticky admission violations](#t-5169-handle-absent-optional-builds-without-sticky-admission-violations) | review | done (2026-11-19, 3dce5c2ff5b907536058dcbd90394fc36e9dae24) |
+| T-5170 | [Retain discovered source gaps when remediation writing fails](#t-5170-retain-discovered-source-gaps-when-remediation-writing-fails) | review | done (2026-11-19, 3dce5c2ff5b907536058dcbd90394fc36e9dae24) |
 | T-5171 | [Preserve bounded validation source and exact build working-directory context](#t-5171-preserve-bounded-validation-source-and-exact-build-working-directory-context) | review | open |
 | T-5172 | [Apply valid C++ patches and unified diffs without lexical misclassification](#t-5172-apply-valid-c-patches-and-unified-diffs-without-lexical-misclassification) | review | open |
 | T-5173 | [Preserve failed CodeQL language coverage in review indexes](#t-5173-preserve-failed-codeql-language-coverage-in-review-indexes) | evidence | open |
@@ -4465,11 +4465,18 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5131 — Deliver document drift through the actual inference retrieval path
 
-- **State:** open
+- **State:** done (2026-11-19, bf0833cc7644a18ea01e3626d95b41e03ef92cac)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: DI-F02. declarations do not deliver document results to inference.
 - **Scope:** `src/appsec_review/document_issues.py`, `src/appsec_review/retrieval/core.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 125 delivery cases passed/15.61 s and 83 inference/package cases passed/54.24 s,
+  two shuffled workers, no final skips or cases over 10 s. A real provisional navigation
+  index reaches bounded queries and inference context through the existing late-index merge,
+  without a topology cycle or promotion to scanner/control/confirmed-finding authority.
+  Nine pre-existing CPG fixture failures were reproduced on the exact clean base, then corrected
+  to use actual source bytes, hashes and identities; admission assertions remain intact.
+  The unrelated mixed T172 fixture gap remains in T-5056. No live validation was run.
 - **Refs:** `audit-results/job-audit-job_document_issue_analysis.md`; follow-up to closed T-172 (not reopened).
 
 ### T-5132 — Treat parseable scanner error documents as coverage failures
@@ -4511,11 +4518,16 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5135 — Read retained corroboration payloads rather than stripped control fields
 
-- **State:** open
+- **State:** done (2026-11-19, bf0833cc7644a18ea01e3626d95b41e03ef92cac)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: EC-06. Corroboration/disposition consumers read fields removed by handoff projection.
 - **Scope:** `src/appsec_review/jobs/job_evidence_collection/job.py`, `src/appsec_review/jobs/job_review_prioritization/composite.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5131's verification. Readers follow hash-pinned domain artifacts, actual cluster
+  locations and scanner dispositions, retaining read receipts even for empty fallback shards.
+  Two new cases initially exceeded 10 s because they discovered unrelated host feeds.
+  Their real producer/projection/correlation coverage now uses a private verified-input boundary,
+  with stronger count and receipt assertions: 0.299 s and 0.281 s on main. No budget was raised.
 - **Refs:** `audit-results/job-audit-job_evidence_collection.md`; follow-up to closed T-170, T-171 (not reopened).
 
 ### T-5136 — Bind every verified unit context into the durable publication snapshot
@@ -4666,38 +4678,53 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5147 — Publish JVM provenance and invalidate changed command indexes
 
-- **State:** open
+- **State:** done (2026-11-19, ee2c095f1622c281ad87b10b34bd8f972c2da46f)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: LB-F01, LB-F02. JVM provenance shards are written but omitted from the accepted manifest; equal JVM artifact bytes reuse a stale command/provenance index.
 - **Scope:** `src/appsec_review/jobs/job_language_build/jvm.py` and its `job.py` publication path.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 200 affected language/controller/preservation cases passed/24.87 s, two workers,
+  seed 9147, no skips or cases over 10 s. Accepted manifests include verified JVM shards;
+  full provenance inputs bind reuse. Publication reconciles shards with final receipt status,
+  artifacts and gaps, so a rejected transaction cannot publish stale successful provenance.
+  Independent review corrections were verified before integration; no native/live validation.
 - **Refs:** `audit-results/job-audit-job_language_build.md`.
 
 ### T-5148 — Honor Rust metadata and dotnet PHP build policies
 
-- **State:** open
+- **State:** done (2026-11-19, ee2c095f1622c281ad87b10b34bd8f972c2da46f)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: LB-F03, LB-F05, LB-F06. nondefault Rust target/profile adds build-only flags to `cargo metadata`; accepted `.NET` publish/pack/AOT prohibitions are not enforced.
 - **Scope:** `src/appsec_review/jobs/job_language_build/dotnet.py`, `src/appsec_review/jobs/job_language_build/php.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5147's 200-case selection. Metadata receives only applicable Cargo options;
+  .NET restrictions cover project-qualified Publish/Pack targets and AOT before executor
+  resolution. Required Composer locks retain exact admitted directory/path/hash custody.
 - **Refs:** `audit-results/job-audit-job_language_build.md`.
 
 ### T-5149 — Keep identical compiler argv distinct across working directories
 
-- **State:** open
+- **State:** done (2026-11-19, ee2c095f1622c281ad87b10b34bd8f972c2da46f)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: LB-F04. capture reconciliation merges identical argv across different working directories.
 - **Scope:** `src/appsec_review/jobs/job_language_build/capture.py` and its `job.py` consumers.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5147's 200-case selection. Captured cwd participates in reconciliation identity;
+  ambiguous wrapper records stay unmatched with a gap, never borrowing another directory's
+  compile or link provenance.
 - **Refs:** `audit-results/job-audit-job_language_build.md`.
 
 ### T-5150 — Apply configured diagnostic tail bounds to every build family
 
-- **State:** open
+- **State:** done (2026-11-19, ee2c095f1622c281ad87b10b34bd8f972c2da46f)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: LB-F07. non-JVM `diagnostic_tail_bytes` is accepted but does not bound tails.
-- **Scope:** `src/appsec_review/jobs/job_language_build/job.py`
+- **Scope:** `src/appsec_review/jobs/job_language_build/job.py` and `src/appsec_review/jobs/build_iterations.py`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5147's 200-case selection. Retention and failure diagnosis use the frozen family's
+  byte limit, including permitted zero and multibyte cases; Java maps to JVM settings.
+  Missing/invalid configurable settings fail explicitly. Full stream evidence remains hash-verified
+  and unchanged; only families without this option retain the existing default.
 - **Refs:** `audit-results/job-audit-job_language_build.md`.
 
 ### T-5151 — Preserve dependency OpenVEX identity gaps nullable coordinates and telemetry
@@ -4727,29 +4754,40 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5153 — Reject malformed OWASP model field types within the bounded cell
 
-- **State:** open
+- **State:** done (2026-11-19, 033ef93d037e2a07389beef76c809275d7abf8f5)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: OCA-F02. Malformed JSON field types escape model error handling and fail a whole cell.
 - **Scope:** `src/appsec_review/owasp_workbench/assessment.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 151 cases passed/12.11 s plus 59 complementary cases passed/66.0 s, two workers,
+  no skips or cases over 10 s. Malformed response/retrieval fields remain within the bounded
+  model-error path, preserving explicit reasons and earlier completed batch results.
+  All model calls were inert doubles; no provider or live validation was run.
 - **Refs:** `audit-results/job-audit-job_owasp_control_assessment.md`.
 
 ### T-5154 — Conserve OWASP dispatch and characterization gap accounting
 
-- **State:** open
+- **State:** done (2026-11-19, 033ef93d037e2a07389beef76c809275d7abf8f5)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: OCA-F03, OCA-F04. Part splitting reports undispatched rows as dispatched/reviewed and undercounts partial coverage; Characterization gaps disappear from the published coverage/status.
 - **Scope:** `src/appsec_review/jobs/job_owasp_control_assessment/job.py`, `src/appsec_review/owasp_workbench/batching.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5153's 210-case selection. Per-row/part accounting counts actual dispatches;
+  reuse and pre-dispatch failure add no new calls. Pending rows, partial adverse obligations
+  and load/classification gaps survive final coverage and publication.
 - **Refs:** `audit-results/job-audit-job_owasp_control_assessment.md`.
 
 ### T-5155 — Accept resolving OWASP prerequisite citations and adverse qualifications
 
-- **State:** open
+- **State:** done (2026-11-19, 033ef93d037e2a07389beef76c809275d7abf8f5)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: OCA-F05, OCA-F07. Required caller/callee prerequisite citations cannot pass subject acceptance; Adverse qualification rows wrongly require a target evidence resolver at publication.
 - **Scope:** `src/appsec_review/jobs/job_owasp_control_assessment/job.py`, `src/appsec_review/owasp_workbench/assessment.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5153's 210-case selection. Primary evidence stays decisive; re-resolved complete
+  source functions may supply scoped prerequisite context, not semantic call-graph proof.
+  Original qualified identities and spaced/commented member/qualified calls remain rejected.
+  Synthetic adverse qualification does not require a target resolver or assess production controls.
 - **Refs:** `audit-results/job-audit-job_owasp_control_assessment.md`.
 
 ### T-5156 — Make workbench filters retrieve finding-package records
@@ -4869,38 +4907,53 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5167 — Keep canonical CMake build directories and output requirements aligned
 
-- **State:** open
+- **State:** done (2026-11-19, aeb53814124562953ed5c4e77f2d9a681c67209e)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: PB-F01. CMake canonicalization changes the build directory but keeps old output requirements.
-- **Scope:** `src/appsec_review/jobs/build_recipe_replay.py`, `src/appsec_review/jobs/job_project_build/job.py`
+- **Scope:** `src/appsec_review/jobs/job_project_build/job.py`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 61 passed/16.00 s, two workers, seed 9167, no skips or cases over 10 s.
+  A selected CMake recipe retains its coupled directory/options/cwd/output contract;
+  marker-derived defaults apply only when no recipe is selected. No builds were executed.
 - **Refs:** `audit-results/job-audit-job_project_build.md`.
 
 ### T-5168 — Admit reusable native planning records without invented image bindings
 
-- **State:** open
+- **State:** done (2026-11-19, aeb53814124562953ed5c4e77f2d9a681c67209e)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: PB-F02. native planning records make valid project-job checkpoints and whole-job reuse fail admission.
-- **Scope:** `src/appsec_review/jobs/job_project_build/job.py`, `src/appsec_review/jobs/job_project_build/repair.py`
+- **Scope:** `src/appsec_review/jobs/job_project_build/job.py` and `src/appsec_review/jobs/build_topology_artifacts.py`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5167's 61-case selection. Only runner-established closed planning contexts omit
+  execution-image binding; recipe/refinement/source/configuration/release and selected-promotion
+  checks remain. Actual execution image checks and immutable checkpoints remain enforced.
+  The corrected shared test proves both successful reuse and a second call before rejecting
+  an attempted checkpoint overwrite, while retaining the original checkpoint bytes.
 - **Refs:** `audit-results/job-audit-job_project_build.md`.
 
 ### T-5169 — Handle absent optional builds without sticky admission violations
 
-- **State:** open
+- **State:** done (2026-11-19, 3dce5c2ff5b907536058dcbd90394fc36e9dae24)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RMP-02. Missing optional build becomes a sticky input-contract failure.
-- **Scope:** `src/appsec_review/jobs/job_poc_generation/buildctx.py`, `src/appsec_review/jobs/job_remediation_planning/inputs.py`
+- **Scope:** `src/appsec_review/jobs/job_remediation_planning/inputs.py` and its `job.py` factory wiring.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 18 passed/4.35 s, two workers, seed 9169, no skips or cases over 10 s.
+  Planning uses the existing contract-aware optional loader; absent/unsupplied builds remain
+  unavailable without a sticky violation. Required readers and undeclared/foreign/tampered
+  input refusals are unchanged. No target/compiler/model or live execution was performed.
 - **Refs:** `audit-results/job-audit-job_remediation_planning.md`.
 
 ### T-5170 — Retain discovered source gaps when remediation writing fails
 
-- **State:** open
+- **State:** done (2026-11-19, 3dce5c2ff5b907536058dcbd90394fc36e9dae24)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RMP-03. Writer/patch failure drops already-discovered source gaps.
 - **Scope:** `src/appsec_review/jobs/job_remediation_planning/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5169's 18-case selection. Source gaps are captured before writer work and survive
+  timeout, invalid response and invalid exact-patch outcomes with the bounded failure cause.
+  Successful proposals retain the same source identity, gaps and non-runtime assurance.
 - **Refs:** `audit-results/job-audit-job_remediation_planning.md`.
 
 ### T-5171 — Preserve bounded validation source and exact build working-directory context

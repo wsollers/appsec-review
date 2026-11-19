@@ -114,6 +114,7 @@
     "derived_checkpoints": "documents_and_retrieval",
     "document_drift_issues": "documents_and_retrieval",
     "document_issue_ledger": "review_products",
+    "document_navigation": "documents_and_retrieval",
     "dossier_publications": "review_products",
     "feed_sync_work": "dependencies_and_advisories",
     "final_report_publications": "review_products",

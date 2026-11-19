@@ -29,7 +29,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `analysis` | `analysis.map_and_adjudicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_document_issue_analysis/job.py#L76) |
+| `analysis` | `analysis.map_and_adjudicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_document_issue_analysis/job.py#L173) |
 
 ### Accepted input declarations
 
@@ -184,6 +184,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | --- | --- | --- | --- | --- | --- |
 | `document_drift_issues` | `analysis` | `appsec-review/document-drift-issue/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `document_issue_ledger` | `analysis` | `appsec-review/document-issue-ledger/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `document_navigation` | `analysis` | `appsec-review/retrieval-index/2` | indexed | `precomputed` | `query_doc_drift`, `query_precomputed` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
 
@@ -929,6 +930,10 @@ flowchart LR
   output_schema1["appsec-review/document-issue-ledger/1"]
   job --> output1
   output1 -. schema .-> output_schema1
+  output2["document_navigation"]
+  output_schema2["appsec-review/retrieval-index/2"]
+  job --> output2
+  output2 -. schema .-> output_schema2
 ```
 
 <!-- generated:end -->

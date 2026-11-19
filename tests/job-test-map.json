@@ -79,6 +79,7 @@
         "tests/unit/job_build_iteration/test_admission.py",
         "tests/unit/job_build_iteration/test_contract.py",
         "tests/unit/job_build_iteration/test_continuity.py",
+        "tests/unit/job_build_iteration/test_diagnostic_tail.py",
         "tests/unit/job_build_iteration/test_manual_dispatch.py",
         "tests/unit/job_build_iteration/test_native_products.py",
         "tests/unit/job_build_iteration/test_job_graph.py",
@@ -440,6 +441,9 @@
     },
     "job_language_build": {
       "unit": [
+        "tests/unit/job_language_build/test_audit_correctness.py",
+        "tests/unit/job_language_build/test_jvm_acceptance.py",
+        "tests/unit/job_build_iteration/test_diagnostic_tail.py",
         "tests/unit/job_language_build/test_contract.py",
         "tests/unit/job_language_build/test_job_graph.py",
         "tests/unit/job_language_build/test_job_helpers.py",
@@ -522,6 +526,10 @@
     },
     "job_owasp_control_assessment": {
       "unit": [
+        "tests/unit/job_owasp_control_assessment/test_audit_assessment.py",
+        "tests/unit/job_owasp_control_assessment/test_audit_publication.py",
+        "tests/unit/job_owasp_control_assessment/test_parser_versions.py",
+        "tests/unit/job_owasp_control_assessment/test_request_batching.py",
         "tests/unit/job_owasp_control_assessment/test_contract.py",
         "tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py",
         "tests/unit/job_owasp_control_assessment/test_package_projection.py",
@@ -600,6 +608,8 @@
     },
     "job_project_build": {
       "unit": [
+        "tests/unit/job_project_build/test_planning_semantics.py",
+        "tests/test_build_topology_refinement.py",
         "tests/unit/job_project_build/test_job_graph.py",
         "tests/unit/job_project_build/test_contract.py",
         "tests/unit/job_project_build/test_project_build_helpers.py",
@@ -628,6 +638,7 @@
     },
     "job_remediation_planning": {
       "unit": [
+        "tests/unit/job_remediation_planning/test_source_context_failures.py",
         "tests/test_remediation_models.py",
         "tests/test_remediation_patches.py",
         "tests/unit/job_remediation_planning/test_coverage_edges.py",
@@ -957,6 +968,20 @@
         "tests/unit/job_inference_security_review/test_contract.py::test_alternate_cpg_is_admitted_and_read_without_sticky_violation",
         "tests/unit/job_inference_security_review/test_contract.py::test_alternate_cpg_refuses_unadmitted_or_missing_bytes"
       ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
+    "evidence-consumer-delivery": {
+      "jobs": [
+        "job_document_issue_analysis",
+        "job_evidence_collection",
+        "job_inference_security_review",
+        "job_review_data_indexing",
+        "job_review_package_assembly",
+        "job_review_prioritization"
+      ],
+      "unit": ["tests/unit/test_evidence_consumer_delivery.py"],
       "integration": [],
       "acceptance": [],
       "live": []

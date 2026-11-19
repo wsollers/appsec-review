@@ -30,45 +30,45 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `build_dispatch` | `build_dispatch.dotnet` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `build_dispatch` | `build_dispatch.go` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `build_dispatch` | `build_dispatch.java` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `build_dispatch` | `build_dispatch.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `build_dispatch` | `build_dispatch.node` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `build_dispatch` | `build_dispatch.php` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `build_dispatch` | `build_dispatch.python` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `build_dispatch` | `build_dispatch.rust` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `build_dispatch` | `build_dispatch.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `image` | `image.dotnet` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `image` | `image.go` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `image` | `image.java` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `image` | `image.native` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `image` | `image.node` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `image` | `image.php` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `image` | `image.python` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `image` | `image.rust` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `image` | `image.wasm` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `plan` | `plan.load_recipes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `probe` | `probe.dotnet` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `probe` | `probe.go` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `probe` | `probe.java` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `probe` | `probe.native` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `probe` | `probe.node` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `probe` | `probe.php` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `probe` | `probe.python` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `probe` | `probe.rust` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `probe` | `probe.wasm` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `static_dispatch` | `static_dispatch.dotnet` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `static_dispatch` | `static_dispatch.global` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `static_dispatch` | `static_dispatch.go` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `static_dispatch` | `static_dispatch.java` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `static_dispatch` | `static_dispatch.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `static_dispatch` | `static_dispatch.node` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `static_dispatch` | `static_dispatch.php` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `static_dispatch` | `static_dispatch.python` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `static_dispatch` | `static_dispatch.rust` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
-| `static_dispatch` | `static_dispatch.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1526) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `build_dispatch` | `build_dispatch.dotnet` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `build_dispatch` | `build_dispatch.go` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `build_dispatch` | `build_dispatch.java` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `build_dispatch` | `build_dispatch.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `build_dispatch` | `build_dispatch.node` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `build_dispatch` | `build_dispatch.php` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `build_dispatch` | `build_dispatch.python` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `build_dispatch` | `build_dispatch.rust` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `build_dispatch` | `build_dispatch.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `image` | `image.dotnet` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `image` | `image.go` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `image` | `image.java` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `image` | `image.native` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `image` | `image.node` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `image` | `image.php` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `image` | `image.python` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `image` | `image.rust` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `image` | `image.wasm` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `plan` | `plan.load_recipes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `probe` | `probe.dotnet` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `probe` | `probe.go` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `probe` | `probe.java` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `probe` | `probe.native` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `probe` | `probe.node` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `probe` | `probe.php` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `probe` | `probe.python` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `probe` | `probe.rust` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `probe` | `probe.wasm` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `static_dispatch` | `static_dispatch.dotnet` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `static_dispatch` | `static_dispatch.global` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `static_dispatch` | `static_dispatch.go` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `static_dispatch` | `static_dispatch.java` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `static_dispatch` | `static_dispatch.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `static_dispatch` | `static_dispatch.node` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `static_dispatch` | `static_dispatch.php` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `static_dispatch` | `static_dispatch.python` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `static_dispatch` | `static_dispatch.rust` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
+| `static_dispatch` | `static_dispatch.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_project_build/job.py#L1522) |
 
 ### Accepted input declarations
 
@@ -134,7 +134,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | `tests/acceptance/job_project_build/test_project_build_graph.py`<br>`tests/acceptance/job_project_build/test_project_build_capture.py`<br>`tests/acceptance/job_project_build/test_family_project_builds.py`<br>`tests/acceptance/job_project_build/test_jvm_dotnet_project_builds.py`<br>`tests/acceptance/job_project_build/test_node_project_builds.py`<br>`tests/acceptance/job_project_build/test_native_build_output_layout.py`<br>`tests/acceptance/job_project_build/test_unity_project_builds.py` |
 | integration | `tests/integration/job_project_build/test_executor.py`<br>`tests/integration/job_project_build/test_native_artifacts.py`<br>`tests/integration/job_project_build/test_capture_boundary.py`<br>`tests/integration/job_project_build/test_fixture_provenance.py` |
 | live | None declared |
-| unit | `tests/unit/job_project_build/test_job_graph.py`<br>`tests/unit/job_project_build/test_contract.py`<br>`tests/unit/job_project_build/test_project_build_helpers.py`<br>`tests/unit/job_project_build/test_family_recipe_helpers.py`<br>`tests/unit/job_project_build/test_repair.py`<br>`tests/unit/job_project_build/test_enforcement.py`<br>`tests/unit/job_project_build/test_build_recovery.py`<br>`tests/unit/job_project_build/test_handlers.py` |
+| unit | `tests/unit/job_project_build/test_planning_semantics.py`<br>`tests/test_build_topology_refinement.py`<br>`tests/unit/job_project_build/test_job_graph.py`<br>`tests/unit/job_project_build/test_contract.py`<br>`tests/unit/job_project_build/test_project_build_helpers.py`<br>`tests/unit/job_project_build/test_family_recipe_helpers.py`<br>`tests/unit/job_project_build/test_repair.py`<br>`tests/unit/job_project_build/test_enforcement.py`<br>`tests/unit/job_project_build/test_build_recovery.py`<br>`tests/unit/job_project_build/test_handlers.py` |
 
 ### Dagster placement
 

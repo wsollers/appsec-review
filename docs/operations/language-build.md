@@ -1062,7 +1062,7 @@ The receipt field `build_output_dispositions` (`appsec-review/build-output-dispo
 scope_role, files, bytes, kept, examples}]`, `configured_exclusions` and `bookkeeping`. `kept` is a
 list of workspace-relative paths. `excluded_bookkeeping` and the receipt schema
 `language-build-receipt/1` are unchanged. The executor identity is
-`appsec-review/generic-language-build-executor/4` plus the delivery-scope policy identity.
+`appsec-review/generic-language-build-executor/5` plus the delivery-scope policy identity.
 
 Classification gaps:
 

@@ -443,6 +443,7 @@
           "dataset_inventory",
           "derived_checkpoints",
           "document_drift_issues",
+          "document_navigation",
           "fts_image_validation",
           "precomputed_products",
           "target_documents"
@@ -460,6 +461,7 @@
           "coverage",
           "find",
           "query_dataset_inventory",
+          "query_doc_drift",
           "query_observations",
           "query_precomputed",
           "read_excerpt",
@@ -4815,6 +4817,58 @@
       "sensitivity": "internal",
       "source": "docs/generated/inventory.json: jobs.job_document_issue_analysis.datasets",
       "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "checkout"
+    },
+    {
+      "access": "indexed_evidence",
+      "authority": "provisional",
+      "bucket": "documents_and_retrieval",
+      "dataset": "document_navigation",
+      "description": "Bounded provisional drift and mapping navigation; never adjudicated findings.",
+      "family": "documents",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_doc_drift; query_precomputed query_set=document_context",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "query_doc_drift",
+          "query_precomputed"
+        ]
+      },
+      "producer": "job_document_issue_analysis",
+      "producer_languages": {
+        "basis": "job_document_issue_analysis: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.indexes",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "precomputed"
+        ]
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "hypothesis_hunter"
+        ]
+      },
+      "schema": "appsec-review/retrieval-index/2",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_document_issue_analysis.datasets",
+      "stage": "indexed",
       "store": "retrieval",
       "target_access": "checkout"
     },
@@ -16886,6 +16940,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -16959,6 +17014,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17032,6 +17088,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17105,6 +17162,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17178,6 +17236,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17251,6 +17310,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17324,6 +17384,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17397,6 +17458,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17470,6 +17532,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17543,6 +17606,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17616,6 +17680,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17689,6 +17754,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17762,6 +17828,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17835,6 +17902,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17908,6 +17976,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -17981,6 +18050,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
@@ -18054,6 +18124,7 @@
       "target_independent_producers": [],
       "unbound_datasets": [
         "job_document_issue_analysis/document_drift_issues",
+        "job_document_issue_analysis/document_navigation",
         "job_review_data_indexing/accepted_input_summary",
         "job_review_data_indexing/coverage_matrices",
         "job_review_data_indexing/cross_domain_links",
