@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from scripts import documentation
-from scripts.docs_support import BLOCK, frontmatter, links
+from scripts.docs_support import BLOCK, frontmatter, identifier_errors, links, with_frontmatter
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -89,3 +89,68 @@ def test_adapter_reference_without_a_scan_is_not_a_launch() -> None:
         return selected.tool_id
     row = documentation.task_binding(SimpleNamespace(unit_id="step.normalize", handler=normalize), ROOT)
     assert row["tools"] == [] and row["tool_gap"] == "T-147"
+
+
+def _identity_document(body: str) -> str:
+    return with_frontmatter({
+        "title": "Identity contract", "kind": "architecture", "subsystem": "runtime interchange",
+        "status": "current", "last reconciled": "a" * 40,
+    }, body)
+
+
+def test_current_claim_identity_is_discovered_without_relabelling_the_ledger_schema() -> None:
+    schemas, _ = documentation.source_identifiers(ROOT)
+    inventory = {"identifiers": {"schemas": schemas}}
+    assert identifier_errors(_identity_document("Identity `claim/3`; record `appsec-review/claim/1`."),
+                             inventory) == []
+    assert identifier_errors(_identity_document("Undeclared identity `claim/999`."), inventory)
+
+
+def _source_identifiers(tmp_path: Path, monkeypatch, source: str) -> set[str]:
+    path = "src/appsec_review/review/fixture.py"
+    for relative in (path, "scripts/documentation.py", "scripts/docs_matrices.py",
+                     "tests/acceptance_review_stages.py"):
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(source if relative == path else "", encoding="utf-8")
+    monkeypatch.setattr(documentation.subprocess, "run",
+                        lambda *args, **kwargs: SimpleNamespace(stdout=path + "\0"))
+    return documentation.source_identifiers(tmp_path)[0]
+
+
+def test_identity_discovery_follows_the_bound_version_not_a_literal_allowlist(tmp_path, monkeypatch) -> None:
+    source = '''
+from appsec_review.review.identity import make_id
+FIXTURE_IDENTITY_VERSION = 7
+raise AssertionError("source discovery must never execute inspected modules")
+def identity():
+    return make_id("claim", FIXTURE_IDENTITY_VERSION, {})
+'''
+    schemas = _source_identifiers(tmp_path, monkeypatch, source)
+    assert "claim/7" in schemas and "claim/3" not in schemas
+    schemas = _source_identifiers(tmp_path, monkeypatch, source.replace("VERSION = 7", "VERSION = 8"))
+    assert "claim/8" in schemas and "claim/7" not in schemas
+
+
+def test_identity_discovery_does_not_promote_prose_or_unbound_calls(tmp_path, monkeypatch) -> None:
+    schemas = _source_identifiers(tmp_path, monkeypatch, '''
+"""A discussion of `prose-only/9` is not a declaration."""
+EXPLANATION = "A string mentioning string-only/9 does not declare it."
+from another_library import make_id
+VERSION = 9
+def identity():
+    return make_id("unrelated", VERSION, {})
+''')
+    inventory = {"identifiers": {"schemas": schemas}}
+    for name in ("prose-only/9", "string-only/9", "unrelated/9"):
+        assert name not in schemas
+        assert identifier_errors(_identity_document(f"Undeclared `{name}`."), inventory)
+    for source in (
+        'VERSION = 9\ndef identity(make_id): return make_id("claim", VERSION, {})',
+        'VERSION = 9\ndef identity(VERSION): return make_id("claim", VERSION, {})',
+        'VERSION = True\ndef identity(): return make_id("claim", VERSION, {})',
+        'VERSION = 9\ndef identity(): return make_id("unregistered_kind", VERSION, {})',
+    ):
+        schemas = _source_identifiers(
+            tmp_path, monkeypatch, "from appsec_review.review.identity import make_id\n" + source)
+        assert not schemas

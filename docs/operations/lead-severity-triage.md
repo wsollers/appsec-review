@@ -67,13 +67,21 @@ this check.
 
 The assessed value controls lead ordering and admission only. It does not feed scoring, claim state,
 or ship-block policy. Lane A admission (`lanes.lead_admission`) weighs the two severities under
-`lanes.lead_admission_basis` (`lead-admission-basis/1`, `review.packages.severity_admission`):
+`lanes.lead_admission_basis` through
+[`review.packages.severity_admission`](../../src/appsec_review/review/packages.py#L469):
 
 - `either` (default): the lead is admitted when its reported **or** its assessed severity is in the
   policy; the `admission_reasons` name the severity that admitted (`reported_severity`,
   `assessed_severity`, or both). An assessment never demotes a reported `high`.
 - `reported`: the earlier policy, the *effective* severity (reported when known, else assessed).
 - `assessed`: the assessed severity when one exists, else the reported one.
+
+The function's source docstring uses the following documentary policy label. It is not a
+registered schema or an identifier emitted in an admission record:
+
+```text
+lead-admission-basis/1
+```
 
 The package manifest's `admission` entries and `excluded-leads.json` carry `reported_severity` and
 `assessed_severity` (with its source) beside every lead and the basis in force, so "reported medium,

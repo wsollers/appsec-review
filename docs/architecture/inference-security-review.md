@@ -576,7 +576,9 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   (`lanes.lead_admission`). Every lead carries the scanner's normalized *reported* severity and, when a
   `lead-severity-rules/1` row or its rule CWE in the run-pinned MITRE catalog decides one, an audited
   *assessed* severity for the impact of the weakness class (lead triage; the model pass runs only for leads
-  reported `unknown`). `lanes.lead_admission_basis` (`lead-admission-basis/1`) says which is weighed:
+  reported `unknown`). `lanes.lead_admission_basis`, implemented by `review.packages.severity_admission`
+  ([policy and source-documentation label](../operations/lead-severity-triage.md#what-the-result-changes)),
+  says which is weighed:
   `either` (default) admits when the reported **or** the assessed value qualifies, so a scanner's `medium` on
   a format-string or unbounded-copy sink (rule confidence, not impact) no longer hides a `high`-impact
   weakness; `reported` restores the earlier policy (the effective severity: reported when known, else

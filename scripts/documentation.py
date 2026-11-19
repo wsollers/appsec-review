@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import ast
+from collections import Counter
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import asdict, fields, is_dataclass
@@ -198,6 +200,49 @@ def guidance_assignments(registry: dict) -> dict:
     return plain(assignments)
 
 
+def _derived_identity_identifiers(text: str) -> set[str]:
+    """Project literal make_id declarations, not version-shaped prose or arbitrary calls."""
+    from appsec_review.review.identity import PREFIXES
+
+    tree = ast.parse(text)
+    bindings = Counter(
+        node.id if isinstance(node, ast.Name) else
+        node.arg if isinstance(node, ast.arg) else
+        node.asname or node.name.split(".")[0] if isinstance(node, ast.alias) else node.name
+        for node in ast.walk(tree)
+        if (isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)))
+        or isinstance(node, (ast.arg, ast.alias, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    )
+    constructors = {
+        alias.asname or alias.name
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.level == 0
+        and node.module == "appsec_review.review.identity"
+        for alias in node.names if alias.name == "make_id"
+        and bindings[alias.asname or alias.name] == 1
+    }
+    constants = {}
+    for node in tree.body:
+        targets = node.targets if isinstance(node, ast.Assign) else (
+            [node.target] if isinstance(node, ast.AnnAssign) else [])
+        if targets and isinstance(node.value, ast.Constant) and type(node.value.value) is int:
+            for target in targets:
+                if isinstance(target, ast.Name) and bindings[target.id] == 1:
+                    constants[target.id] = node.value.value
+    result = set()
+    for node in ast.walk(tree):
+        if (not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name)
+                or node.func.id not in constructors or len(node.args) < 2):
+            continue
+        kind, declared = node.args[:2]
+        version = (constants.get(declared.id) if isinstance(declared, ast.Name) else
+                   declared.value if isinstance(declared, ast.Constant) else None)
+        if (isinstance(kind, ast.Constant) and isinstance(kind.value, str) and kind.value in PREFIXES
+                and type(version) is int and version > 0):
+            result.add(f"{kind.value}/{version}")
+    return result
+
+
 def source_identifiers(root: Path) -> tuple[set[str], set[str]]:
     result, named_fields = set(), set()
     pattern = re.compile(r"""["']((?:appsec-review/)?[a-z][a-z0-9_/-]*/[1-9]\d*)(?:\+)?["']""")
@@ -216,6 +261,8 @@ def source_identifiers(root: Path) -> tuple[set[str], set[str]]:
         text = path.read_text(encoding="utf-8")
         result.update(pattern.findall(text))
         if path.suffix == ".py":
+            if "make_id" in text:
+                result.update(_derived_identity_identifiers(text))
             named_fields.update(re.findall(r"\bdef (job_[a-z0-9_]+)\(", text))
             named_fields.update(re.findall(r"""["'](job_[a-z0-9_]+)["']\s*:""", text))
             named_fields.update(re.findall(r"\b(job_[a-z0-9_]+)\s*:\s*(?:str|int|Mapping)\b", text))
