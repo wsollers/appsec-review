@@ -150,6 +150,13 @@ parser budget before its shared assembler reads it. Oversized/truncated input re
 prefix with incomplete native provenance and a named coverage gap, including an explicit gap for
 an execution file-size-limit result. These are not completed zero-finding scans.
 
+**Shared live-capture limitation.** `tool.output_bytes` limits retained stdout/stderr after the
+external runner returns; it does not cap subprocess output held in memory while the command runs.
+The shared executor's `_default_runner` uses `subprocess.run(capture_output=True)`, and its active
+safety path uses `execution_safety.run_process` with `communicate()`. A noisy subprocess can
+therefore consume application memory beyond the job's stream-retention cap. The timeout, native
+file-write limit and bounded post-execution reads do not fix that shared capture limitation.
+
 The protected `artifact_scanner_io` dataset owns scanner scratch, receipts, retained parser bytes
 and diagnostics, plus the empty mount placeholders under each task's `target-inputs/<token>/` and
 `installer-records/<token>/`. Original inputs remain owned by their accepted upstream datasets;

@@ -51,6 +51,61 @@ def test_runner_applies_job_execution_bounds_without_widening_catalog(tmp_path, 
         runner("syft", tmp_path / "input", {"canonical_identity": "fixture:input"}, timeout, limit)
 
 
+def test_real_executor_enforces_job_timeout_retention_and_file_limit_argv(tmp_path):
+    from appsec_review.container_runtime.executor import CommandOutcome
+    from appsec_review.storage import file_sha256
+
+    run_root = tmp_path / "run"
+    source = run_root / "inputs" / "app"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"fixture artifact")
+    scanner = ContainerScannerRunner(ROOT, run_root, run_root / "scratch")
+    scanner.parser_input_limit_bytes = 32
+    image = "sha256:" + "1" * 64
+    stdout, stderr = b"stdout beyond retention", b"stderr beyond retention"
+    payload = b'{"artifacts":[]}'
+    launches, verifications = [], []
+
+    def run_process(argv, timeout):
+        if tuple(argv[:3]) == ("docker", "image", "inspect"):
+            return CommandOutcome(0, image.encode(), b"")
+        assert tuple(argv[:2]) == ("docker", "run"), "unexpected external command"
+        launches.append((tuple(argv), timeout))
+        [scratch_mount] = [item for item in argv if item.startswith("type=bind,") and "dst=/scratch" in item]
+        mount = dict(part.split("=", 1) for part in scratch_mount.split(","))
+        (Path(mount["src"]) / "output.json").write_bytes(payload)
+        # The full streams reach the executor; this tests retention, not bounded live capture.
+        return CommandOutcome(0, stdout, stderr)
+
+    def verify_image(image_id, *, reference):
+        verifications.append((image_id, reference))
+
+    scanner.executor = ContainerExecutor(
+        scanner.catalog, run_root, runner=run_process,
+        image_verifier=SimpleNamespace(verify=verify_image))
+    result = scanner("syft", source,
+                     {"canonical_identity": "fixture:input", "sha256": file_sha256(source)}, 7, 8)
+
+    [(argv, timeout)] = launches
+    assert timeout == 7
+    assert argv[argv.index("--ulimit") + 1] == "fsize=32:32"
+    assert verifications == [(image, scanner.catalog.tool("tool-syft").tag)] * 2
+    assert result["stdout"] == stdout[:8] and result["stderr"] == stderr[:8]
+    assert result["truncated"] is True
+    assert result["payload"] == payload and result["payload_truncated"] is False
+    receipt_path = run_root / result["execution_receipt"]["path"]
+    assert file_sha256(receipt_path) == result["execution_receipt"]["sha256"]
+    receipt = json.loads(receipt_path.read_bytes())
+    assert receipt["limits"]["timeout_seconds"] == 7
+    assert receipt["limits"]["stdout_bytes"] == receipt["limits"]["stderr_bytes"] == 8
+    assert receipt["limits"]["file_size_bytes"] == receipt["file_size_limit_bytes"] == 32
+    assert receipt["stdout_truncated"] is True and receipt["stderr_truncated"] is True
+    assert (run_root / receipt["stdout_path"]).read_bytes() == stdout[:8]
+    assert (run_root / receipt["stderr_path"]).read_bytes() == stderr[:8]
+    assert receipt["stdout_sha256"] == file_sha256(run_root / receipt["stdout_path"])
+    assert receipt["stderr_sha256"] == file_sha256(run_root / receipt["stderr_path"])
+
+
 @pytest.mark.parametrize("source", ["report", "stdout", "blint"], ids=["report", "stdout", "blint"])
 def test_runner_bounds_reads_before_materializing_scanner_output(tmp_path, monkeypatch, source):
     runner = ContainerScannerRunner(ROOT, tmp_path, tmp_path / "scratch")

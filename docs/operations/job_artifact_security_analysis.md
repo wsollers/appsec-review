@@ -35,6 +35,11 @@ file-size-limit outcomes remain explicit coverage gaps. Input-mount placeholders
 `target-inputs/` and `installer-records/` are protected `artifact_scanner_io`, not finding evidence.
 Archive readers reject negative member sizes before reading or moving their cursor.
 
+The stream cap is **retention**, not bounded live subprocess capture: the shared executor uses
+`capture_output=True`, or `communicate()` under execution safety, and truncates streams after the
+runner returns. Noisy commands can still exceed that cap in application memory. This job's timeout,
+file-write limit and bounded post-execution reads do not repair that shared runtime limitation.
+
 <!-- generated:begin job=job_artifact_security_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract
