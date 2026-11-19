@@ -30,6 +30,8 @@ flowchart LR
   A --> I[accepted precomputed shard and query_precomputed]
   I --> P[job_review_package_assembly: scanner leads and document hunts]
   P --> M[job_document_issue_analysis: private candidate ledger]
+  C --> M
+  M --> DRI[Attempt-local API drift: provisional leads and coverage gaps]
   M -. planned .-> R[job_inference_security_review]
   R --> J[adjudicated finding packages]
   J --> E[gate-certified final publication]
@@ -114,6 +116,17 @@ remain `insufficient_evidence`; the accepted ledger has no findings or scoring i
 independent claim review. The adjudication gate requires distinct source proof lines plus red,
 blue, and independent verifier decisions that resolve to the accepted source snapshot. The job
 does not synthesize those decisions from document text, OpenAPI, tests, or scanner output.
+
+The same job also publishes a separate, always-recomputed API drift artifact. It reads
+canonical catalog operation records, groups exact document file identities and reuses
+one custody-checked byte read across document/source aliases. Parse and upstream coverage
+gaps survive; changed bytes fail closed. Drift IDs retain specification provenance.
+Literal route-local guard/annotation observations are navigation evidence, never proof
+of effective authentication. OpenAPI anonymous alternatives, method distinctions and
+same-line registration multiplicity are preserved. GraphQL root operation and protobuf
+service context remain non-HTTP declarations with explicit unsupported-mapping gaps.
+See [drift operations and bounds](../operations/document-issue-analysis.md#api-declaration-drift).
+This artifact-only output does not yet reach inference through a payload reader (T-5131).
 
 ## Inference and findings design
 

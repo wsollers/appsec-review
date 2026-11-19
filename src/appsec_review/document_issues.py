@@ -12,9 +12,11 @@ from pathlib import Path
 import re
 from typing import Any, Mapping
 
+from appsec_review.indexing import document_interfaces as interfaces
 from appsec_review.indexing.products_base import AcceptedShards
 from appsec_review.retrieval import RetrievalCore
 from appsec_review.retrieval.model import canonical_json
+from appsec_review.retrieval.source_resolution import read_source_bytes
 from appsec_review.review_packages import verify_review_packages
 from appsec_review.storage import file_sha256
 
@@ -59,18 +61,22 @@ def _source_lines(core: RetrievalCore, max_files: int, max_file_bytes: int) -> t
             gaps.append(f"source mapping skipped oversized file: {location['path']}")
             continue
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            text = path.read_text(encoding="utf-8")
         except UnicodeError:
             gaps.append(f"source mapping skipped undecodable file: {location['path']}")
             continue
-        for number, line in enumerate(lines, 1):
-            match = _ROUTE.search(line)
-            if match:
+        masked = _code_mask(text, _EXT_LANG.get(path.suffix.lower(), "")).splitlines()
+        for number, line in enumerate(text.splitlines(), 1):
+            for match in _ROUTE.finditer(line):
+                if not masked[number - 1][match.start():match.start() + 1].strip():
+                    continue
                 result.append({"entity_id": row.identity, "shard_id": row.shard_id,
                                "shard_sha256": row.shard_sha256, "path": location["path"],
                                "file_sha256": location["file_sha256"], "line": number,
+                               "column": match.start() + 1,
                                "method": match.group(1).upper(), "route": match.group(2)})
-    return sorted(result, key=lambda item: (item["method"], item["route"], item["path"], item["line"])), gaps
+    return sorted(result, key=lambda item: (item["method"], item["route"], item["path"],
+                                          item["line"], item["column"])), gaps
 
 
 def adjudicate(candidate: Mapping[str, Any], *, core: RetrievalCore | None = None,
@@ -325,13 +331,85 @@ def normalize_route_template(route: str) -> str:
     return _PARAM_SEGMENT_RE.sub("{param}", cleaned)
 
 
+def _code_mask(text: str, language: str) -> str:
+    """Keep offsets while excluding comments and string contents from identifier matches."""
+    pattern = r"""'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|//[^\n]*|/\*[\s\S]*?\*/"""
+    if language in {"python", "ruby"}:
+        pattern += r"|#[^\n]*"
+    return re.sub(pattern, lambda match: "".join("\n" if c == "\n" else " " for c in match.group()), text)
+
+
+def _call_end(mask: str, start: int) -> int:
+    opening = mask.find("(", start)
+    if opening < 0:
+        return start
+    depth = 0
+    for offset in range(opening, len(mask)):
+        if mask[offset] == "(":
+            depth += 1
+        elif mask[offset] == ")":
+            depth -= 1
+            if not depth:
+                return offset + 1
+    return start
+
+
+def _annotation_contexts(text: str, mask: str, language: str) -> dict[int, tuple[int, int]]:
+    if language in {"python", "java"}:
+        pattern = r"@\s*[A-Za-z_][\w.]*"
+    elif language == "csharp":
+        pattern = r"\["
+    elif language == "rust":
+        pattern = r"#\["
+    else:
+        return {}
+    groups: list[list[tuple[int, int]]] = []
+    previous_end = 0
+    for match in re.finditer(pattern, mask):
+        if match.start() < previous_end:
+            continue
+        end = match.end()
+        if language in {"python", "java"}:
+            if mask[end:].lstrip().startswith("("):
+                end = max(end, _call_end(mask, match.start()))
+        else:
+            depth = 1
+            while end < len(mask) and depth:
+                depth += (mask[end] == "[") - (mask[end] == "]")
+                end += 1
+        if not groups or text[previous_end:match.start()].strip():
+            groups.append([])
+        groups[-1].append((match.start(), end))
+        previous_end = end
+    return {start: (group[0][0], group[-1][1]) for group in groups for start, _ in group}
+
+
+def _route_context(text: str, mask: str, start: int, end: int, language: str,
+                   annotations: Mapping[int, tuple[int, int]]) -> str:
+    # Only the registration expression or its contiguous annotation group is local.
+    # Arbitrary nearby statements and other methods are not evidence of enforcement.
+    if start in annotations:
+        first, last = annotations[start]
+        return text[first:last]
+    if language == "ruby":
+        last = text.find("\n", end)
+        return text[start:len(text) if last < 0 else last]
+    last = _call_end(mask, start)
+    last = max(end, last)
+    if language == "javascript":
+        callback = re.search(r"=>|\bfunction\b", mask[end:last])
+        if callback:
+            last = end + callback.start()
+    return text[start:last]
+
+
 def extract_multilang_route_handlers(path: str, text: str, *, source_id: str | None = None) -> list[dict[str, Any]]:
     """Extract route handler declarations and local auth guards across all 9 target languages."""
     suffix = Path(path).suffix.lower()
     file_lang = _EXT_LANG.get(suffix)
     nl = chr(10)
-    lines = text.splitlines()
-    file_level_guards = sorted({m.group(1) for m in _AUTH_GUARD_RE.finditer(nl.join(lines[:35]))})
+    mask = _code_mask(text, file_lang or "")
+    annotations = _annotation_contexts(text, mask, file_lang or "")
     found: dict[tuple[str, str, int], dict[str, Any]] = {}
 
     csharp_prefix = ""
@@ -347,6 +425,8 @@ def extract_multilang_route_handlers(path: str, text: str, *, source_id: str | N
         ):
             continue
         for match in regex.finditer(text):
+            if not mask[match.start():match.end()].strip():
+                continue
             groups = match.groups()
             line_no = text.count(nl, 0, match.start()) + 1
             if pattern_lang == "rust" and regex.pattern.startswith(r"\.route"):
@@ -382,17 +462,25 @@ def extract_multilang_route_handlers(path: str, text: str, *, source_id: str | N
                 raw_method, raw_route = groups[0], groups[1]
                 methods = [(raw_method or "GET").upper()]
 
-            win_start = max(0, line_no - 6)
-            win_end = min(len(lines), line_no + 12)
-            window_text = nl.join(lines[win_start:win_end])
-            local_guards = sorted({m.group(1) for m in _AUTH_GUARD_RE.finditer(window_text)})
-            anon_override = bool(_ALLOW_ANON_RE.search(window_text))
-            effective_guards = [] if anon_override else sorted(set(local_guards or file_level_guards))
-            observed_roles = sorted({m.group(1).lower() for m in _ROLE_TOKEN_RE.finditer(window_text)})
-            line_text = lines[line_no - 1] if 1 <= line_no <= len(lines) else ""
+            window_text = _route_context(text, mask, match.start(), match.end(), pattern_lang, annotations)
+            window_mask = _code_mask(window_text, pattern_lang)
+            guards = [m for m in _AUTH_GUARD_RE.finditer(window_text)
+                      if window_mask[m.start():m.start() + 1].strip()
+                      and (m.group(1).lower() not in {"secured", "authorize", "preauthorize", "rolesallowed"}
+                           or pattern_lang in {"java", "csharp"})]
+            anon_override = any(window_mask[m.start():m.start() + 1].strip()
+                                for m in _ALLOW_ANON_RE.finditer(window_text))
+            effective_guards = [] if anon_override else sorted({m.group(1) for m in guards})
+            role_contexts = []
+            for guard in guards:
+                after = window_mask[guard.end():]
+                if after.lstrip().startswith("("):
+                    role_contexts.append(window_text[guard.start():_call_end(window_mask, guard.start())])
+            observed_roles = sorted({m.group(1).lower() for context in role_contexts
+                                     for m in _ROLE_TOKEN_RE.finditer(context)})
 
             for method in methods:
-                key = (method, raw_route, line_no)
+                key = (method, raw_route, match.start())
                 if key in found:
                     continue
                 found[key] = {
@@ -401,134 +489,99 @@ def extract_multilang_route_handlers(path: str, text: str, *, source_id: str | N
                     "normalized_route": normalize_route_template(raw_route),
                     "path": path,
                     "line": line_no,
+                    "column": match.start() - text.rfind(nl, 0, match.start()),
                     "language": file_lang or pattern_lang,
                     "source_id": source_id,
                     "observed_guards": effective_guards,
                     "observed_roles": observed_roles,
                     "allow_anonymous": anon_override,
-                    "has_inline_guard": bool(effective_guards) or ("auth" in line_text.lower() and not anon_override),
+                    "has_inline_guard": bool(effective_guards),
                     "window_excerpt": window_text[:400],
                 }
     return [found[k] for k in sorted(found)]
 
 
-def _parse_openapi_spec_operations(text: str, spec_path: str, spec_source_id: str | None) -> list[dict[str, Any]]:
-    """Deterministically extract declared routes, security schemes/scopes, and required parameters from OpenAPI JSON or YAML."""
-    ops: list[dict[str, Any]] = []
-    parsed: Any = None
-    stripped = text.lstrip()
-    if stripped.startswith("{"):
-        try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError:
-            parsed = None
-    if parsed is None:
-        try:
-            import yaml  # type: ignore[import-untyped]
-            parsed = yaml.safe_load(text)
-        except Exception:
-            parsed = None
-    if not isinstance(parsed, Mapping):
-        return ops
-    if not any(k in parsed for k in ("openapi", "swagger", "paths")):
-        return ops
-    global_sec = parsed.get("security")
-    paths_obj = parsed.get("paths")
-    if not isinstance(paths_obj, Mapping):
-        return ops
-    for route, item in sorted(paths_obj.items(), key=lambda kv: str(kv[0])):
-        if not isinstance(item, Mapping) or not str(route).startswith("/"):
-            continue
-        path_params = item.get("parameters") if isinstance(item.get("parameters"), list) else []
-        for method_key, op in sorted(item.items(), key=lambda kv: str(kv[0])):
-            method = str(method_key).upper()
-            if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
+def _parse_openapi_spec_operations(text: str, spec_path: str, spec_source_id: str | None,
+                                   *, gaps: list[str] | None = None) -> list[dict[str, Any]]:
+    """Use the catalog's bounded composition and security-alternative interpretation."""
+    from yaml.nodes import MappingNode, SequenceNode
+
+    root = interfaces._compose(text, max_depth=64, max_nodes=200_000)
+    top = interfaces._mapping(root)
+    child, scalar, mapping = interfaces._child, interfaces._scalar, interfaces._mapping
+    version = scalar(child(root, "openapi") or child(root, "swagger"))
+    if not (version.startswith("3.") or version == "2.0") or "paths" not in top:
+        raise interfaces.DocumentParseError("expected OpenAPI 3 or Swagger 2 paths")
+    pending = [root]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, MappingNode):
+            values = mapping(node)
+            if "$ref" in values and gaps is not None:
+                gaps.append(f"unresolved specification reference: {scalar(values['$ref'][1])[:200]}")
+            pending.extend(value for _, value in values.values())
+        elif isinstance(node, SequenceNode):
+            pending.extend(node.value)
+
+    ops = []
+    for route, (_, path) in sorted(mapping(child(root, "paths")).items()):
+        if not route.startswith("/"):
+            raise interfaces.DocumentParseError("expected an absolute OpenAPI route")
+        for method_key, (key, operation) in sorted(mapping(path).items()):
+            method = method_key.upper()
+            if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"}:
                 continue
-            if not isinstance(op, Mapping):
-                continue
-            op_sec = op.get("security", global_sec)
-            declared_security: list[str] = []
-            declared_roles: list[str] = []
-            public_explicit = op_sec == []
-            if isinstance(op_sec, list):
-                for entry in op_sec:
-                    if isinstance(entry, Mapping):
-                        for scheme, scopes in sorted(entry.items()):
-                            declared_security.append(str(scheme))
-                            if isinstance(scopes, list):
-                                for sc in scopes:
-                                    declared_security.append(f"{scheme}:{sc}")
-                                    for role_m in _ROLE_TOKEN_RE.finditer(str(sc)):
-                                        declared_roles.append(role_m.group(1).lower())
-            req_params: list[str] = []
-            for p in [*path_params, *(op.get("parameters") if isinstance(op.get("parameters"), list) else [])]:
-                if isinstance(p, Mapping) and p.get("required") is True and p.get("name"):
-                    req_params.append(str(p["name"]))
+            fields = mapping(operation)
+            security = fields["security"][1] if "security" in fields else child(root, "security")
+            state, schemes = interfaces._security(security)
+            declared_security = list(schemes)
+            role_alternatives = []
+            if security is not None:
+                for entry in security.value:
+                    roles = set()
+                    for scheme, (_, scopes) in mapping(entry).items():
+                        if not isinstance(scopes, SequenceNode):
+                            raise interfaces.DocumentParseError("security scopes must be a sequence")
+                        for scope in scopes.value:
+                            value = scalar(scope)
+                            declared_security.append(f"{scheme}:{value}")
+                            roles.update(match.group(1).lower() for match in _ROLE_TOKEN_RE.finditer(value))
+                    role_alternatives.append(roles)
+            # Alternatives are OR, not a union of mandatory roles.
+            required_roles = set.intersection(*role_alternatives) if role_alternatives else set()
+            required_parameters = []
+            for owner in (path, operation):
+                parameters = child(owner, "parameters")
+                if parameters is not None and not isinstance(parameters, SequenceNode):
+                    raise interfaces.DocumentParseError("parameters must be a sequence")
+                for parameter in parameters.value if parameters is not None else ():
+                    if scalar(child(parameter, "required")) == "true":
+                        required_parameters.append(scalar(child(parameter, "name")))
             ops.append({
-                "spec_format": "openapi",
-                "spec_path": spec_path,
-                "spec_source_id": spec_source_id,
-                "method": method,
-                "route": str(route),
-                "normalized_route": normalize_route_template(str(route)),
-                "declared_security": sorted(set(declared_security)),
-                "declared_roles": sorted(set(declared_roles)),
-                "requires_auth": bool(declared_security) and not public_explicit,
-                "public_explicit": public_explicit,
-                "required_parameters": sorted(set(req_params)),
+                "spec_format": "openapi", "spec_path": spec_path, "spec_source_id": spec_source_id,
+                "method": method, "route": route, "normalized_route": normalize_route_template(route),
+                "declared_security": sorted(set(declared_security)), "declared_roles": sorted(required_roles),
+                "requires_auth": state == "required", "public_explicit": state in {"none", "optional"},
+                "required_parameters": sorted(set(required_parameters)),
+                "start_line": key.start_mark.line + 1,
             })
     return ops
 
 
-def _parse_graphql_or_proto_operations(doc_payload: Mapping[str, Any], text: str | None) -> list[dict[str, Any]]:
-    """Extract GraphQL/Protobuf interface operations and @auth/@hasRole directives."""
-    fmt = str(doc_payload.get("format") or "")
+def _parse_graphql_or_proto_operations(doc_payload: Mapping[str, Any], text: str | None,
+                                       *, gaps: list[str] | None = None) -> list[dict[str, Any]]:
+    """Retain the canonical root type/service context; these are not HTTP handlers."""
+    fmt = str(doc_payload.get("document_kind") or doc_payload.get("format") or "")
     spec_path = str(doc_payload.get("path") or "")
     spec_source_id = str(doc_payload.get("source_file_id") or "") or None
-    ops: list[dict[str, Any]] = []
-    if fmt == "graphql" and text:
-        for m in re.finditer(r"(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\([^)]*\))?\s*:\s*[^\n#]+", text):
-            field_name = m.group(1)
-            if field_name in {"type", "input", "enum", "interface", "union", "scalar", "schema", "Query", "Mutation"}:
-                continue
-            line = m.group(0)
-            directives = re.findall(r"@(auth|authenticated|hasRole|requires)\b(?:\s*\(([^)]*)\))?", line, flags=re.I)
-            sec = [f"@{d[0]}" + (f"({d[1]})" if d[1] else "") for d in directives]
-            roles = sorted({rm.group(1).lower() for d in directives for rm in _ROLE_TOKEN_RE.finditer(d[1] or "")})
-            ops.append({
-                "spec_format": "graphql",
-                "spec_path": spec_path,
-                "spec_source_id": spec_source_id,
-                "method": "POST",
-                "route": f"/graphql#{field_name}",
-                "normalized_route": f"/graphql#{field_name}",
-                "declared_security": sorted(set(sec)),
-                "declared_roles": roles,
-                "requires_auth": bool(sec),
-                "public_explicit": False,
-                "required_parameters": [],
-            })
-    elif fmt == "protobuf" and text:
-        service_name = "Service"
-        svc_m = re.search(r"\bservice\s+([A-Za-z_][A-Za-z0-9_]*)", text)
-        if svc_m:
-            service_name = svc_m.group(1)
-        for m in re.finditer(r"\brpc\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", text):
-            rpc_name = m.group(1)
-            ops.append({
-                "spec_format": "protobuf",
-                "spec_path": spec_path,
-                "spec_source_id": spec_source_id,
-                "method": "POST",
-                "route": f"/{service_name}/{rpc_name}",
-                "normalized_route": f"/{service_name}/{rpc_name}",
-                "declared_security": [],
-                "declared_roles": [],
-                "requires_auth": False,
-                "public_explicit": False,
-                "required_parameters": [],
-            })
-    return ops
+    operations, limitations = interfaces.idl_operations(text or "", fmt, max_depth=64, max_nodes=200_000)
+    if gaps is not None:
+        gaps.extend(limitations)
+    return [{
+        **operation, "spec_format": fmt, "spec_path": spec_path, "spec_source_id": spec_source_id,
+        "normalized_route": operation["route"], "declared_security": [], "declared_roles": [],
+        "requires_auth": False, "public_explicit": False, "required_parameters": [],
+    } for operation in operations]
 
 
 def analyze_api_spec_drift(
@@ -537,91 +590,133 @@ def analyze_api_spec_drift(
     max_files: int = 20000,
     max_file_bytes: int = 1048576,
 ) -> dict[str, Any]:
-    """Compare structured API specs (OpenAPI, GraphQL, Protobuf) against 9-language route handlers."""
+    """Compare accepted HTTP declarations, preserving non-HTTP mapping and read gaps."""
+    if max_files < 1 or max_file_bytes < 1:
+        raise ValueError("drift analysis bounds must be positive")
     gaps: list[str] = []
     view = AcceptedShards(core.run_root, core.manifest["indexes"], core.manifest["target_snapshot"])
     source_shards = view.select("source", job="job_target_catalog")
     doc_shards = view.select("documents", job="job_target_catalog")
 
-    source_by_path: dict[str, tuple[str, str]] = {}
-    all_handlers: list[dict[str, Any]] = []
-    scanned_files = 0
-    rows = sorted(view.entities(source_shards, ("source_file",)), key=lambda r: r.identity) if source_shards else []
-    for row in rows:
-        location = row.location or {}
-        rel_path = str(location.get("path") or row.payload.get("path") or "")
-        if not rel_path:
+    for shards, name in ((source_shards, "source"), (doc_shards, "documents")):
+        if not shards:
+            gaps.append(f"drift accepted {name} index is unavailable")
+        for shard in shards:
+            gaps.extend(str(gap) for gap in shard.get("gaps", ()))
+        for coverage in view.coverage(shards):
+            if coverage["gap"] or coverage["status"] != "complete":
+                gaps.append(f"drift upstream {name} {coverage['area']}: "
+                            f"{coverage['gap'] or coverage['status']}")
+
+    source_rows = sorted(view.entities(source_shards, ("source_file",)), key=lambda row: row.identity)
+    doc_rows = sorted(view.entities(doc_shards, ("document_record", "target_document")), key=lambda row: row.identity)
+    documents: dict[tuple[str, str, str], list[Any]] = {}
+    locations: dict[str, Mapping[str, Any]] = {}
+    sources: dict[str, Any] = {}
+
+    def admit(row: Any) -> tuple[str, str] | None:
+        loc = row.location or {}
+        path, digest = loc.get("path"), loc.get("file_sha256")
+        if not path or not digest:
+            gaps.append(f"drift input has no resolving path/hash: {row.identity}")
+            return None
+        if path in locations and locations[path]["file_sha256"] != digest:
+            raise ValueError(f"accepted source/document hashes conflict: {path}")
+        locations.setdefault(path, loc)
+        return path, digest
+
+    for row in source_rows:
+        identity = admit(row)
+        if identity:
+            sources.setdefault(identity[0], row)
+    for row in doc_rows:
+        fmt = str(row.payload.get("document_kind") or row.payload.get("format") or "")
+        if fmt not in {"openapi", "graphql", "protobuf", "asyncapi", "postman"}:
             continue
-        if scanned_files >= max_files:
-            gaps.append("drift_source_file_bound_reached")
-            break
-        full_path = (core.target_root / rel_path).resolve()
-        if core.target_root not in full_path.parents or full_path.is_symlink() or not full_path.is_file():
-            continue
-        expected_sha = location.get("file_sha256")
-        if expected_sha and file_sha256(full_path) != expected_sha:
-            raise ValueError("accepted source bytes changed after catalog publication")
-        if full_path.stat().st_size > max_file_bytes:
-            gaps.append(f"drift mapping skipped oversized file: {rel_path}")
+        identity = admit(row)
+        if identity:
+            documents.setdefault((*identity, fmt), []).append(row)
+
+    # One shared, attempted-file budget: a failed read or document-only fallback
+    # cannot reopen the budget, and a document/source alias is read just once.
+    texts = {}
+    for index, (path, location) in enumerate(sorted(locations.items())):
+        if index >= max_files:
+            gaps.append(f"drift file bound reached: {path}")
             continue
         try:
-            text = full_path.read_text(encoding="utf-8")
-        except UnicodeError:
+            raw = read_source_bytes(
+                core.run_root, core.target_root, target_snapshot=core.manifest["target_snapshot"],
+                path=path, sha256=location["file_sha256"], native=location.get("producer_location"),
+                limit=max_file_bytes)
+        except ValueError as exc:
+            if "changed" in str(exc):
+                raise ValueError(f"accepted source/document bytes changed after catalog publication: {path}") from exc
+            gaps.append(f"drift input unavailable: {path}: {exc}")
             continue
-        scanned_files += 1
-        source_by_path[rel_path] = (row.identity, text)
-        if not _NON_IMPLEMENTATION.search(rel_path):
-            all_handlers.extend(extract_multilang_route_handlers(rel_path, text, source_id=row.identity))
+        except OSError as exc:
+            gaps.append(f"drift input unavailable: {path}: {type(exc).__name__}")
+            continue
+        try:
+            texts[path] = raw.decode("utf-8-sig")
+        except UnicodeError:
+            gaps.append(f"drift input undecodable: {path}")
+
+    all_handlers: list[dict[str, Any]] = []
+    for path, row in sorted(sources.items()):
+        if path in texts and Path(path).suffix.lower() in _EXT_LANG and not _NON_IMPLEMENTATION.search(path):
+            all_handlers.extend(extract_multilang_route_handlers(path, texts[path], source_id=row.identity))
+    if all_handlers:
+        gaps.append("drift auth enforcement unresolved: literal registration/annotation heuristics do not "
+                    "establish global middleware, handler behavior, mounts or effective role enforcement")
+    for handler in all_handlers:
+        if handler["method"] == "ANY":
+            gaps.append(f"drift handler method coverage unresolved: {handler['path']}:{handler['line']}")
 
     spec_ops: list[dict[str, Any]] = []
     specs_parsed = 0
-    seen_spec_paths: set[str] = set()
-    doc_rows = sorted(view.entities(doc_shards, ("document_record", "target_document")), key=lambda r: r.identity) if doc_shards else []
-    for doc_row in doc_rows:
-        dp = doc_row.payload
-        loc = doc_row.location or {}
-        fmt = str(dp.get("format") or "")
-        doc_class = str(dp.get("document_class") or "")
-        doc_path = str(loc.get("path") or dp.get("path") or "")
-        if doc_class != "interface_specification" and fmt not in {"openapi", "asyncapi", "graphql", "protobuf", "postman"}:
+    for (path, digest, fmt), records in sorted(documents.items()):
+        if path not in texts:
             continue
-        src_tuple = source_by_path.get(doc_path)
-        raw_text = src_tuple[1] if src_tuple else None
-        src_id = src_tuple[0] if src_tuple else (str(dp.get("source_file_id") or "") or doc_row.identity)
-        if raw_text is None and doc_path:
-            candidate_file = (core.target_root / doc_path).resolve()
-            if core.target_root in candidate_file.parents and candidate_file.is_file() and not candidate_file.is_symlink():
-                if candidate_file.stat().st_size <= max_file_bytes:
-                    try:
-                        raw_text = candidate_file.read_text(encoding="utf-8")
-                    except UnicodeError:
-                        raw_text = None
-        extracted: list[dict[str, Any]] = []
-        if fmt == "openapi" and raw_text:
-            extracted = _parse_openapi_spec_operations(raw_text, doc_path, src_id)
-        elif fmt in {"graphql", "protobuf"}:
-            extracted = _parse_graphql_or_proto_operations(dp, raw_text)
-        if not extracted and isinstance(dp.get("operations"), list):
-            for op_str in dp["operations"]:
-                parts = str(op_str).strip().split(None, 1)
-                if len(parts) == 2 and parts[1].startswith("/"):
-                    extracted.append({
-                        "spec_format": fmt or "openapi",
-                        "spec_path": doc_path,
-                        "spec_source_id": src_id,
-                        "method": parts[0].upper(),
-                        "route": parts[1],
-                        "normalized_route": normalize_route_template(parts[1]),
-                        "declared_security": [],
-                        "declared_roles": [],
-                        "requires_auth": False,
-                        "public_explicit": False,
-                        "required_parameters": [],
-                    })
-        if doc_path and doc_path not in seen_spec_paths and (extracted or raw_text is not None):
-            seen_spec_paths.add(doc_path)
-            specs_parsed += 1
-        spec_ops.extend(extracted)
+        limitations: list[str] = []
+        try:
+            if fmt == "openapi":
+                extracted = _parse_openapi_spec_operations(texts[path], path, records[0].identity, gaps=limitations)
+            elif fmt in {"graphql", "protobuf"}:
+                extracted = _parse_graphql_or_proto_operations(
+                    {"document_kind": fmt, "path": path, "source_file_id": records[0].identity},
+                    texts[path], gaps=limitations)
+                limitations.append(f"{fmt} implementation mapping is unsupported")
+            else:
+                gaps.append(f"drift unsupported specification format: {path}: {fmt}")
+                continue
+        except interfaces.DocumentParseError as exc:
+            gaps.append(f"drift specification parse failed: {path}: {exc}")
+            continue
+        specs_parsed += 1
+        if not extracted:
+            limitations.append("no supported interface operation")
+        gaps.extend(f"drift specification coverage: {path}: {reason}" for reason in limitations)
+        operation_records = {}
+        file_records = []
+        for row in records:
+            fields = row.payload.get("fields", {})
+            operation_records.setdefault((fields.get("method"), fields.get("route")), row)
+            if row.payload.get("subtype") != "operation":
+                file_records.append(row)
+        for operation in extracted:
+            matching = operation_records.get((operation["method"], operation["route"]))
+            if matching is None:
+                # Whole-file fixture/legacy records still resolve the accepted file,
+                # but an operation record must never be cited for a different operation.
+                matching = file_records[0] if file_records else None
+            if matching is None:
+                gaps.append(f"drift operation has no accepted document record: {path}: "
+                            f"{operation['method']} {operation['route']}")
+                continue
+            operation["spec_source_id"] = matching.identity
+            operation["spec_file_sha256"] = digest
+            spec_ops.append(operation)
 
     handlers_by_norm: dict[tuple[str, str], list[dict[str, Any]]] = {}
     handlers_by_route_any: dict[str, list[dict[str, Any]]] = {}
@@ -630,15 +725,23 @@ def analyze_api_spec_drift(
         handlers_by_route_any.setdefault(h["normalized_route"], []).append(h)
 
     mismatches: list[dict[str, Any]] = []
-    matched_handler_keys: set[tuple[str, str, int]] = set()
+    matched_handler_keys: set[tuple[str, str, str, int, int]] = set()
+
+    def handler_key(handler: Mapping[str, Any]) -> tuple[str, str, str, int, int]:
+        return (handler["path"], handler["method"], handler["route"], handler["line"], handler["column"])
 
     for op in sorted(spec_ops, key=lambda item: (item["method"], item["normalized_route"], item["spec_path"])):
+        if op["spec_format"] != "openapi":
+            continue
+        spec_identity = {"spec": op["spec_path"], "spec_source_id": op["spec_source_id"],
+                         "spec_sha256": op["spec_file_sha256"]}
         candidates = list(handlers_by_norm.get((op["method"], op["normalized_route"]), ()))
         if not candidates:
             candidates = [h for h in handlers_by_route_any.get(op["normalized_route"], ()) if h["method"] == "ANY"]
         if not candidates:
             if op["spec_format"] == "openapi":
-                seed = {"kind": "unmapped_declared_operation", "method": op["method"], "route": op["route"], "spec": op["spec_path"]}
+                seed = {**spec_identity, "kind": "unmapped_declared_operation",
+                        "method": op["method"], "route": op["route"]}
                 mismatches.append({
                     "drift_id": "drift:" + _hash(seed)[:24],
                     "drift_kind": "unmapped_declared_operation",
@@ -655,15 +758,15 @@ def analyze_api_spec_drift(
                     "auth_mismatch": False,
                     "declared_security": op["declared_security"],
                     "observed_guards": [],
-                    "summary": f"Declared {op['method']} {op['route']} in {op['spec_path']} has no matching route handler.",
+                    "summary": f"Declared {op['method']} {op['route']} in {op['spec_path']} has no matching literal registration in the bounded source scan.",
                 })
             continue
 
         for h in candidates:
-            matched_handler_keys.add((h["path"], h["route"], h["line"]))
+            matched_handler_keys.add(handler_key(h))
             if op["requires_auth"] and (not h["observed_guards"] or h["allow_anonymous"]):
-                seed = {"kind": "missing_auth_middleware", "method": op["method"], "route": op["route"],
-                        "handler": h["path"], "line": h["line"]}
+                seed = {**spec_identity, "kind": "missing_auth_middleware",
+                        "method": op["method"], "route": op["route"], "handler": handler_key(h)}
                 mismatches.append({
                     "drift_id": "drift:" + _hash(seed)[:24],
                     "drift_kind": "missing_auth_middleware",
@@ -681,11 +784,12 @@ def analyze_api_spec_drift(
                     "declared_security": op["declared_security"],
                     "observed_guards": h["observed_guards"],
                     "summary": (f"Spec {op['spec_path']} declares security {op['declared_security']} on "
-                                f"{op['method']} {op['route']}, but handler at {h['path']}:{h['line']} lacks observed auth guard."),
+                                f"{op['method']} {op['route']}, but no local guard was observed at "
+                                f"{h['path']}:{h['line']}; effective enforcement is unresolved."),
                 })
-            elif op["declared_roles"] and h["observed_guards"] and not set(op["declared_roles"]).intersection(h["observed_roles"]):
-                seed = {"kind": "role_or_scope_mismatch", "method": op["method"], "route": op["route"],
-                        "handler": h["path"], "line": h["line"]}
+            elif op["requires_auth"] and op["declared_roles"] and h["observed_guards"] and not set(op["declared_roles"]).intersection(h["observed_roles"]):
+                seed = {**spec_identity, "kind": "role_or_scope_mismatch",
+                        "method": op["method"], "route": op["route"], "handler": handler_key(h)}
                 mismatches.append({
                     "drift_id": "drift:" + _hash(seed)[:24],
                     "drift_kind": "role_or_scope_mismatch",
@@ -709,10 +813,10 @@ def analyze_api_spec_drift(
     if specs_parsed > 0 and any(op["spec_format"] == "openapi" for op in spec_ops):
         openapi_spec = next(op for op in spec_ops if op["spec_format"] == "openapi")
         for h in all_handlers:
-            if (h["path"], h["route"], h["line"]) in matched_handler_keys:
+            if handler_key(h) in matched_handler_keys or h["method"] == "ANY":
                 continue
             seed = {"kind": "undocumented_route", "method": h["method"], "route": h["route"],
-                    "handler": h["path"], "line": h["line"]}
+                    "handler": handler_key(h), "spec_source_id": openapi_spec["spec_source_id"]}
             mismatches.append({
                 "drift_id": "drift:" + _hash(seed)[:24],
                 "drift_kind": "undocumented_route",
@@ -726,13 +830,15 @@ def analyze_api_spec_drift(
                 "handler_language": h["language"],
                 "handler_source_id": h["source_id"],
                 "authority": DRIFT_AUTHORITY,
-                "auth_mismatch": not bool(h["observed_guards"]),
+                "auth_mismatch": False,
                 "declared_security": [],
                 "observed_guards": h["observed_guards"],
-                "summary": f"Route handler {h['method']} {h['route']} at {h['path']}:{h['line']} is undocumented in {openapi_spec['spec_path']}.",
+                "summary": f"Literal registration {h['method']} {h['route']} at {h['path']}:{h['line']} was not found in the parsed OpenAPI operations; specification coverage may be incomplete.",
             })
 
-    mismatches.sort(key=lambda item: (item["drift_kind"], item["method"], item["route"], str(item.get("handler_path") or "")))
+    mismatches = list({item["drift_id"]: item for item in mismatches}.values())
+    mismatches.sort(key=lambda item: (item["drift_kind"], item["method"], item["route"],
+                                     str(item.get("handler_path") or ""), item["drift_id"]))
     return {
         "schema": DRIFT_SCHEMA,
         "run_id": core.run_id,

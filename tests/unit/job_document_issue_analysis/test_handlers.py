@@ -15,6 +15,7 @@ from appsec_review.config import ToolCapabilityConfig, load_config
 from appsec_review.config.assurance import ComponentReleases, ReviewPolicy
 from appsec_review.document_issues import verify_document_issue_ledger
 from appsec_review.indexing.store import AcceptedHandoff
+from appsec_review.indexing.target_documents import collect_target_documents
 from appsec_review.jobs.job_document_issue_analysis import job as job_module
 from appsec_review.jobs.job_document_issue_analysis.datasets import CONTRACT, DATASETS
 from appsec_review.jobs.job_document_issue_analysis.job import (
@@ -69,18 +70,22 @@ def _seed_document_hunt_run(tmp_path: Path) -> tuple[Path, Path, str, Path, str,
     doc_rel = "api/openapi.yaml"
     doc_path = target / doc_rel
     doc_path.parent.mkdir(parents=True, exist_ok=True)
-    doc_bytes = b"paths:\n  /api/orders/{id}:\n    get:\n      summary: Order lookup\n"
+    doc_bytes = (b"openapi: 3.0.3\npaths:\n  /api/orders/{id}:\n    get:\n"
+                 b"      summary: Order lookup\n      security:\n        - bearerAuth: []\n")
     doc_path.write_bytes(doc_bytes)
     doc_sha = hashlib.sha256(doc_bytes).hexdigest()
 
     snapshot = "target-sha256:" + "9" * 64
+    document = collect_target_documents(
+        target, snapshot, [{"path": doc_rel, "sha256": doc_sha, "kind": "openapi"}]).records[0]
     src_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, snapshot, {"path": src_rel})
     doc_id = LogicalIdentity.derive(EntityKind.DOCUMENT_RECORD, snapshot, {"path": doc_rel, "op": "GET /api/orders/{id}"})
     route_fact_id = LogicalIdentity.derive(EntityKind.PRECOMPUTED_FACT, snapshot, {"qs": "document_context", "k": "route"})
     boundary_fact_id = LogicalIdentity.derive(EntityKind.PRECOMPUTED_FACT, snapshot, {"qs": "document_context", "k": "boundary"})
 
     src_loc = SourceLocation(snapshot, src_rel, src_sha, 0, len(src_bytes), 1, 3, 1, 1, {}, "exact", 1.0)
-    doc_loc = SourceLocation(snapshot, doc_rel, doc_sha, 0, len(doc_bytes), 1, 4, 1, 1, {}, "exact", 1.0)
+    doc_loc = SourceLocation(snapshot, doc_rel, doc_sha, 0, len(doc_bytes),
+                             document["line"], document["end_line"], 1, 1, {}, "exact", 1.0)
     shards: list[IndexIdentity] = []
 
     def add_shard(name: str, shard_id: str, entities: list[EntityRecord], producer: dict[str, str]) -> None:
@@ -121,8 +126,11 @@ def _seed_document_hunt_run(tmp_path: Path) -> tuple[Path, Path, str, Path, str,
     add_shard(
         "documents",
         "target-docs",
-        [EntityRecord(doc_id, "doc-1", "GET /api/orders/{id}", "Order lookup", {"authority": "declared"}, doc_loc)],
-        {"job": "job_document_analysis", "unit": "analysis.documents"},
+        [EntityRecord(doc_id, document["id"], document["text"], document["text"],
+                      {"record_type": "target_document", "document_kind": document["kind"],
+                       "subtype": document["subtype"], "authority": document["authority"],
+                       "fields": document["fields"]}, doc_loc)],
+        {"job": "job_target_catalog", "unit": "retrieval_indexes.build_target_documents"},
     )
     add_shard(
         "precomputed",
@@ -343,6 +351,10 @@ def test_analyze_handler_computes_and_reuses_private_candidate_ledger(
     assert len(out1["gaps"]) > 1
     assert out1["counts"] == {"candidates": 2, "supported": 0, "unmapped": 1, "ambiguous": 0}
     assert out1["artifacts"] == [out1["artifact"], out1["drift_artifact"]]
+    drift1 = json.loads((run_root / out1["drift_artifact"]["path"]).read_text())
+    assert out1["drift_counts"] == {"specs_parsed": 1, "handlers_scanned": 1, "mismatches": 1}
+    assert drift1["mismatches"][0]["drift_kind"] == "missing_auth_middleware"
+    assert drift1["mismatches"][0]["spec_source_id"].startswith("asr:document_record:")
 
     receipt1 = verify_receipt(run_root, out1["shared_receipt"])
     assert receipt1["mode"] == "computed"
@@ -374,6 +386,8 @@ def test_analyze_handler_computes_and_reuses_private_candidate_ledger(
     out2 = res2["outputs"]["analysis.map_and_adjudicate"]
     assert out2["reused"] is expected_reusable
     assert out2["artifact"] == out1["artifact"]
+    assert out2["drift_artifact"]["path"] != out1["drift_artifact"]["path"]
+    assert json.loads((run_root / out2["drift_artifact"]["path"]).read_text()) == drift1
     receipt2 = verify_receipt(run_root, out2["shared_receipt"])
     assert receipt2["mode"] == ("reused" if expected_reusable else "computed")
     events2 = [
