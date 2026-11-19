@@ -77,6 +77,26 @@ def _coverage_gaps(view: AcceptedShards) -> list[dict[str, str]]:
     return sorted({item["gap_id"]: item for item in gaps}.values(), key=lambda item: item["gap_id"])
 
 
+def _input_gaps(view: AcceptedShards, *, scanner_available: bool) -> list[dict[str, str]]:
+    gaps = _coverage_gaps(view)
+    if not scanner_available:
+        gaps.append(_gap("scanner_correlation", "source_sast", "unavailable",
+                         "no accepted scanner-correlation facts; document hunts have no scanner lead"))
+    return gaps
+
+
+def _build_fact_gaps(payload: Mapping[str, Any], identity: str) -> list[dict[str, str]]:
+    state = str(payload.get("coverage_status", "complete"))
+    reasons = {str(reason) for reason in
+               (*payload.get("gaps", ()), *payload["result"].get("gaps", ()))}
+    if state == "complete" and not reasons:
+        return []
+    if not reasons:
+        reasons.add(f"selected build-action fact has {state} coverage")
+    return [_gap("build_provenance", identity, "partial" if state == "complete" else state, reason)
+            for reason in sorted(reasons)]
+
+
 def _lead(value: Mapping[str, Any]) -> dict[str, Any]:
     location = value["location"]
     return {"observation_id": value["observation_id"], "scanner": value["scanner"],
@@ -135,6 +155,7 @@ def _package(core: RetrievalCore, *, kind: str, partition: str, leads: list[dict
     entity_ids = sorted({item["observation_id"] for item in leads} |
                         {item["entity_id"] for item in evidence} |
                         set(source_ids) | set(context_ids) | set(build_context["action_ids"]) |
+                        set(build_context["artifact_ids"]) |
                         {item["entity_id"] for item in tag_context["assignments"]} |
                         {item["entity_id"] for item in compiled_context} |
                         {item["scope_id"] for item in metrics} |
@@ -198,6 +219,9 @@ def validate_packages(core: RetrievalCore, packages: list[Mapping[str, Any]],
         if [item["observation_id"] for item in leads] != sorted({item["observation_id"] for item in leads}):
             raise ValueError("review package lead order or uniqueness failed")
         grant = set(package["retrieval"]["entity_ids"])
+        if (package["scope"]["artifact_ids"] != package["build_context"]["artifact_ids"]
+                or not set(package["scope"]["artifact_ids"]) <= grant):
+            raise ValueError("review package retrieval grant omits scoped artifact")
         for item in leads:
             LogicalIdentity.parse(item["observation_id"])
             if item["observation_id"] not in grant:
@@ -292,10 +316,7 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
     inputs = sorted({(item["name"], item.get("shard_id", "default"), item["sha256"])
                      for item in core.manifest["indexes"]})
     document_rows = {row.identity: row for row in view.entities(view.select("documents"), ("document_record",))}
-    gaps = _coverage_gaps(view)
-    if not facts:
-        gaps.append(_gap("scanner_correlation", "source_sast", "unavailable",
-                         "no accepted scanner-correlation facts; document hunts have no scanner lead"))
+    gaps = _input_gaps(view, scanner_available=bool(facts))
     source_by_path: dict[str, list[str]] = {}
     for row in view.entities(view.select("source"), ("source_file",)):
         if row.location:
@@ -361,6 +382,8 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
                        if payload.get("subject_identity") in {scope.identity for scope in scopes.values()}
                        or payload.get("result", {}).get("scope") == "file"}
         build_rows = {row.identity: (payload, row) for path in paths for payload, row in build_by_path.get(path, ())}
+        local_gaps.extend(gap for payload, row in build_rows.values()
+                          for gap in _build_fact_gaps(payload, row.identity))
         metrics = [metric for payload, _ in sorted(metric_rows.values(), key=lambda pair: pair[1].identity)
                    for metric in payload["result"].get("metrics", ())]
         commands = [command for payload, _ in sorted(build_rows.values(), key=lambda pair: pair[1].identity)
@@ -504,8 +527,8 @@ def assemble_review_packages(core: RetrievalCore, *, max_page_size: int = 20) ->
                 "counts": {"finding_lead": len(leads), "hunt": len(menus),
                            "document_hunt": len(document_facts),
                            "high_critical": len(expected["high_critical"]), "unknown": len(expected["unknown"])},
-                "coverage_gaps": sorted({gap["gap_id"]: gap for item in packages
-                                         for gap in item["coverage_gaps"]}.values(),
+                "coverage_gaps": sorted({gap["gap_id"]: gap for gap in
+                                         [*gaps, *(gap for item in packages for gap in item["coverage_gaps"])]}.values(),
                                         key=lambda item: item["gap_id"])}
     manifest["content_sha256"] = _digest(manifest)
     return packages, manifest
@@ -574,12 +597,14 @@ def verify_review_packages(core: RetrievalCore, directory: Path) -> dict[str, An
         if package.get("kind") != entry.get("kind"):
             raise ValueError("review package kind mismatch")
         packages.append(package)
-    _, _, documents, leads, menus, audits, expected = _membership(core, manifest["max_page_size"])
+    view, facts, documents, leads, menus, audits, expected = _membership(core, manifest["max_page_size"])
     validate_packages(core, packages, expected, audits[0] if audits else None)
     counts = {"finding_lead": len(leads), "hunt": len(menus), "document_hunt": len(documents),
               "high_critical": len(expected["high_critical"]), "unknown": len(expected["unknown"])}
-    gaps = sorted({gap["gap_id"]: gap for item in packages
-                   for gap in item["coverage_gaps"]}.values(), key=lambda item: item["gap_id"])
+    gaps = sorted({gap["gap_id"]: gap for gap in [
+        *_input_gaps(view, scanner_available=bool(facts)),
+        *(gap for item in packages for gap in item["coverage_gaps"])]}.values(),
+        key=lambda item: item["gap_id"])
     expected_menus = {
         f"{menu['menu']}:{menu['component_id']}:{menu['partition']:05d}":
             ([item["observation_id"] for item in sorted(menu["members"], key=lambda item: item["observation_id"])],

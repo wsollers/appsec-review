@@ -40,6 +40,27 @@ packages are consumed by `job_document_issue_analysis`, which publishes private 
 the inference job does not yet consume those document hunts. A declared route, test assertion, or
 exact route registration is not proof of control enforcement.
 
+For this separate catalog-derived producer (`src/appsec_review/review_packages.py`), the
+manifest retains accepted input coverage gaps independently of package membership. An audited
+empty scanner menu can produce zero packages, but incomplete input coverage still produces
+`COMPLETED_WITH_GAPS`; verification reconciles the manifest against the input gaps as well as
+the package-local gaps. Empty results without a valid scanner audit or document subject are
+unavailable inputs, not a clean review.
+
+Selected `build_provenance/build_action` facts carry their own `coverage_status`, top-level
+gaps and `result.gaps` into package and manifest coverage, scoped to the accepted fact identity.
+Producer omission reasons (including supplied command counts) remain verbatim even when shard
+coverage is complete. A non-complete fact without a reason receives an explicit status
+qualification. The package's `truncation.omitted_context` counts assembly omissions, not a guessed
+count of work the upstream producer omitted. Safe command and environment facts remain safe
+projections; assembly does not read protected capture bytes.
+
+Catalog scanner packages grant the produced artifact IDs already in their own
+`scope.artifact_ids`/`build_context.artifact_ids`, not every artifact in the run. A scoped lookup
+still requires the actual typed, admitted producer inputs and exact shard hashes; neither an
+artifact name in a fact, a manifest ancestor nor an available `latest.json` grants a new input.
+Missing optional build context adds a named gap and no artifact grant.
+
 ## Source of each field
 
 | Contract field | Accepted source and current query |
