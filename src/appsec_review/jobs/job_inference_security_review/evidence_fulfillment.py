@@ -44,7 +44,7 @@ def attach_querying_skill_to_bundle(
     job_id: str = "job_inference_security_review",
     force: bool = False,
 ) -> dict[str, Any]:
-    """Deterministically attach ``evidence-and-graph-querying`` to eligible review bundles and reseal."""
+    """Append querying guidance once, preserving the role/persona/binary selection, and reseal."""
     eligible = force or role in DEFAULT_QUERYING_SKILL_ROLES or (
         role is Role.BLUE_TEAM_REFUTER and task == "chain_refuter"
     )
@@ -56,8 +56,6 @@ def attach_querying_skill_to_bundle(
     items = list(procedures.get("items", ()))
     if any(item.get("id") == EVIDENCE_QUERYING_SKILL_ID for item in items):
         return bundle
-    if len(items) >= 2:
-        raise GuidanceError("selected evidence querying skill exceeds the procedure count bound")
     skill = load_runtime_skill(repository_root, EVIDENCE_QUERYING_SKILL_ID, job_id=job_id,
                                fallback_to_package=False)
     items.append({"id": skill.name, "path": skill.path, "text": skill.text, "source_sha256": skill.sha256})

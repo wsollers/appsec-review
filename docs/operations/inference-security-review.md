@@ -43,6 +43,10 @@ Each inference model table declares `thinking_min_output_tokens` (4096 in the sh
 For thinking-enabled reasoning levels the loader rejects an output cap below that floor;
 requests use the resolved `max_output_tokens` unchanged. Missing selected querying guidance
 fails assembly rather than silently dropping the procedure or borrowing packaged guidance.
+Querying guidance is appended once to the complete role/task/persona/binary selection, not
+rejected because two procedures are already selected (T-5081). The existing request byte bound
+derived from the configured input-token cap still applies before transport dispatch; no selected
+procedure is dropped and no capability is added.
 Alternate-CPG queries likewise require the typed `alternate_cpg_index` input from
 `job_code_graph_index`, its admitted handoff pin and verified shard bytes. Inference, package
 assembly and OWASP share this explicit optional-evidence requirement (T-5080); missing data is

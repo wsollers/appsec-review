@@ -334,3 +334,151 @@ def test_evidence_and_graph_querying_runtime_skill_lifecycle(repo, taxonomy, tmp
     tampered["sha256"] = bundle_sha256(tampered)
     with pytest.raises(IntegrityError, match="procedure source hash"):
         verify_bundle(tampered)
+
+
+@pytest.mark.parametrize(("role", "task", "persona", "binary", "expected"), [
+    ("hypothesis_hunter", "control_gap", "memory_safety_native", False,
+     ["generative-investigation", "effective-control-verification"]),
+    ("hypothesis_hunter", "control_gap", "authentication_session", False,
+     ["generative-investigation", "effective-control-verification", "stateful-invariant-analysis"]),
+    ("hypothesis_hunter", "control_gap", "authentication_session", True,
+     ["generative-investigation", "effective-control-verification", "stateful-invariant-analysis",
+      "binary-evidence"]),
+    ("red_team_analyst", "lead_red_preconditions", "authentication_session", True,
+     ["generative-investigation", "stateful-invariant-analysis", "binary-evidence"]),
+    ("red_team_analyst", "lead_red_stack", "memory_safety_native", True,
+     ["generative-investigation", "binary-evidence"]),
+    ("independent_verifier", "blind_verifier", "filesystem_resources", True,
+     ["predicate-verification", "stateful-invariant-analysis", "binary-evidence"]),
+], ids=["control", "stateful-control", "stateful-control-binary", "red-stateful-binary",
+        "red-binary", "verifier-stateful-binary"])
+def test_querying_attachment_preserves_supported_compositions(
+    taxonomy, tmp_path, role, task, persona, binary, expected,
+):
+    from appsec_review.guidance import pin_bundle
+    from appsec_review.jobs.job_inference_security_review.evidence_fulfillment import (
+        EVIDENCE_QUERYING_SKILL_ID, attach_querying_skill_to_bundle,
+    )
+    from appsec_review.review.models import Role
+
+    original = _compose(ROOT, taxonomy, role=role, task=task, persona=persona, binary_evidence=binary,
+                        capability={"granted_tools": [], "max_queries": 4, "max_turns": 2})
+    assert [item["id"] for item in _section(original, "procedures")["items"]] == expected
+    attached = attach_querying_skill_to_bundle(ROOT, deepcopy(original), role=Role(role), task=task)
+    items = _section(attached, "procedures")["items"]
+    assert [item["id"] for item in items] == [*expected, EVIDENCE_QUERYING_SKILL_ID]
+    assert items[:-1] == _section(original, "procedures")["items"]
+    assert {name for name, sha in original["section_sha256"].items()
+            if sha != attached["section_sha256"][name]} == {"procedures"}
+    skill = load_runtime_skill(ROOT, EVIDENCE_QUERYING_SKILL_ID, job_id="job_inference_security_review",
+                               fallback_to_package=False)
+    assert items[-1] == {"id": skill.name, "path": skill.path, "text": skill.text,
+                         "source_sha256": skill.sha256}
+    assert verify_bundle(attached) == attached["sha256"] != original["sha256"]
+    assert attach_querying_skill_to_bundle(
+        ROOT, deepcopy(attached), role=Role(role), task=task,
+    ) == attached
+    prompt = render_prompt(attached)
+    assert all(item["text"] in prompt for item in items)
+    pinned = pin_bundle(tmp_path / "run", attached)
+    assert json.loads((tmp_path / "run" / pinned["path"]).read_text()) == attached
+
+
+@pytest.mark.parametrize("defect", ("missing", "unregistered", "denied"))
+def test_querying_attachment_full_bundle_requires_registered_source(repo, taxonomy, defect):
+    from appsec_review.jobs.job_inference_security_review.evidence_fulfillment import (
+        EVIDENCE_QUERYING_SKILL_ID, attach_querying_skill_to_bundle,
+    )
+    from appsec_review.review.models import Role
+
+    bundle = _compose(repo, taxonomy, task="control_gap", binary_evidence=True)
+    original = deepcopy(bundle)
+    if defect == "missing":
+        (repo / "pipeline" / "skills" / EVIDENCE_QUERYING_SKILL_ID / "SKILL.md").unlink()
+        error = "runtime skill file is unavailable"
+    else:
+        path = repo / "pipeline" / "guidance" / "registry.json"
+        registry = json.loads(path.read_text())
+        if defect == "unregistered":
+            registry["runtime_skills"].pop(EVIDENCE_QUERYING_SKILL_ID)
+            error = "runtime skill is not registered"
+        else:
+            registry["runtime_skills"][EVIDENCE_QUERYING_SKILL_ID]["jobs"] = ["job_poc_generation"]
+            error = "is not allowed for job_inference_security_review"
+        path.write_text(json.dumps(registry))
+    with pytest.raises(GuidanceError, match=error):
+        attach_querying_skill_to_bundle(repo, bundle, role=Role.HYPOTHESIS_HUNTER, task="control_gap")
+    assert bundle == original
+
+
+def test_querying_attachment_cannot_make_an_unwired_task_composable(taxonomy):
+    with pytest.raises(GuidanceError, match="task control_gap is not assigned to role red_team_analyst"):
+        _compose(ROOT, taxonomy, role="red_team_analyst", task="control_gap", binary_evidence=True)
+
+
+def test_querying_attachment_source_tampering_is_refused_when_rendered_or_pinned(taxonomy, tmp_path):
+    from appsec_review.guidance import pin_bundle
+    from appsec_review.jobs.job_inference_security_review.evidence_fulfillment import (
+        attach_querying_skill_to_bundle,
+    )
+    from appsec_review.review.models import Role
+
+    bundle = _compose(ROOT, taxonomy, task="control_gap", persona="authentication_session",
+                      binary_evidence=True)
+    bundle = attach_querying_skill_to_bundle(
+        ROOT, bundle, role=Role.HYPOTHESIS_HUNTER, task="control_gap",
+    )
+    section = _section(bundle, "procedures")
+    section["items"][-1]["text"] += "\nModified after selection."
+    section["sha256"] = section_sha256(section)
+    bundle["section_sha256"]["procedures"] = section["sha256"]
+    bundle["sha256"] = bundle_sha256(bundle)
+    with pytest.raises(IntegrityError, match="procedure source hash mismatch: evidence-and-graph-querying"):
+        render_prompt(bundle)
+    with pytest.raises(IntegrityError, match="procedure source hash mismatch: evidence-and-graph-querying"):
+        pin_bundle(tmp_path / "run", bundle)
+
+
+@pytest.mark.parametrize("over_budget", (False, True), ids=["configured", "over-budget"])
+def test_querying_attachment_does_not_bypass_the_request_input_budget(taxonomy, over_budget):
+    from appsec_review.config import load_config
+    from appsec_review.inference.errors import ExecutionLimit
+    from appsec_review.inference.execution import Execution
+    from appsec_review.inference.request import ModelResult, ReviewModelRequest
+    from appsec_review.jobs.job_inference_security_review.evidence_fulfillment import (
+        attach_querying_skill_to_bundle,
+    )
+    from appsec_review.review.models import Role
+
+    bundle = _compose(ROOT, taxonomy, task="control_gap", persona="authentication_session",
+                      binary_evidence=True, capability={"granted_tools": []})
+    bundle = attach_querying_skill_to_bundle(
+        ROOT, bundle, role=Role.HYPOTHESIS_HUNTER, task="control_gap",
+    )
+    profile = load_config(ROOT / "appsec-review.toml").job(
+        "job_inference_security_review",
+    ).typed_settings.profile_for(Role.HYPOTHESIS_HUNTER)
+    request = ReviewModelRequest(
+        schema="appsec-review/worker-turn/1", role="hypothesis_hunter", persona="authentication_session",
+        stack_profile="cpp_rpc_service", guidance_bundle_sha256=bundle["sha256"],
+        guidance_text=render_prompt(bundle), task_input={}, transcript=(), provider=profile.provider,
+        model=profile.model, reasoning=profile.reasoning,
+        max_input_tokens=1 if over_budget else profile.max_input_tokens,
+        max_output_tokens=profile.max_output_tokens,
+    )
+
+    def inert_transport(received, *, timeout_seconds):
+        assert not over_budget, "over-budget guidance must be refused before transport dispatch"
+        assert received == request
+        return ModelResult(proposal={"fixture": "no model executed"})
+
+    execution = Execution(timeout_seconds=10, max_calls=1)
+    if over_budget:
+        with pytest.raises(ExecutionLimit, match="input_byte_bound"):
+            execution.call(inert_transport, request, timeout_seconds=10)
+        assert execution.calls == 0
+    else:
+        assert execution.call(inert_transport, request, timeout_seconds=10).proposal == {
+            "fixture": "no model executed",
+        }
+        assert execution.calls == 1

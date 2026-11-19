@@ -138,3 +138,18 @@ Technical reference points:
 threat-boundary, OWASP-gap, and API-drift queries across `job_inference_security_review`,
 `job_poc_generation`, `job_remediation_planning`, and `job_threat_model_generation`. See
 [Hosted querying and indexing skills](querying-and-indexing-skills.md).
+
+Eligible inference cells append this registered procedure once after role/task/persona and
+accepted binary-evidence selection. All existing selected procedures and their source hashes are
+preserved; attachment reseals the procedure section and bundle without changing the capability
+receipt. A control-gap hunter can therefore receive generative investigation, effective-control
+verification, stateful-invariant analysis, binary evidence and querying together.
+
+The representative two- and three-procedure test counts above are not universal assembly caps.
+Admission follows trusted job/role/task/persona wiring, accepted binary capability and the
+registered skill's job allowlist, never target text or a model-selected procedure list. There is
+no count-based truncation or replacement rule. Selection is finite and deterministic.
+Separately, the request remains subject to the existing configured input-token-derived byte bound in
+`inference/execution.py` before transport dispatch. Missing or job-denied querying guidance still
+fails closed, with no package fallback. T-5081 removes the attachment helper's incompatible local
+two-item guard; it does not raise a global limit or change runtime skill content.
