@@ -27,7 +27,10 @@ and reports failed PDF rendering as a gap while keeping source artifacts. Its cl
 not copy this tool's arbitrary review interchange into developer dossiers or public output.
 Only sanitized summaries/statuses and artifact references belong in public projections.
 `reporting/dossier_render.py` reuses the commissioned executor/template, retains
-`dossier-rendering-receipt/1`, and removes only its run-owned input/scratch staging. Integration
+private `dossier-rendering-receipt/2`, and removes only its run-owned input/scratch staging.
+Its additional Markdown/HTML references are hash-bound and gate-certified without changing
+the public four-file map; legacy receipt `/1` remains readable without certifying those formats.
+Integration
 `dd9c9ad` introduced gate/report `/2` certification; current gate `/2` and report `/3` preserve
 that boundary. Dossier Markdown, HTML and LaTeX now share one bounded document, including accepted
 counterevidence and exact-edit patch displays, without inventing paths or validation outcomes.

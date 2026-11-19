@@ -447,7 +447,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5213 | [Align optional intake declarations and Tree-sitter loader behavior](#t-5213-align-optional-intake-declarations-and-tree-sitter-loader-behavior) | pipeline | open |
 | T-5214 | [Verify every native scope checkpoint evidence artifact](#t-5214-verify-every-native-scope-checkpoint-evidence-artifact) | graph | open |
 | T-5215 | [Bind seed omission and provenance accounting into native checkpoint reuse](#t-5215-bind-seed-omission-and-provenance-accounting-into-native-checkpoint-reuse) | graph | open |
-| T-5216 | [Bind dossier Markdown and HTML through publication and the gate](#t-5216-bind-dossier-markdown-and-html-through-publication-and-the-gate) | evidence | in-progress |
+| T-5216 | [Bind dossier Markdown and HTML through publication and the gate](#t-5216-bind-dossier-markdown-and-html-through-publication-and-the-gate) | evidence | done (2026-11-19, d945d9a698f1d107e2d3ffcb6b81d5e5a9a40e9b) |
 | T-5217 | [Observe exact accepted build payload reads](#t-5217-observe-exact-accepted-build-payload-reads) | evidence | open |
 | T-5218 | [Observe exact private analysis payload reads](#t-5218-observe-exact-private-analysis-payload-reads) | evidence | open |
 | T-5219 | [Observe exact completion payload reads](#t-5219-observe-exact-completion-payload-reads) | evidence | open |
@@ -484,6 +484,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5250 | [Repair the three stateful guidance prompt-size test failures](#t-5250-repair-the-three-stateful-guidance-prompt-size-test-failures) | testing | done (2026-11-19, 86d81cae0680fd8fa97ffe6c7fd773fdc55e3a8e) |
 | T-5251 | [Bound shared subprocess stream capture before materialization](#t-5251-bound-shared-subprocess-stream-capture-before-materialization) | pipeline | open |
 | T-5252 | [Reconcile inherited documentation contract failures](#t-5252-reconcile-inherited-documentation-contract-failures) | testing | done (2026-11-19, f131b7c48ac4623e71cbe1b93cbc6ec393d6ca95) |
+| T-5253 | [Keep documentation fixtures stable across exact file selections](#t-5253-keep-documentation-fixtures-stable-across-exact-file-selections) | testing | done (2026-11-19, 358c93d7a49003342e2f81159a58762a8f954e4e) |
 
 ## Active entries
 
@@ -5157,12 +5158,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5216 — Bind dossier Markdown and HTML through publication and the gate
 
-- **State:** in-progress
+- **State:** done (2026-11-19, d945d9a698f1d107e2d3ffcb6b81d5e5a9a40e9b)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: DP-04. Newly written Markdown/HTML are absent from publication and gate file bindings.
 - **Scope:** `src/appsec_review/jobs/job_dossier_publication/job.py`, `src/appsec_review/jobs/job_final_publication_gate/attachments.py`; paired callers/tests identified by those cases.
 - **Done when:** Actual emitted sidecars are in durable producer/gate bindings and certified report listings; unbound files are never discovered as a workaround. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dossier_publication.md`; follow-up to closed T-176 (not reopened).
+  Closed private receipt `/2` binds the actual Markdown/HTML files; publication and gate verify
+  their deterministic contents, and report readers require exact gate membership and hashes.
+  Public four-key maps and every pre-existing schema remain unchanged. Legacy `/1` explicitly
+  certifies neither additional format, with no sidecar discovery. Main affected selection:
+  132 passed/9.93 s, two workers, seed 5089, no skips or slow cases; native rendering not run.
 
 ### T-5217 — Observe exact accepted build payload reads
 
@@ -5535,6 +5541,24 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   seed 5252, no skips or cases over ten seconds. The global watermark remains unchanged.
 - **Refs:** `tests/docs/test_docs_frontmatter.py`, `tests/docs/test_docs_identifiers.py`;
   repair documentation handoff at `7a0a51efbd0ff43becc51fd5fc9d1d805a673b9c`, 2026-11-19.
+
+### T-5253 — Keep documentation fixtures stable across exact file selections
+
+- **State:** done (2026-11-19, 358c93d7a49003342e2f81159a58762a8f954e4e)
+- **Area:** testing
+- **Why:** the focused receipt-documentation selection returned 138 passes and one fixture error.
+  Interleaving a root test file between two documentation files produced different nested
+  directory collectors: `doc_pages` existed but was not applicable to the later test.
+  The affected module passed alone, so that pass did not establish isolation.
+- **Scope:** move the two unchanged function-scoped documentation fixtures to the common
+  `tests/conftest.py` ancestor; keep fixture loading, assertions and dependency versions intact.
+  A subprocess regression exercises the actual interleaved file-selection shape with
+  setup only, without depending on other test bodies.
+- **Done when:** interleaved file selection resolves the shared fixtures and the affected
+  shuffled parallel suite passes. The real file-selection regression failed before repair;
+  final selection: 140 passed/22.41 s, two workers, seed 5216.
+- **Refs:** `tests/docs/test_docs_identifiers.py`,
+  `tests/conftest.py`; receipt documentation verification, 2026-11-19; T-5216.
 
 ## Legacy backlog
 

@@ -885,6 +885,13 @@
     }
   },
   "common_contracts": {
+    "dossier-format-custody": {
+      "jobs": ["job_dossier_publication", "job_final_publication_gate", "job_final_report_publication"],
+      "unit": ["tests/unit/job_dossier_publication/test_format_custody.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
     "alternate-cpg-consumption": {
       "jobs": [
         "job_inference_security_review",
