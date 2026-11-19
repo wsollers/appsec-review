@@ -22,6 +22,19 @@ not replaced by high severity or a synthetic subject. `severity_missing_or_unrat
 `subject_identity_missing` travel with the record and scan summary. Such metadata gaps keep the
 scan explicitly partial; they do not discard a reported finding or turn it into a clean scan.
 
+Native scanner documents must have the adapter's expected result containers and finding identifiers.
+Malformed bytes, error-shaped JSON/XML and malformed records are named parse gaps, not completed
+empty scans. Legitimate empty native reports remain valid. CVE-bin-tool findings use root-array
+selectors (`/0`, `/1`, …) against the original retained bytes, never the normalized `records` wrapper.
+
+The runner narrows catalog timeout and retained-stream limits to the configured job bounds without
+widening catalog limits. Native file writes receive the parser byte limit through the executor's
+existing file-size limit; report and diagnostic reads are bounded before materialization. Blint's
+native report set is byte-bounded and shape-checked before assembly. Truncated parser inputs and
+file-size-limit outcomes remain explicit coverage gaps. Input-mount placeholders under task
+`target-inputs/` and `installer-records/` are protected `artifact_scanner_io`, not finding evidence.
+Archive readers reject negative member sizes before reading or moving their cursor.
+
 <!-- generated:begin job=job_artifact_security_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

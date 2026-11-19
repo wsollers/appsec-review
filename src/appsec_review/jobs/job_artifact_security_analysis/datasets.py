@@ -27,8 +27,10 @@ DATASETS = (
                   reason="acceptance summary governs job disposition and shard inventory; findings are queried "
                          "through the artifact-security index"),
     protected("artifact_scanner_io", "analyze", "scanner_findings", "appsec-review/container-execution/1",
-              "Scanner streams, container scratch and copied feed databases.",
-              artifacts=(_A + "/artifacts/asa/**", _A + "/steps/analyze/tasks/*/containers/**"), reason=RAW),
+              "Scanner streams, container scratch, copied feed databases and read-only input mount placeholders.",
+              artifacts=(_A + "/artifacts/asa/**", _A + "/steps/analyze/tasks/*/containers/**",
+                         _A + "/steps/analyze/tasks/*/target-inputs/**",
+                         _A + "/steps/analyze/tasks/*/installer-records/**"), reason=RAW),
 )
 
 from appsec_review.runtime.contracts import (

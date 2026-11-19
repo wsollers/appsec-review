@@ -41,6 +41,43 @@ from appsec_review.storage import file_sha256
 from .support import ROOT
 
 
+@pytest.mark.parametrize("origin", ["target-intake", "installer-record"])
+def test_actual_scanner_staging_files_have_protected_dataset_custody(tmp_path, monkeypatch, origin):
+    from appsec_review.container_runtime import ContainerExecutor
+    from appsec_review.jobs.job_artifact_security_analysis.scanners import ContainerScannerRunner
+    from .support import RECORD_METADATA
+
+    attempt = tmp_path / "data/jobs/job_artifact_security_analysis/attempts/attempt_0001"
+    task = attempt / "steps/analyze/tasks/syft"
+    source = tmp_path / "input"
+    source.write_bytes(b"{}")
+    artifact = {"canonical_identity": "fixture:input", "sha256": file_sha256(source)}
+    if origin == "target-intake":
+        artifact.update(artifact_origin=origin, target_relative_path="vendor/package-lock.json")
+    else:
+        artifact["dependency_metadata"] = RECORD_METADATA
+    runner = ContainerScannerRunner(ROOT, tmp_path, task)
+    monkeypatch.setattr(runner, "identity", lambda *args: {"scanner": "fixture"})
+
+    class Captured(Exception):
+        pass
+
+    def execute(executor, request):
+        assert request.extra_mounts[0].source == source and request.extra_mounts[0].read_only
+        raise Captured
+
+    monkeypatch.setattr(ContainerExecutor, "execute", execute)
+    with pytest.raises(Captured):
+        runner("syft", source, artifact, 1, 32)
+    files = sorted(path for path in task.rglob("*") if path.is_file())
+    assert len(files) == 1 and files[0].read_bytes() == b""
+    for path in files:
+        relative = path.relative_to(tmp_path).as_posix()
+        owners = [decl for decl in DATASETS if any(fnmatch(relative, glob) for glob in decl.artifacts)]
+        assert [(decl.output_kind, decl.disposition) for decl in owners] == [
+            ("artifact_scanner_io", "protected")]
+
+
 EXPECTED_INPUTS = (
     (
         "job_artifact_indexing",

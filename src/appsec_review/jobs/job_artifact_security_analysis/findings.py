@@ -31,7 +31,7 @@ from appsec_review.provenance import common_metadata, json_selector, select_nati
 RECORD_SCHEMA = "appsec-review/artifact-security-record/2"
 # Version of the scan-result -> record splitting below. It is part of the observations shard fingerprint, not of
 # the scan checkpoint fingerprint: scanner receipts stay reusable when only this normalization changes.
-FINDING_NORMALIZER = "appsec-review/artifact-security-findings/4"
+FINDING_NORMALIZER = "appsec-review/artifact-security-findings/5"
 MESSAGE_BOUND = 512
 FIELD_BOUND = 128
 FINDING_BOUND = 5_000          # findings kept per scan; a scan above it reports the truncation as a gap
@@ -256,7 +256,7 @@ def _cve_bin_tool(observation: Mapping[str, Any]) -> Iterator[Finding]:
                        "observation": {"matches": [{
                            "artifact": {"name": name, "version": version, "purl": None},
                            "vulnerability": {"id": check, "severity": severity},
-                       }]}}, json_selector("records", index).as_dict())
+                       }]}}, json_selector(index).as_dict())
 
 
 def _packaged_security_risks(observation: Mapping[str, Any]) -> list[Finding]:

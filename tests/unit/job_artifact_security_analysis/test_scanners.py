@@ -27,6 +27,82 @@ from appsec_review.jobs.job_artifact_security_analysis.scanners import (
 from .support import RECORD_METADATA, ROOT, _installed_rows
 
 
+@pytest.mark.parametrize(("timeout", "limit"), [(1, 8), (10000, 100000000)],
+                         ids=["narrower", "catalog-ceiling"])
+def test_runner_applies_job_execution_bounds_without_widening_catalog(tmp_path, monkeypatch, timeout, limit):
+    runner = ContainerScannerRunner(ROOT, tmp_path, tmp_path / "scratch")
+    runner.parser_input_limit_bytes = 32
+    monkeypatch.setattr(runner, "identity", lambda *args: {"scanner": "tool-syft"})
+    original = runner.catalog.tool("tool-syft")
+
+    class Captured(Exception):
+        pass
+
+    def execute(executor, request):
+        effective = executor.catalog.tool(request.tool_id)
+        assert effective.timeout_seconds == min(timeout, original.timeout_seconds)
+        assert effective.output_bytes == min(limit, original.output_bytes)
+        assert request.file_size_limit_bytes == 32
+        assert runner.catalog.tool("tool-syft") == original
+        raise Captured
+
+    monkeypatch.setattr(ContainerExecutor, "execute", execute)
+    with pytest.raises(Captured):
+        runner("syft", tmp_path / "input", {"canonical_identity": "fixture:input"}, timeout, limit)
+
+
+@pytest.mark.parametrize("source", ["report", "stdout", "blint"], ids=["report", "stdout", "blint"])
+def test_runner_bounds_reads_before_materializing_scanner_output(tmp_path, monkeypatch, source):
+    runner = ContainerScannerRunner(ROOT, tmp_path, tmp_path / "scratch")
+    runner.parser_input_limit_bytes = 32
+    monkeypatch.setattr(runner, "identity", lambda *args: {"scanner": "fixture"})
+    raw = b'{"artifacts":[]}' + b" " * 1024
+
+    def execute(executor, request):
+        (tmp_path / "stdout").write_bytes(raw)
+        (tmp_path / "stderr").write_bytes(b"diagnostic" * 100)
+        (tmp_path / "receipt").write_bytes(b"{}")
+        if source != "stdout":
+            name = "app-metadata.json" if source == "blint" else "output.json"
+            (request.scratch_root / name).write_bytes(raw)
+        return SimpleNamespace(stdout_path="stdout", stderr_path="stderr", receipt_path="receipt",
+                               exit_code=0, timed_out=False, stdout_truncated=False,
+                               stderr_truncated=False)
+
+    monkeypatch.setattr(ContainerExecutor, "execute", execute)
+    original_open = Path.open
+    read_sizes = []
+
+    class BoundedReader:
+        def __init__(self, stream):
+            self.stream = stream
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.stream.close()
+
+        def read(self, size=-1):
+            read_sizes.append(size)
+            assert 0 <= size <= 33, "scanner output read was unbounded"
+            return self.stream.read(size)
+
+    def guarded_open(path, mode="r", *args, **kwargs):
+        stream = original_open(path, mode, *args, **kwargs)
+        if "r" in mode and path.name in {"stdout", "stderr", "output.json", "app-metadata.json"}:
+            return BoundedReader(stream)
+        return stream
+
+    monkeypatch.setattr(Path, "open", guarded_open)
+    result = runner("blint" if source == "blint" else "syft", tmp_path / "input",
+                    {"canonical_identity": "fixture:input"}, 1, 8)
+    assert len(result["stdout"]) <= 8 and len(result["stderr"]) <= 8
+    assert len(result["payload"]) <= 32
+    assert result["truncated"] is True and result["payload_truncated"] is True
+    assert read_sizes
+
+
 def test_bounded_parse_json_native_result_count_and_parse_spotbugs() -> None:
     assert _bounded({"a": 1}) == {"a": 1}
 
@@ -89,7 +165,7 @@ def test_bounded_parse_json_native_result_count_and_parse_spotbugs() -> None:
     assert sb["finding_count"] == 2 and sb["_parser_truncated"] is False
     assert sb["findings"][0]["class"] == "pkg.A" and sb["findings"][1]["class"] is None
 
-    sb_many = parse_spotbugs(b"<BugCollection>" + (b"<BugInstance/>" * 20_001) + b"</BugCollection>")
+    sb_many = parse_spotbugs(b"<BugCollection>" + (b'<BugInstance type="XSS"/>' * 20_001) + b"</BugCollection>")
     assert sb_many["finding_count"] == 20_000
     assert sb_many["finding_count_reported"] == 20_001
     assert sb_many["_parser_truncated"] is True

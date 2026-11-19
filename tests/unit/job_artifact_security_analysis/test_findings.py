@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 import pytest
 
 from appsec_review.interchange import ArtifactReference, NativeResultReference, ResultSelector
@@ -22,6 +25,117 @@ from appsec_review.jobs.job_artifact_security_analysis.findings import (
     summary_category,
 )
 from appsec_review.retrieval.observations import RECORD_KIND_FINDING, RECORD_KIND_SUMMARY
+
+
+def _native_scan(tmp_path, capability, payload):
+    from appsec_review.jobs.job_artifact_security_analysis import job
+    from appsec_review.provenance import validate_observation_provenance
+    from appsec_review.storage import atomic_json, file_sha256
+    from appsec_review.storage.shared import SharedArtifacts, publication_scope_for_owner
+    from .test_job_graph import _seed_artifact, _unit_context
+
+    ctx, _ = _unit_context(tmp_path / "run", unit_id=f"analyze.{capability}")
+    artifact = _seed_artifact(ctx.job.run_root)
+    receipt = ctx.job.attempt_root / "artifacts" / "asa" / "execution.json"
+    atomic_json(receipt, {"schema": "appsec-review/container-execution/1", "exit_code": 0})
+
+    def execute(*args):
+        return {"stdout": b"", "stderr": b"", "exit_code": 0, "payload": payload,
+                "execution_receipt": {"path": receipt.relative_to(ctx.job.run_root).as_posix(),
+                                      "sha256": file_sha256(receipt)}}
+
+    with publication_scope_for_owner(SharedArtifacts.for_job(ctx.job)):
+        scan = job._scan_one(ctx, artifact, capability, execute)
+        summary, findings = scan_records(scan)
+        validate_observation_provenance(
+            ctx.job.run_root, [record.payload for record in (summary, *findings)],
+            parser_identity=job.PARSER_IDENTITY)
+    retained = ctx.job.run_root / scan["native_output"]["artifact"]["path"]
+    assert retained.read_bytes() == payload
+    assert scan["native_output"]["artifact"]["sha256"] == hashlib.sha256(payload).hexdigest()
+    return scan, summary, findings
+
+
+def test_native_cve_array_findings_resolve_original_bytes(tmp_path) -> None:
+    payload = b'[\n {"cve_number":"CVE-2018-25032","product":"zlib","version":"1.2.11","severity":"HIGH"}\n]'
+    scan, summary, findings = _native_scan(tmp_path, "cve_bin_tool", payload)
+    assert scan["gaps"] == [] and summary.payload["findings_complete"] is True
+    assert len(findings) == 1
+    reference = findings[0].payload["common"]["evidence_refs"][0]
+    assert reference["selector"] == {"kind": "json_pointer", "value": "/0"}
+    assert json.loads(payload)[0]["cve_number"] == findings[0].payload["rule_id"]
+
+
+@pytest.mark.parametrize(("capability", "payload", "selector"), [
+    ("grype", b'{"matches":[{"vulnerability":{"id":"CVE-2018-25032","severity":"High"},'
+              b'"artifact":{"name":"zlib","version":"1.2.11"}}]}', "/matches/0"),
+    ("osv", b'{"results":[{"packages":[{"package":{"name":"zlib","version":"1.2.11"},'
+            b'"vulnerabilities":[{"id":"CVE-2018-25032","database_specific":{"severity":"HIGH"}}]}]}]}',
+     "/results/0/packages/0/vulnerabilities/0"),
+    ("spotbugs", b'<BugCollection><BugInstance type="SQL_INJECTION" priority="1">'
+                 b'<SourceLine classname="pkg.A"/></BugInstance></BugCollection>', None),
+], ids=["grype", "osv", "spotbugs"])
+def test_native_positive_reports_keep_resolving_finding_selectors(tmp_path, capability, payload, selector):
+    scan, summary, findings = _native_scan(tmp_path, capability, payload)
+    assert scan["gaps"] == [] and summary.payload["findings_complete"] is True
+    assert len(findings) == 1
+    actual = findings[0].payload["common"]["evidence_refs"][0]["selector"]
+    if selector is not None:
+        assert actual == {"kind": "json_pointer", "value": selector}
+    else:
+        assert actual == {"kind": "xml_ordinal", "value": {"element": "BugInstance", "ordinal": 0}}
+
+
+@pytest.mark.parametrize(("capability", "payload"), [
+    ("cve_bin_tool", b"[]"),
+    ("grype", b'{"matches":[], "descriptor":{"name":"grype"}}'),
+    ("syft", b'{"artifacts":[], "schema":{"version":"16.0.16"}}'),
+    ("osv", b'{"results":[]}'),
+    ("spotbugs", b'<BugCollection><Errors errors="0" missingClasses="0"/></BugCollection>'),
+    ("blint", b'{"schema":"appsec-review/blint-report/1","findings":[],"reviews":[],'
+              b'"analyzed":[{"report":"app-metadata.json","file_path":"/target/app"}]}'),
+], ids=["cve", "grype", "syft", "osv", "spotbugs", "blint"])
+def test_native_empty_reports_remain_completed(tmp_path, capability, payload) -> None:
+    scan, summary, findings = _native_scan(tmp_path, capability, payload)
+    assert scan["gaps"] == [] and findings == ()
+    assert summary.payload["scan_outcome"] == "completed"
+    assert summary.payload["findings_complete"] is (None if capability == "syft" else True)
+
+
+@pytest.mark.parametrize(("capability", "payload"), [
+    ("grype", b'{"matches":"wrong-type","error":"database failed"}'),
+    ("grype", b'{"error":"database failed"}'),
+    ("grype", b'{"matches":[{"artifact":{"name":"zlib"},"vulnerability":{}}]}'),
+    ("grype", b'{"matches":[], "error":"database failed"}'),
+    ("syft", b'{"artifacts":{}}'),
+    ("syft", b'{"artifacts":[null]}'),
+    ("osv", b'{"results":[{"packages":"invalid"}]}'),
+    ("osv", b'{"results":[{"packages":[{"vulnerabilities":[{}]}]}]}'),
+    ("cve_bin_tool", b'{"error":"database failed"}'),
+    ("cve_bin_tool", b'[{"error":"database failed"}]'),
+    ("blint", b'{"findings":"invalid","analyzed":[{"report":"app-metadata.json"}]}'),
+    ("spotbugs", b'<Error>analysis failed</Error>'),
+    ("spotbugs", b'<BugCollection><Errors errors="1"><Error/></Errors></BugCollection>'),
+    ("spotbugs", b'<BugCollection><BugInstance/></BugCollection>'),
+], ids=["grype-shape", "grype-error", "grype-record", "grype-empty-error",
+        "syft-shape", "syft-record", "osv-shape", "osv-record", "cve-root",
+        "cve-record", "blint-shape", "xml-root", "xml-errors", "xml-record"])
+def test_parseable_invalid_reports_are_not_complete_empty_results(tmp_path, capability, payload) -> None:
+    scan, summary, findings = _native_scan(tmp_path, capability, payload)
+    assert scan["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any("could not be parsed" in gap for gap in scan["gaps"])
+    assert findings == ()
+    assert summary.payload["scan_outcome"] == "not_completed"
+    assert summary.payload["findings_complete"] is not True
+
+
+@pytest.mark.parametrize(("capability", "payload"), [
+    ("grype", b'{"matches":['), ("spotbugs", b"<BugCollection>"),
+], ids=["json", "xml"])
+def test_malformed_report_bytes_are_retained_as_parse_gaps(tmp_path, capability, payload) -> None:
+    scan, summary, findings = _native_scan(tmp_path, capability, payload)
+    assert any("could not be parsed" in gap for gap in scan["gaps"])
+    assert summary.payload["scan_outcome"] == "not_completed" and findings == ()
 
 
 def test_primitive_helpers_outcome_and_summary_category() -> None:

@@ -136,6 +136,124 @@ def _seed_artifact(
     return {**base, **scope_fields(base)}
 
 
+@pytest.mark.parametrize("mode", ["native-limit", "stdout-limit", "file-limit", "complete"])
+def test_configured_scan_bounds_flow_through_real_runner_and_provenance(tmp_path, monkeypatch, mode):
+    from appsec_review.container_runtime import ContainerExecutor
+    from appsec_review.jobs.job_artifact_security_analysis.findings import scan_records
+    from appsec_review.provenance import validate_observation_provenance
+
+    ctx, _ = _unit_context(tmp_path / "run", settings_override={
+        "timeout_seconds": 1, "stream_limit_bytes": 8, "parser_input_limit_bytes": 32})
+    artifact = _seed_artifact(ctx.job.run_root)
+    ctx.output("load.accepted_artifacts")["artifacts"] = [artifact]
+    monkeypatch.setattr(ContainerExecutor, "resolve_image", lambda *args: "sha256:" + "1" * 64)
+    payload = b'{"artifacts":[]}' + (b" " * 64 if mode == "native-limit" else b"")
+    requests = []
+
+    def execute(executor, request):
+        requests.append(request)
+        tool = executor.catalog.tool(request.tool_id)
+        assert tool.timeout_seconds == 1 and tool.output_bytes == 8
+        assert request.file_size_limit_bytes == 32
+        scratch = request.scratch_root
+        stdout = payload if mode == "stdout-limit" else b""
+        (scratch / "stdout.bin").write_bytes(stdout)
+        (scratch / "stderr.bin").write_bytes(b"")
+        (scratch / "execution.json").write_bytes(b'{"exit_code":0}')
+        if mode != "stdout-limit":
+            (scratch / "output.json").write_bytes(payload)
+        relative = scratch.relative_to(ctx.job.run_root).as_posix()
+        return SimpleNamespace(
+            stdout_path=relative + "/stdout.bin", stderr_path=relative + "/stderr.bin",
+            receipt_path=relative + "/execution.json", stdout_truncated=False, stderr_truncated=False,
+            exit_code=0, timed_out=False, file_size_limit_reached=mode == "file-limit")
+
+    monkeypatch.setattr(ContainerExecutor, "execute", execute)
+    handler = next(unit.handler for unit in build_job().units if unit.unit_id == "analyze.syft")
+    with publication_scope_for_owner(SharedArtifacts.for_job(ctx.job)):
+        result = handler(ctx)
+        [scan] = result["observations"]
+        summary, findings = scan_records(scan)
+        validate_observation_provenance(ctx.job.run_root, [summary.payload],
+                                        parser_identity=security.PARSER_IDENTITY)
+    assert len(requests) == 1 and findings == ()
+    reference = scan["native_output"]
+    retained = ctx.job.run_root / reference["artifact"]["path"]
+    expected = payload[:8] if mode == "stdout-limit" else payload[:32]
+    assert retained.read_bytes() == expected
+    assert reference["artifact"]["sha256"] == file_sha256(retained)
+    assert reference["complete"] is (mode == "complete")
+    if mode == "complete":
+        assert scan["gaps"] == [] and summary.payload["scan_outcome"] == "completed"
+    else:
+        assert scan["terminal_status"] == "COMPLETED_WITH_GAPS"
+        assert any("native parser input was truncated" in gap for gap in scan["gaps"])
+        assert summary.payload["scan_outcome"] == "not_completed"
+        if mode == "file-limit":
+            assert any("file size limit was reached" in gap for gap in scan["gaps"])
+
+
+@pytest.mark.parametrize("mode", ["finding", "empty", "error", "bad-record", "malformed"])
+def test_blint_native_directory_contract_is_validated_before_assembly(tmp_path, monkeypatch, mode):
+    from fnmatch import fnmatch
+    from appsec_review.container_runtime import ContainerExecutor
+    from appsec_review.jobs.job_artifact_security_analysis.findings import scan_records
+    from appsec_review.provenance import validate_observation_provenance
+
+    ctx, _ = _unit_context(tmp_path / "run", unit_id="analyze.blint")
+    artifact = _seed_artifact(ctx.job.run_root)
+    ctx.output("load.accepted_artifacts")["artifacts"] = [artifact]
+    monkeypatch.setattr(ContainerExecutor, "resolve_image", lambda *args: "sha256:" + "1" * 64)
+    reports = {
+        "finding": b'{"scan_id":"fixture","findings":[{"id":"CHECK_NX","severity":"HIGH","filename":"/target/app"}]}',
+        "error": b'{"error":"analysis failed"}',
+        "bad-record": b'{"findings":[null]}',
+        "malformed": b'{"findings":[',
+    }
+
+    def execute(executor, request):
+        scratch = request.scratch_root
+        (scratch / "app-metadata.json").write_bytes(b'{"file_path":"/target/app","has_nx":false}')
+        if mode != "empty":
+            (scratch / "findings.json").write_bytes(reports[mode])
+        (scratch / "stdout.bin").write_bytes(b"")
+        (scratch / "stderr.bin").write_bytes(b"")
+        (scratch / "execution.json").write_bytes(b'{"exit_code":0}')
+        relative = scratch.relative_to(ctx.job.run_root).as_posix()
+        return SimpleNamespace(
+            stdout_path=relative + "/stdout.bin", stderr_path=relative + "/stderr.bin",
+            receipt_path=relative + "/execution.json", stdout_truncated=False, stderr_truncated=False,
+            exit_code=0, timed_out=False)
+
+    monkeypatch.setattr(ContainerExecutor, "execute", execute)
+    handler = next(unit.handler for unit in build_job().units if unit.unit_id == "analyze.blint")
+    with publication_scope_for_owner(SharedArtifacts.for_job(ctx.job)):
+        [scan] = handler(ctx)["observations"]
+        summary, findings = scan_records(scan)
+        validate_observation_provenance(ctx.job.run_root, [r.payload for r in (summary, *findings)],
+                                        parser_identity=security.PARSER_IDENTITY)
+    if mode in {"finding", "empty"}:
+        assert scan["gaps"] == [] and summary.payload["findings_complete"] is True
+        assert len(findings) == (1 if mode == "finding" else 0)
+        if findings:
+            ref = findings[0].payload["common"]["evidence_refs"][0]
+            assert ref["selector"] == {"kind": "json_pointer", "value": "/findings/0"}
+            native = ctx.job.run_root / ref["artifact"]["path"]
+            assert native.read_bytes() == reports["finding"]
+            assert file_sha256(native) == ref["artifact"]["sha256"]
+    else:
+        assert scan["terminal_status"] == "COMPLETED_WITH_GAPS"
+        assert any("parse or execution failure" in gap for gap in scan["gaps"])
+        assert summary.payload["findings_complete"] is False and not findings
+        [raw] = ctx.unit_root.glob("containers/*/findings.json")
+        assert raw.read_bytes() == reports[mode]
+    for path in sorted(ctx.unit_root.rglob("*")):
+        if path.is_file():
+            relative = path.relative_to(ctx.job.run_root).as_posix()
+            owners = [d for d in DATASETS if any(fnmatch(relative, glob) for glob in d.artifacts)]
+            assert [(d.output_kind, d.disposition) for d in owners] == [("artifact_scanner_io", "protected")]
+
+
 def test_safe_file_and_accepted_artifacts_enforce_lineage_custody_and_target_intake(
     tmp_path: Path, monkeypatch
 ) -> None:

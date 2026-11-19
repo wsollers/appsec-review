@@ -157,6 +157,9 @@ def _ar_members(path: Path, limits: ArchiveLimits, *, thin: bool) -> tuple[list[
             except ValueError:
                 gaps.append("ar archive member size is malformed")
                 break
+            if size < 0:
+                gaps.append("ar archive member size is negative")
+                break
             data_offset = offset + _AR_HEADER
             name = raw_name
             if raw_name == "//":
@@ -170,6 +173,9 @@ def _ar_members(path: Path, limits: ArchiveLimits, *, thin: bool) -> tuple[list[
                     length = int(raw_name[3:])
                 except ValueError:
                     gaps.append("ar archive BSD member name is malformed")
+                    break
+                if length < 0 or length > size:
+                    gaps.append("ar archive BSD member name length is invalid")
                     break
                 name = stream.read(min(length, 4096)).split(b"\0", 1)[0].decode("utf-8", "replace")
             elif raw_name.startswith("/") and raw_name[1:].isdigit():

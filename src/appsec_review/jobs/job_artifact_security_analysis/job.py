@@ -35,14 +35,14 @@ from .findings import (FINDING_NORMALIZER, RECORD_KIND_FINDING, RECORD_SCHEMA, R
                        scan_records)
 from .formats import ArchiveLimits, builtin_observation, classify
 from .scanners import (ADAPTERS, INSTALLER_RECORD_PRESENTATION, ContainerScannerRunner, native_result_count,
-                       scanner_input)
+                       read_bounded, scanner_input)
 from appsec_review.config.evidence_collection import memory_limit
 from appsec_review.jobs.job_artifact_security_analysis.datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/artifact-security-analysis/1"
 OBSERVATION_SCHEMA = "appsec-review/artifact-security-observation/1"
-PARSER_IDENTITY = "appsec-review/artifact-security-parsers/3+" + POLICY_IDENTITY
+PARSER_IDENTITY = "appsec-review/artifact-security-parsers/4+" + POLICY_IDENTITY
 NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/2"
 # The observations shard is a function of the scan results (parser and normalizer identities, which also key the
 # scan checkpoints) and of the splitting of a scan into one summary and per-finding records (``findings.py``).
@@ -435,6 +435,10 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
             receipt_value = raw.get("execution_receipt")
             execution_receipt = receipt_value if isinstance(receipt_value, Mapping) else None
             parser_complete = not bool(raw.get("payload_truncated", raw.get("truncated", False)))
+            if not parser_complete:
+                gaps.append(f"{capability} native parser input was truncated at its byte bound")
+            if raw.get("file_size_limit_reached"):
+                gaps.append(f"{capability} scanner report file size limit was reached")
             if parser_payload is None and not isinstance(raw.get("observation"), Mapping):
                 parser_payload = stdout
             if parser_payload is not None and len(parser_payload) > parser_limit:
@@ -524,13 +528,14 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
             raise FrameworkIntegrityError("unexpected native scanner report source")
         from appsec_review.storage.shared import safe_path
         native_path = safe_path(unit.job.run_root, relative)
-        if native_path.stat().st_size > parser_limit:
+        native_payload, native_truncated = read_bounded(native_path, parser_limit)
+        if native_truncated:
             gaps.append("blint native findings report exceeded its configured byte bound")
             observation = {}
             continue
         native_reports[report] = retain_native_output(
             unit.job.run_root, native_path, parser_identity=PARSER_IDENTITY, complete=True,
-            native_result_count=len(json.loads(native_path.read_bytes()).get("findings", [])),
+            native_result_count=len(json.loads(native_payload).get("findings", [])),
             execution_reference=execution_receipt, events=unit.job.events, unit_id=unit.unit_id).as_dict()
     safety.check_running()
     result = {"schema": OBSERVATION_SCHEMA, "fingerprint": fingerprint,
@@ -684,7 +689,8 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                 if effective_runner is None and capability in ADAPTERS:
                     effective_runner = ContainerScannerRunner(
                         unit.job.repository_root, unit.job.run_root, unit.unit_root,
-                        osv_memory=str(unit.job.config.settings["osv_memory"]))
+                        osv_memory=str(unit.job.config.settings["osv_memory"]),
+                        parser_input_limit_bytes=int(unit.job.config.settings["parser_input_limit_bytes"]))
                 result = _scan_one(unit, artifact, capability, effective_runner)
                 record_gaps: list[str] = []
                 if scanner_input(artifact) is not None and covering.get(_record_key(artifact)) is artifact:

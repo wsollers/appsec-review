@@ -5,6 +5,8 @@ from __future__ import annotations
 import io
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import tarfile
 import zipfile
 
@@ -55,6 +57,53 @@ def _ar_entry(name: str, data: bytes, *, size_text: str | None = None, end: byte
     assert len(header) == 60
     pad = b"\n" if len(data) % 2 else b""
     return header + data + pad
+
+
+@pytest.mark.parametrize(("magic", "name", "size"), [
+    (b"!<arch>\n", "/", "-60"),
+    (b"!<arch>\n", "//", "-1"),
+    (b"!<arch>\n", "normal.o/", "-60"),
+    (b"!<thin>\n", "normal.o/", "-1"),
+], ids=["symbol-loop", "name-table-read", "member-loop", "thin"])
+def test_negative_ar_sizes_reject_without_rewinding_or_unbounded_reads(tmp_path, magic, name, size):
+    path = tmp_path / "negative.a"
+    path.write_bytes(magic + _ar_entry(name, b"", size_text=size))
+    # A separate, deadline-bounded pure parser probe also catches the pre-fix infinite cursor loop.
+    code = (
+        "import json,sys; from pathlib import Path; "
+        "from appsec_review.jobs.job_artifact_security_analysis.formats import inspect_archive; "
+        "print(json.dumps(inspect_archive(Path(sys.argv[1]))))"
+    )
+    try:
+        result = subprocess.run([sys.executable, "-c", code, str(path)], timeout=2,
+                                capture_output=True, text=True, check=True)
+    except subprocess.TimeoutExpired:
+        pytest.fail("negative ar size failed to make bounded progress")
+    import json
+    parsed = json.loads(result.stdout)
+    assert parsed["safe"] is False
+    assert any("size" in gap and "negative" in gap for gap in parsed["gaps"])
+    assert parsed["members"] == [] and parsed["expanded_bytes"] == 0
+
+
+def test_zero_size_and_normal_ar_members_advance(tmp_path):
+    path = tmp_path / "valid.a"
+    path.write_bytes(b"!<arch>\n" + _ar_entry("/", b"") + _ar_entry("empty.o/", b"")
+                     + _ar_entry("odd.o/", b"abc") + _ar_entry("normal.o/", b"abcd"))
+    parsed = inspect_archive(path)
+    assert parsed["safe"] is True and parsed["gaps"] == []
+    assert [(row["path"], row["size_bytes"]) for row in parsed["members"]] == [
+        ("empty.o", 0), ("odd.o", 3), ("normal.o", 4)]
+    assert parsed["expanded_bytes"] == 7
+
+
+@pytest.mark.parametrize("length", ["-1", "5"])
+def test_ar_bsd_name_length_cannot_trigger_unbounded_or_outside_member_reads(tmp_path, length):
+    path = tmp_path / "bsd.a"
+    path.write_bytes(b"!<arch>\n" + _ar_entry("#1/" + length, b"abc"))
+    parsed = inspect_archive(path)
+    assert parsed["safe"] is False and parsed["members"] == []
+    assert parsed["gaps"] == ["ar archive BSD member name length is invalid"]
 
 
 @pytest.mark.parametrize(

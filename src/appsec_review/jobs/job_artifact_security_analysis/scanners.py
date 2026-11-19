@@ -6,9 +6,10 @@ target artifacts are mounted read-only and are never invoked as programs.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from copy import copy
+from dataclasses import dataclass, replace
 import hashlib
-import inspect
+from itertools import islice
 import json
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
@@ -72,12 +73,66 @@ CVE_BIN_TOOL_DATABASE_ENVIRONMENT = "CVE_BIN_TOOL_DATABASE"
 FEED_NAMES = {"grype": "grype", "osv": "osv", "cve_bin_tool": "cve-bin-tool"}
 
 
-def parse_json(payload: bytes) -> Mapping[str, Any]:
+PARSER_BYTE_LIMIT = 64 * 1024 * 1024
+
+
+def _report_object(value: Any, location: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{location} must be an object")
+    if value.get("error") or value.get("errors"):
+        raise ValueError(f"{location} reports an error")
+    return value
+
+
+def _report_list(value: Any, location: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise ValueError(f"{location} must be an array")
+    return value
+
+
+def _report_id(value: Mapping[str, Any], key: str, location: str) -> None:
+    if not isinstance(value.get(key), str) or not value[key].strip():
+        raise ValueError(f"{location} requires a nonempty {key}")
+
+
+def _validate_json_report(capability: str, raw: Any) -> None:
+    """Validate native containers before normalization can hide incompatible or omitted records."""
+    if capability == "cve_bin_tool":
+        for item in _report_list(raw, "cve-bin-tool report"):
+            _report_id(_report_object(item, "cve-bin-tool record"), "cve_number", "cve-bin-tool record")
+        return
+    root = _report_object(raw, f"{capability} report")
+    key = {"blint": "findings", "syft": "artifacts", "grype": "matches", "osv": "results"}[capability]
+    for item in _report_list(root.get(key), f"{capability}.{key}"):
+        item = _report_object(item, f"{capability}.{key} record")
+        if capability == "blint":
+            _report_id(item, "id", "blint finding")
+        elif capability == "syft":
+            _report_id(item, "name", "syft artifact")
+        elif capability == "grype":
+            _report_id(_report_object(item.get("vulnerability"), "grype vulnerability"), "id", "grype vulnerability")
+            if "artifact" in item:
+                _report_object(item["artifact"], "grype artifact")
+        elif capability == "osv":
+            for package in _report_list(item.get("packages"), "osv packages"):
+                package = _report_object(package, "osv package entry")
+                if "package" in package:
+                    _report_object(package["package"], "osv package")
+                for vulnerability in _report_list(package.get("vulnerabilities"), "osv vulnerabilities"):
+                    _report_id(_report_object(vulnerability, "osv vulnerability"), "id", "osv vulnerability")
+    if capability == "blint":
+        for item in _report_list(root.get("analyzed"), "blint analyzed"):
+            _report_id(_report_object(item, "blint analysis"), "report", "blint analysis")
+
+
+def parse_json(payload: bytes, *, capability: str | None = None) -> Mapping[str, Any]:
     if len(payload) > 64 * 1024 * 1024:
         raise ValueError("scanner JSON exceeds parser byte bound")
     if not payload.strip():
         raise ValueError("scanner JSON output is empty")
     raw = json.loads(payload.decode("utf-8"))
+    if capability is not None:
+        _validate_json_report(capability, raw)
     truncations: set[str] = set()
     value = _bounded(raw, truncations=truncations)
     return {**(value if isinstance(value, Mapping) else {"records": value}),
@@ -105,8 +160,18 @@ def parse_spotbugs(payload: bytes) -> Mapping[str, Any]:
     if len(payload) > 64 * 1024 * 1024:
         raise ValueError("SpotBugs XML exceeds parser byte bound")
     root = ET.fromstring(payload.decode("utf-8"))
+    if root.tag.rsplit("}", 1)[-1] != "BugCollection":
+        raise ValueError("SpotBugs report root must be BugCollection")
+    for element in root.iter():
+        tag = element.tag.rsplit("}", 1)[-1]
+        if tag in {"Error", "MissingClass"} or (
+                tag == "Errors" and any(element.get(key, "0") != "0"
+                                       for key in ("errors", "missingClasses"))):
+            raise ValueError("SpotBugs report contains analysis errors")
     findings = []
     bugs = [element for element in root.iter() if element.tag.rsplit("}", 1)[-1] == "BugInstance"]
+    if any(not (bug.get("type") or "").strip() for bug in bugs):
+        raise ValueError("SpotBugs BugInstance requires a nonempty type")
     ordinals: dict[str, int] = {}
     for bug in bugs[:20_000]:
         ordinal = ordinals.get(bug.tag, 0)
@@ -161,7 +226,8 @@ class ScannerAdapter:
         raise ValueError(f"unknown scanner capability: {self.capability}")
 
     def parse(self, payload: bytes) -> Mapping[str, Any]:
-        return parse_spotbugs(payload) if self.capability == "spotbugs" else parse_json(payload)
+        return (parse_spotbugs(payload) if self.capability == "spotbugs"
+                else parse_json(payload, capability=self.capability))
 
 
 ADAPTERS = {item.capability: item for item in (
@@ -204,15 +270,49 @@ def _execution_token(capability: str, artifact: Mapping[str, Any]) -> str:
     return hashlib.sha256(material.encode()).hexdigest()[:16]
 
 
+def read_bounded(path: Path, limit: int) -> tuple[bytes, bool]:
+    with path.open("rb") as stream:
+        payload = stream.read(limit + 1)
+    return payload[:limit], len(payload) > limit
+
+
+def _prepare_blint_report(scratch: Path, output: Path, limit: int) -> tuple[bytes, bool]:
+    # The scanner's write window is closed. Bound and validate the native files before the shared
+    # assembler can drop malformed entries or eagerly read files using its larger default limit.
+    paths = [scratch / name for name in ("findings.json", "reviews.json")
+             if (scratch / name).is_file()]
+    metadata = list(islice(scratch.glob("*" + blint_report.METADATA_SUFFIX), blint_report.MAX_ITEMS + 1))
+    if len(metadata) > blint_report.MAX_ITEMS:
+        return b"", True
+    total = 0
+    for path in [*paths, *sorted(metadata)]:
+        payload, truncated = read_bounded(path, limit - total)
+        total += len(payload)
+        if truncated:
+            return payload, True
+        document = _report_object(json.loads(payload), f"blint {path.name}")
+        if path.name in {"findings.json", "reviews.json"}:
+            key = path.stem
+            for item in _report_list(document.get(key), f"blint {key}"):
+                _report_id(_report_object(item, f"blint {key} record"), "id", f"blint {key} record")
+        elif not any(key in document for key in blint_report.METADATA_FIELDS):
+            raise ValueError("blint metadata report lacks binary analysis fields")
+    blint_report.write(scratch, output)
+    return read_bounded(output, limit)
+
+
 class ContainerScannerRunner:
     """Run pinned scanners with one produced artifact mounted read-only as data."""
 
     def __init__(self, repository_root: Path, run_root: Path, scratch_root: Path, *,
-                 osv_memory: str | None = None):
+                 osv_memory: str | None = None, parser_input_limit_bytes: int = PARSER_BYTE_LIMIT):
         self.repository_root = repository_root
         self.osv_memory = osv_memory
         self.run_root = run_root
         self.scratch_root = scratch_root
+        if type(parser_input_limit_bytes) is not int or parser_input_limit_bytes < 1:
+            raise ValueError("scanner parser byte limit must be positive")
+        self.parser_input_limit_bytes = min(parser_input_limit_bytes, PARSER_BYTE_LIMIT)
         self.catalog = load_catalog(repository_root)
         self.executor = ContainerExecutor(self.catalog, run_root)
         self._identities: dict[str, Mapping[str, Any]] = {}
@@ -315,24 +415,40 @@ class ContainerScannerRunner:
             environment[OSV_DB_ENVIRONMENT] = OSV_DATABASE_ROOT
             memory = self.osv_memory
         tool = self.catalog.tool(adapter.tool_id)
-        result = self.executor.execute(ExecutionRequest(adapter.tool_id,
+        tool = replace(tool, timeout_seconds=min(timeout, tool.timeout_seconds),
+                       output_bytes=min(limit, tool.output_bytes))
+        # Invocation-local policy: concurrent scans never mutate the shared catalog or widen it.
+        executor = copy(self.executor)
+        executor.catalog = replace(self.catalog, tools={**self.catalog.tools, adapter.tool_id: tool})
+        parser_limit = min(self.parser_input_limit_bytes, PARSER_BYTE_LIMIT)
+        result = executor.execute(ExecutionRequest(adapter.tool_id,
             adapter.argv(tool.executable, input_name), target_root, scratch,
             extra_mounts=tuple(mounts), environment=environment, memory=memory,
+            file_size_limit_bytes=parser_limit,
             accepted_exit_codes=frozenset(adapter.accepted_exit_codes),
             expected_nonzero=lambda code, stdout, stderr: (
                 capability == "osv" and osv_reported_no_package_sources(code, stdout + b"\n" + stderr))))
-        stdout = (self.run_root / result.stdout_path).read_bytes()
-        stderr = (self.run_root / result.stderr_path).read_bytes()
+        stdout, stdout_truncated = read_bounded(self.run_root / result.stdout_path, tool.output_bytes)
+        stderr, stderr_truncated = read_bounded(self.run_root / result.stderr_path, tool.output_bytes)
+        stdout_truncated |= result.stdout_truncated
+        stderr_truncated |= result.stderr_truncated
         output = scratch / PurePosixPath(adapter.output_file).name
         if (capability == "blint" and not result.timed_out
                 and result.exit_code in adapter.accepted_exit_codes):
-            blint_report.write(scratch, output)
-        payload = output.read_bytes() if output.is_file() else stdout
+            payload, payload_truncated = _prepare_blint_report(scratch, output, parser_limit)
+        elif output.is_file():
+            payload, payload_truncated = read_bounded(output, parser_limit)
+        else:
+            payload = stdout[:parser_limit]
+            payload_truncated = stdout_truncated or len(stdout) > parser_limit
+        file_limit_reached = bool(getattr(result, "file_size_limit_reached", False))
+        payload_truncated |= file_limit_reached
         return {"stdout": stdout, "stderr": stderr, "exit_code": result.exit_code,
-            "timed_out": result.timed_out, "truncated": result.stdout_truncated or result.stderr_truncated,
+            "timed_out": result.timed_out, "truncated": stdout_truncated or stderr_truncated,
             "payload": payload, "tool_identity": identity,
-            "payload_truncated": result.stdout_truncated if not output.is_file() else False,
+            "payload_truncated": payload_truncated, "file_size_limit_reached": file_limit_reached,
             "native_reports": ({"findings.json": (scratch / "findings.json").relative_to(self.run_root).as_posix()}
-                               if capability == "blint" and (scratch / "findings.json").is_file() else {}),
+                               if capability == "blint" and not payload_truncated
+                               and (scratch / "findings.json").is_file() else {}),
             "execution_receipt": {"path": result.receipt_path,
                                   "sha256": file_sha256(self.run_root / result.receipt_path)}}

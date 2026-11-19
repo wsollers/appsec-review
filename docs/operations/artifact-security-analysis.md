@@ -47,6 +47,9 @@ CURL,EPSS,GAD,OSV,PURL2CPE,REDHAT,RSD --disable-version-check --disable-validati
 snapshot's rows all carry that source and the offline flags already prevent any fetch. Exit 1 means
 a CVE matched and is accepted.
 
+The native JSON array is retained byte-for-byte; findings select `/0`, `/1`, and so on in that
+array. The in-memory `records` wrapper is not a native document and never appears in those selectors.
+
 Each JSON record becomes one `vulnerability_matching` finding (`tool_id: tool-cve-bin-tool`) with
 `package_name`, `package_version`, `vendor`, `checker` (cve-bin-tool names its checker after the
 product it matched), `advisory_id`, the `matched_paths` the version string was found in, the
@@ -104,11 +107,16 @@ Classification reads bounded member names: a jar holding only
 neither reaches SpotBugs (which would exit 1 with "No files to analyze could be opened"). Unix `ar`
 archives (`.a` static libraries, Rust `.rlib`) are `ar-archive`: their members are listed from GNU,
 BSD, and thin headers without extraction instead of being reported as corrupt.
+Negative member sizes and BSD name lengths outside the declared member are rejected before reads
+or cursor advancement; valid zero-byte members still advance by their header.
 
 BLint 3.4.0 has no JSON stdout: with `--reports /scratch` it writes `findings.json` (only when there
 are findings), `reviews.json`, and one `<name>-metadata.json` per binary it analyzed.
 `appsec_review.blint_report` assembles those into `blint-report.json`; a supported binary with no
 metadata report is a gap ("blint produced no per-binary analysis report"), never a clean result.
+Before assembly, this job bounds the combined bytes of the native JSON reports and validates their
+containers and record identifiers. Error-shaped reports and malformed records cannot disappear
+into an apparently empty assembled report.
 
 osv-scanner 1.9.2 is invoked as `scan --experimental-offline --lockfile /target/<name>`: it selects
 an extractor by file name and has no extractor for jars, wheels, Go/Rust binaries, objects, or
@@ -123,6 +131,29 @@ databases" report. Its exit-128 "No package sources found" report (an empty lock
 `SKIPPED_NA`; ordinary exits 0 and 1 are accepted by the adapter (1 can report matches).
 Other exits are gaps carrying the last bounded stderr line, as are
 timeouts and truncation.
+
+## Native report contracts and bounds
+
+The adapters require native CVE-bin-tool arrays, Grype `matches`, Syft `artifacts`, OSV
+`results`/`packages`/`vulnerabilities`, and a SpotBugs `BugCollection`. Finding records require their
+native check/advisory identifier. Wrong roots, wrong collection types, malformed records and
+reported analysis errors produce named parse gaps even when the process exits successfully.
+Invalid JSON/XML bytes are a distinct parse failure. Empty collections are valid negative results
+only in an otherwise valid report; severity and subject metadata retain their separate gap policy.
+
+For each invocation, timeout and retained diagnostic limits are the smaller of the central job
+settings and the catalog limits. The original catalog, image identities and isolation policy do not
+change. `parser_input_limit_bytes` (also capped by the 64 MiB adapter ceiling) supplies the existing
+executor `file_size_limit_bytes` hook and bounds report reads before materialization. Diagnostic
+reads use the effective stream limit. Blint's stopped native report set is checked against the
+parser budget before its shared assembler reads it. Oversized/truncated input retains a bounded
+prefix with incomplete native provenance and a named coverage gap, including an explicit gap for
+an execution file-size-limit result. These are not completed zero-finding scans.
+
+The protected `artifact_scanner_io` dataset owns scanner scratch, receipts, retained parser bytes
+and diagnostics, plus the empty mount placeholders under each task's `target-inputs/<token>/` and
+`installer-records/<token>/`. Original inputs remain owned by their accepted upstream datasets;
+staging does not copy their payloads or create new vulnerability evidence.
 
 ## Installed npm packages: one scan per installer record
 
