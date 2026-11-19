@@ -127,6 +127,34 @@ def test_scope_routing_chunks_large_partitions_deterministically_by_count_and_by
     assert [len(scope.files) for scope in by_bytes] == [2, 2, 1]
 
 
+@pytest.mark.parametrize("generated", [False, True], ids=["target", "generated"])
+@pytest.mark.parametrize("keep_small", [False, True], ids=["all-excluded", "partial"])
+def test_scope_byte_bound_excludes_an_oversized_single_file_with_a_named_gap(generated, keep_small):
+    files = [
+        {"path": "python/large.py", "sha256": "a" * 64, "language": "Python", "size_bytes": 32},
+        *([{"path": "python/small.py", "sha256": "b" * 64, "language": "Python", "size_bytes": 8}]
+          if keep_small else []),
+    ]
+    if generated:
+        files = [{**item, "source_backing": {"path": f"data/treesitter/sources/{'c' * 64}.json",
+                                            "sha256": "c" * 64, "size_bytes": 100}, "build_unit_id": "bu",
+                  "workspace_path": item["path"], "build_root": "."} for item in files]
+    scopes = plan_scopes({"files": files}, max_source_bytes_per_scope=8)
+    assert scopes == plan_scopes({"files": list(reversed(files))}, max_source_bytes_per_scope=8)
+    assert all(sum(item["size_bytes"] for item in scope.files) <= 8 for scope in scopes)
+    assert [item["path"] for scope in scopes for item in scope.files] == (
+        ["python/small.py"] if keep_small else [])
+    assert any(item["path"] == "python/large.py" and item["reason"] == "scope_source_byte_limit"
+               for scope in scopes for item in scope.exclusions)
+    runnable, gaps = partition_scopes(scopes, {"Python": _lock()})
+    if keep_small:
+        assert runnable == scopes and not gaps
+    else:
+        assert not runnable and len(gaps) == 1
+        assert gaps[0]["terminal_status"] == "UNAVAILABLE"
+        assert any("python/large.py: scope_source_byte_limit" in gap for gap in gaps[0]["gaps"])
+
+
 def test_scope_files_are_ordered_first_party_first_and_chunked_in_that_order() -> None:
     files = [
         {"path": f"native/{name}", "sha256": f"{index:064x}", "language": "C", "generated": False, "size_bytes": 10}

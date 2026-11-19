@@ -29,9 +29,24 @@ access. Generated origin alone neither excludes source nor proves delivery; unre
 relationships remain gaps.
 
 Large language partitions are deterministically chunked by configured file-count and source-byte
-ceilings. The parser additionally enforces per-file bytes and nodes plus a total node ceiling for
-the invocation, keeping container memory, output, and retry work bounded without silently dropping
-the remainder.
+ceilings. A single file larger than the scope-byte ceiling is excluded with a
+`scope_source_byte_limit` gap, for both target and generated source. Smaller files still run;
+a partition containing only oversized files publishes unavailable coverage without dispatching
+a parser. Source sizes used for chunking cannot be negative.
+
+The scope handler checks count and declared-byte bounds before payload access. Before dispatching
+a target parser, it also checks actual aggregate file sizes, including files over the parser's
+per-file cap: the container currently checks that cap after reading. Host source reads pass the
+smaller of the per-file limit and remaining scope
+allowance to the hash-verifying source reader, rather than loading all files and checking afterward.
+Generated source bytes used for detached staging are reused for normalization, not loaded twice.
+Changed or short source reads remain integrity failures, never successful partial source coverage.
+The scope-byte allowance is included in checkpoint fingerprints, alongside the CFG builder identity,
+so reducing it cannot reuse a larger old result under understated inventory sizes.
+
+The parser additionally enforces per-file bytes and nodes plus a total node ceiling for the
+invocation, keeping container memory, output, and retry work bounded without silently dropping the
+remainder.
 
 The only production parser is `tool-tree-sitter`. Its image is assembled from a digest-pinned
 Python base, hash-locked wheels, and pre-generated Linux grammar libraries. Image assembly verifies

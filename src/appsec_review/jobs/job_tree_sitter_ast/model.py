@@ -101,9 +101,16 @@ def plan_scopes(catalog: Mapping[str, Any], *, max_files_per_scope: int = 128,
         chunks: list[list[Mapping[str, Any]]] = []
         current: list[Mapping[str, Any]] = []
         current_bytes = 0
+        oversized = []
         ordered = sorted(buckets[key], key=lambda item: (item["disposition"] != FIRST_PARTY, str(item["path"])))
         for item in ordered:
             size = int(item.get("size_bytes", 0))
+            if size < 0:
+                raise ValueError("source size must be nonnegative")
+            if size > max_source_bytes_per_scope:
+                oversized.append({"path": item["path"], "sha256": item["sha256"], "size_bytes": size,
+                                  "reason": "scope_source_byte_limit", "limit_bytes": max_source_bytes_per_scope})
+                continue
             if current and (len(current) >= max_files_per_scope or
                             current_bytes + size > max_source_bytes_per_scope):
                 chunks.append(current)
@@ -112,6 +119,10 @@ def plan_scopes(catalog: Mapping[str, Any], *, max_files_per_scope: int = 128,
             current_bytes += size
         if current:
             chunks.append(current)
+        if oversized:
+            relevant = (*relevant, *oversized)
+            if not chunks:
+                chunks.append([])
         for chunk_index, chunk in enumerate(chunks):
             native = {"policy": POLICY_IDENTITY, "source_resolution": SOURCE_IDENTITY,
                       "project": project_id, "translation": translation_id, "language": language,
@@ -130,9 +141,10 @@ def plan_scopes(catalog: Mapping[str, Any], *, max_files_per_scope: int = 128,
 def partition_scopes(scopes: Iterable[Scope], locks: Mapping[str, GrammarLock]) -> tuple[tuple[Scope, ...], tuple[Mapping[str, Any], ...]]:
     runnable, gaps = [], []
     for scope in scopes:
-        if scope.language not in SUPPORTED_LANGUAGES or scope.language not in locks:
+        if not scope.files or scope.language not in SUPPORTED_LANGUAGES or scope.language not in locks:
             gaps.append({"scope_id": scope.scope_id, "language": scope.language,
-                         "terminal_status": "UNAVAILABLE", "reason": "grammar unavailable",
+                         "terminal_status": "UNAVAILABLE",
+                         "reason": "source scope byte limit excludes every file" if not scope.files else "grammar unavailable",
                          "gaps": [f"{item.get('path')}: {item.get('reason')}"
                                   for item in scope.exclusions]})
         else:

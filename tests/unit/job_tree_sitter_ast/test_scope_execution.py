@@ -471,3 +471,172 @@ def test_parse_scope_handles_container_failures_missing_output_and_guard_errors(
     )
     with pytest.raises(ValueError, match="exceeds configured bounds"):
         parse_scope(small_unit, asdict(two_gen), lambda _: omit_exec)  # type: ignore[arg-type]
+
+
+def _bounded_sources(tmp_path, *, generated, sizes, declared_sizes=None):
+    from appsec_review.retrieval.model import EntityKind, LogicalIdentity
+    from appsec_review.retrieval.source_resolution import generated_path
+
+    target = tmp_path / "target"
+    target.mkdir()
+    unit, owner, asset_lock, image_id = _make_unit(tmp_path, target)
+    unit.job.config = replace(unit.job.config, settings={
+        **unit.job.config.settings, "max_file_bytes": 64, "max_source_bytes_per_scope": 8})
+    files, physical = [], []
+    with publication_scope_for_owner(owner):
+        for index, size in enumerate(sizes):
+            name = f"source{index}.py"
+            data = (b"#" + bytes([97 + index]) * (size - 2) + b"\n") if size else b""
+            digest = hashlib.sha256(data).hexdigest()
+            item = {"path": name, "sha256": digest, "size_bytes": size, "language": "Python"}
+            if generated:
+                canonical = LogicalIdentity.derive(
+                    EntityKind.BUILD_ARTIFACT, unit.job.source_fingerprint,
+                    {"build_unit_id": "bu", "workspace_path": name, "sha256": digest, "format": "generated-code"})
+                logical = generated_path(canonical.value, name)
+                backing = publish_source(
+                    unit.job.run_root, target_snapshot=unit.job.source_fingerprint, logical_path=logical,
+                    artifact={"path": f"data/build/{name}", "workspace_path": name, "sha256": digest,
+                              "size_bytes": size, "canonical_identity": canonical.value, "kind": "generated-code",
+                              "scope_role": "deliverable", "artifact_origin": "build-output"},
+                    build_unit_id="bu", handoff_sha256="c" * 64, data=data)
+                item.update(path=logical, source_domain="generated", source_backing=backing,
+                            build_unit_id="bu", workspace_path=name)
+                physical.append(unit.job.run_root / "data/shared/objects" / digest)
+            else:
+                (target / name).write_bytes(data)
+                physical.append(target / name)
+            if declared_sizes is not None:
+                item["size_bytes"] = declared_sizes[index]
+            files.append(item)
+    scope = Scope("scope-bounded", "component", ".", "generated:bu" if generated else "source:component",
+                  ".", "Python", tuple(files))
+    fake = _FakeScopeExecutor(image_id=image_id, asset_lock=asset_lock)
+    return unit, owner, scope, fake, physical
+
+
+def _observe_source_reads(monkeypatch, paths, executor, *, short_read=False):
+    reads = []
+    original_open = Path.open
+    original_execute = executor.execute
+    in_external_parser = False
+
+    def execute(request):
+        nonlocal in_external_parser
+        in_external_parser = True
+        try:
+            return original_execute(request)
+        finally:
+            in_external_parser = False
+
+    class ObservedStream:
+        def __init__(self, path, stream):
+            self.path, self.stream = path, stream
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return self.stream.__exit__(*exc)
+
+        def read(self, size=-1):
+            data = self.stream.read(min(size, 2) if short_read else size)
+            reads.append((self.path, size, len(data)))
+            return data
+
+    def open_file(path, mode="r", *args, **kwargs):
+        stream = original_open(path, mode, *args, **kwargs)
+        if mode == "rb" and path in paths and not in_external_parser:
+            return ObservedStream(path, stream)
+        return stream
+
+    monkeypatch.setattr(Path, "open", open_file)
+    monkeypatch.setattr(executor, "execute", execute)
+    return reads
+
+
+@pytest.mark.parametrize("generated", [False, True], ids=["target", "generated"])
+def test_oversized_scope_is_rejected_before_source_reads_or_parser(tmp_path, monkeypatch, generated):
+    unit, owner, scope, fake, physical = _bounded_sources(tmp_path, generated=generated, sizes=(32,))
+    reads = _observe_source_reads(monkeypatch, physical, fake)
+    with publication_scope_for_owner(owner), pytest.raises(ValueError, match="scope exceeds configured bounds"):
+        parse_scope(unit, asdict(scope), lambda _: fake)
+    assert not reads and fake.calls == 0
+
+
+@pytest.mark.parametrize("generated", [False, True], ids=["target", "generated"])
+def test_understated_inventory_cannot_overrun_actual_scope_read_budget(tmp_path, monkeypatch, generated):
+    unit, owner, scope, fake, physical = _bounded_sources(
+        tmp_path, generated=generated, sizes=(6, 6), declared_sizes=(4, 4))
+    reads = _observe_source_reads(monkeypatch, physical, fake)
+    with publication_scope_for_owner(owner), pytest.raises(ValueError, match="bound"):
+        parse_scope(unit, asdict(scope), lambda _: fake)
+    assert sum(count for _, _, count in reads) <= 8
+    assert all(path != physical[1] for path, _, _ in reads)
+    assert fake.calls == 0
+
+
+@pytest.mark.parametrize("generated", [False, True], ids=["target", "generated"])
+def test_exact_scope_budget_reads_each_source_once_and_keeps_complete_bytes(tmp_path, monkeypatch, generated):
+    unit, owner, scope, fake, physical = _bounded_sources(tmp_path, generated=generated, sizes=(4, 4, 0))
+    reads = _observe_source_reads(monkeypatch, physical, fake)
+    with publication_scope_for_owner(owner):
+        result = parse_scope(unit, asdict(scope), lambda _: fake)
+    assert result["terminal_status"] == "SUCCEEDED"
+    assert result["counts"]["bytes_parsed"] == 8 and result["counts"]["files_parsed"] == 3
+    assert [path for path, _, _ in reads] == physical
+    assert sum(count for _, _, count in reads) == 8
+    assert fake.calls == 1
+
+
+@pytest.mark.parametrize("generated", [False, True], ids=["target", "generated"])
+def test_short_source_read_never_publishes_partial_bytes_as_complete(tmp_path, monkeypatch, generated):
+    unit, owner, scope, fake, physical = _bounded_sources(tmp_path, generated=generated, sizes=(4,))
+    reads = _observe_source_reads(monkeypatch, physical, fake, short_read=True)
+    with publication_scope_for_owner(owner), pytest.raises(ValueError, match="changed"):
+        parse_scope(unit, asdict(scope), lambda _: fake)
+    assert reads and reads[0][2] == 2
+    assert not list((unit.job.run_root / "data/treesitter/shards").glob("*.json"))
+
+
+@pytest.mark.parametrize("generated", [False, True], ids=["target", "generated"])
+def test_planned_oversize_exclusion_keeps_small_source_and_publishes_partial_gap(tmp_path, monkeypatch, generated):
+    from appsec_review.jobs.job_tree_sitter_ast.model import plan_scopes
+
+    unit, owner, raw_scope, fake, physical = _bounded_sources(tmp_path, generated=generated, sizes=(32, 4))
+    scope, = plan_scopes({"files": list(raw_scope.files)}, max_source_bytes_per_scope=8)
+    reads = _observe_source_reads(monkeypatch, physical, fake)
+    with publication_scope_for_owner(owner):
+        result = parse_scope(unit, asdict(scope), lambda _: fake)
+    assert result["terminal_status"] == "PARTIAL"
+    assert result["counts"]["files_parsed"] == 1 and result["counts"]["bytes_parsed"] == 4
+    assert result["gaps"] == list(result["index_identity"]["gaps"])
+    assert f"{raw_scope.files[0]['path']}: scope_source_byte_limit" in result["gaps"]
+    assert [path for path, _, _ in reads] == [physical[1]]
+
+
+def test_reduced_scope_budget_cannot_reuse_a_checkpoint_over_the_actual_byte_limit(tmp_path, monkeypatch):
+    unit, owner, scope, fake, physical = _bounded_sources(
+        tmp_path, generated=False, sizes=(6,), declared_sizes=(0,))
+    reads = _observe_source_reads(monkeypatch, physical, fake)
+    with publication_scope_for_owner(owner):
+        first = parse_scope(unit, asdict(scope), lambda _: fake)
+        metadata_path = unit.job.run_root / f"data/treesitter/shards/{first['fingerprint']}.json"
+        before = metadata_path.read_bytes()
+        unit.job.config = replace(unit.job.config, settings={
+            **unit.job.config.settings, "max_source_bytes_per_scope": 4})
+        reads.clear()
+        with pytest.raises(ValueError, match="scope exceeds configured bounds"):
+            parse_scope(unit, asdict(scope), lambda _: fake)
+        assert metadata_path.read_bytes() == before
+    assert fake.calls == 1 and not reads
+
+
+def test_target_scope_preflight_counts_files_above_the_parser_file_cap(tmp_path, monkeypatch):
+    unit, owner, scope, fake, physical = _bounded_sources(
+        tmp_path, generated=False, sizes=(32,), declared_sizes=(0,))
+    unit.job.config = replace(unit.job.config, settings={**unit.job.config.settings, "max_file_bytes": 4})
+    reads = _observe_source_reads(monkeypatch, physical, fake)
+    with publication_scope_for_owner(owner), pytest.raises(ValueError, match="scope exceeds configured bounds"):
+        parse_scope(unit, asdict(scope), lambda _: fake)
+    assert fake.calls == 0 and not reads

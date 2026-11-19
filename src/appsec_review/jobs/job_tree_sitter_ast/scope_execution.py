@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict
 import hashlib
 import json
@@ -59,6 +59,33 @@ def _validate_container_output(output: Mapping[str, Any], *, scope: Scope, gramm
             raise ValueError("Tree-sitter output grammar identity does not match the scope lock")
 
 
+def _read_scope_sources(unit: UnitContext, files: Iterable[Mapping[str, Any]],
+                        limits: Mapping[str, int]) -> dict[str, bytes]:
+    sources = {}
+    remaining = limits["max_scope_bytes"]
+    for item in files:
+        data = read_source_bytes(
+            unit.job.run_root, unit.job.target_root or Path(), target_snapshot=unit.job.source_fingerprint,
+            path=item["path"], sha256=item["sha256"], native=source_native(item),
+            limit=min(limits["max_file_bytes"], remaining))
+        sources[item["path"]] = data
+        remaining -= len(data)
+    return sources
+
+
+def _check_target_scope_bytes(target_root: Path, scope: Scope, limits: Mapping[str, int]) -> None:
+    total = 0
+    for item in scope.files:
+        path = safe_path(target_root, item["path"])
+        if not path.is_file():
+            raise ValueError("indexed source is unavailable")
+        # The container checks its per-file cap after reading, so even files that will
+        # become TRUNCATED must fit the actual source-byte allowance before dispatch.
+        total += path.stat().st_size
+        if total > limits["max_scope_bytes"]:
+            raise ValueError("AST source scope exceeds configured bounds")
+
+
 def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
                 executor_factory: ExecutorFactory | None = None) -> Mapping[str, Any]:
     loaded = unit.output("load.accepted_inputs")
@@ -67,6 +94,7 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
                      "exclusions": tuple(raw_scope.get("exclusions", ()))})
     grammar = GrammarLock(**loaded["grammar_locks"][scope.language])
     limits = {"max_file_bytes": int(settings["max_file_bytes"]),
+              "max_scope_bytes": int(settings["max_source_bytes_per_scope"]),
               "max_nodes": int(settings["max_nodes_per_file"]),
               "max_scope_nodes": int(settings["max_nodes_per_scope"])}
     generated = any("source_backing" in item for item in scope.files)
@@ -74,15 +102,11 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
         raise ValueError("out-of-scope source entered AST parsing")
     if generated and not all("source_backing" in item for item in scope.files):
         raise ValueError("generated and target sources must have separate parser mounts")
-    if generated and (len(scope.files) > int(settings["max_files_per_scope"]) or sum(
-            int(item.get("size_bytes", 0)) for item in scope.files) > int(settings["max_source_bytes_per_scope"])):
+    sizes = [int(item.get("size_bytes", 0)) for item in scope.files]
+    if (any(size < 0 for size in sizes) or len(scope.files) > int(settings["max_files_per_scope"])
+            or sum(sizes) > limits["max_scope_bytes"]):
         raise ValueError("AST source scope exceeds configured bounds")
-    generated_bytes = {
-        item["path"]: read_source_bytes(
-            unit.job.run_root, unit.job.target_root or Path(), target_snapshot=unit.job.source_fingerprint,
-            path=item["path"], sha256=item["sha256"], native=source_native(item), limit=limits["max_file_bytes"])
-        for item in scope.files if generated
-    }
+    generated_bytes = _read_scope_sources(unit, scope.files, limits) if generated else {}
     cfg_builder = cfg_builder_identity()
     fingerprint = scope_fingerprint(target_snapshot=unit.job.source_fingerprint, scope=scope,
         grammar=grammar, image_id=loaded["image_id"], normalizer_schema=NORMALIZER_SCHEMA, limits=limits,
@@ -97,6 +121,8 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
         attest_reused_shard(unit.job.run_root, index_path, metadata, target_snapshot=unit.job.source_fingerprint)
         record_reuse(unit, scope.scope_id, fingerprint, metadata.get("tree_sitter_invocation_id"))
         return {**metadata, "index_reused": True}
+    if not generated:
+        _check_target_scope_bytes(unit.job.target_root or Path(), scope, limits)
     scratch = (unit.job.run_root / "data" / "treesitter" / "work" / unit.job.attempt_id /
                hashlib.sha256(scope.scope_id.encode()).hexdigest()[:20])
     request = {"schema": "appsec-review/tree-sitter-request/1", "scope_id": scope.scope_id,
@@ -134,6 +160,11 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
     _validate_container_output(container_output, scope=scope, grammar=grammar,
         asset_lock=loaded["asset_lock"], image_id=loaded["image_id"],
         execution_image_id=execution.image_id)
+    parsed_files = [item for item in scope.files if any(
+        record.get("path") == item["path"] and record.get("status") != "TRUNCATED"
+        for record in container_output.get("records", ()))]
+    source_bytes = ({item["path"]: generated_bytes[item["path"]] for item in parsed_files} if generated else
+                    _read_scope_sources(unit, parsed_files, limits))
     artifact, identity, counts = normalize_scope(run_root=unit.job.run_root,
         target_snapshot=unit.job.source_fingerprint, scope=scope, grammar=grammar,
         fingerprint=fingerprint, container_output=container_output,
@@ -141,11 +172,7 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
                   "language": scope.language, "image_id": execution.image_id, "grammar": asdict(grammar),
                   "cfg_builder": cfg_builder},
         artifact_path=artifact_path, index_path=index_path,
-        source_bytes={item["path"]: read_source_bytes(
-            unit.job.run_root, unit.job.target_root or Path(), target_snapshot=unit.job.source_fingerprint,
-            path=item["path"], sha256=item["sha256"], native=source_native(item), limit=limits["max_file_bytes"])
-            for item in scope.files if any(record.get("path") == item["path"]
-                and record.get("status") != "TRUNCATED" for record in container_output.get("records", ()))},
+        source_bytes=source_bytes,
         dispositions=job_dispositions(settings),
         cfg_dir=unit.job.run_root / "data" / "treesitter" / "cfg" / fingerprint)
     counts_dict = dict(counts)
