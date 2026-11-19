@@ -481,7 +481,7 @@ See the [handler](../../src/appsec_review/jobs/job_remediation_planning/job.py),
 3. Write the immutable input snapshot and `priority-ranking.json`; a missing required review is
    admission failure, not empty remediation success.
 
-The ranker reads the production accepted-finding projection (RMP-01): severity comes from
+The ranker reads the production accepted-finding projection (T-5085 / RMP-01): severity comes from
 `ship_block.technical_severity`, not a top-level alias or a different provider's score. An absent
 or unrecognized rating stays `unknown`; severity bounds do not become an asserted rating.
 `attack_chains` membership elevates the planning priority of medium/low findings, not their
