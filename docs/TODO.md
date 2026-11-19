@@ -35,6 +35,15 @@ Entry format:
 Entries T-001–T-034 are the former prose backlog; they keep their text under "Legacy backlog"
 until each is rewritten into the entry format when it is next touched.
 
+The 2026-11-19 ALL-ISSUES repair registration preserves the immutable reports in
+`audit-results/`. Its entries include latent/non-C++ defects and conditional questions, not just
+next-run blockers. An archived assertion is not a current-source confirmation. Related closed
+T-169–T-173 and T-176 entries are not reopened; exact existing open work keeps its original ID.
+New repair completion uses focused unit regressions, not automatic live/acceptance runs.
+Native/provider behavior and meaningful live finding quality remain separately unvalidated.
+File ownership and integration are serialized by the campaign coordinator; T-178 remains reserved
+for the separate binary-symbolic design.
+
 ## Index
 
 | Id | Title | Area | State |
@@ -296,6 +305,176 @@ until each is rewritten into the entry format when it is next touched.
 | T-032 | [Wire binary decompilation publications into a review](#t-032-wire-binary-decompilation-publications-into-a-review) | binary | open |
 | T-033 | [Decide how to assert correctness for large query-set jobs](#t-033-decide-how-to-assert-correctness-for-large-query-set-jobs) | testing | open |
 | T-034 | [Host a dependency proxy so builds can run without external egress](#t-034-host-a-dependency-proxy-so-builds-can-run-without-external-egress) | images | open |
+| T-5080 | [Admit alternate CPG in every consuming review contract](#t-5080-admit-alternate-cpg-in-every-consuming-review-contract) | graph | done (2026-11-19, 9efede41a4ab1e1bb5984cc89a5976a224a331ec) |
+| T-5081 | [Compose required querying guidance within the approved procedure bound](#t-5081-compose-required-querying-guidance-within-the-approved-procedure-bound) | review | blocked |
+| T-5082 | [Read the accepted dependency task key in OpenVEX](#t-5082-read-the-accepted-dependency-task-key-in-openvex) | evidence | done (2026-11-19, f9f04585ac12449328be849cce45d57d3ffe126a) |
+| T-5083 | [Separate validation execution receipts from source custody and expected compile failures](#t-5083-separate-validation-execution-receipts-from-source-custody-and-expected-compile-failures) | review | in-progress |
+| T-5084 | [Keep composite priority scores and consumer ordering coherent](#t-5084-keep-composite-priority-scores-and-consumer-ordering-coherent) | review | open |
+| T-5085 | [Rank remediation from the actual accepted finding projection](#t-5085-rank-remediation-from-the-actual-accepted-finding-projection) | review | in-progress |
+| T-5086 | [Render dossier claims only from explicit accepted evidence](#t-5086-render-dossier-claims-only-from-explicit-accepted-evidence) | review | open |
+| T-5087 | [Render accepted patches and validation tiers truthfully](#t-5087-render-accepted-patches-and-validation-tiers-truthfully) | review | open |
+| T-5088 | [Derive report coverage and chain dimensions from certified evidence](#t-5088-derive-report-coverage-and-chain-dimensions-from-certified-evidence) | review | open |
+| T-5089 | [Preserve certified chain severity and dossier availability in executive output](#t-5089-preserve-certified-chain-severity-and-dossier-availability-in-executive-output) | review | open |
+| T-5090 | [Require real header release evidence for dependency versions](#t-5090-require-real-header-release-evidence-for-dependency-versions) | evidence | open |
+| T-5091 | [Bind advisory reachability to exact package symbols and bounded call sites](#t-5091-bind-advisory-reachability-to-exact-package-symbols-and-bounded-call-sites) | evidence | open |
+| T-5092 | [Preserve clangd call occurrences locations and coverage](#t-5092-preserve-clangd-call-occurrences-locations-and-coverage) | graph | open |
+| T-5093 | [Preserve overload linkage and exact AST source identities](#t-5093-preserve-overload-linkage-and-exact-ast-source-identities) | graph | open |
+| T-5094 | [Preserve failed and partial compiled-analysis outcomes through reuse](#t-5094-preserve-failed-and-partial-compiled-analysis-outcomes-through-reuse) | graph | open |
+| T-5095 | [Preserve full-mode control flow under presentation and AST filtering bounds](#t-5095-preserve-full-mode-control-flow-under-presentation-and-ast-filtering-bounds) | graph | open |
+| T-5096 | [Retain accepted native link source and compile-directory context](#t-5096-retain-accepted-native-link-source-and-compile-directory-context) | build | open |
+| T-5097 | [Select header seeds and enforce actual include-read budgets](#t-5097-select-header-seeds-and-enforce-actual-include-read-budgets) | graph | open |
+| T-5098 | [Preserve alternate graph symbol kinds identities and disputed evidence](#t-5098-preserve-alternate-graph-symbol-kinds-identities-and-disputed-evidence) | graph | open |
+| T-5099 | [Keep alternate graph storage immutable and traversal honestly bounded](#t-5099-keep-alternate-graph-storage-immutable-and-traversal-honestly-bounded) | graph | open |
+| T-5100 | [Preserve artifact index content and unambiguous relationship identities](#t-5100-preserve-artifact-index-content-and-unambiguous-relationship-identities) | evidence | open |
+| T-5101 | [Validate artifact scanner native selectors output shapes and staging custody](#t-5101-validate-artifact-scanner-native-selectors-output-shapes-and-staging-custody) | scanners | open |
+| T-5102 | [Bound artifact scan reads and guarantee archive parser progress](#t-5102-bound-artifact-scan-reads-and-guarantee-archive-parser-progress) | scanners | open |
+| T-5103 | [Recognize imported Wasm features and universal Mach-O format correctly](#t-5103-recognize-imported-wasm-features-and-universal-mach-o-format-correctly) | binary | open |
+| T-5104 | [Deliver artifact risks without losing identity or inventing severity](#t-5104-deliver-artifact-risks-without-losing-identity-or-inventing-severity) | review | open |
+| T-5105 | [Bind artifact scan indexes to immutable result content](#t-5105-bind-artifact-scan-indexes-to-immutable-result-content) | evidence | open |
+| T-5106 | [Resolve binary external references and real pseudo-C call sites](#t-5106-resolve-binary-external-references-and-real-pseudo-c-call-sites) | binary | open |
+| T-5107 | [Report stored binary relationships and truncated evidence accurately](#t-5107-report-stored-binary-relationships-and-truncated-evidence-accurately) | binary | open |
+| T-5108 | [Preserve shell dialect and uncertainty under environment bounds](#t-5108-preserve-shell-dialect-and-uncertainty-under-environment-bounds) | build | open |
+| T-5109 | [Reconstruct build iterations and preserve current failure context](#t-5109-reconstruct-build-iterations-and-preserve-current-failure-context) | build | open |
+| T-5110 | [Read manual build transaction requests before unrelated checkout requirements](#t-5110-read-manual-build-transaction-requests-before-unrelated-checkout-requirements) | build | open |
+| T-5111 | [Validate native product bytes against declared product kind](#t-5111-validate-native-product-bytes-against-declared-product-kind) | build | open |
+| T-5112 | [Retain unknown review state bounded hunks and unique change churn](#t-5112-retain-unknown-review-state-bounded-hunks-and-unique-change-churn) | history | open |
+| T-5113 | [Preserve function identity through change-priority consumption](#t-5113-preserve-function-identity-through-change-priority-consumption) | review | open |
+| T-5114 | [Reject incomplete CI scanner output and bound reads before execution](#t-5114-reject-incomplete-ci-scanner-output-and-bound-reads-before-execution) | scanners | open |
+| T-5115 | [Honor CI provider tool framework and identity settings](#t-5115-honor-ci-provider-tool-framework-and-identity-settings) | scanners | open |
+| T-5116 | [Preserve exact CI locations and real job hierarchy](#t-5116-preserve-exact-ci-locations-and-real-job-hierarchy) | scanners | open |
+| T-5117 | [Replay static analysis in the accepted compile working directory](#t-5117-replay-static-analysis-in-the-accepted-compile-working-directory) | graph | open |
+| T-5118 | [Preserve bounded resolving Clang diagnostic traces and valid spans](#t-5118-preserve-bounded-resolving-clang-diagnostic-traces-and-valid-spans) | graph | open |
+| T-5119 | [Distinguish failed unsupported and missing Clang scopes](#t-5119-distinguish-failed-unsupported-and-missing-clang-scopes) | graph | open |
+| T-5120 | [Retain missing-build and per-scope CodeQL coverage decisions](#t-5120-retain-missing-build-and-per-scope-codeql-coverage-decisions) | codeql | open |
+| T-5121 | [Preserve meaningful leading dots in CodeQL source paths](#t-5121-preserve-meaningful-leading-dots-in-codeql-source-paths) | codeql | open |
+| T-5122 | [Return scoped CodeQL export timeout outcomes without KeyError](#t-5122-return-scoped-codeql-export-timeout-outcomes-without-keyerror) | codeql | open |
+| T-5123 | [Normalize only selected CPG facts with stable identities and parse gaps](#t-5123-normalize-only-selected-cpg-facts-with-stable-identities-and-parse-gaps) | graph | open |
+| T-5124 | [Do not cache failed CPG exports or retain failed intermediates](#t-5124-do-not-cache-failed-cpg-exports-or-retain-failed-intermediates) | graph | open |
+| T-5125 | [Preserve debug range lookup bounds and public-only PDB symbols](#t-5125-preserve-debug-range-lookup-bounds-and-public-only-pdb-symbols) | binary | open |
+| T-5126 | [Preserve package coordinates across dependency consumers](#t-5126-preserve-package-coordinates-across-dependency-consumers) | evidence | open |
+| T-5127 | [Fingerprint dependency reachability and its advisory snapshot](#t-5127-fingerprint-dependency-reachability-and-its-advisory-snapshot) | evidence | open |
+| T-5128 | [Align dependency input requirements with actual required reads](#t-5128-align-dependency-input-requirements-with-actual-required-reads) | pipeline | open |
+| T-5129 | [Read real catalog documents once with custody and parse gaps](#t-5129-read-real-catalog-documents-once-with-custody-and-parse-gaps) | evidence | open |
+| T-5130 | [Preserve route-local guards authentication methods and operation context](#t-5130-preserve-route-local-guards-authentication-methods-and-operation-context) | evidence | open |
+| T-5131 | [Deliver document drift through the actual inference retrieval path](#t-5131-deliver-document-drift-through-the-actual-inference-retrieval-path) | review | open |
+| T-5132 | [Treat parseable scanner error documents as coverage failures](#t-5132-treat-parseable-scanner-error-documents-as-coverage-failures) | scanners | open |
+| T-5133 | [Corroborate before caps with order-independent evidence clustering](#t-5133-corroborate-before-caps-with-order-independent-evidence-clustering) | scanners | open |
+| T-5134 | [Keep scanner submission scope and full coverage counts truthful](#t-5134-keep-scanner-submission-scope-and-full-coverage-counts-truthful) | scanners | open |
+| T-5135 | [Read retained corroboration payloads rather than stripped control fields](#t-5135-read-retained-corroboration-payloads-rather-than-stripped-control-fields) | review | open |
+| T-5136 | [Bind every verified unit context into the durable publication snapshot](#t-5136-bind-every-verified-unit-context-into-the-durable-publication-snapshot) | evidence | open |
+| T-5137 | [Reject contradictory certified buckets and counts](#t-5137-reject-contradictory-certified-buckets-and-counts) | evidence | open |
+| T-5138 | [Export only evidence-backed SARIF flows fixes classifications and severity](#t-5138-export-only-evidence-backed-sarif-flows-fixes-classifications-and-severity) | review | open |
+| T-5139 | [Carry certified reachable supply-chain facts into the report](#t-5139-carry-certified-reachable-supply-chain-facts-into-the-report) | review | open |
+| T-5140 | [Conserve report bounds completion metrics and renderer outcomes](#t-5140-conserve-report-bounds-completion-metrics-and-renderer-outcomes) | review | open |
+| T-5141 | [Update only active required image pins by default](#t-5141-update-only-active-required-image-pins-by-default) | images | open |
+| T-5142 | [Verify declared preinstalled CodeQL runtime identities at readiness](#t-5142-verify-declared-preinstalled-codeql-runtime-identities-at-readiness) | images | open |
+| T-5143 | [Honor evidence request wire shapes and zero retrieval budgets](#t-5143-honor-evidence-request-wire-shapes-and-zero-retrieval-budgets) | review | open |
+| T-5144 | [Require verifier blindness evidence for independent confirmation](#t-5144-require-verifier-blindness-evidence-for-independent-confirmation) | review | open |
+| T-5145 | [Keep failed judges distinct from intentionally not-convened judges](#t-5145-keep-failed-judges-distinct-from-intentionally-not-convened-judges) | review | open |
+| T-5146 | [Honor disabled model profiles throughout inference dispatch](#t-5146-honor-disabled-model-profiles-throughout-inference-dispatch) | review | open |
+| T-5147 | [Publish JVM provenance and invalidate changed command indexes](#t-5147-publish-jvm-provenance-and-invalidate-changed-command-indexes) | build | open |
+| T-5148 | [Honor Rust metadata and dotnet PHP build policies](#t-5148-honor-rust-metadata-and-dotnet-php-build-policies) | build | open |
+| T-5149 | [Keep identical compiler argv distinct across working directories](#t-5149-keep-identical-compiler-argv-distinct-across-working-directories) | build | open |
+| T-5150 | [Apply configured diagnostic tail bounds to every build family](#t-5150-apply-configured-diagnostic-tail-bounds-to-every-build-family) | build | open |
+| T-5151 | [Preserve dependency OpenVEX identity gaps nullable coordinates and telemetry](#t-5151-preserve-dependency-openvex-identity-gaps-nullable-coordinates-and-telemetry) | evidence | open |
+| T-5152 | [Enforce dependency result and aggregate OpenVEX input bounds](#t-5152-enforce-dependency-result-and-aggregate-openvex-input-bounds) | evidence | open |
+| T-5153 | [Reject malformed OWASP model field types within the bounded cell](#t-5153-reject-malformed-owasp-model-field-types-within-the-bounded-cell) | review | open |
+| T-5154 | [Conserve OWASP dispatch and characterization gap accounting](#t-5154-conserve-owasp-dispatch-and-characterization-gap-accounting) | review | open |
+| T-5155 | [Accept resolving OWASP prerequisite citations and adverse qualifications](#t-5155-accept-resolving-owasp-prerequisite-citations-and-adverse-qualifications) | review | open |
+| T-5156 | [Make workbench filters retrieve finding-package records](#t-5156-make-workbench-filters-retrieve-finding-package-records) | review | open |
+| T-5157 | [Resolve bounded PoC declarations from the correct accepted build](#t-5157-resolve-bounded-poc-declarations-from-the-correct-accepted-build) | review | open |
+| T-5158 | [Validate actual PoC calls bounds numeric triggers and denied names](#t-5158-validate-actual-poc-calls-bounds-numeric-triggers-and-denied-names) | review | open |
+| T-5159 | [Bound PoC briefs and retain nested compile qualifications](#t-5159-bound-poc-briefs-and-retain-nested-compile-qualifications) | review | open |
+| T-5160 | [Bind hardening conclusions to the exact binary command and evidence](#t-5160-bind-hardening-conclusions-to-the-exact-binary-command-and-evidence) | evidence | open |
+| T-5161 | [Keep post-build shards immutable and rejected artifact hashes rejected](#t-5161-keep-post-build-shards-immutable-and-rejected-artifact-hashes-rejected) | evidence | open |
+| T-5162 | [Reject error-shaped post-build model assessments](#t-5162-reject-error-shaped-post-build-model-assessments) | review | open |
+| T-5163 | [Interpret PE Mach-O and truncated ELF protection evidence correctly](#t-5163-interpret-pe-mach-o-and-truncated-elf-protection-evidence-correctly) | binary | open |
+| T-5164 | [Index duplicate profile content without conflicting source identities](#t-5164-index-duplicate-profile-content-without-conflicting-source-identities) | evidence | open |
+| T-5165 | [Preserve Callgrind perf LLVM and UTF-8 profile semantics](#t-5165-preserve-callgrind-perf-llvm-and-utf-8-profile-semantics) | evidence | open |
+| T-5166 | [Route profile queries and retain source attribution and gaps](#t-5166-route-profile-queries-and-retain-source-attribution-and-gaps) | evidence | open |
+| T-5167 | [Keep canonical CMake build directories and output requirements aligned](#t-5167-keep-canonical-cmake-build-directories-and-output-requirements-aligned) | build | open |
+| T-5168 | [Admit reusable native planning records without invented image bindings](#t-5168-admit-reusable-native-planning-records-without-invented-image-bindings) | build | open |
+| T-5169 | [Handle absent optional builds without sticky admission violations](#t-5169-handle-absent-optional-builds-without-sticky-admission-violations) | review | open |
+| T-5170 | [Retain discovered source gaps when remediation writing fails](#t-5170-retain-discovered-source-gaps-when-remediation-writing-fails) | review | open |
+| T-5171 | [Preserve bounded validation source and exact build working-directory context](#t-5171-preserve-bounded-validation-source-and-exact-build-working-directory-context) | review | open |
+| T-5172 | [Apply valid C++ patches and unified diffs without lexical misclassification](#t-5172-apply-valid-c-patches-and-unified-diffs-without-lexical-misclassification) | review | open |
+| T-5173 | [Preserve failed CodeQL language coverage in review indexes](#t-5173-preserve-failed-codeql-language-coverage-in-review-indexes) | evidence | open |
+| T-5174 | [Bound review-index relations facts and threat retrieval without corrupting totals](#t-5174-bound-review-index-relations-facts-and-threat-retrieval-without-corrupting-totals) | evidence | open |
+| T-5175 | [Build OWASP inventory from the admitted publication rather than a floating pointer](#t-5175-build-owasp-inventory-from-the-admitted-publication-rather-than-a-floating-pointer) | evidence | open |
+| T-5176 | [Retain package gaps qualifications and scoped artifact grants](#t-5176-retain-package-gaps-qualifications-and-scoped-artifact-grants) | review | open |
+| T-5177 | [Deliver promoted leads and the bounded hunt queue to real consumers](#t-5177-deliver-promoted-leads-and-the-bounded-hunt-queue-to-real-consumers) | review | open |
+| T-5178 | [Preserve prioritization coverage and omitted-context qualifications](#t-5178-preserve-prioritization-coverage-and-omitted-context-qualifications) | review | open |
+| T-5179 | [Assign semantic evidence to the exact function rather than shared lines](#t-5179-assign-semantic-evidence-to-the-exact-function-rather-than-shared-lines) | review | open |
+| T-5180 | [Keep sanitizer attempts immutable with clean accepted-source copies](#t-5180-keep-sanitizer-attempts-immutable-with-clean-accepted-source-copies) | build | open |
+| T-5181 | [Distinguish sanitizer limit equality and split CMake flag masking](#t-5181-distinguish-sanitizer-limit-equality-and-split-cmake-flag-masking) | build | open |
+| T-5182 | [Publish per-unit sanitizer readiness through its advertised query](#t-5182-publish-per-unit-sanitizer-readiness-through-its-advertised-query) | evidence | open |
+| T-5183 | [Classify only eligible first-party components from real producer shapes](#t-5183-classify-only-eligible-first-party-components-from-real-producer-shapes) | review | open |
+| T-5184 | [Contain malformed and optional security-tagging inference failures](#t-5184-contain-malformed-and-optional-security-tagging-inference-failures) | review | open |
+| T-5185 | [Express tagging evidence columns in the required UTF-16 units](#t-5185-express-tagging-evidence-columns-in-the-required-utf-16-units) | evidence | open |
+| T-5186 | [Preserve history boundaries rename identities and empty-ranking precedence](#t-5186-preserve-history-boundaries-rename-identities-and-empty-ranking-precedence) | history | open |
+| T-5187 | [Contain optional GitHub enrichment transport failures](#t-5187-contain-optional-github-enrichment-transport-failures) | history | open |
+| T-5188 | [Publish schema-consistent proportional hotspot counts](#t-5188-publish-schema-consistent-proportional-hotspot-counts) | history | open |
+| T-5189 | [Preserve incomplete SVF operands before alias contradiction decisions](#t-5189-preserve-incomplete-svf-operands-before-alias-contradiction-decisions) | graph | open |
+| T-5190 | [Preserve SVF resource bounds nested validation and partial outcomes](#t-5190-preserve-svf-resource-bounds-nested-validation-and-partial-outcomes) | graph | open |
+| T-5191 | [Bound Gerrit and bundle reviews without assigning current facts to old patchsets](#t-5191-bound-gerrit-and-bundle-reviews-without-assigning-current-facts-to-old-patchsets) | history | open |
+| T-5192 | [Retain materializable acquisitions when changed-path diff fails](#t-5192-retain-materializable-acquisitions-when-changed-path-diff-fails) | pipeline | open |
+| T-5193 | [Reject malformed nested planning values through bounded repair](#t-5193-reject-malformed-nested-planning-values-through-bounded-repair) | build | open |
+| T-5194 | [Carry real prebuilt artifact intake into plan selection](#t-5194-carry-real-prebuilt-artifact-intake-into-plan-selection) | build | open |
+| T-5195 | [Align dotnet planning guidance with the accepted recipe contract](#t-5195-align-dotnet-planning-guidance-with-the-accepted-recipe-contract) | build | open |
+| T-5196 | [Preserve CRLF source offsets and declaration coverage gaps](#t-5196-preserve-crlf-source-offsets-and-declaration-coverage-gaps) | evidence | open |
+| T-5197 | [Handle malformed npm and preserve Android descriptor facts](#t-5197-handle-malformed-npm-and-preserve-android-descriptor-facts) | topology | open |
+| T-5198 | [Parse bounded OpenAPI JSON structurally with exact operations](#t-5198-parse-bounded-openapi-json-structurally-with-exact-operations) | evidence | open |
+| T-5199 | [Count unique coverage lines and preserve malformed counter uncertainty](#t-5199-count-unique-coverage-lines-and-preserve-malformed-counter-uncertainty) | evidence | open |
+| T-5200 | [Index duplicate coverage content without conflicting source identities](#t-5200-index-duplicate-coverage-content-without-conflicting-source-identities) | evidence | open |
+| T-5201 | [Route coverage retrieval and distinguish file from build aggregates](#t-5201-route-coverage-retrieval-and-distinguish-file-from-build-aggregates) | evidence | open |
+| T-5202 | [Read completion status consistently across engineering signal loaders](#t-5202-read-completion-status-consistently-across-engineering-signal-loaders) | review | open |
+| T-5203 | [Advance NVD cursors only across complete validated snapshot intervals](#t-5203-advance-nvd-cursors-only-across-complete-validated-snapshot-intervals) | data | open |
+| T-5204 | [Preserve newer OSV state and configured snapshot roots in consumers](#t-5204-preserve-newer-osv-state-and-configured-snapshot-roots-in-consumers) | data | open |
+| T-5205 | [Validate MITRE identity and account for character truncation](#t-5205-validate-mitre-identity-and-account-for-character-truncation) | data | open |
+| T-5206 | [Validate actual cve-bin-tool range rows against declared counts](#t-5206-validate-actual-cve-bin-tool-range-rows-against-declared-counts) | data | open |
+| T-5207 | [Keep feed redirects within configured HTTPS source identity](#t-5207-keep-feed-redirects-within-configured-https-source-identity) | data | open |
+| T-5208 | [Return snapshot identities from the publisher transaction actually completed](#t-5208-return-snapshot-identities-from-the-publisher-transaction-actually-completed) | data | open |
+| T-5209 | [Index the real threat-model schema without dropping owners and threats](#t-5209-index-the-real-threat-model-schema-without-dropping-owners-and-threats) | evidence | open |
+| T-5210 | [Retain graph eligibility language restrictions and distinct threat sites](#t-5210-retain-graph-eligibility-language-restrictions-and-distinct-threat-sites) | evidence | open |
+| T-5211 | [Preserve language control flow and explicit CFG incompleteness](#t-5211-preserve-language-control-flow-and-explicit-cfg-incompleteness) | graph | open |
+| T-5212 | [Bind CFG cache semantics and apply bounds before materialization](#t-5212-bind-cfg-cache-semantics-and-apply-bounds-before-materialization) | graph | open |
+| T-5213 | [Align optional intake declarations and Tree-sitter loader behavior](#t-5213-align-optional-intake-declarations-and-tree-sitter-loader-behavior) | pipeline | open |
+| T-5214 | [Verify every native scope checkpoint evidence artifact](#t-5214-verify-every-native-scope-checkpoint-evidence-artifact) | graph | open |
+| T-5215 | [Bind seed omission and provenance accounting into native checkpoint reuse](#t-5215-bind-seed-omission-and-provenance-accounting-into-native-checkpoint-reuse) | graph | open |
+| T-5216 | [Bind dossier Markdown and HTML through publication and the gate](#t-5216-bind-dossier-markdown-and-html-through-publication-and-the-gate) | evidence | open |
+| T-5217 | [Observe exact accepted build payload reads](#t-5217-observe-exact-accepted-build-payload-reads) | evidence | open |
+| T-5218 | [Observe exact private analysis payload reads](#t-5218-observe-exact-private-analysis-payload-reads) | evidence | open |
+| T-5219 | [Observe exact completion payload reads](#t-5219-observe-exact-completion-payload-reads) | evidence | open |
+| T-5220 | [Align CodeQL optional declarations with required loader inputs](#t-5220-align-codeql-optional-declarations-with-required-loader-inputs) | pipeline | open |
+| T-5221 | [Reject missing claimed acquisitions and inconsistent intake identities](#t-5221-reject-missing-claimed-acquisitions-and-inconsistent-intake-identities) | pipeline | open |
+| T-5222 | [Reconcile actual payload shapes declarations and schema versions](#t-5222-reconcile-actual-payload-shapes-declarations-and-schema-versions) | evidence | blocked |
+| T-5223 | [Repair the four audited stale unit cases against current contracts](#t-5223-repair-the-four-audited-stale-unit-cases-against-current-contracts) | testing | open |
+| T-5224 | [Grant querying capabilities only for admitted evidence](#t-5224-grant-querying-capabilities-only-for-admitted-evidence) | review | open |
+| T-5225 | [Honor the resolved structural fallback policy](#t-5225-honor-the-resolved-structural-fallback-policy) | codeql | open |
+| T-5226 | [Emit dependency gaps only for applicable required evidence](#t-5226-emit-dependency-gaps-only-for-applicable-required-evidence) | evidence | open |
+| T-5227 | [Count canonical report gaps once without erasing distinct scopes](#t-5227-count-canonical-report-gaps-once-without-erasing-distinct-scopes) | review | open |
+| T-5228 | [Read build environment inputs through the public admitted boundary](#t-5228-read-build-environment-inputs-through-the-public-admitted-boundary) | pipeline | open |
+| T-5229 | [Reconcile audit-identified as-built prose and test navigation](#t-5229-reconcile-audit-identified-as-built-prose-and-test-navigation) | pipeline | open |
+| T-5230 | [Resolve clang static analysis conditional audit boundaries](#t-5230-resolve-clang-static-analysis-conditional-audit-boundaries) | pipeline | blocked |
+| T-5231 | [Resolve code graph index conditional audit boundaries](#t-5231-resolve-code-graph-index-conditional-audit-boundaries) | pipeline | open |
+| T-5232 | [Resolve cpp compiled analysis conditional audit boundaries](#t-5232-resolve-cpp-compiled-analysis-conditional-audit-boundaries) | pipeline | blocked |
+| T-5233 | [Resolve cpp symbol index conditional audit boundaries](#t-5233-resolve-cpp-symbol-index-conditional-audit-boundaries) | pipeline | open |
+| T-5234 | [Resolve debug symbol indexing conditional audit boundaries](#t-5234-resolve-debug-symbol-indexing-conditional-audit-boundaries) | pipeline | open |
+| T-5235 | [Resolve dossier publication conditional audit boundaries](#t-5235-resolve-dossier-publication-conditional-audit-boundaries) | pipeline | open |
+| T-5236 | [Resolve evidence collection conditional audit boundaries](#t-5236-resolve-evidence-collection-conditional-audit-boundaries) | pipeline | open |
+| T-5237 | [Resolve final publication gate conditional audit boundaries](#t-5237-resolve-final-publication-gate-conditional-audit-boundaries) | pipeline | open |
+| T-5238 | [Resolve final report publication conditional audit boundaries](#t-5238-resolve-final-report-publication-conditional-audit-boundaries) | pipeline | open |
+| T-5239 | [Resolve inference security review conditional audit boundaries](#t-5239-resolve-inference-security-review-conditional-audit-boundaries) | pipeline | open |
+| T-5240 | [Resolve language build conditional audit boundaries](#t-5240-resolve-language-build-conditional-audit-boundaries) | pipeline | blocked |
+| T-5241 | [Resolve model connectivity conditional audit boundaries](#t-5241-resolve-model-connectivity-conditional-audit-boundaries) | pipeline | open |
+| T-5242 | [Resolve poc generation conditional audit boundaries](#t-5242-resolve-poc-generation-conditional-audit-boundaries) | testing | open |
+| T-5243 | [Resolve post build security assessment conditional audit boundaries](#t-5243-resolve-post-build-security-assessment-conditional-audit-boundaries) | pipeline | open |
+| T-5244 | [Resolve profile data conditional audit boundaries](#t-5244-resolve-profile-data-conditional-audit-boundaries) | pipeline | open |
+| T-5245 | [Resolve remediation planning conditional audit boundaries](#t-5245-resolve-remediation-planning-conditional-audit-boundaries) | pipeline | blocked |
+| T-5246 | [Resolve test coverage conditional audit boundaries](#t-5246-resolve-test-coverage-conditional-audit-boundaries) | pipeline | blocked |
+| T-5247 | [Resolve third party data sync conditional audit boundaries](#t-5247-resolve-third-party-data-sync-conditional-audit-boundaries) | pipeline | open |
+| T-5248 | [Resolve tree sitter ast conditional audit boundaries](#t-5248-resolve-tree-sitter-ast-conditional-audit-boundaries) | pipeline | open |
+| T-5249 | [Reproduce and repair recurrent Grype database listing selection](#t-5249-reproduce-and-repair-recurrent-grype-database-listing-selection) | data | open |
 
 ## Active entries
 
@@ -749,6 +928,16 @@ until each is rewritten into the entry format when it is next touched.
   `tests/test_remediation_jobs.py` against unchanged code in `4ab4a1e` (base `3d1dc3d7`).
   They remain named baseline gaps; the new report, remediation, model-floor and profile-parity
   regressions are covered by the focused repair units.
+  The ALL-ISSUES ledger independently reproduced the five profile nodes at `b9aad27b` on
+  2026-11-19: `tests/test_runtime_profiles.py::test_dev_is_the_default_and_keeps_todays_values`,
+  `::test_prod_loads_the_exact_models_and_limits`,
+  `::test_model_preflight_and_connectivity_list_the_active_profiles_models`,
+  `::test_prod_is_a_hashed_layer_frozen_in_the_resolved_document`, and
+  `::test_profile_and_capacity_overlay_produce_both_layers_in_order`.
+  Two focused selections returned 3 failed/2 passed (6.70 s) and 2 failed (2.80 s), with two
+  shuffled workers and no case over ten seconds. These are stale verifier/model assertions;
+  preserve the checked-in profile policy when repairing them. Four other audited stale cases
+  are separately registered in T-5223, not included in this count.
 - **Done when:** the differential against `fe328d76`'s baseline shows no failures attributable to
   the merge.
 - **Refs:** `docs/tasks/2026-11-07-job-control-schema-standardization.md` (differential method).
@@ -1849,6 +2038,9 @@ until each is rewritten into the entry format when it is next touched.
 - **Area:** data
 - **Why:** every feed pointer under `data/feeds` is dated 2026-10-16 or 2026-10-18. Dagster shows the schedule `third_party_data_sync_schedule` (cron `0 0 * * *` UTC, default status RUNNING) in instance state STOPPED; its last tick was 2026-10-19 00:00 UTC. Its last two runs failed: 2026-10-19 in step `cve_bin_tool_db_build__build`, 2026-10-18 in `begin`; the last scheduled success was 2026-10-17. So the schedule was stopped explicitly after two failed nights and nothing has synced for 24 days. A review reading these snapshots matches against vulnerability data of mid-October without saying so.
 - **Scope:** find and fix the two failures, turn the schedule back on (an operator action on the shared stack), and add a staleness check to run readiness so a review cannot start on feeds older than a configured bound without a named gap. This is the first item of the dependency plan (phase 0).
+  The 2026-11-19 feedback reports a different, recurrent Grype listing-selection failure;
+  T-5249 owns that exact offline reproduction and repair. The historical host observations above
+  are not a current readiness measurement, and this campaign does not authorize schedule changes.
 - **Done when:** the schedule ticks and publishes on this host, and a readiness test with a feed pointer older than the bound yields the named gap.
 - **Refs:** `src/appsec_review/jobs/job_third_party_data_sync/`, `src/appsec_review/orchestration/dagster/adapter.py`, `deploy/dagster/bin/ops_readiness.py`, T-057.
 
@@ -3602,6 +3794,1551 @@ until each is rewritten into the entry format when it is next touched.
 - **Scope:** decide per role whether to raise `max_output_tokens`, bound thinking separately, or shrink the requested answer; land the TOML change between runs (an active run fails its next step on a configuration hash change) and add a unit test that the cap applies to the answer the role must produce.
 - **Done when:** a smoke run shows no `model_token_cap` receipts in those jobs, and the per-role caps are justified in the configuration comments.
 - **Refs:** `appsec-review.toml` (`jobs.job_owasp_control_assessment.settings.model(s)`, `jobs.job_poc_generation.settings.models.default`, `jobs.job_remediation_validation.settings.reviewer`, `jobs.job_inference_security_review.settings.models.default`), `runs/2026-11-17-0005/data/inference-executions/` (host-local), T-5073.
+
+### T-5080 — Admit alternate CPG in every consuming review contract
+
+- **State:** done (2026-11-19, 9efede41a4ab1e1bb5984cc89a5976a224a331ec)
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CGI-F12, OCA-F01. Inference cannot legally read the alternate dataset it is offered; Current graph publication is undeclared at OWASP's actual read boundary.
+- **Scope:** `src/appsec_review/jobs/job_inference_security_review/datasets.py`, `src/appsec_review/jobs/job_owasp_control_assessment/datasets.py`; paired callers/tests identified by those cases.
+- **Done when:** Real published alternate shards are admitted by all three consumers; removing each grant is rejected in focused pairing tests.
+- **Refs:** `audit-results/job-audit-job_code_graph_index.md`, `audit-results/job-audit-job_owasp_control_assessment.md`; follow-up to closed T-169, T-173 (not reopened).
+
+### T-5081 — Compose required querying guidance within the approved procedure bound
+
+- **State:** blocked
+- **Area:** review
+- **Why:** Archived audit/feedback cases: FB-QUERY-ATTACH. Compose required querying guidance without exceeding the two-procedure limit.
+- **Scope:** `src/appsec_review/guidance/skills.py`, `src/appsec_review/jobs/job_inference_security_review/evidence_fulfillment.py` Blocked decision: Choose a consolidated registered procedure or an explicitly approved composition contract; do not silently drop either required role procedure or querying guidance.
+- **Done when:** Real hunter/red control-gap composition retains required guidance, deterministic selection and pinned identities without raising the bound or widening capabilities; focused assembly tests pass.
+- **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory); follow-up to closed T-173 (not reopened).
+
+### T-5082 — Read the accepted dependency task key in OpenVEX
+
+- **State:** done (2026-11-19, f9f04585ac12449328be849cce45d57d3ffe126a)
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: DI-05. Accepted dependency output crashes the OpenVEX companion on the wrong task key.
+- **Scope:** `src/appsec_review/jobs/job_openvex_export/dependencies.py`, `tests/unit/job_openvex_export/test_dependency_publication.py`
+- **Done when:** Feed the real dependency publish result through the real OpenVEX loader; reject absent/wrong tasks and preserve pinned admission.
+- **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`; follow-up to closed T-170, T-171 (not reopened).
+
+### T-5083 — Separate validation execution receipts from source custody and expected compile failures
+
+- **State:** in-progress
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RV-F01, FB-COMPILE-STOP. Successful safety-scoped compiler checks always contaminate the source manifest; Contain expected compiler failure without swallowing genuine ReviewStopped.
+- **Scope:** `src/appsec_review/container_runtime/build_executor.py`, `src/appsec_review/jobs/job_remediation_validation/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Successful compile receipts do not look like source edits; expected failing compiles yield the declared validation result while true source changes and unrelated ReviewStopped still fail; fake-executor regressions cover both.
+- **Refs:** `audit-results/job-audit-job_remediation_validation.md`, user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory).
+
+### T-5084 — Keep composite priority scores and consumer ordering coherent
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RP-01, RP-08. Composite scores above one are divided by 100 downstream; The silence-hunt threshold is not validated and bad values silently change policy.
+- **Scope:** `src/appsec_review/jobs/job_review_prioritization/composite.py`, `src/appsec_review/review/units.py`
+- **Done when:** Boost combinations preserve a documented score representation and monotonic ordering; no indiscriminate clamping or magnitude-based percentage inference. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-171 (not reopened).
+
+### T-5085 — Rank remediation from the actual accepted finding projection
+
+- **State:** in-progress
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RMP-01. Risk-first ordering is disconnected from real accepted findings.
+- **Scope:** `docs/operations/job_remediation_planning.md`, `src/appsec_review/jobs/job_remediation_planning/prioritization.py`; paired callers/tests identified by those cases.
+- **Done when:** Pair real accepted projections with capped prioritization; critical and higher-risk items cannot be demoted by missing flat aliases. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_remediation_planning.md`.
+
+### T-5086 — Render dossier claims only from explicit accepted evidence
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: DP-01, DP-03. Fallback dossier sections invent taint paths and guard/verification conclusions; Markdown dossiers silently drop decision basis, qualifications, risk and provenance.
+- **Scope:** `src/appsec_review/reporting/dossiers.py`
+- **Done when:** Missing taint/guard/verification evidence generates no invented claims, and Markdown retains available counterevidence, qualifications and provenance. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_dossier_publication.md`; follow-up to closed T-176 (not reopened).
+
+### T-5087 — Render accepted patches and validation tiers truthfully
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: DP-02, RV-F05. Remediation projection cannot render the actual accepted patch format; Dossier labels a statically failed, rejected patch `static_checked`.
+- **Scope:** `src/appsec_review/jobs/job_dossier_publication/inputs.py`, `src/appsec_review/reporting/dossiers.py`
+- **Done when:** Real exact-patch and rejected/static/build validation projections retain patch contents and never imply stronger assurance than accepted status. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_dossier_publication.md`, `audit-results/job-audit-job_remediation_validation.md`; follow-up to closed T-176 (not reopened).
+
+### T-5088 — Derive report coverage and chain dimensions from certified evidence
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: FR-F01, FR-F03. A withheld, unconfirmed package can certify 100% domain coverage with no findings; Radar ignores every gate-shaped chain membership.
+- **Scope:** `src/appsec_review/jobs/job_final_report_publication/report.py`, `src/appsec_review/reporting/dimensions.py`
+- **Done when:** Withheld or uninspected work cannot become verified-no-findings; gate-shaped chain memberships produce correct dimension counts. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
+
+### T-5089 — Preserve certified chain severity and dossier availability in executive output
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: FR-F02, FR-F04. HTML and executive PDF discard the certified composed chain severity; HTML reports certified dossiers as nonexistent and omits available narratives.
+- **Scope:** `src/appsec_review/jobs/job_final_report_publication/render.py`, `src/appsec_review/reporting/executive_report.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
+
+### T-5090 — Require real header release evidence for dependency versions
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: DI-01. Commented header text becomes a corroborated release and published SPDX version.
+- **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/discovery.py`, `src/appsec_review/jobs/job_dependency_intelligence/sbom.py`
+- **Done when:** Commented defines are not release evidence; active corroborated definitions retain SPDX versions. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`.
+
+### T-5091 — Bind advisory reachability to exact package symbols and bounded call sites
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: DI-02, DI-03, DI-07. Imports and unrelated local calls are promoted to vulnerable-symbol reachability; Scanner advisories attach to fixed versions and foreign ecosystems sharing a name.
+- **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/reachability.py`
+- **Done when:** Imports and same-named unrelated calls cannot prove reachability; version/ecosystem matching and all configured call-site limits preserve uncertainty. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`; follow-up to closed T-170 (not reopened).
+
+### T-5092 — Preserve clangd call occurrences locations and coverage
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CSI-F02, CSI-F03, CSI-F04, CSI-F05, CSI-F06, CSI-F07. Resolved recursive calls are discarded as unresolved references; Exact symbol locations carry whole-file byte spans and unchecked coordinates.
+- **Scope:** `src/appsec_review/jobs/job_cpp_symbol_index/job.py`
+- **Done when:** Recursive calls, bounded repeated occurrences, spaces and valid positions retain their meaning; omitted/truncated inputs are not complete coverage. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_cpp_symbol_index.md`.
+
+### T-5093 — Preserve overload linkage and exact AST source identities
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CPP-F01, CPP-F02. Seeded IR joins distinct C++ overloads and emits the wrong exact call; AST nodes get incorrect source files/lines with exact confidence.
+- **Scope:** `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/llvm_ir.py`; paired callers/tests identified by those cases.
+- **Done when:** Tiny overloaded functions and header-origin nodes retain exact linkage, file and line identities in production-normalized graph output. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+
+### T-5094 — Preserve failed and partial compiled-analysis outcomes through reuse
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CPP-F03, CPP-F06, CPP-F07, CPP-F08. Seeded parse failures are marked resolved and cached; CFG failures are cached too; Whole-program AST/IR accepts an unusable replay receipt as clean.
+- **Scope:** `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/seeded.py`
+- **Done when:** Seeded AST/CFG parse failure is not reusable success; full-mode unusable receipts and binary-tool failure emit accurate canonical gaps. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+
+### T-5095 — Preserve full-mode control flow under presentation and AST filtering bounds
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CPP-F05, K04, K05. IR block detail limit also erases CFG edges; K04 — High, full-mode IR drops flow.
+- **Scope:** `containers/tools/native-cpp/native.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Full-mode IR retains flow and actual source locations; detail limits cannot erase CFG edges and function filtering reports coverage limits. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+
+### T-5096 — Retain accepted native link source and compile-directory context
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: K01, K02, K03. K01 — High, links lost; K02 — High, valid sources removed.
+- **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`
+- **Done when:** Accepted link receipts resolve, legitimate nested build/target source paths survive, and generated includes and working directories rebase correctly. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+
+### T-5097 — Select header seeds and enforce actual include-read budgets
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CPP-F04, K06. Header seeds through `-isystem`, `-iquote`, `-idirafter` are never selected; K06 — Medium, include scan budget not actual reads.
+- **Scope:** `src/appsec_review/seeding/plan.py`, `src/appsec_review/seeding/units.py`
+- **Done when:** All supported include flag forms select the correct TU; candidate reads and byte limits count actual work with deterministic priority. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+
+### T-5098 — Preserve alternate graph symbol kinds identities and disputed evidence
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CSI-F01, CGI-F01, CGI-F03, CGI-F04, CGI-F05, CGI-F06, CGI-F07, CGI-F10, CGI-F11. Alternate CPG turns a variable reference into a function call; Alternate nodes fabricate source digests when catalog shards are absent.
+- **Scope:** `src/appsec_review/graph/normalize.py`, `src/appsec_review/jobs/job_code_graph_index/alternate_cpg.py`
+- **Done when:** Producer-shaped fixtures prove symbol kind, linkage, source custody, call positions, guard association, flow direction, AST payload and exact integer fidelity for each cited seam. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_code_graph_index.md`, `audit-results/job-audit-job_cpp_symbol_index.md`; follow-up to closed T-168, T-169 (not reopened).
+
+### T-5099 — Keep alternate graph storage immutable and traversal honestly bounded
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CGI-F02, CGI-F08, CGI-F09, CGI-F13. Same-count alternate rebuild overwrites a previously referenced shard; `enabled` and `max_slice_depth` settings have no effect.
+- **Scope:** `src/appsec_review/jobs/job_code_graph_index/alternate_cpg.py`
+- **Done when:** Content identities prevent same-count overwrites; enabled/depth/work caps affect behavior and full scorecard totals remain distinct from displayed samples. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_code_graph_index.md`; follow-up to closed T-169 (not reopened).
+
+### T-5100 — Preserve artifact index content and unambiguous relationship identities
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: AI-01, AI-02, AI-03. changed indexed facts reuse stale catalog/member/relationship shards; adding an earlier batch makes a valid existing shard fail as corrupt metadata.
+- **Scope:** `src/appsec_review/jobs/job_artifact_indexing/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_artifact_indexing.md`.
+
+### T-5101 — Validate artifact scanner native selectors output shapes and staging custody
+
+- **State:** open
+- **Area:** scanners
+- **Why:** Archived audit/feedback cases: ASA-F01, ASA-F03, ASA-F10. Every positive CVE-bin-tool array has a nonresolving native selector; Incompatible scanner JSON becomes a complete zero-finding scan.
+- **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/findings.py`, `src/appsec_review/jobs/job_artifact_security_analysis/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`.
+
+### T-5102 — Bound artifact scan reads and guarantee archive parser progress
+
+- **State:** open
+- **Area:** scanners
+- **Why:** Archived audit/feedback cases: ASA-F02, ASA-F09. Scanner adapter ignores execution bounds and eagerly reads unbounded report files; Negative ar member size makes the builtin archive reader stop making progress.
+- **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/formats.py`, `src/appsec_review/jobs/job_artifact_security_analysis/scanners.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`.
+
+### T-5103 — Recognize imported Wasm features and universal Mach-O format correctly
+
+- **State:** open
+- **Area:** binary
+- **Why:** Archived audit/feedback cases: ASA-F04, ASA-F05. Wasm resource/feature summaries omit imported memories and tables; Universal Mach-O files are classified as Java classes.
+- **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/formats.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`.
+
+### T-5104 — Deliver artifact risks without losing identity or inventing severity
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: ASA-F06, ASA-F08. New packaged-risk helpers never participate in a job task; Prioritization collapses different artifact findings and upgrades unknown severity.
+- **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/findings.py`, `src/appsec_review/jobs/job_artifact_security_analysis/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`; follow-up to closed T-170, T-171 (not reopened).
+
+### T-5105 — Bind artifact scan indexes to immutable result content
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: ASA-F07. Nonreusable reruns overwrite published result identities and reuse stale observation content.
+- **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_artifact_security_analysis.md`.
+
+### T-5106 — Resolve binary external references and real pseudo-C call sites
+
+- **State:** open
+- **Area:** binary
+- **Why:** Archived audit/feedback cases: BE-01, BE-02. Direct external references cannot resolve to their exported imports; Pseudo-C call-location matching accepts declarations and string literals.
+- **Scope:** `src/appsec_review/jobs/job_binary_evidence_indexing/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_binary_evidence_indexing.md`.
+
+### T-5107 — Report stored binary relationships and truncated evidence accurately
+
+- **State:** open
+- **Area:** binary
+- **Why:** Archived audit/feedback cases: BE-03, BE-04. Published relation counts exceed the relations actually stored; Truncated string evidence still publishes clean coverage.
+- **Scope:** `src/appsec_review/jobs/job_binary_evidence_indexing/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_binary_evidence_indexing.md`.
+
+### T-5108 — Preserve shell dialect and uncertainty under environment bounds
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: BE-01, BE-02, BE-03, BE-04. Shell and batch assignment grammars are conflated; Script/depth bounds suppress required taint of already inventoried scripts.
+- **Scope:** `src/appsec_review/jobs/job_build_environment_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_build_environment_analysis.md`.
+
+### T-5109 — Reconstruct build iterations and preserve current failure context
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: BI-F01, BI-F02, BI-F03. changed accepted recipes are blocked before the controller can invalidate and rebuild; successful production of a promoted recipe prevents subsequent controller reconstruction.
+- **Scope:** `src/appsec_review/jobs/build_iterations.py`, `src/appsec_review/jobs/build_recipe_replay.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_build_iteration.md`.
+
+### T-5110 — Read manual build transaction requests before unrelated checkout requirements
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: BI-F04. manual transaction CLI requires an unrelated configured checkout before reading its request.
+- **Scope:** `src/appsec_review/cli.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_build_iteration.md`.
+
+### T-5111 — Validate native product bytes against declared product kind
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: BI-F05. explicit native product contracts can accept executable bytes as a static library.
+- **Scope:** `src/appsec_review/jobs/build_recipe_replay.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_build_iteration.md`.
+
+### T-5112 — Retain unknown review state bounded hunks and unique change churn
+
+- **State:** open
+- **Area:** history
+- **Why:** Archived audit/feedback cases: CC-01, CC-02, CC-03, CC-06. entirely missing review facts become trusted zero-valued ranking inputs; unknown approval commit is reported as a confirmed stale approval.
+- **Scope:** `src/appsec_review/jobs/job_change_context_analysis/job.py`, `metrics.py` and
+  `sources.py`, with paired prioritization regressions.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_change_context_analysis.md`.
+
+### T-5113 — Preserve function identity through change-priority consumption
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: CC-05. final function priorities lose the fields their consumer needs.
+- **Scope:** `src/appsec_review/jobs/job_change_context_analysis/job.py`, `src/appsec_review/jobs/job_review_prioritization/composite.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_change_context_analysis.md`; follow-up to closed T-171 (not reopened).
+
+### T-5114 — Reject incomplete CI scanner output and bound reads before execution
+
+- **State:** open
+- **Area:** scanners
+- **Why:** Archived audit/feedback cases: CI-01, CI-03. malformed/truncated generic scanner output becomes a successful clean or incomplete scan; max_file_bytes is not an effective pre-read/pre-launch bound.
+- **Scope:** `src/appsec_review/jobs/job_ci_configuration_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_ci_configuration_analysis.md`.
+
+### T-5115 — Honor CI provider tool framework and identity settings
+
+- **State:** open
+- **Area:** scanners
+- **Why:** Archived audit/feedback cases: CI-02. advertised provider/tool/framework and identity settings do not control execution.
+- **Scope:** `src/appsec_review/jobs/job_ci_configuration_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_ci_configuration_analysis.md`.
+
+### T-5116 — Preserve exact CI locations and real job hierarchy
+
+- **State:** open
+- **Area:** scanners
+- **Why:** Archived audit/feedback cases: CI-04, CI-05, CI-06. native actionlint columns are discarded; canonical correlation discards exact byte spans while continuing to claim exact mapping.
+- **Scope:** `src/appsec_review/jobs/job_ci_configuration_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_ci_configuration_analysis.md`.
+
+### T-5117 — Replay static analysis in the accepted compile working directory
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CSA-F01. Static Analyzer ignores accepted compile working directory.
+- **Scope:** `src/appsec_review/jobs/job_clang_static_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`.
+
+### T-5118 — Preserve bounded resolving Clang diagnostic traces and valid spans
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CSA-F02, CSA-F03, CSA-F08, CSA-F09. Diagnostic traces lose resolving information and silently truncate; Out-of-range diagnostic coordinates become false exact source locations.
+- **Scope:** `containers/tools/clang-static-analysis/clang-static.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`.
+
+### T-5119 — Distinguish failed unsupported and missing Clang scopes
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CSA-F06, CSA-F07. Every translation unit can fail while coverage remains partial; Unsupported-only scopes vanish from the summary and look unavailable in coverage.
+- **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`.
+
+### T-5120 — Retain missing-build and per-scope CodeQL coverage decisions
+
+- **State:** open
+- **Area:** codeql
+- **Why:** Archived audit/feedback cases: CQ-01, CQ-04, CQ-05. Compiled source without a matching build receipt disappears from the plan; Plan-only coverage gaps do not affect acceptance terminal status.
+- **Scope:** `src/appsec_review/jobs/job_codeql_analysis/job.py`, `src/appsec_review/jobs/job_codeql_analysis/planning.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_codeql_analysis.md`; follow-up to closed T-169 (not reopened).
+
+### T-5121 — Preserve meaningful leading dots in CodeQL source paths
+
+- **State:** open
+- **Area:** codeql
+- **Why:** Archived audit/feedback cases: CQ-02. SARIF mapping strips meaningful leading dots, losing Actions locations or binding the wrong source.
+- **Scope:** `src/appsec_review/jobs/job_codeql_analysis/sarif.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_codeql_analysis.md`.
+
+### T-5122 — Return scoped CodeQL export timeout outcomes without KeyError
+
+- **State:** open
+- **Area:** codeql
+- **Why:** Archived audit/feedback cases: CQ-03. Export admission timeout raises KeyError instead of returning the scoped failure.
+- **Scope:** `src/appsec_review/jobs/job_codeql_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_codeql_analysis.md`.
+
+### T-5123 — Normalize only selected CPG facts with stable identities and parse gaps
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CPG-F01, CPG-F02, CPG-F03, CPG-F04, CPG-F08. The seeded allowlist accepts unselected suffix-matching paths; AST depth caching silently drops valid facts and makes output row-order dependent.
+- **Scope:** `src/appsec_review/jobs/job_cpg_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_cpg_analysis.md`.
+
+### T-5124 — Do not cache failed CPG exports or retain failed intermediates
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CPG-F05, CPG-F09, CPG-F10. A failed seeded export is checkpointed and never retried; Whole-program mode runs Joern for an unsupported-only scope.
+- **Scope:** `src/appsec_review/jobs/job_cpg_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_cpg_analysis.md`.
+
+### T-5125 — Preserve debug range lookup bounds and public-only PDB symbols
+
+- **State:** open
+- **Area:** binary
+- **Why:** Archived audit/feedback cases: DS-F02, DS-F03, DS-F04. Valid source-range queries by function (and DWARF compilation unit) return no existing line records; Valid fragmented records exceed an unhandled index-only bound and abort the entire extraction.
+- **Scope:** `src/appsec_review/jobs/job_debug_symbol_indexing/job.py`,
+  `src/appsec_review/debug_symbols/_reader_dwarf.py`, `_reader_pdb.py`, and the corresponding
+  `src/appsec_review/retrieval/debug_symbols.py` and `debug_symbol_index.py` boundaries.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_debug_symbol_indexing.md`; follow-up to closed T-169 (not reopened).
+
+### T-5126 — Preserve package coordinates across dependency consumers
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: DI-04, DI-06. Normalization and OSV name projection discard usable package coordinates; Other consumers use field names the SCA producer never emits.
+- **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/reachability.py`, `src/appsec_review/jobs/job_dependency_intelligence/resolution.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`; follow-up to closed T-170, T-171, T-172 (not reopened).
+
+### T-5127 — Fingerprint dependency reachability and its advisory snapshot
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: DI-08. Inventory fingerprint excludes the reachability output and its OSV snapshot.
+- **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`; follow-up to closed T-170 (not reopened).
+
+### T-5128 — Align dependency input requirements with actual required reads
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: DI-09. Required loader reads disagree with optional input declarations.
+- **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/datasets.py`, `src/appsec_review/jobs/job_dependency_intelligence/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`.
+
+### T-5129 — Read real catalog documents once with custody and parse gaps
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: DI-F01, DI-F03, DI-F04, DI-F09. real catalog document payloads are all skipped by drift analysis; document fallback reads changed bytes without checking accepted document hashes.
+- **Scope:** `src/appsec_review/document_issues.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_document_issue_analysis.md`; follow-up to closed T-172 (not reopened).
+
+### T-5130 — Preserve route-local guards authentication methods and operation context
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: DI-F05, DI-F06, DI-F07, DI-F08, DI-F10. unrelated route-local guards become file-global protection; optional OpenAPI authentication is classified as required.
+- **Scope:** `src/appsec_review/document_issues.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_document_issue_analysis.md`; follow-up to closed T-172 (not reopened).
+
+### T-5131 — Deliver document drift through the actual inference retrieval path
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: DI-F02. declarations do not deliver document results to inference.
+- **Scope:** `src/appsec_review/document_issues.py`, `src/appsec_review/retrieval/core.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_document_issue_analysis.md`; follow-up to closed T-172 (not reopened).
+
+### T-5132 — Treat parseable scanner error documents as coverage failures
+
+- **State:** open
+- **Area:** scanners
+- **Why:** Archived audit/feedback cases: EC-01. Malformed/error-shaped native reports become successful zero-result scans.
+- **Scope:** `src/appsec_review/jobs/job_evidence_collection/adapters.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_evidence_collection.md`; follow-up to closed T-170 (not reopened).
+
+### T-5133 — Corroborate before caps with order-independent evidence clustering
+
+- **State:** open
+- **Area:** scanners
+- **Why:** Archived audit/feedback cases: EC-02, EC-03. Cross-scanner “pre-cap” corroboration receives already capped per-tool evidence; Greedy CWE clustering is order-dependent, changing counts and identities.
+- **Scope:** `src/appsec_review/jobs/job_evidence_collection/evidence.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_evidence_collection.md`; follow-up to closed T-170 (not reopened).
+
+### T-5134 — Keep scanner submission scope and full coverage counts truthful
+
+- **State:** open
+- **Area:** scanners
+- **Why:** Archived audit/feedback cases: EC-04, EC-05, EC-07. Final not-applicable totals are recomputed from truncated detail samples; Directory scanners do not enforce the accepted path selection.
+- **Scope:** `src/appsec_review/jobs/job_evidence_collection/adapters.py`, `src/appsec_review/jobs/job_evidence_collection/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_evidence_collection.md`; follow-up to closed T-170 (not reopened).
+
+### T-5135 — Read retained corroboration payloads rather than stripped control fields
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: EC-06. Corroboration/disposition consumers read fields removed by handoff projection.
+- **Scope:** `src/appsec_review/jobs/job_evidence_collection/job.py`, `src/appsec_review/jobs/job_review_prioritization/composite.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_evidence_collection.md`; follow-up to closed T-170, T-171 (not reopened).
+
+### T-5136 — Bind every verified unit context into the durable publication snapshot
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: FPG-F01. Verified package unit contexts are omitted from the durable gate binding closure.
+- **Scope:** `src/appsec_review/jobs/accepted_review.py` and
+  `src/appsec_review/jobs/job_final_publication_gate/verify.py`, with paired gate publication tests.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_final_publication_gate.md`.
+
+### T-5137 — Reject contradictory certified buckets and counts
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: FPG-F02. Gate sealing and the shared certificate reader accept contradictory bucket/count projections.
+- **Scope:** `src/appsec_review/jobs/job_final_publication_gate/job.py`, `src/appsec_review/jobs/job_final_publication_gate/verify.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_final_publication_gate.md`.
+
+### T-5138 — Export only evidence-backed SARIF flows fixes classifications and severity
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: FR-F05, FR-F06, FR-F07. The wired SARIF exporter silently drops every trace and validated fix; Unclassified SARIF findings are invented as authentication/OWASP A07 findings.
+- **Scope:** `src/appsec_review/jobs/job_final_report_publication/sarif.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
+
+### T-5139 — Carry certified reachable supply-chain facts into the report
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: FR-F08. Reachable supply-chain count is permanently zero because its input is forbidden.
+- **Scope:** `src/appsec_review/jobs/job_final_report_publication/report.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
+
+### T-5140 — Conserve report bounds completion metrics and renderer outcomes
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: FR-F09, FR-F10. Legal chain volume can make final report assembly fail its own schema; Completion summary drops new report metrics and disabled-PDF outcomes.
+- **Scope:** `src/appsec_review/jobs/job_final_report_publication/job.py`, `src/appsec_review/jobs/job_final_report_publication/report.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
+
+### T-5141 — Update only active required image pins by default
+
+- **State:** open
+- **Area:** images
+- **Why:** Archived audit/feedback cases: IP-F01. Default pin updater still requires retired manual Joern/SVF images.
+- **Scope:** `src/appsec_review/jobs/job_image_pin_verification/pins.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_image_pin_verification.md`; follow-up to closed T-168 (not reopened).
+
+### T-5142 — Verify declared preinstalled CodeQL runtime identities at readiness
+
+- **State:** open
+- **Area:** images
+- **Why:** Archived audit/feedback cases: IP-F02. Gate omits declared preinstalled CodeQL runtime IDs.
+- **Scope:** `src/appsec_review/config/host_pins.py`, `src/appsec_review/jobs/job_image_pin_verification/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_image_pin_verification.md`.
+
+### T-5143 — Honor evidence request wire shapes and zero retrieval budgets
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: ISR-F01, ISR-F05. Round-2 fulfillment consumes incompatible request and retrieval wire formats; Configured zero retrieval queries silently becomes one.
+- **Scope:** `src/appsec_review/jobs/job_inference_security_review/evidence_fulfillment.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_inference_security_review.md`; follow-up to closed T-173 (not reopened).
+
+### T-5144 — Require verifier blindness evidence for independent confirmation
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: ISR-F02. Missing verifier blindness receipt can still yield independent confirmation.
+- **Scope:** `src/appsec_review/jobs/job_inference_security_review/teams.py`, `src/appsec_review/review/adjudication.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_inference_security_review.md`.
+
+### T-5145 — Keep failed judges distinct from intentionally not-convened judges
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: ISR-F03. Failed judges are relabeled “not convened” and become PoC candidates.
+- **Scope:** `src/appsec_review/jobs/job_inference_security_review/teams.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_inference_security_review.md`.
+
+### T-5146 — Honor disabled model profiles throughout inference dispatch
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: ISR-F04. `models.<profile>.enabled=false` is ignored outside chain dispatch.
+- **Scope:** `src/appsec_review/jobs/job_inference_security_review/stages.py`, `src/appsec_review/jobs/job_inference_security_review/teams.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_inference_security_review.md`; follow-up to closed T-173 (not reopened).
+
+### T-5147 — Publish JVM provenance and invalidate changed command indexes
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: LB-F01, LB-F02. JVM provenance shards are written but omitted from the accepted manifest; equal JVM artifact bytes reuse a stale command/provenance index.
+- **Scope:** `src/appsec_review/jobs/job_language_build/jvm.py` and its `job.py` publication path.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_language_build.md`.
+
+### T-5148 — Honor Rust metadata and dotnet PHP build policies
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: LB-F03, LB-F05, LB-F06. nondefault Rust target/profile adds build-only flags to `cargo metadata`; accepted `.NET` publish/pack/AOT prohibitions are not enforced.
+- **Scope:** `src/appsec_review/jobs/job_language_build/dotnet.py`, `src/appsec_review/jobs/job_language_build/php.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_language_build.md`.
+
+### T-5149 — Keep identical compiler argv distinct across working directories
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: LB-F04. capture reconciliation merges identical argv across different working directories.
+- **Scope:** `src/appsec_review/jobs/job_language_build/capture.py` and its `job.py` consumers.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_language_build.md`.
+
+### T-5150 — Apply configured diagnostic tail bounds to every build family
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: LB-F07. non-JVM `diagnostic_tail_bytes` is accepted but does not bound tails.
+- **Scope:** `src/appsec_review/jobs/job_language_build/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_language_build.md`.
+
+### T-5151 — Preserve dependency OpenVEX identity gaps nullable coordinates and telemetry
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: OX-01, OX-02, OX-03, OX-06. Dependency product omits source/configuration identity; Empty/all-positive dependency export drops upstream coverage gaps.
+- **Scope:** `src/appsec_review/jobs/job_openvex_export/dependencies.py`, `src/appsec_review/jobs/job_openvex_export/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_openvex_export.md`; follow-up to closed T-170, T-176 (not reopened).
+
+### T-5152 — Enforce dependency result and aggregate OpenVEX input bounds
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: OX-04, OX-05. Dependency result is read with the document byte limit only at acceptance; Separate dependency reader bypasses aggregate input limits.
+- **Scope:** `src/appsec_review/jobs/job_openvex_export/dependencies.py`, `src/appsec_review/jobs/job_openvex_export/inputs.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_openvex_export.md`; follow-up to closed T-176 (not reopened).
+
+### T-5153 — Reject malformed OWASP model field types within the bounded cell
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: OCA-F02. Malformed JSON field types escape model error handling and fail a whole cell.
+- **Scope:** `src/appsec_review/owasp_workbench/assessment.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_owasp_control_assessment.md`.
+
+### T-5154 — Conserve OWASP dispatch and characterization gap accounting
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: OCA-F03, OCA-F04. Part splitting reports undispatched rows as dispatched/reviewed and undercounts partial coverage; Characterization gaps disappear from the published coverage/status.
+- **Scope:** `src/appsec_review/jobs/job_owasp_control_assessment/job.py`, `src/appsec_review/owasp_workbench/batching.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_owasp_control_assessment.md`.
+
+### T-5155 — Accept resolving OWASP prerequisite citations and adverse qualifications
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: OCA-F05, OCA-F07. Required caller/callee prerequisite citations cannot pass subject acceptance; Adverse qualification rows wrongly require a target evidence resolver at publication.
+- **Scope:** `src/appsec_review/jobs/job_owasp_control_assessment/job.py`, `src/appsec_review/owasp_workbench/assessment.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_owasp_control_assessment.md`.
+
+### T-5156 — Make workbench filters retrieve finding-package records
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: OCA-F06. Advertised workbench filters miss finding-package records.
+- **Scope:** `src/appsec_review/retrieval/core.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_owasp_control_assessment.md`.
+
+### T-5157 — Resolve bounded PoC declarations from the correct accepted build
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: POC-F01, POC-F02, POC-F05, POC-F08. Build lookup stops at an unrelated workspace containing the same source; Declaration retrieval is not hash-verified accepted-source retrieval.
+- **Scope:** `src/appsec_review/jobs/job_poc_generation/buildctx.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_poc_generation.md`.
+
+### T-5158 — Validate actual PoC calls bounds numeric triggers and denied names
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: POC-F03, POC-F04, POC-F07, POC-F10. A sink reference counts as a sink call; Loop bounds ignore direction and inclusive endpoints.
+- **Scope:** `src/appsec_review/jobs/job_poc_generation/policy.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_poc_generation.md`.
+
+### T-5159 — Bound PoC briefs and retain nested compile qualifications
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: POC-F06, POC-F09. `max_brief_bytes` is not an enforced bound; Nested compile/brief qualifications disappear from published coverage.
+- **Scope:** `src/appsec_review/jobs/job_poc_generation/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_poc_generation.md`.
+
+### T-5160 — Bind hardening conclusions to the exact binary command and evidence
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: PBS-F01, PBS-F02, PBS-F04, PBS-F05, PBS-F09. Case-wide flags falsely create requested-versus-binary failures; Basename collisions produce false exact provenance.
+- **Scope:** `src/appsec_review/jobs/job_post_build_security_assessment/assessment.py`, `src/appsec_review/jobs/job_post_build_security_assessment/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_post_build_security_assessment.md`; follow-up to closed T-172 (not reopened).
+
+### T-5161 — Keep post-build shards immutable and rejected artifact hashes rejected
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: PBS-F03, PBS-F07, PBS-F11. Changed inference results reuse an old shard while advertising new source artifacts; Oversize-artifact gap records crash first-time indexing.
+- **Scope:** `src/appsec_review/jobs/job_post_build_security_assessment/assessment.py`, `src/appsec_review/jobs/job_post_build_security_assessment/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_post_build_security_assessment.md`.
+
+### T-5162 — Reject error-shaped post-build model assessments
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: PBS-F08. Error-shaped model replies become successful empty assessments.
+- **Scope:** `src/appsec_review/jobs/job_post_build_security_assessment/assessment.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_post_build_security_assessment.md`.
+
+### T-5163 — Interpret PE Mach-O and truncated ELF protection evidence correctly
+
+- **State:** open
+- **Area:** binary
+- **Why:** Archived audit/feedback cases: PBS-F12, PBS-F13, PBS-F14. PE32 is incorrectly required to have 64-bit high-entropy VA; Valid Mach-O `.o` files take the COFF parser.
+- **Scope:** `src/appsec_review/jobs/job_post_build_security_assessment/assessment.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_post_build_security_assessment.md`.
+
+### T-5164 — Index duplicate profile content without conflicting source identities
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: PD-01. Identical report copies at different paths abort indexing.
+- **Scope:** `src/appsec_review/jobs/job_profile_data/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_profile_data.md`.
+
+### T-5165 — Preserve Callgrind perf LLVM and UTF-8 profile semantics
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: PD-02, PD-03, PD-04, PD-09. Callgrind call costs are attached to the wrong source line; Perf sample periods become part of the event identity.
+- **Scope:** `src/appsec_review/jobs/job_profile_data/parsers.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_profile_data.md`.
+
+### T-5166 — Route profile queries and retain source attribution and gaps
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: PD-05, PD-06, PD-07, PD-10. The declared dataset retrieval route cannot retrieve the dataset; Engineering-signals path filtering discards profile rows with that exact source.
+- **Scope:** `src/appsec_review/jobs/job_profile_data/datasets.py`, `src/appsec_review/retrieval/core.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_profile_data.md`; follow-up to closed T-172 (not reopened).
+
+### T-5167 — Keep canonical CMake build directories and output requirements aligned
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: PB-F01. CMake canonicalization changes the build directory but keeps old output requirements.
+- **Scope:** `src/appsec_review/jobs/build_recipe_replay.py`, `src/appsec_review/jobs/job_project_build/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_project_build.md`.
+
+### T-5168 — Admit reusable native planning records without invented image bindings
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: PB-F02. native planning records make valid project-job checkpoints and whole-job reuse fail admission.
+- **Scope:** `src/appsec_review/jobs/job_project_build/job.py`, `src/appsec_review/jobs/job_project_build/repair.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_project_build.md`.
+
+### T-5169 — Handle absent optional builds without sticky admission violations
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RMP-02. Missing optional build becomes a sticky input-contract failure.
+- **Scope:** `src/appsec_review/jobs/job_poc_generation/buildctx.py`, `src/appsec_review/jobs/job_remediation_planning/inputs.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_remediation_planning.md`.
+
+### T-5170 — Retain discovered source gaps when remediation writing fails
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RMP-03. Writer/patch failure drops already-discovered source gaps.
+- **Scope:** `src/appsec_review/jobs/job_remediation_planning/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_remediation_planning.md`.
+
+### T-5171 — Preserve bounded validation source and exact build working-directory context
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RV-F02, RV-F03, RV-F07. Related files in the same build are mistaken for a multi-build proposal; Validation source-context bounds are fingerprinted but not enforced.
+- **Scope:** `src/appsec_review/jobs/job_remediation_validation/job.py`, `src/appsec_review/jobs/job_remediation_validation/workspace.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_remediation_validation.md`.
+
+### T-5172 — Apply valid C++ patches and unified diffs without lexical misclassification
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RV-F04, RV-F06. Legal existing C++ digit separators reject otherwise applicable patches; Exported unified-diff helper misplaces zero-context insertions and ignores new counts.
+- **Scope:** `src/appsec_review/jobs/job_poc_generation/static_compile_check.py` and
+  `src/appsec_review/jobs/job_remediation_validation/static_validator.py`. The broken unified-diff
+  helper is latent: current validation uses `apply_exact` and `after_text`, not that branch.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_remediation_validation.md`.
+
+### T-5173 — Preserve failed CodeQL language coverage in review indexes
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: RDI-F02. Failed CodeQL coverage is published as a complete language lane.
+- **Scope:** `src/appsec_review/indexing/products.py`, `src/appsec_review/jobs/job_review_data_indexing/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_review_data_indexing.md`; follow-up to closed T-172 (not reopened).
+
+### T-5174 — Bound review-index relations facts and threat retrieval without corrupting totals
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: RDI-F03, RDI-F05, RDI-F06, RDI-F07. `max_links_per_rule` does not bound emitted relationships; Threat-boundary nested caps corrupt totals without a truncation gap.
+- **Scope:** `src/appsec_review/indexing/products.py`, `src/appsec_review/jobs/job_review_data_indexing/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_review_data_indexing.md`; follow-up to closed T-172, T-173 (not reopened).
+
+### T-5175 — Build OWASP inventory from the admitted publication rather than a floating pointer
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: RDI-F04. Inventory trusts the floating OWASP pointer rather than the admitted publication.
+- **Scope:** `src/appsec_review/jobs/job_review_data_indexing/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_review_data_indexing.md`.
+
+### T-5176 — Retain package gaps qualifications and scoped artifact grants
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RPA-01, RPA-02, RPA-03. An empty package set erases accepted coverage gaps and publishes success; Selected partial build facts lose their omitted-work qualifications.
+- **Scope:** `src/appsec_review/jobs/job_review_package_assembly/job.py`, `src/appsec_review/review_packages.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_review_package_assembly.md`.
+
+### T-5177 — Deliver promoted leads and the bounded hunt queue to real consumers
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RP-02. Promoted leads and the full hunt queue stop at artifact publication.
+- **Scope:** `src/appsec_review/jobs/job_review_prioritization/job.py`, `src/appsec_review/review/packages.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-170, T-171, T-172 (not reopened).
+
+### T-5178 — Preserve prioritization coverage and omitted-context qualifications
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RP-03, RP-04, RP-07, RP-09. One successful CodeQL scope hides failed scopes and imputes zero coverage; Reusing an existing priority shard drops its local context-bound gap.
+- **Scope:** `src/appsec_review/jobs/job_review_prioritization/composite.py`, `src/appsec_review/jobs/job_review_prioritization/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-171 (not reopened).
+
+### T-5179 — Assign semantic evidence to the exact function rather than shared lines
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: RP-06. Same-line functions receive another function's semantic evidence.
+- **Scope:** `src/appsec_review/jobs/job_review_prioritization/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-171 (not reopened).
+
+### T-5180 — Keep sanitizer attempts immutable with clean accepted-source copies
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: SB-F01, SB-F02. a fresh attempt destroys an earlier attempt's referenced sanitizer evidence; the supposedly fresh source copy retains target-owned build caches.
+- **Scope:** `src/appsec_review/jobs/job_sanitizer_build/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_sanitizer_build.md`.
+
+### T-5181 — Distinguish sanitizer limit equality and split CMake flag masking
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: SB-F03, SB-F04. exactly reaching the artifact limit is falsely reported as truncation; valid split CMake `-D` arguments bypass masking-flag detection.
+- **Scope:** `src/appsec_review/jobs/job_sanitizer_build/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_sanitizer_build.md`.
+
+### T-5182 — Publish per-unit sanitizer readiness through its advertised query
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: SB-F05. per-unit sanitizer readiness is not delivered to its advertised retrieval query.
+- **Scope:** `src/appsec_review/indexing/products.py`, `src/appsec_review/jobs/job_review_data_indexing/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_sanitizer_build.md`; follow-up to closed T-172 (not reopened).
+
+### T-5183 — Classify only eligible first-party components from real producer shapes
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: ST-01, ST-02, ST-03, ST-06. the declared mobile target rule cannot see its inputs; build classification reads a payload shape the actual producers never publish.
+- **Scope:** `src/appsec_review/jobs/job_security_tagging/collation.py`, `model_pass.py` and
+  their `job.py` dispatch.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_security_tagging.md`.
+
+### T-5184 — Contain malformed and optional security-tagging inference failures
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: ST-04, ST-05. malformed JSON values escape model rejection and fail the job; actual inference failure policy contradicts the optional-pass gap behavior.
+- **Scope:** `src/appsec_review/jobs/job_security_tagging/model_pass.py` and its `job.py` caller.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_security_tagging.md`.
+
+### T-5185 — Express tagging evidence columns in the required UTF-16 units
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: ST-07. lexical/model evidence columns count code points rather than UTF-16 units.
+- **Scope:** `src/appsec_review/jobs/job_security_tagging/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_security_tagging.md`.
+
+### T-5186 — Preserve history boundaries rename identities and empty-ranking precedence
+
+- **State:** open
+- **Area:** history
+- **Why:** Archived audit/feedback cases: SH-01, SH-03, SH-05. the extra history-bound commit contaminates the last retained commit's message; empty Git rankings incorrectly make change-log history a supplement.
+- **Scope:** `src/appsec_review/jobs/job_source_history_analysis/git.py`, `src/appsec_review/jobs/job_source_history_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_source_history_analysis.md`.
+
+### T-5187 — Contain optional GitHub enrichment transport failures
+
+- **State:** open
+- **Area:** history
+- **Why:** Archived audit/feedback cases: SH-02. an optional GitHub head-timestamp transport failure aborts otherwise usable Git analysis.
+- **Scope:** `src/appsec_review/jobs/job_source_history_analysis/github.py`, `src/appsec_review/jobs/job_source_history_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_source_history_analysis.md`.
+
+### T-5188 — Publish schema-consistent proportional hotspot counts
+
+- **State:** open
+- **Area:** history
+- **Why:** Archived audit/feedback cases: SH-04. valid proportional hotspot settings produce schema-invalid, contradictory publication.
+- **Scope:** `src/appsec_review/jobs/job_source_history_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_source_history_analysis.md`; follow-up to closed T-171 (not reopened).
+
+### T-5189 — Preserve incomplete SVF operands before alias contradiction decisions
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: SVF-F02, SVF-F05. Truncated points-to sets can publish a complete object with a missing free; Alias cross-check drops unmodeled empty operands before its completeness test.
+- **Scope:** `containers/tools/svf/driver/svf-alias-export.cpp`, `src/appsec_review/graph/svf_crosscheck.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_svf_alias_analysis.md`; follow-up to closed T-159 (not reopened).
+
+### T-5190 — Preserve SVF resource bounds nested validation and partial outcomes
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: SVF-F01, SVF-F04, SVF-K01. Output-sized process file limit prevents permitted bitcode sizes; Nested driver validation admits malformed success or crashes the entire analysis task.
+- **Scope:** `src/appsec_review/jobs/job_svf_alias_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_svf_alias_analysis.md`; follow-up to closed T-159, T-168, T-169 (not reopened).
+
+### T-5191 — Bound Gerrit and bundle reviews without assigning current facts to old patchsets
+
+- **State:** open
+- **Area:** history
+- **Why:** Archived audit/feedback cases: TA-01, TA-02. Review-count bound is ignored for Gerrit and bypassed by bundles; Gerrit current approvals/merge state are attributed to superseded patchsets.
+- **Scope:** `src/appsec_review/target_acquisition/review_exports.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_target_acquisition.md`.
+
+### T-5192 — Retain materializable acquisitions when changed-path diff fails
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: TA-03. Changed-path diff failure discards an otherwise materializable review component.
+- **Scope:** `src/appsec_review/target_acquisition/git_source.py`, with the acquisition cleanup
+  boundary and the registered job's focused consumer tests.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_target_acquisition.md`.
+
+### T-5193 — Reject malformed nested planning values through bounded repair
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: TA-F01. malformed nested model values abort the job instead of bounded rejection.
+- **Scope:** `src/appsec_review/jobs/build_discovery.py`, `src/appsec_review/jobs/job_target_analysis_plan/planning.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_target_analysis_plan.md`.
+
+### T-5194 — Carry real prebuilt artifact intake into plan selection
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: TA-F02. real prebuilt artifact intake never reaches plan artifact selections.
+- **Scope:** `src/appsec_review/jobs/job_target_analysis_plan/job.py`, `src/appsec_review/jobs/job_target_analysis_plan/planning.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_target_analysis_plan.md`.
+
+### T-5195 — Align dotnet planning guidance with the accepted recipe contract
+
+- **State:** open
+- **Area:** build
+- **Why:** Archived audit/feedback cases: TA-F05. .NET planning guidance contradicts the recipe validator.
+- **Scope:** `src/appsec_review/jobs/job_target_analysis_plan/planning.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_target_analysis_plan.md`.
+
+### T-5196 — Preserve CRLF source offsets and declaration coverage gaps
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: TC-01, TC-05. CRLF sources publish incorrect “exact” symbol byte spans; Symbol shard reports complete declarations after the source inventory omits files.
+- **Scope:** `src/appsec_review/jobs/cataloging.py`, `src/appsec_review/jobs/job_target_catalog/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_target_catalog.md`.
+
+### T-5197 — Handle malformed npm and preserve Android descriptor facts
+
+- **State:** open
+- **Area:** topology
+- **Why:** Archived audit/feedback cases: TC-02, TC-04. Invalid npm manifest shapes fail the entire catalog instead of producing parse gaps; Descriptor packaging erases accepted Android facts and selects the Java profile.
+- **Scope:** `src/appsec_review/jobs/build_discovery.py`, `src/appsec_review/jobs/job_target_catalog/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_target_catalog.md`.
+
+### T-5198 — Parse bounded OpenAPI JSON structurally with exact operations
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: TC-03. OpenAPI 3 JSON bypasses structural parsing, losing or misbinding operations and ignoring parser limits.
+- **Scope:** `src/appsec_review/indexing/document_interfaces.py`, `src/appsec_review/indexing/target_documents.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_target_catalog.md`.
+
+### T-5199 — Count unique coverage lines and preserve malformed counter uncertainty
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: TC-01, TC-05, TC-06, TC-07. Repeated source records silently inflate file denominators; LLVM count validation truncates invalid values and lets overflow escape.
+- **Scope:** `src/appsec_review/jobs/job_test_coverage/parsers.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_test_coverage.md`.
+
+### T-5200 — Index duplicate coverage content without conflicting source identities
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: TC-02. Identical reports at different artifact paths abort indexing.
+- **Scope:** `src/appsec_review/jobs/job_test_coverage/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_test_coverage.md`.
+
+### T-5201 — Route coverage retrieval and distinguish file from build aggregates
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: TC-03, TC-04. The published dataset advertises an invalid retrieval route; File coverage cells are mistaken for build aggregates and broadcast.
+- **Scope:** `src/appsec_review/jobs/job_test_coverage/datasets.py`, `src/appsec_review/retrieval/core.py`; paired callers/tests identified by those cases.
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_test_coverage.md`; follow-up to closed T-171 (not reopened).
+
+### T-5202 — Read completion status consistently across engineering signal loaders
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: TC-08. Prioritization labels successfully consumed coverage UNAVAILABLE.
+- **Scope:** `src/appsec_review/jobs/job_review_prioritization/composite.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_test_coverage.md`; follow-up to closed T-171 (not reopened).
+
+### T-5203 — Advance NVD cursors only across complete validated snapshot intervals
+
+- **State:** open
+- **Area:** data
+- **Why:** Archived audit/feedback cases: SYNC-F01, SYNC-F02, SYNC-F03. Bootstrap cursor skips updates newer than the downloaded yearly snapshots; Inconsistent NVD page counts are accepted and permanently advance the cursor.
+- **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/steps/nvd_sync/feed.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_third_party_data_sync.md`.
+
+### T-5204 — Preserve newer OSV state and configured snapshot roots in consumers
+
+- **State:** open
+- **Area:** data
+- **Why:** Archived audit/feedback cases: SYNC-F04, SYNC-F09. OSV duplicate merging silently discards newer advisory state, withdrawal and aliases; Configurable OSV publisher root is ignored by the actual scanner consumers.
+- **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/steps/osv_sync/feed.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_third_party_data_sync.md`.
+
+### T-5205 — Validate MITRE identity and account for character truncation
+
+- **State:** open
+- **Area:** data
+- **Why:** Archived audit/feedback cases: SYNC-F05, SYNC-F08. Unversioned, non-CWE XML is published under the configured CWE version; MITRE character truncation is omitted from truncation accounting.
+- **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/steps/mitre_sync/feed.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_third_party_data_sync.md`.
+
+### T-5206 — Validate actual cve-bin-tool range rows against declared counts
+
+- **State:** open
+- **Area:** data
+- **Why:** Archived audit/feedback cases: SYNC-F06. cve-bin-tool validation trusts the declared range count without checking range rows.
+- **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/steps/cve_bin_tool_db_build/database.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_third_party_data_sync.md`.
+
+### T-5207 — Keep feed redirects within configured HTTPS source identity
+
+- **State:** open
+- **Area:** data
+- **Why:** Archived audit/feedback cases: SYNC-F07. General downloader's redirects escape the configured HTTPS source identity.
+- **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/publication.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_third_party_data_sync.md`.
+
+### T-5208 — Return snapshot identities from the publisher transaction actually completed
+
+- **State:** open
+- **Area:** data
+- **Why:** Archived audit/feedback cases: SYNC-F10. Interleaved publishers produce successful receipts containing different snapshot identities.
+- **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_third_party_data_sync.md`.
+
+### T-5209 — Index the real threat-model schema without dropping owners and threats
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: TM-01. indexed consumer drops actual generated threats and loses boundary/source ownership.
+- **Scope:** `src/appsec_review/indexing/products.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_threat_model_generation.md`; follow-up to closed T-172 (not reopened).
+
+### T-5210 — Retain graph eligibility language restrictions and distinct threat sites
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: TM-02, TM-03, TM-04. inexact analyzer-only graph records are promoted to verified semantic interactions; interaction catalog language restrictions are ignored.
+- **Scope:** `src/appsec_review/threat_model/lanes/interactions.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_threat_model_generation.md`.
+
+### T-5211 — Preserve language control flow and explicit CFG incompleteness
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: TS-F01, TS-F02, TS-F03, TS-F04. Real Rust CST statement wrappers erase branches, loops and early returns; `finally` is bypassed by terminating paths.
+- **Scope:** `src/appsec_review/jobs/job_tree_sitter_ast/cfg.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_tree_sitter_ast.md`; follow-up to closed T-168, T-169 (not reopened).
+
+### T-5212 — Bind CFG cache semantics and apply bounds before materialization
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: TS-F05, TS-F06, TS-F08. CFG generation is absent from the scope cache validity contract; New CFG retrieval paginates only after processing every matching function.
+- **Scope:** `src/appsec_review/jobs/job_tree_sitter_ast/job.py`, `src/appsec_review/retrieval/core.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_tree_sitter_ast.md`; follow-up to closed T-168, T-169 (not reopened).
+
+### T-5213 — Align optional intake declarations and Tree-sitter loader behavior
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: TS-F07. Declared optional intake is unconditionally required by the load handler.
+- **Scope:** `src/appsec_review/jobs/job_tree_sitter_ast/datasets.py`, `src/appsec_review/jobs/job_tree_sitter_ast/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_tree_sitter_ast.md`.
+
+### T-5214 — Verify every native scope checkpoint evidence artifact
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CSA-F04, CSI-K01, CPG-F06, SVF-F03. Scope cache reuses observations whose native evidence is missing; raw evidence omitted from scope-checkpoint verification.
+- **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Delete or alter each caller's distinct raw artifact and prove real checkpoint rejection; a helper-only test is insufficient. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`, `audit-results/job-audit-job_cpg_analysis.md`, `audit-results/job-audit-job_cpp_symbol_index.md`, `audit-results/job-audit-job_svf_alias_analysis.md`; follow-up to closed T-159 (not reopened).
+
+### T-5215 — Bind seed omission and provenance accounting into native checkpoint reuse
+
+- **State:** open
+- **Area:** graph
+- **Why:** Archived audit/feedback cases: CSA-F05, CPG-F07. Unchanged selected seed keys hide changed omitted-seed counts on resume; Same selected seed keys reuse stale omission/provenance metadata.
+- **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Unchanged selected seeds with changed omitted/provenance inputs cannot reuse stale accounting; test each caller separately. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`, `audit-results/job-audit-job_cpg_analysis.md`.
+
+### T-5216 — Bind dossier Markdown and HTML through publication and the gate
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: DP-04. Newly written Markdown/HTML are absent from publication and gate file bindings.
+- **Scope:** `src/appsec_review/jobs/job_dossier_publication/job.py`, `src/appsec_review/jobs/job_final_publication_gate/attachments.py`; paired callers/tests identified by those cases.
+- **Done when:** Actual emitted sidecars are in durable producer/gate bindings and certified report listings; unbound files are never discovered as a workaround. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_dossier_publication.md`; follow-up to closed T-176 (not reopened).
+
+### T-5217 — Observe exact accepted build payload reads
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: TA-F04, PB-F04, DS-F01, TS-F09. document consumption is missing from typed input receipts; the accepted-build reader never records consumption of the dispatch dataset.
+- **Scope:** `src/appsec_review/jobs/bound_artifacts.py`, `src/appsec_review/jobs/job_debug_symbol_indexing/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Each named real reader records the exact admitted dataset read; removing that dataset grant fails even with a valid envelope and hash. Preserve pins and bytes, and test every caller independently.
+- **Refs:** `audit-results/job-audit-job_debug_symbol_indexing.md`, `audit-results/job-audit-job_project_build.md`, `audit-results/job-audit-job_target_analysis_plan.md`, `audit-results/job-audit-job_tree_sitter_ast.md`.
+
+### T-5218 — Observe exact private analysis payload reads
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: CC-07, BE-K01, PBS-F10, RP-05, K01. catalog/history payload reads bypass dataset-level consumption observation; Intake payload reads are not observed by dataset.
+- **Scope:** `src/appsec_review/jobs/job_binary_evidence_indexing/job.py`, `src/appsec_review/jobs/job_change_context_analysis/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Each named real reader records the exact admitted dataset read; removing that dataset grant fails even with a valid envelope and hash. Preserve pins and bytes, and test every caller independently.
+- **Refs:** `audit-results/job-audit-cumulative.md`, CC-07, BE-K01, PBS-F10, RP-05 and RDI K01 in their respective per-job reports.
+
+### T-5219 — Observe exact completion payload reads
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: OX-K01, RMP-K01. Observe exact OpenVEX payload reads in addition to envelope admission; Observe remediation planning protected payload reads.
+- **Scope:** `src/appsec_review/jobs/accepted_review.py`, `src/appsec_review/jobs/job_openvex_export/dependencies.py`; paired callers/tests identified by those cases.
+- **Done when:** Each named real reader records the exact admitted dataset read; removing that dataset grant fails even with a valid envelope and hash. Preserve pins and bytes, and test every caller independently.
+- **Refs:** `audit-results/job-audit-job_openvex_export.md`, `audit-results/job-audit-job_remediation_planning.md`; follow-up to closed T-173 (not reopened).
+
+### T-5220 — Align CodeQL optional declarations with required loader inputs
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: CQ-D02. Align optional declarations with required CodeQL loader reads.
+- **Scope:** `src/appsec_review/jobs/job_codeql_analysis/datasets.py`, `src/appsec_review/jobs/job_codeql_analysis/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_codeql_analysis.md`.
+
+### T-5221 — Reject missing claimed acquisitions and inconsistent intake identities
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: RI-F01, RI-F03. A claimed acquisition can disappear and become successful “no acquisition”; Acquisition payloads are copied without validating gap shape or identity consistency.
+- **Scope:** `src/appsec_review/jobs/job_review_intake/job.py`
+- **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+- **Refs:** `audit-results/job-audit-job_review_intake.md`.
+
+### T-5222 — Reconcile actual payload shapes declarations and schema versions
+
+- **State:** blocked
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: CC-04, CPP-D01, PBS-F15, FB-OWASP-SCHEMA, FB-DOCUMENT-SCHEMA, FB-REPORT-SCHEMA, L133. signals.json advertises the units schema; Declared plan/summary schema does not validate the plan.
+- **Scope:** `docs/schemas/cpp-compiled-analysis.schema.json`, `docs/schemas/dossier/finding-dossier.schema.json`; paired callers/tests identified by those cases. Blocked decision: Establish the intended external compatibility/version contract before selecting replacement versions for OWASP, document drift, dossier and final report.
+- **Done when:** Validate real emitted documents against their declared schemas, pair consumers, and pin approved version/shape compatibility without accepting contradictory shapes.
+- **Refs:** `audit-results/job-audit-cumulative.md`, CC-04, CPP-D01, PBS-F15 and dossier schema drift in their per-job reports; 2026-11-19 schema feedback; follow-up to closed T-176 (not reopened).
+
+### T-5223 — Repair the four audited stale unit cases against current contracts
+
+- **State:** open
+- **Area:** testing
+- **Why:** Archived audit/feedback cases: TG-01, ST-08, TM-05. Repeatable stale fixture, not demonstrated production failure; direct-parent assertion rejects valid transitive scheduling.
+- **Scope:** `tests/orchestration/dagster/test_security_tagging.py`, `tests/test_threat_model_generation_job.py`; paired callers/tests identified by those cases.
+- **Done when:** The four exact recorded nodes pass alone and shuffled/parallel with real admitted catalog fixtures and correct transitive topology/consumer expectations; do not alter working production contracts to satisfy stale assertions.
+- **Refs:** `audit-results/job-audit-job_security_tagging.md`, `audit-results/job-audit-job_target_analysis_plan.md`, `audit-results/job-audit-job_threat_model_generation.md`; follow-up to closed T-172 (not reopened).
+
+### T-5224 — Grant querying capabilities only for admitted evidence
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: FB-QUERY-GRANTS. Derive three query capability grants from admitted evidence.
+- **Scope:** `src/appsec_review/review/cells.py`
+- **Done when:** Identify and test each of the three reported grants with present, absent and forbidden datasets; procedure attachment cannot widen authority.
+- **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory); follow-up to closed T-173 (not reopened).
+
+### T-5225 — Honor the resolved structural fallback policy
+
+- **State:** open
+- **Area:** codeql
+- **Why:** Archived audit/feedback cases: FB-STRUCTURAL-FALLBACK. Honor the configured CodeQL structural fallback policy.
+- **Scope:** `src/appsec_review/jobs/job_codeql_analysis/job.py`
+- **Done when:** A focused seeded-dispatch test proves enabled and disabled configured fallback paths differ correctly without running CodeQL.
+- **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory).
+
+### T-5226 — Emit dependency gaps only for applicable required evidence
+
+- **State:** open
+- **Area:** evidence
+- **Why:** Archived audit/feedback cases: FB-JOERN-GAP. Avoid unconditional Joern gap in dependency intelligence.
+- **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/job.py`
+- **Done when:** Reproduce the unconditional gap, then distinguish retired optional Joern from genuinely missing required evidence without declaring clean uncovered work.
+- **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory).
+
+### T-5227 — Count canonical report gaps once without erasing distinct scopes
+
+- **State:** open
+- **Area:** review
+- **Why:** Archived audit/feedback cases: FB-FINAL-GAP-COUNT. Count final-report gaps once by canonical identity.
+- **Scope:** `src/appsec_review/jobs/job_final_report_publication/report.py`
+- **Done when:** Pair real gate/report projections and assert exact counts for repeated same-identity gaps and distinct scoped gaps.
+- **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory); follow-up to closed T-176 (not reopened).
+
+### T-5228 — Read build environment inputs through the public admitted boundary
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: FB-PRIVATE-CONSUME. Use public accepted-upstream consumption in build environment.
+- **Scope:** `src/appsec_review/jobs/job_build_environment_analysis/job.py`
+- **Done when:** Remove private accepted-handoff coupling while preserving required pins and observing actual reads; forbidden and missing inputs remain rejected.
+- **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory).
+
+### T-5229 — Reconcile audit-identified as-built prose and test navigation
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: BE-D01, CI-D1, IP-D01, MC-D01, MC-D02, POC-D01, PB-D01, RMP-D01, SVF-D01, TA-D01, TC-D01, TC-D1, TC-D2, TS-D01, L302, L131, L153, L193, L266, L198, L177, L178, L117, L175, L154, L134, L163, L208, L147, C15-F16, L222, L138, L180, L130, L160, CQ-D01. Documentation overstates the job-specific failure type for invalid catalogs; `docs/operations/job_ci_configuration_analysis.md:16-18,265-267` says the handoff's security-findings list remains empty. `job.py:786` now publishes the `lead_candidate` subset, consumed by prioritization. T-170 is done (`docs/TODO.md:2799-2806`) and intentionally introduc.
+- **Scope:** `containers/tools/clangd-indexer/README.md`, `containers/tools/joern/README.md`; paired callers/tests identified by those cases.
+- **Done when:** Every listed prose discrepancy is reconciled against implemented behavior; documentation checks pass and generated pages/maps are regenerated by their designated owner. No capability, bound, signature policy or completed TODO state changes merely to match prose.
+- **Refs:** `audit-results/job-audit-cumulative.md` and the documentation/conditional sections in all 47 linked per-job reports, including the final-gate pinned-input/pointer-stability distinction; follow-up to closed T-168, T-169, T-170, T-171, T-172, T-173, T-176 (not reopened).
+
+### T-5230 — Resolve clang static analysis conditional audit boundaries
+
+- **State:** blocked
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L184, L185, L186. Decide whether missing per-TU outcome records remain supported legacy output; Align accepted Clang diagnostic settings with wrapper limits.
+- **Scope:** `src/appsec_review/jobs/job_clang_static_analysis/job.py` Blocked decision: Decide whether legacy zero-exit output without per-TU records is accepted or explicitly incomplete.
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`.
+
+### T-5231 — Resolve code graph index conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L267. Verify first-party disposition and guard-range-summary preservation during alternate fusion.
+- **Scope:** `src/appsec_review/jobs/job_code_graph_index/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_code_graph_index.md`.
+
+### T-5232 — Resolve cpp compiled analysis conditional audit boundaries
+
+- **State:** blocked
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: K07. K07 — Conditional replay dependency gap.
+- **Scope:** `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py` Blocked decision: Establish whether the accepted derived build image must supply custom replay headers; do not assume every extension currently fails.
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+
+### T-5233 — Resolve cpp symbol index conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L179, L180. Verify unknown clangd shapes and duplicate declaration-definition IDs; Verify per-configuration clangd translation-unit coverage.
+- **Scope:** `src/appsec_review/jobs/job_cpp_symbol_index/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_cpp_symbol_index.md`.
+
+### T-5234 — Resolve debug symbol indexing conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L118. Verify debug array fidelity source-row caps and checksum-bearing declarations.
+- **Scope:** `src/appsec_review/jobs/job_debug_symbol_indexing/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_debug_symbol_indexing.md`.
+
+### T-5235 — Resolve dossier publication conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L136. Reconcile legacy decision-audit absence with promised explicit metadata.
+- **Scope:** `src/appsec_review/jobs/job_dossier_publication/inputs.py`, `src/appsec_review/jobs/job_dossier_publication/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_dossier_publication.md`.
+
+### T-5236 — Resolve evidence collection conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L165. Verify scanner subset native-format and error-document compatibility.
+- **Scope:** `src/appsec_review/jobs/job_evidence_collection/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_evidence_collection.md`.
+
+### T-5237 — Resolve final publication gate conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: C16-F01. Verify whole-run prerequisite coverage union at publication.
+- **Scope:** `tests/test_final_report.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_final_publication_gate.md`.
+
+### T-5238 — Resolve final report publication conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: FR-U01. Conditional medium — Executive wording ignores an explicit lack of independence.
+- **Scope:** `src/appsec_review/jobs/job_final_report_publication/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_final_report_publication.md`.
+
+### T-5239 — Resolve inference security review conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L158. Verify noncritical severity ordering and worker-cardinality configuration.
+- **Scope:** `src/appsec_review/jobs/job_inference_security_review/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_inference_security_review.md`.
+
+### T-5240 — Resolve language build conditional audit boundaries
+
+- **State:** blocked
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L194, L196. Decide semantics for accepted Python frontend and Rust toolchain settings; Verify complete Go Rust JVM and Wasm metadata bounds.
+- **Scope:** `src/appsec_review/jobs/job_language_build/job.py` Blocked decision: Decide whether Python frontend and Rust toolchain settings select tools or only describe accepted recipe/image authority.
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_language_build.md`.
+
+### T-5241 — Resolve model connectivity conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: C13-F04. Validate configured model reasoning capabilities.
+- **Scope:** `src/appsec_review/jobs/job_model_connectivity/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_model_connectivity.md`.
+
+### T-5242 — Resolve poc generation conditional audit boundaries
+
+- **State:** open
+- **Area:** testing
+- **Why:** Archived audit/feedback cases: L194. Map PoC compile-policy tests and remove host-target-dependent unit fixtures.
+- **Scope:** `tests/job-test-map.json`, `tests/poc_support.py`; paired callers/tests identified by those cases.
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_poc_generation.md`.
+
+### T-5243 — Resolve post build security assessment conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: K03, K04. K03 — Verified metadata/relationship limitations:** binary/model rows hardcode `RelWithDebInfo`; binary rows hardcode producer `job_cpp_compiled_analysis` and native-style build roots, including family cases (`job.py:780-783,858-862`). Action project/configuration can differ from case-based binary scope. `evidence_entities:837-839` maps action IDs .
+- **Scope:** `src/appsec_review/jobs/job_post_build_security_assessment/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_post_build_security_assessment.md`.
+
+### T-5244 — Resolve profile data conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L177. Support or explicitly bound multi-position Callgrind dialects.
+- **Scope:** `src/appsec_review/jobs/job_profile_data/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_profile_data.md`.
+
+### T-5245 — Resolve remediation planning conditional audit boundaries
+
+- **State:** blocked
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L143. Reconcile querying procedure with admitted-source-only remediation tools.
+- **Scope:** `src/appsec_review/jobs/job_final_publication_gate/attachments.py` Blocked decision: Reconcile querying procedure promises with source-only tools without widening worker capability.
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_remediation_planning.md`; follow-up to closed T-173 (not reopened).
+
+### T-5246 — Resolve test coverage conditional audit boundaries
+
+- **State:** blocked
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L147, L149. Decide safe support for standard DOCTYPE-bearing JaCoCo exports; Retain helper-only coverage cache collision without claiming admitted stale reuse.
+- **Scope:** `src/appsec_review/jobs/job_test_coverage/job.py` Blocked decision: Decide safe DOCTYPE-bearing JaCoCo support while preserving entity protections; do not classify helper-only cache collision as an admitted runtime defect.
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_test_coverage.md`.
+
+### T-5247 — Resolve third party data sync conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L209, L210. Bound NVD decompression and cve image-layer materialization; Verify complete MITRE XML declaration detection within supported encodings.
+- **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/job.py`
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_third_party_data_sync.md`.
+
+### T-5248 — Resolve tree sitter ast conditional audit boundaries
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** Archived audit/feedback cases: L251, L252. Verify Tree-sitter point span root and ordinal invariants; Avoid parsing after scope node budget is already exhausted.
+- **Scope:** `src/appsec_review/jobs/job_target_catalog/job.py`, `src/appsec_review/jobs/job_tree_sitter_ast/job.py`; paired callers/tests identified by those cases.
+- **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+- **Refs:** `audit-results/job-audit-job_tree_sitter_ast.md`.
+
+### T-5249 — Reproduce and repair recurrent Grype database listing selection
+
+- **State:** open
+- **Area:** data
+- **Why:** user feedback reports two consecutive HAL nightly failures with
+  `ValueError: Grype listing has no active, supported, hash-pinned database`. The local audit
+  did not retain the failing upstream listing, so this is a current-reproduction lead, not a
+  claim of independently verified live failure or a reason to weaken feed validation.
+- **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/steps/grype_db_sync/feed.py`
+  and focused offline selector fixtures. Obtain a sanitized failing listing and preserve exact
+  source/version/hash and supported-database rules.
+- **Done when:** the real selector handles the reproduced supported listing and rejects stale,
+  unsupported and unpinned alternatives in focused units. Live sync and feed freshness remain
+  separately outstanding; neither is an automatic repair gate.
+- **Refs:** user feedback attachment, 2026-11-19; T-106; `audit-results/job-audit-job_third_party_data_sync.md`.
 
 ## Legacy backlog
 
