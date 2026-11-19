@@ -475,9 +475,12 @@ def test_shipped_recovery_maps_preserve_narrow_fixture_scopes_and_manual_categor
     ]
     assert common["fixture-review-repair"]["acceptance"] == ["tests/acceptance/test_repair_fixture_review.py"]
     assert common["fixture-review-repair"]["unit"] == common["fixture-review-repair"]["integration"] == []
-    for job_id in ("job_review_intake", "job_target_catalog", "job_document_issue_analysis"):
-        selected = select_tests(ROOT, [job_id])
-        contract_ids = [contract["contract_id"] for contract in selected["common_contracts"]]
-        assert ("wave1-reuse" in contract_ids) is (job_id != "job_document_issue_analysis")
-        assert not any("/integration/" in selector or "/acceptance/" in selector
-                       for selector in selected["selectors"])
+
+
+@pytest.mark.parametrize("job_id", ("job_review_intake", "job_target_catalog", "job_document_issue_analysis"))
+def test_shipped_recovery_unit_selection_preserves_each_job_scope(job_id):
+    selected = select_tests(ROOT, [job_id])
+    contract_ids = [contract["contract_id"] for contract in selected["common_contracts"]]
+    assert ("wave1-reuse" in contract_ids) is (job_id != "job_document_issue_analysis")
+    assert not any("/integration/" in selector or "/acceptance/" in selector
+                   for selector in selected["selectors"])
