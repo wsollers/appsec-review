@@ -340,7 +340,8 @@
       "unit": [
         "tests/unit/job_final_report_publication/test_contract_and_settings.py",
         "tests/unit/job_final_report_publication/test_job_units.py",
-        "tests/unit/job_final_report_publication/test_report_and_render.py"
+        "tests/unit/job_final_report_publication/test_report_and_render.py",
+        "tests/unit/job_final_report_publication/test_report_custody.py"
       ],
       "integration": [],
       "acceptance": ["tests/test_final_report.py::test_report_json_is_schema_valid_and_contains_the_required_sections"],

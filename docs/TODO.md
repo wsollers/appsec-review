@@ -320,7 +320,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5086 | [Render dossier claims only from explicit accepted evidence](#t-5086-render-dossier-claims-only-from-explicit-accepted-evidence) | review | done (2026-11-19, 7ccbafbb4f72604498c25750f74fd9d3d5a34043) |
 | T-5087 | [Render accepted patches and validation tiers truthfully](#t-5087-render-accepted-patches-and-validation-tiers-truthfully) | review | done (2026-11-19, 7ccbafbb4f72604498c25750f74fd9d3d5a34043) |
 | T-5088 | [Derive report coverage and chain dimensions from certified evidence](#t-5088-derive-report-coverage-and-chain-dimensions-from-certified-evidence) | review | done (2026-11-19, 38707646255ff5122caca9498989847dade2b02e) |
-| T-5089 | [Preserve certified chain severity and dossier availability in executive output](#t-5089-preserve-certified-chain-severity-and-dossier-availability-in-executive-output) | review | in-progress |
+| T-5089 | [Preserve certified chain severity and dossier availability in executive output](#t-5089-preserve-certified-chain-severity-and-dossier-availability-in-executive-output) | review | done (2026-11-19, 7dd477153cf5aedd2183755c7393b3230a5797b6) |
 | T-5090 | [Require real header release evidence for dependency versions](#t-5090-require-real-header-release-evidence-for-dependency-versions) | evidence | done (2026-11-19, b577faf8fe20300ec0572a1e6780dbdf26b6b350) |
 | T-5091 | [Bind advisory reachability to exact package symbols and bounded call sites](#t-5091-bind-advisory-reachability-to-exact-package-symbols-and-bounded-call-sites) | evidence | done (2026-11-19, 874b13235ffcc340072489cda97da1840d372e2a) |
 | T-5092 | [Preserve clangd call occurrences locations and coverage](#t-5092-preserve-clangd-call-occurrences-locations-and-coverage) | graph | done (2026-11-19, 0c37a8bb505c4f9b6049350002368f86f8d18261) |
@@ -3945,12 +3945,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5089 — Preserve certified chain severity and dossier availability in executive output
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 7dd477153cf5aedd2183755c7393b3230a5797b6)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: FR-F02, FR-F04. HTML and executive PDF discard the certified composed chain severity; HTML reports certified dossiers as nonexistent and omits available narratives.
 - **Scope:** `src/appsec_review/jobs/job_final_report_publication/render.py`, `src/appsec_review/reporting/executive_report.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
+  HTML and PDF-source rendering preserve certified chain cards and read the same gate-bound
+  dossier summaries without protected excerpts. Claimed JSON tampering/identity mismatches
+  fail integrity checks; an unloaded certified dossier is not labelled nonexistent.
+  Main affected selection: 43 passed/5.07 s, two workers, seed 5089, no skips or slow cases.
+  Markdown/HTML artifact custody itself remains under T-5216; legacy schemas are unchanged.
 
 ### T-5090 — Require real header release evidence for dependency versions
 
