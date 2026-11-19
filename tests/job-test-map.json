@@ -365,10 +365,12 @@
         "tests/review/test_bounded_cells.py",
         "tests/review/test_discovery_competence.py",
         "tests/review/test_execution_budget_wiring.py",
+        "tests/review/test_independence.py",
         "tests/review/test_inference_review_schemas.py",
         "tests/review/test_prompt_competence.py",
         "tests/review/test_team_handler.py",
         "tests/review/test_teams.py",
+        "tests/review/test_verifier_blindness.py",
         "tests/test_inference_fixture_contracts.py",
         "tests/test_inference_review_config.py",
         "tests/test_review_guidance_execution.py",
@@ -857,6 +859,8 @@
     },
     "job_tree_sitter_ast": {
       "unit": [
+        "tests/unit/job_tree_sitter_ast/test_cfg_and_guards.py",
+        "tests/unit/job_tree_sitter_ast/test_cfg_control.py",
         "tests/unit/job_tree_sitter_ast/test_contract.py",
         "tests/unit/job_tree_sitter_ast/test_model.py",
         "tests/unit/job_tree_sitter_ast/test_normalize_and_projection.py",

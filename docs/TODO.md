@@ -382,14 +382,14 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5148 | [Honor Rust metadata and dotnet PHP build policies](#t-5148-honor-rust-metadata-and-dotnet-php-build-policies) | build | open |
 | T-5149 | [Keep identical compiler argv distinct across working directories](#t-5149-keep-identical-compiler-argv-distinct-across-working-directories) | build | open |
 | T-5150 | [Apply configured diagnostic tail bounds to every build family](#t-5150-apply-configured-diagnostic-tail-bounds-to-every-build-family) | build | open |
-| T-5151 | [Preserve dependency OpenVEX identity gaps nullable coordinates and telemetry](#t-5151-preserve-dependency-openvex-identity-gaps-nullable-coordinates-and-telemetry) | evidence | open |
-| T-5152 | [Enforce dependency result and aggregate OpenVEX input bounds](#t-5152-enforce-dependency-result-and-aggregate-openvex-input-bounds) | evidence | open |
+| T-5151 | [Preserve dependency OpenVEX identity gaps nullable coordinates and telemetry](#t-5151-preserve-dependency-openvex-identity-gaps-nullable-coordinates-and-telemetry) | evidence | in-progress |
+| T-5152 | [Enforce dependency result and aggregate OpenVEX input bounds](#t-5152-enforce-dependency-result-and-aggregate-openvex-input-bounds) | evidence | in-progress |
 | T-5153 | [Reject malformed OWASP model field types within the bounded cell](#t-5153-reject-malformed-owasp-model-field-types-within-the-bounded-cell) | review | open |
 | T-5154 | [Conserve OWASP dispatch and characterization gap accounting](#t-5154-conserve-owasp-dispatch-and-characterization-gap-accounting) | review | open |
 | T-5155 | [Accept resolving OWASP prerequisite citations and adverse qualifications](#t-5155-accept-resolving-owasp-prerequisite-citations-and-adverse-qualifications) | review | open |
 | T-5156 | [Make workbench filters retrieve finding-package records](#t-5156-make-workbench-filters-retrieve-finding-package-records) | review | open |
 | T-5157 | [Resolve bounded PoC declarations from the correct accepted build](#t-5157-resolve-bounded-poc-declarations-from-the-correct-accepted-build) | review | open |
-| T-5158 | [Validate actual PoC calls bounds numeric triggers and denied names](#t-5158-validate-actual-poc-calls-bounds-numeric-triggers-and-denied-names) | review | open |
+| T-5158 | [Validate actual PoC calls bounds numeric triggers and denied names](#t-5158-validate-actual-poc-calls-bounds-numeric-triggers-and-denied-names) | review | in-progress |
 | T-5159 | [Bound PoC briefs and retain nested compile qualifications](#t-5159-bound-poc-briefs-and-retain-nested-compile-qualifications) | review | open |
 | T-5160 | [Bind hardening conclusions to the exact binary command and evidence](#t-5160-bind-hardening-conclusions-to-the-exact-binary-command-and-evidence) | evidence | open |
 | T-5161 | [Keep post-build shards immutable and rejected artifact hashes rejected](#t-5161-keep-post-build-shards-immutable-and-rejected-artifact-hashes-rejected) | evidence | open |
@@ -483,7 +483,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5249 | [Reproduce and repair recurrent Grype database listing selection](#t-5249-reproduce-and-repair-recurrent-grype-database-listing-selection) | data | open |
 | T-5250 | [Repair the three stateful guidance prompt-size test failures](#t-5250-repair-the-three-stateful-guidance-prompt-size-test-failures) | testing | done (2026-11-19, 86d81cae0680fd8fa97ffe6c7fd773fdc55e3a8e) |
 | T-5251 | [Bound shared subprocess stream capture before materialization](#t-5251-bound-shared-subprocess-stream-capture-before-materialization) | pipeline | open |
-| T-5252 | [Reconcile inherited documentation contract failures](#t-5252-reconcile-inherited-documentation-contract-failures) | testing | in-progress |
+| T-5252 | [Reconcile inherited documentation contract failures](#t-5252-reconcile-inherited-documentation-contract-failures) | testing | done (2026-11-19, f131b7c48ac4623e71cbe1b93cbc6ec393d6ca95) |
 
 ## Active entries
 
@@ -4529,7 +4529,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5151 — Preserve dependency OpenVEX identity gaps nullable coordinates and telemetry
 
-- **State:** open
+- **State:** in-progress
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: OX-01, OX-02, OX-03, OX-06. Dependency product omits source/configuration identity; Empty/all-positive dependency export drops upstream coverage gaps.
 - **Scope:** `src/appsec_review/jobs/job_openvex_export/dependencies.py`, `src/appsec_review/jobs/job_openvex_export/job.py`
@@ -4538,7 +4538,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5152 — Enforce dependency result and aggregate OpenVEX input bounds
 
-- **State:** open
+- **State:** in-progress
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: OX-04, OX-05. Dependency result is read with the document byte limit only at acceptance; Separate dependency reader bypasses aggregate input limits.
 - **Scope:** `src/appsec_review/jobs/job_openvex_export/dependencies.py`, `src/appsec_review/jobs/job_openvex_export/inputs.py`
@@ -4592,7 +4592,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5158 — Validate actual PoC calls bounds numeric triggers and denied names
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** Archived audit/feedback cases: POC-F03, POC-F04, POC-F07, POC-F10. A sink reference counts as a sink call; Loop bounds ignore direction and inclusive endpoints.
 - **Scope:** `src/appsec_review/jobs/job_poc_generation/policy.py`
@@ -5484,7 +5484,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5252 — Reconcile inherited documentation contract failures
 
-- **State:** in-progress
+- **State:** done (2026-11-19, f131b7c48ac4623e71cbe1b93cbc6ec393d6ca95)
 - **Area:** testing
 - **Why:** the bounded repair documentation selection has 154 passes and two inherited failures:
   frontmatter reconciliation metadata and unresolved prose identifiers across seven unchanged
@@ -5497,6 +5497,12 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   policy; keep proposals distinct from implementation, without invented identifiers or weaker checks.
 - **Done when:** the affected documentation checks pass with source-backed identifiers and honest
   metadata. Do not advance `docs/docs-sync.json` without its full cumulative reconciliation.
+  Corrected metadata preserves prior page-specific revisions; proposed jobs and retired labels
+  remain explicit proposals/history. Identity discovery derives `claim/3` from the real
+  `make_id` binding, not a whitelist or a replacement for record schema `appsec-review/claim/1`.
+  The admission-basis docstring label remains a sourced quotation, not an emitted schema.
+  Combined main documentation/map/generation checks: 159 passed/27.01 s, two workers,
+  seed 5252, no skips or cases over ten seconds. The global watermark remains unchanged.
 - **Refs:** `tests/docs/test_docs_frontmatter.py`, `tests/docs/test_docs_identifiers.py`;
   repair documentation handoff at `7a0a51efbd0ff43becc51fd5fc9d1d805a673b9c`, 2026-11-19.
 
