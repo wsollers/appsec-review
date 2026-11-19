@@ -95,13 +95,15 @@ def build_argv(argv: Sequence[str], settings: RustBuildSettings) -> tuple[str, .
         values.append("--offline")
     if settings.locked and "--locked" not in values:
         values.append("--locked")
-    if settings.target and not _has_option(values, "--target"):
+    subcommand = values[1]
+    if subcommand in {"build", "rustc", "check", "fetch"} and settings.target and not _has_option(values, "--target"):
         values.extend(("--target", settings.target))
-    if settings.profile != "dev" and not _has_option(values, "--profile") and "--release" not in values:
+    if (subcommand in {"build", "rustc", "check"} and settings.profile != "dev"
+            and not _has_option(values, "--profile") and "--release" not in values):
         values.extend(("--profile", settings.profile))
-    if settings.features and not _has_option(values, "--features"):
+    if subcommand != "fetch" and settings.features and not _has_option(values, "--features"):
         values.extend(("--features", ",".join(settings.features)))
-    if values[1] in {"build", "rustc", "check"}:
+    if subcommand in {"build", "rustc", "check"}:
         if "-vv" not in values and "--verbose" not in values:
             values.append("-vv")
         if not _has_option(values, "--message-format"):

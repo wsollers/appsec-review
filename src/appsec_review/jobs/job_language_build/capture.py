@@ -161,8 +161,9 @@ def reconcile_captured_build(
     # An invocation belongs to the one capture record whose event ordinals identify it and to
     # the one executable those events started, so the same argv observed under two commands,
     # or through a toolchain proxy and the binary it resolves to, is two rows.
-    rows: dict[tuple[int, str, str], dict[str, Any]] = {}
+    rows: dict[tuple[int, str, str, str], dict[str, Any]] = {}
     reconcilable: dict[tuple[int, str], list[dict[str, Any]]] = {}
+    invocation_directories: dict[tuple[int, str], str | None] = {}
     classify_record = descriptor.classify_record or descriptor.classify_tool
     facts: dict[str, Any] = {
         "process_exec_events": 0,
@@ -266,7 +267,10 @@ def reconcile_captured_build(
                 facts["truncated_tool_exec_events"] += 1
                 continue
             invocation = (ordinal, _identity_key(identity, argv))
-            key = (*invocation, executable)
+            working_directory = _workspace_directory(directories, event, directory)
+            if invocation in invocation_directories and invocation_directories[invocation] != working_directory:
+                invocation_directories[invocation] = None
+            key = (*invocation, executable, working_directory)
             row = rows.get(key)
             if row is None:
                 if len(rows) >= limits.invocation_count:
@@ -274,9 +278,10 @@ def reconcile_captured_build(
                     continue
                 row = descriptor.build_invocation(
                     identity.name, identity.kind, argv, workspace,
-                    _workspace_directory(directories, event, directory),
+                    working_directory,
                     f"{label}:event-{event.get('ordinal')}",
                 )
+                row["working_directory"] = working_directory
                 row["evidence"] = {
                     "capture_record_sha256": record_sha,
                     "tool_call": None,
@@ -288,6 +293,7 @@ def reconcile_captured_build(
                 }
                 rows[key] = row
                 reconcilable.setdefault(invocation, []).append(row)
+                invocation_directories.setdefault(invocation, working_directory)
             observed_exec = row["evidence"]["process_exec"]
             observed_exec["count"] += 1
             if len(observed_exec["event_ordinals"]) < limits.event_ordinals_per_invocation:
@@ -310,8 +316,11 @@ def reconcile_captured_build(
             identity = classify_record(PurePosixPath(tool).name, argv)
             if identity is None:
                 continue
-            candidates = reconcilable.get((ordinal, _identity_key(identity, argv)))
-            if not candidates:
+            invocation = (ordinal, _identity_key(identity, argv))
+            candidates = reconcilable.get(invocation)
+            # Wrapper records do not carry a cwd. Equal argv in different directories cannot
+            # be attributed to one of those execs without inventing secondary provenance.
+            if not candidates or invocation_directories[invocation] is None:
                 facts["unreconciled_tool_calls"] += 1
                 continue
             # A wrapper runs the real tool from the image; its launcher only started the wrapper.

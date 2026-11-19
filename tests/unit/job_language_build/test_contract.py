@@ -105,7 +105,7 @@ def test_outputs_are_declared_per_step_with_their_schema_and_disposition() -> No
     assert all(item.artifacts or item.indexes for item in DATASETS), "every output claims files or an index"
     assert SCHEMA == "appsec-review/language-build-handoff/2"
     assert RECEIPT_SCHEMA == "appsec-review/language-build-receipt/1"
-    assert EXECUTOR_IDENTITY.startswith("appsec-review/generic-language-build-executor/4+")
+    assert EXECUTOR_IDENTITY.startswith("appsec-review/generic-language-build-executor/5+")
 
 
 def test_build_workspaces_claim_one_tree_per_family_lane() -> None:

@@ -75,7 +75,7 @@ from appsec_review.jobs.job_language_build.datasets import CONTRACT, DATASETS
 
 SCHEMA = "appsec-review/language-build-handoff/2"
 RECEIPT_SCHEMA = LANGUAGE_RECEIPT_SCHEMA
-EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/4+" + POLICY_IDENTITY
+EXECUTOR_IDENTITY = "appsec-review/generic-language-build-executor/5+" + POLICY_IDENTITY
 CAPTURE_DESCRIPTORS: dict[str, CapturedBuildDescriptor] = {
     descriptor.family: descriptor for descriptor in (
         dotnet.CAPTURE_DESCRIPTOR, native.CAPTURE_DESCRIPTOR, rust.CAPTURE_DESCRIPTOR,
@@ -530,7 +530,8 @@ def _apply_native_link_metadata(rows: Sequence[dict[str, Any]], workspace: Path,
         if not argv:
             continue
         metadata = link_metadata_by_argv.get((Path(str(argv[0])).name, tuple(str(value) for value in argv[1:])))
-        if metadata is not None:
+        if (metadata is not None
+                and row.get("working_directory", metadata["directory"]) == metadata["directory"]):
             row["inputs"] = list(metadata["inputs"])
             row["outputs"] = list(metadata["outputs"])
             row["metadata_origin"] = metadata["origin"]
@@ -687,7 +688,8 @@ def _fingerprint(dispatch: Mapping[str, Any], accepted: Mapping[str, Any],
         "build_outputs": (build_outputs or BuildOutputPolicy()).identity})).hexdigest()
 
 
-def _stream_identity(run_root: Path, path: Path, result: Any, name: str, limit: int) -> dict[str, Any]:
+def _stream_identity(run_root: Path, path: Path, result: Any, name: str, limit: int, *,
+                     tail_limit: int = 32768) -> dict[str, Any]:
     data = bytes(getattr(result, name))
     complete_file = getattr(result, f"{name}_file", None)
     if isinstance(complete_file, Path):
@@ -697,28 +699,31 @@ def _stream_identity(run_root: Path, path: Path, result: Any, name: str, limit: 
         try: path.chmod(0o600)
         except OSError: pass
         preview_truncated = bool(getattr(result, f"{name}_truncated", False))
-        return {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
+        identity = {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
                 "captured_bytes": total, "total_bytes": total,
                 "capture_limit_bytes": None, "truncated": False,
                 "storage": "complete-file",
                 "preview_limit_bytes": len(data) if preview_truncated else limit,
                 "preview_truncated": preview_truncated}
-    total = getattr(result, f"{name}_bytes", None)
-    total = len(data) if total is None else int(total)
-    truncated = bool(getattr(result, f"{name}_truncated", False) or total > len(data))
-    tail = bytes(getattr(result, f"{name}_tail", b""))
-    tail_path = path.with_name(path.name + ".tail")
+        with path.open("rb") as stream:
+            stream.seek(max(0, total - tail_limit))
+            tail = stream.read(tail_limit)
+        retain_tail = preview_truncated or total > tail_limit
+    else:
+        total = getattr(result, f"{name}_bytes", None)
+        total = len(data) if total is None else int(total)
+        truncated = bool(getattr(result, f"{name}_truncated", False) or total > len(data))
+        available_tail = bytes(getattr(result, f"{name}_tail", b"")) if truncated else data
+        tail = available_tail[-tail_limit:] if tail_limit else b""
+        retain_tail = truncated or total > tail_limit
+        identity = {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
+                    "captured_bytes": len(data), "total_bytes": total,
+                    "capture_limit_bytes": limit, "truncated": truncated}
     try: path.chmod(0o600)
     except OSError: pass
-    identity = {"path": path.relative_to(run_root).as_posix(), "sha256": file_sha256(path),
-                "captured_bytes": len(data), "total_bytes": total,
-                "capture_limit_bytes": limit, "truncated": truncated}
-    try: path.chmod(0o600)
-    except OSError: pass
-    if truncated and tail:
+    if retain_tail and tail:
+        tail_path = path.with_name(path.name + ".tail")
         tail_path.write_bytes(tail)
-        try: tail_path.chmod(0o600)
-        except OSError: pass
         try: tail_path.chmod(0o600)
         except OSError: pass
         identity["diagnostic_tail"] = {"path": tail_path.relative_to(run_root).as_posix(),
@@ -1170,16 +1175,20 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
     php_metadata: dict[str, Any] | None = None
     php_metadata_gaps: list[str] = []
     if family == "php":
-        php_errors = php.validate_php_dispatch(dispatch)
         php_policy = php.composer_policy(unit.job.config.settings)
-        if php_policy["require_lockfile"] and php_errors:
+        php_errors = php.validate_php_dispatch(dispatch, policy=php_policy, workspace=workspace)
+        if php_errors:
             raise ValueError("accepted PHP dispatch is invalid: " + "; ".join(php_errors))
         if dispatch.get("build_system") == "composer":
             php_metadata, php_metadata_gaps = php.composer_metadata(workspace, str(recipe["source_dir"]))
     if family == "dotnet":
         projects, topology_gaps, platform_gaps = dotnet.selected_project_topology(
             unit.job.run_root, dispatch)
-        recipe_gaps = list(dotnet.validate_recipe(recipe, workspace))
+        typed = unit.job.config.typed_settings
+        if not isinstance(typed, LanguageBuildSettings):
+            raise ValueError("typed language-build settings are unavailable")
+        recipe_gaps = list(dotnet.validate_recipe(
+            recipe, workspace, settings=typed.dotnet, operations=selected_target.get("operations", ())))
         if platform_gaps:
             return _platform_receipt(unit, dispatch, accepted,
                                      [*topology_gaps, *platform_gaps], projects)
@@ -1327,8 +1336,11 @@ def _execute_one(unit: UnitContext, dispatch: Mapping[str, Any], accepted: Mappi
         except OSError: pass
         failed = result.timed_out or result.exit_code != 0
         limit = int(unit.job.config.settings["output_bytes"])
-        stdout_identity = _stream_identity(unit.job.run_root, stdout, result, "stdout", limit)
-        stderr_identity = _stream_identity(unit.job.run_root, stderr, result, "stderr", limit)
+        tail_limit = int(unit.job.config.settings.get(family, {}).get("diagnostic_tail_bytes", 32768))
+        stdout_identity = _stream_identity(unit.job.run_root, stdout, result, "stdout", limit,
+                                           tail_limit=tail_limit)
+        stderr_identity = _stream_identity(unit.job.run_root, stderr, result, "stderr", limit,
+                                           tail_limit=tail_limit)
         commands.append({"command_id": command_id, "attempt_identity": unit.job.attempt_id,
             "ordinal": ordinal, "tool": Path(argv[0]).name,
             "tool_kind": (php.invocation_kind(Path(argv[0]).name, argv) if family == "php" else
@@ -1758,7 +1770,23 @@ def _validate_config(context, _result) -> None:
 
 def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict[str, Any]:
     prior_path, prior_sha = resolve_context_manifest(unit.job)
-    prior, _ = load_verified_manifest(unit.job.run_root, prior_path, prior_sha)
+    verified = {}
+    prior, _ = load_verified_manifest(unit.job.run_root, prior_path, prior_sha, verified=verified)
+    specialized: dict[tuple[str, str], IndexIdentity] = {}
+    for receipt in receipts:
+        raw = receipt.get("retrieval_index")
+        if raw is None:
+            continue
+        identity = IndexIdentity(**{**raw["identity"], "gaps": tuple(raw["identity"].get("gaps", ()))})
+        if (receipt.get("family") != "java" or identity.name != "build"
+                or identity.shard_id != "jvm-" + str(receipt["build_unit_id"])
+                or identity.producer.get("job") != "job_language_build"
+                or identity.producer.get("family") != "java"):
+            raise ValueError("JVM build index identity does not match its receipt")
+        key = (identity.name, identity.shard_id)
+        if key in specialized and specialized[key] != identity:
+            raise ValueError("conflicting JVM build index identities")
+        specialized[key] = identity
     producer = [{"build_unit_id": receipt.get("build_unit_id"), "fingerprint": receipt.get("fingerprint"),
                  "status": receipt.get("terminal_status")} for receipt in receipts]
     fingerprint = index_fingerprint(name="build", target_snapshot=unit.job.source_fingerprint,
@@ -1828,14 +1856,18 @@ def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -
                              path.relative_to(unit.job.run_root).as_posix(),
                              {"job": "job_language_build", "unit": unit.unit_id}, tuple(gaps), "language-build")
     indexes = [IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))}) for raw in prior["indexes"]]
-    indexes = [value for value in indexes if not (value.name == "build" and value.shard_id == "language-build")]
+    indexes = [value for value in indexes if (value.name, value.shard_id) not in specialized
+               and not (value.name == "build" and value.shard_id == "language-build")]
+    indexes.extend(specialized.values())
     indexes.append(identity)
     manifest = unit.job.run_root / "data" / "indices" / "manifests" / f"language-build-{unit.job.attempt_id}.json"
     write_manifest(manifest, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
                    target_root=unit.job.target_root or Path(), indexes=indexes,
                    upstream_manifests=({"path": prior_path.relative_to(unit.job.run_root).as_posix(),
                                         "sha256": prior_sha},))
-    return {"path": manifest.relative_to(unit.job.run_root).as_posix(), "sha256": file_sha256(manifest)}
+    manifest_sha = file_sha256(manifest)
+    load_verified_manifest(unit.job.run_root, manifest, manifest_sha, verified=verified)
+    return {"path": manifest.relative_to(unit.job.run_root).as_posix(), "sha256": manifest_sha}
 
 
 def iteration_controller(unit: UnitContext):

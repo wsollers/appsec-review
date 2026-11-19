@@ -120,6 +120,10 @@ instances; the descriptors classify observed tools and map language-specific inp
 artifacts, and metadata. Go runs under the same executor/collector boundary and standardized
 syscall capture records but reconciles them in its own `go.capture_invocations`, with the same
 authority rule: only successful process-exec events establish that a tool ran.
+The shared reconciler keeps identical compiler argv in different observed working directories
+distinct, including their input/output mappings. Wrapper records without a working directory
+cannot disambiguate those execs: they remain unmatched secondary evidence with a named gap.
+Optional link metadata only enriches a captured row from the same working directory.
 
 **Source-integrated:** the
 [topology and bounded-iteration architecture](../architecture/build-topology-and-iterations.md)
@@ -298,6 +302,13 @@ It catalogs class files, generated Java/Kotlin sources, resources and dependency
 module/source-map data, DEX files, APK packages, and JAR/WAR/EAR packages. When a build tool
 performs compiler or packaging work in-process and no nested invocation is observable, the receipt
 reports a provenance gap instead of inventing a command.
+Acceptance composes each receipt's actual `jvm-<build-unit-id>` provenance shard with the aggregate
+`language-build` shard and inherited indices, verifying hashes, shard metadata, target snapshot,
+and relation closure before publishing the manifest. JVM index fingerprints include commands,
+observed invocations, declared compilations, artifact mappings, status, and gaps; equal artifact
+bytes alone cannot reuse stale provenance.
+The generic and JVM executor identity revisions also invalidate older family checkpoints, so
+previously accepted receipts cannot bypass these policy/provenance repairs through cache reuse.
 
 Gradle compiles Java and Kotlin inside its own JVM, so every language-build Gradle command (plain
 and Android) runs with a run-owned init script,
@@ -505,6 +516,9 @@ standardized execution capture described in
 each command receipt carries a hash-verified `execution_capture` identity and its gitleaks findings
 identity. Successful process-exec syscall events, reconciled with PATH tool-call records, are the
 evidence for rustc, linker-driver, linker, archiver, and build-script/code-generator execution;
+the generated `cargo metadata` command receives lock/offline/feature policy but no build-only
+target or profile options. Target/profile and diagnostic-format options apply to compilation
+commands; Cargo fetch receives no profile or feature options.
 Cargo output is retained as a diagnostic stream and is not parsed for provenance. Cargo metadata
 identifies proc-macro targets, workspace packages, and exact resolve relationships. Generated Rust
 sources, rlib/rmeta files, static/shared libraries, binaries, and debug/dependency metadata are
@@ -702,7 +716,11 @@ only hashes, outcomes, bounded stream facts, and artifact identities.
 
 .NET restore may resolve packages declared by the accepted project inputs; build, publish, and pack
 commands may perform their normal implicit restore. The adapter never runs tests or target
-applications. It catalogs C#/VB/F# assemblies, portable PDBs, generated sources, NuGet packages,
+applications. Frozen `allow_publish`, `allow_pack`, and `allow_aot` settings are checked before
+executor resolution, including explicit MSBuild targets/properties and selected native-AOT
+operations from the accepted topology. A prohibited operation produces a blocked receipt with
+no executed commands; permitted operations retain the existing capture and target-admission rules.
+It catalogs C#/VB/F# assemblies, portable PDBs, generated sources, NuGet packages,
 dependency/runtime configuration, native/AOT outputs, project/package/reference topology, and
 compiler, generator, resource, linker/trimmer, AOT, packaging, and native-tool invocations established
 by successful process-exec syscall events. Managed SDK tools hosted by `dotnet`, including Roslyn
@@ -734,7 +752,11 @@ requires a valid accepted Android-profile recipe, and runs before
 project-build selects the recipe's Android image. This makes recipe-selection drift visible
 without confusing a model proposal with the command ultimately executed.
 
-The PHP adapter requires `composer.json`; `composer.lock` is used when present. Composer dependency
+The PHP adapter requires `composer.json`; `composer.lock` is used when present. With frozen
+`require_lockfile=true`, the source directory's exact lock path must be declared in the recipe,
+hash-bound in accepted dependency inputs, and present with matching bytes in the workspace before
+executor resolution. Manifest-only resolution remains available when this policy is false.
+Composer dependency
 installation may occur while deriving the pinned project image or during the network-enabled build,
 with plugins and scripts disabled. Central policy controls Composer plugins and
 scripts independently. Plugins default to disabled; enabled scripts remain untrusted target build
@@ -1123,8 +1145,13 @@ loading. Values below are the shipped `appsec-review.toml` defaults. Global capt
 | `compiler_artifact_collection_mode` | `required` | `required`, `auto`, or `disabled` |
 | `compiler_artifact_collection_overrides` | native/go/dotnet/rust `required` | per-family mode for `native`, `go`, `dotnet`, `node`, `python`, `rust`, `php`, `java`, `wasm` |
 
-Per-family tables. `diagnostic_tail_bytes` (shipped 32768) bounds the on-demand failure-tail read;
-it is 0-1 MiB for Go, Python, Rust, PHP, and Node and positive for JVM:
+Per-family tables. `diagnostic_tail_bytes` (shipped 32768) bounds retained protected diagnostic
+tails in bytes for Go, Python, Rust, PHP, Node, and JVM. Complete captured stdout/stderr remain
+intact and independently hash-bound; a configured tail larger than the in-memory preview is read
+from the complete file without loading the whole stream. Zero disables a separate tail where
+accepted by the family settings; JVM requires a positive bound. The iteration controller's
+separate diagnosis reader still uses its fixed 32768-character window
+([T-5150](../TODO.md#t-5150-apply-configured-diagnostic-tail-bounds-to-every-build-family)).
 
 | Table | Keys (shipped value) | Constraints |
 | --- | --- | --- |

@@ -14,6 +14,7 @@ from appsec_review.jobs.build_output_scope import (
 )
 from appsec_review.jobs.delivery_scope import apply_scope, scope_fields
 from appsec_review.storage import canonical_json, file_sha256
+from appsec_review.storage.shared import safe_path
 
 from . import php_installed
 
@@ -24,7 +25,8 @@ _ARCHIVE_SUFFIXES = (".phar", ".zip", ".tar", ".tar.gz", ".tgz")
 _LINKED_SUFFIXES = {".a": "static-library", ".lib": "static-library", ".exe": "executable"}
 
 
-def validate_php_dispatch(dispatch: Mapping[str, Any]) -> list[str]:
+def validate_php_dispatch(dispatch: Mapping[str, Any], *, policy: Mapping[str, Any] | None = None,
+                          workspace: Path | None = None) -> list[str]:
     """Validate the language-family constraints that are stricter than a generic recipe."""
     recipe = dispatch.get("recipe")
     if not isinstance(recipe, Mapping) or dispatch.get("build_system") not in {"composer", "phpize"}:
@@ -35,6 +37,18 @@ def validate_php_dispatch(dispatch: Mapping[str, Any]) -> list[str]:
         return [] if "config.m4" in dependencies else ["phpize extension metadata is unavailable"]
     if "composer.json" not in dependencies:
         gaps.append("Composer project metadata is unavailable")
+    if policy is not None and policy["require_lockfile"]:
+        relative = (PurePosixPath(str(recipe["source_dir"])) / "composer.lock").as_posix()
+        expected = dispatch.get("image", {}).get("dependency_hashes", {}).get(relative)
+        if relative not in recipe.get("dependency_files", ()) or not expected:
+            gaps.append("required composer.lock is not bound to accepted dependency inputs")
+        elif workspace is not None:
+            try:
+                path = safe_path(workspace, relative)
+                if not path.is_file() or file_sha256(path) != expected:
+                    gaps.append("required composer.lock bytes differ from accepted dependency inputs")
+            except (ValueError, OSError):
+                gaps.append("required composer.lock is unavailable in the build workspace")
     return gaps
 
 

@@ -270,4 +270,4 @@ def test_load_accepted_language_build_refuses_a_changed_or_foreign_document(tmp_
 
 def test_executor_identity_binds_the_delivery_policy() -> None:
     from appsec_review.jobs.delivery_scope import POLICY_IDENTITY
-    assert EXECUTOR_IDENTITY == "appsec-review/generic-language-build-executor/4+" + POLICY_IDENTITY
+    assert EXECUTOR_IDENTITY == "appsec-review/generic-language-build-executor/5+" + POLICY_IDENTITY

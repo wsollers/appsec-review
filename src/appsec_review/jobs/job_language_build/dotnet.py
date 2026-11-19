@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 import xml.etree.ElementTree as ET
 from typing import Any
 
+from appsec_review.config import DotnetBuildSettings
 from appsec_review.storage import canonical_json, file_sha256
 
 from .capture import CapturedBuildDescriptor, ToolIdentity
@@ -30,7 +31,9 @@ _TOOL_KINDS = {
 }
 
 
-def validate_recipe(recipe: Mapping[str, Any], workspace: Path | None = None) -> tuple[str, ...]:
+def validate_recipe(recipe: Mapping[str, Any], workspace: Path | None = None, *,
+                    settings: DotnetBuildSettings | None = None,
+                    operations: Sequence[Mapping[str, Any]] = ()) -> tuple[str, ...]:
     """Validate the .NET-specific build-only contract."""
     errors: list[str] = []
     commands = [*recipe.get("configure_commands", ()), *recipe.get("build_commands", ())]
@@ -43,6 +46,34 @@ def validate_recipe(recipe: Mapping[str, Any], workspace: Path | None = None) ->
             verb = next((value for value in words if not value.startswith("-")), "")
             if verb not in {"restore", "build", "publish", "pack", "msbuild"}:
                 errors.append(f"dotnet subcommand is unsupported: {verb or '<missing>'}")
+        if settings is not None:
+            requested = set()
+            if executable == "dotnet":
+                requested.add(verb)
+            for index, word in enumerate(words):
+                if (word in {"-p", "--property", "-property", "/property",
+                             "-t", "--target", "-target", "/target"}
+                        and index + 1 < len(words)):
+                    word += ":" + words[index + 1]
+                target = re.fullmatch(r"(?:--?|/)(?:t|target|targets)[:=](.+)", word)
+                if target:
+                    requested.update(re.split(r"[;,]", target[1]))
+                properties = re.fullmatch(r"(?:--?|/)(?:p|property)[:=](.+)", word)
+                if properties:
+                    for assignment in re.split(r"[;,]", properties[1]):
+                        name, _, value = assignment.partition("=")
+                        if value.strip() not in {"false", "0"}:
+                            if name in {"publishaot", "nativeaot", "publishreadytorun"}:
+                                requested.add("aot")
+                            elif name == "generatepackageonbuild":
+                                requested.add("pack")
+            for operation, allowed in (("publish", settings.allow_publish), ("pack", settings.allow_pack),
+                                       ("aot", settings.allow_aot)):
+                if operation in requested and not allowed:
+                    errors.append(f".NET operation {operation} is prohibited by allow_{operation}=false")
+    if settings is not None and not settings.allow_aot and any(
+            operation.get("kind") == "native_aot" for operation in operations):
+        errors.append(".NET selected native AOT operation is prohibited by allow_aot=false")
     return tuple(dict.fromkeys(errors))
 
 
