@@ -41,6 +41,9 @@ callsite. Neither side is a verified source citation. Unresolved callees are omi
 explicit gap, not reassigned to the caller. Non-line position layouts are unsupported and produce
 gaps rather than treating instruction addresses as source lines. Self and inclusive call costs
 must not be summed as one undifferentiated event population.
+The reserved Callgrind file marker `???`, including compressed file references, becomes a null
+source with an `ambiguous_source` gap. Its measured costs remain unlocated same-build context;
+ordinary filenames containing question marks are not treated as this exact reserved marker.
 
 Detection incrementally decodes its bounded prefix, so a UTF-8 character crossing that boundary
 is not rejected. Parsing still strictly validates the complete admitted text and its line bounds.

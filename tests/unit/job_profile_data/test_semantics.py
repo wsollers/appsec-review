@@ -280,6 +280,58 @@ def test_review_profile_context_is_file_scoped_except_unlocated_rows(tmp_path: P
     assert any("unsupported_profile_format" in gap.reason for gap in scope.gaps if gap.producer == "profile_data")
 
 
+def test_callgrind_unknown_file_marker_preserves_metrics_and_same_build_context(tmp_path: Path) -> None:
+    result = _publish(tmp_path, [
+        ("callgrind-unknown.out", b"events: Ir\nfl=???\nfn=hot\n0 9\n", "accepted-input"),
+        ("callgrind-aliases.out", b"""events: Ir
+fl=(1) ???
+fn=aliased
+0 9
+fl=(1)
+fn=reused
+0 9
+fi=???
+fn=inline_unknown
+0 9
+fl=src/known.c
+fn=known
+7 4
+fl=src/???.c
+fn=lookalike
+8 5
+cfl=(1)
+cfn=unknown_callee
+calls=1 0
+9 9
+""", "build-output"),
+    ])
+    scope = accept_manifest(result.root, manifest_path=result.manifest,
+                            manifest_sha256=result.publication["index_manifest"]["sha256"])
+    by_path, by_build, _dependencies = _engineering_context(scope)
+    response = result.core.query_engineering_signals(signal_family="profile")
+    rows = {row["payload"]["symbol"]: row for row in response["results"]}
+    unknown = {"hot", "aliased", "reused", "inline_unknown", "unknown_callee"}
+    assert set(by_path) == {"src/known.c", "src/???.c"}
+    assert {entry.id for entry in by_build["u"]} == {rows[name]["identity"] for name in unknown}
+    assert {entry.id for entry in by_path["src/known.c"]} == {rows["known"]["identity"]}
+    assert {entry.id for entry in by_path["src/???.c"]} == {rows["lookalike"]["identity"]}
+    for name in unknown:
+        row = rows[name]
+        payload = row["payload"]
+        assert payload["source"] is None and payload["line"] is None
+        assert payload["count"] == 9 and payload["event"] == "Ir"
+        assert payload["semantics"] == "context_only"
+        assert "location" not in row
+        assert row["artifact_reference"]["identity"] == row["identity"]
+        assert payload["report_sha256"] == file_sha256(result.root / payload["report_path"])
+    assert rows["unknown_callee"]["payload"]["callsite_source"] == "src/???.c"
+    assert rows["known"]["payload"]["count"] == 4
+    assert rows["lookalike"]["payload"]["count"] == 5
+    assert result.publication["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any("unknown file marker" in gap for gap in response["coverage_gaps"])
+    assert any("unknown file marker" in gap.reason for gap in scope.gaps if gap.producer == "profile_data")
+
+
 def test_local_shard_reuse_binds_normalized_rows_and_coverage(tmp_path: Path) -> None:
     reports = [("hot.folded", b"hot 9\ncold 1\n", "accepted-input")]
     first = _publish(tmp_path, reports, bounds=ProfileBounds(max_rows_per_artifact=1))

@@ -152,13 +152,17 @@ def parse_callgrind(data: bytes, *, max_rows: int = 250_000,
         match = re.fullmatch(r"\(([^)]+)\)(?:\s+(.*))?", raw_value)
         if match and match.group(2):
             refs[match.group(1)] = match.group(2).strip()
-            return refs[match.group(1)]
-        if match:
+            value = refs[match.group(1)]
+        elif match:
             value = refs.get(match.group(1))
             if value is None:
                 gaps.append(f"ambiguous_{kind}: row {number} references unknown id {match.group(1)}")
-            return value
-        return raw_value or None
+        else:
+            value = raw_value or None
+        if kind == "source" and value == "???":
+            gaps.append(f"ambiguous_source: row {number} reports unknown file marker ???")
+            return None
+        return value
 
     def position(raw_value: str, previous: int | None, number: int) -> int | None:
         if _INTEGER.fullmatch(raw_value):
