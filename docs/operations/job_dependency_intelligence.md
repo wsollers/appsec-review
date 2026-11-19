@@ -30,16 +30,16 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L694) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L697) |
 | `inputs` | `inputs.load_accepted` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L315) |
 | `publication` | `publication.native_advisory_lookup` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L466) |
 | `publication` | `publication.publish_context` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L547) |
-| `publication` | `publication.publish_sbom` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L742) |
+| `publication` | `publication.publish_sbom` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L745) |
 | `repositories` | `repositories.deduplicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L393) |
-| `resolution` | `resolution.curate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L734) |
+| `resolution` | `resolution.curate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L737) |
 | `resolution` | `resolution.detect_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L333) |
 | `resolution` | `resolution.infer_repositories` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L364) |
-| `resolution` | `resolution.investigate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L736) |
+| `resolution` | `resolution.investigate_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L739) |
 | `scorecards` | `scorecards.fetch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_dependency_intelligence/job.py#L401) |
 
 ### Accepted input declarations
@@ -148,7 +148,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | None declared |
 | integration | `tests/integration/job_dependency_intelligence/test_native_sbom_job.py`<br>`tests/integration/test_dependency_job_acceptance.py` |
 | live | None declared |
-| unit | `tests/unit/job_dependency_intelligence/test_publication_contract.py`<br>`tests/unit/job_dependency_intelligence/test_contract.py`<br>`tests/unit/job_dependency_intelligence/test_datasets.py`<br>`tests/unit/job_dependency_intelligence/test_dependency_intelligence.py`<br>`tests/unit/job_dependency_intelligence/test_edge_branches.py`<br>`tests/unit/job_dependency_intelligence/test_job_graph.py`<br>`tests/unit/job_dependency_intelligence/test_native_component_curation.py`<br>`tests/unit/job_dependency_intelligence/test_native_discovery.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_runtime.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_wiring.py`<br>`tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py`<br>`tests/unit/job_dependency_intelligence/test_native_advisories.py`<br>`tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py`<br>`tests/unit/job_dependency_intelligence/test_native_spdx.py`<br>`tests/unit/job_dependency_intelligence/test_sca_reachability.py`<br>`tests/unit/job_dependency_intelligence/test_unity_inventory.py` |
+| unit | `tests/unit/job_dependency_intelligence/test_coordinate_consumers.py`<br>`tests/unit/job_dependency_intelligence/test_publication_contract.py`<br>`tests/unit/job_dependency_intelligence/test_contract.py`<br>`tests/unit/job_dependency_intelligence/test_datasets.py`<br>`tests/unit/job_dependency_intelligence/test_dependency_intelligence.py`<br>`tests/unit/job_dependency_intelligence/test_edge_branches.py`<br>`tests/unit/job_dependency_intelligence/test_job_graph.py`<br>`tests/unit/job_dependency_intelligence/test_native_component_curation.py`<br>`tests/unit/job_dependency_intelligence/test_native_discovery.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_runtime.py`<br>`tests/unit/job_dependency_intelligence/test_native_inference_wiring.py`<br>`tests/unit/job_dependency_intelligence/test_native_metadata_investigation.py`<br>`tests/unit/job_dependency_intelligence/test_native_advisories.py`<br>`tests/unit/job_dependency_intelligence/test_native_sbom_metrics.py`<br>`tests/unit/job_dependency_intelligence/test_native_spdx.py`<br>`tests/unit/job_dependency_intelligence/test_sca_reachability.py`<br>`tests/unit/job_dependency_intelligence/test_unity_inventory.py` |
 
 ### Dagster placement
 

@@ -198,7 +198,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/test_target_document_pipeline.py::test_document_issue_path_keeps_claims_private_and_resolves_source`<br>`tests/test_target_document_pipeline.py::test_document_issue_analysis_rejects_changed_source` |
 | live | None declared |
-| unit | `tests/unit/job_document_issue_analysis/test_contract.py`<br>`tests/unit/job_document_issue_analysis/test_document_issues.py`<br>`tests/unit/job_document_issue_analysis/test_handlers.py` |
+| unit | `tests/unit/job_document_issue_analysis/test_contract.py`<br>`tests/unit/job_document_issue_analysis/test_document_issues.py`<br>`tests/unit/job_document_issue_analysis/test_drift.py`<br>`tests/unit/job_document_issue_analysis/test_handlers.py` |
 
 ### Dagster placement
 

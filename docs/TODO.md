@@ -357,11 +357,11 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5123 | [Normalize only selected CPG facts with stable identities and parse gaps](#t-5123-normalize-only-selected-cpg-facts-with-stable-identities-and-parse-gaps) | graph | open |
 | T-5124 | [Do not cache failed CPG exports or retain failed intermediates](#t-5124-do-not-cache-failed-cpg-exports-or-retain-failed-intermediates) | graph | open |
 | T-5125 | [Preserve debug range lookup bounds and public-only PDB symbols](#t-5125-preserve-debug-range-lookup-bounds-and-public-only-pdb-symbols) | binary | open |
-| T-5126 | [Preserve package coordinates across dependency consumers](#t-5126-preserve-package-coordinates-across-dependency-consumers) | evidence | open |
+| T-5126 | [Preserve package coordinates across dependency consumers](#t-5126-preserve-package-coordinates-across-dependency-consumers) | evidence | done (2026-11-19, dfe9e91ff22fd14963f1ac126cf4ca671fa5302d) |
 | T-5127 | [Fingerprint dependency reachability and its advisory snapshot](#t-5127-fingerprint-dependency-reachability-and-its-advisory-snapshot) | evidence | done (2026-11-19, 023cb1e007f610c2bca289dd11e15d2020354a60) |
 | T-5128 | [Align dependency input requirements with actual required reads](#t-5128-align-dependency-input-requirements-with-actual-required-reads) | pipeline | done (2026-11-19, 023cb1e007f610c2bca289dd11e15d2020354a60) |
-| T-5129 | [Read real catalog documents once with custody and parse gaps](#t-5129-read-real-catalog-documents-once-with-custody-and-parse-gaps) | evidence | open |
-| T-5130 | [Preserve route-local guards authentication methods and operation context](#t-5130-preserve-route-local-guards-authentication-methods-and-operation-context) | evidence | open |
+| T-5129 | [Read real catalog documents once with custody and parse gaps](#t-5129-read-real-catalog-documents-once-with-custody-and-parse-gaps) | evidence | done (2026-11-19, 4f0e40aa655e2a8bc2b16ab2ef475ee430e90da3) |
+| T-5130 | [Preserve route-local guards authentication methods and operation context](#t-5130-preserve-route-local-guards-authentication-methods-and-operation-context) | evidence | done (2026-11-19, 4f0e40aa655e2a8bc2b16ab2ef475ee430e90da3) |
 | T-5131 | [Deliver document drift through the actual inference retrieval path](#t-5131-deliver-document-drift-through-the-actual-inference-retrieval-path) | review | open |
 | T-5132 | [Treat parseable scanner error documents as coverage failures](#t-5132-treat-parseable-scanner-error-documents-as-coverage-failures) | scanners | done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad) |
 | T-5133 | [Corroborate before caps with order-independent evidence clustering](#t-5133-corroborate-before-caps-with-order-independent-evidence-clustering) | scanners | done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad) |
@@ -376,8 +376,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5142 | [Verify declared preinstalled CodeQL runtime identities at readiness](#t-5142-verify-declared-preinstalled-codeql-runtime-identities-at-readiness) | images | open |
 | T-5143 | [Honor evidence request wire shapes and zero retrieval budgets](#t-5143-honor-evidence-request-wire-shapes-and-zero-retrieval-budgets) | review | done (2026-11-19, d6e7b56c398525abe058d8d06b7a6143994e18a1) |
 | T-5144 | [Require verifier blindness evidence for independent confirmation](#t-5144-require-verifier-blindness-evidence-for-independent-confirmation) | review | done (2026-11-19, c1343965c1af975f7cb786e2657c852b099c9823) |
-| T-5145 | [Keep failed judges distinct from intentionally not-convened judges](#t-5145-keep-failed-judges-distinct-from-intentionally-not-convened-judges) | review | open |
-| T-5146 | [Honor disabled model profiles throughout inference dispatch](#t-5146-honor-disabled-model-profiles-throughout-inference-dispatch) | review | open |
+| T-5145 | [Keep failed judges distinct from intentionally not-convened judges](#t-5145-keep-failed-judges-distinct-from-intentionally-not-convened-judges) | review | done (2026-11-19, a588fa2247a2c4eb743753a7d84973bf1a6f0ff2) |
+| T-5146 | [Honor disabled model profiles throughout inference dispatch](#t-5146-honor-disabled-model-profiles-throughout-inference-dispatch) | review | done (2026-11-19, a588fa2247a2c4eb743753a7d84973bf1a6f0ff2) |
 | T-5147 | [Publish JVM provenance and invalidate changed command indexes](#t-5147-publish-jvm-provenance-and-invalidate-changed-command-indexes) | build | open |
 | T-5148 | [Honor Rust metadata and dotnet PHP build policies](#t-5148-honor-rust-metadata-and-dotnet-php-build-policies) | build | open |
 | T-5149 | [Keep identical compiler argv distinct across working directories](#t-5149-keep-identical-compiler-argv-distinct-across-working-directories) | build | open |
@@ -3614,6 +3614,12 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   33.54 s, two shuffled workers, no skips or cases over ten seconds. No CBMC semantics changed;
   the other failures in this entry remain open.
   Possible overlap with T-5060's differently located historical label failure is unconfirmed.
+  Additional scoped-check failure awaiting attribution:
+  `tests/unit/test_t172_indexing_and_retrieval.py::test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards`
+  raised `KeyError: end_byte` in `retrieval/syntax.py` while reading the guard-dominator fixture,
+  before reaching the SCA query. This was observed during T-5126's affected checks, not repaired
+  or counted as a pass. The separate real SCA publication/query regressions pass; exact-base
+  attribution and the mixed fixture's repair remain here.
 - **Done when:** the named node ids pass shuffled with `-n 4`.
 - **Refs:** the files above, T-5043, T-5032.
 
@@ -4393,11 +4399,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5126 — Preserve package coordinates across dependency consumers
 
-- **State:** open
+- **State:** done (2026-11-19, dfe9e91ff22fd14963f1ac126cf4ca671fa5302d)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: DI-04, DI-06. Normalization and OSV name projection discard usable package coordinates; Other consumers use field names the SCA producer never emits.
 - **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/reachability.py`, `src/appsec_review/jobs/job_dependency_intelligence/resolution.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 91 passed/9.18 s, two workers, seed 9126, no skips or cases over 10 s.
+  Normalization, real SCA publication, retrieval and priority retain ecosystem, namespace,
+  case-sensitive version, PURL qualifiers/subpaths and installed-root identity. Inferred,
+  conflicting, constrained and malformed grades cannot be promoted through PURL fallback.
+  Complete source/read receipts remain bound; the unrelated mixed-fixture gap is in T-5056.
+  Native engines, feeds, integration, acceptance and live validation were not run.
 - **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`; follow-up to closed T-170, T-171, T-172 (not reopened).
 
 ### T-5127 — Fingerprint dependency reachability and its advisory snapshot
@@ -4428,20 +4440,27 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5129 — Read real catalog documents once with custody and parse gaps
 
-- **State:** open
+- **State:** done (2026-11-19, 4f0e40aa655e2a8bc2b16ab2ef475ee430e90da3)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: DI-F01, DI-F03, DI-F04, DI-F09. real catalog document payloads are all skipped by drift analysis; document fallback reads changed bytes without checking accepted document hashes.
 - **Scope:** `src/appsec_review/document_issues.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 57 passed/7.07 s, two workers, seed 9129, no skips or cases over 10 s.
+  Real catalog records drive one-read, hash-bound document analysis with explicit parse and
+  coverage gaps. Valid OpenAPI specification extensions do not discard supported operations.
+  Integration, acceptance and live validation were not run; downstream delivery remains T-5131.
 - **Refs:** `audit-results/job-audit-job_document_issue_analysis.md`; follow-up to closed T-172 (not reopened).
 
 ### T-5130 — Preserve route-local guards authentication methods and operation context
 
-- **State:** open
+- **State:** done (2026-11-19, 4f0e40aa655e2a8bc2b16ab2ef475ee430e90da3)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: DI-F05, DI-F06, DI-F07, DI-F08, DI-F10. unrelated route-local guards become file-global protection; optional OpenAPI authentication is classified as required.
 - **Scope:** `src/appsec_review/document_issues.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5129's 57-case main selection. Independent review corrections preserve Rust
+  lifetimes, comment-separated Python/Java annotations and attached PHP middleware without
+  borrowing nested Go/JavaScript callback guards or unrelated handler context.
 - **Refs:** `audit-results/job-audit-job_document_issue_analysis.md`; follow-up to closed T-172 (not reopened).
 
 ### T-5131 — Deliver document drift through the actual inference retrieval path
@@ -4603,20 +4622,29 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5145 — Keep failed judges distinct from intentionally not-convened judges
 
-- **State:** open
+- **State:** done (2026-11-19, a588fa2247a2c4eb743753a7d84973bf1a6f0ff2)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: ISR-F03. Failed judges are relabeled “not convened” and become PoC candidates.
 - **Scope:** `src/appsec_review/jobs/job_inference_security_review/teams.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 112 passed/16.33 s, two workers, seed 9145, no skips or cases over 10 s.
+  Selected judge failures and missing terminal evidence block PoC eligibility; successful
+  terminal identities and admitted verdict identities must match exactly. Every admitted
+  verdict survives publication across rounds, without the former eight-item serialization
+  or schema cap. Historical valid finding-package/2 bytes and closed element constraints remain.
+  Models, integration, acceptance and live validation were not run.
 - **Refs:** `audit-results/job-audit-job_inference_security_review.md`.
 
 ### T-5146 — Honor disabled model profiles throughout inference dispatch
 
-- **State:** open
+- **State:** done (2026-11-19, a588fa2247a2c4eb743753a7d84973bf1a6f0ff2)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: ISR-F04. `models.<profile>.enabled=false` is ignored outside chain dispatch.
 - **Scope:** `src/appsec_review/jobs/job_inference_security_review/stages.py`, `src/appsec_review/jobs/job_inference_security_review/teams.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5145's 112-case main selection. Disabled profiles cannot dispatch model calls or
+  spend cell budgets; deterministic triage and documented planner fallbacks remain explicit.
+  Enabled zero-query profiles still perform final-only work without retrieval.
 - **Refs:** `audit-results/job-audit-job_inference_security_review.md`; follow-up to closed T-173 (not reopened).
 
 ### T-5147 — Publish JVM provenance and invalidate changed command indexes
