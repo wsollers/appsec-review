@@ -186,7 +186,16 @@ job refuses to start otherwise.
 
 Typed references bind run, target, component, build/environment, accepted producer/index membership,
 content/file hashes, span and custody. The application re-resolves citations and binds them to the
-named AST site. An authentic but unrelated reference fails subject binding. Semantic predicate
+named AST site. A decisive outcome still requires primary subject evidence in its supporting or
+contradictory citation set. Additional C/C++ caller/callee references can supply prerequisite context
+only when their identities are admitted by that package's evidence or bounded expansion set, their
+scope matches the primary, and re-resolved complete source functions exhibit the direct named call.
+Citation checks distinguish `subject_binding` from `prerequisite_binding`, retaining both original
+references and the call line. This is source-call context, not a resolved executable call graph:
+indirect/member dispatch, shadowed names, incompatible static linkage and unresolved definitions are
+not admitted by this adapter. Assumed semantics and requested prerequisites still prevent a decisive
+outcome; Python authorization retains its complete-module prerequisite gate.
+An authentic but unrelated reference fails binding. Semantic predicate
 entailment remains **analyst-assessed**, not an extractor-proven fact. Documents, declarations and
 tags are context, not proof; downstream/self publications cannot serve as original upstream proof.
 Secret literals are redacted without erasing security-relevant identifiers. Redaction, clipping,
@@ -196,6 +205,9 @@ Assessment dispatches actual configured `Infer` requests over bounded packages. 
 **blinded reviewer** receives the original evidence, never the worker's answer or transcript.
 Models propose; application validation and deterministic joins derive states. Assumptions,
 evidence requests, dissent, counterevidence, hypotheses and limitations remain in the publication.
+Malformed scalar identifiers, outcomes, hypothesis fields, citations and retrieval locators are
+validated inside the existing model-output retry boundary. Exhausted retries preserve the original
+validation reason as a row gap rather than throwing away earlier batches in the cell.
 
 - `not_satisfied` is a scoped adverse assessment, **not an exploitable vulnerability**.
 - `satisfied` is scoped counterevidence, **not component safety**.
@@ -207,6 +219,8 @@ evidence requests, dissent, counterevidence, hypotheses and limitations remain i
 Qualification is an explicit synthetic mode with both worker and reviewer inference disabled.
 Its results are visibly qualification-only and never production-eligible. Merely placing
 `data/inputs/owasp-workbench.json` in a run does not select qualification; assessment rejects it.
+Synthetic adverse qualification rows need no accepted target manifest: they publish their fixture
+result with zero assessed target controls and an empty production control-gap projection.
 
 ## Publication, downstream use and resumability
 
@@ -214,6 +228,12 @@ Four configured worker cells receive deterministic batch partitions across the `
 by independent review, exactly-once join and immutable publication. Every selected control ×
 component row must occur exactly once; a missing, duplicate or unexpected row blocks the join.
 A failed cell retains named gaps without erasing successful siblings.
+After request splitting, each model attempt records its part and row membership. Row dispatch and
+review-attempt counts include only newly dispatched calls for that row, never an oversized sibling,
+pre-dispatch rejection or cached reuse. Partial adverse obligation coverage counts as unresolved,
+even when the scoped adverse verdict remains useful. Input and classification gaps survive the join
+and final coverage/status publication, including first-party exclusions and omitted classification
+tags when every retained class produces only N/A rows. Deliberate N/A without such gaps stays complete.
 
 The accepted manifest joins `standards`, `component-classification`, `applicability`,
 `validation-work`, `finding-package` and `control-result` shards. It records assessment mode,

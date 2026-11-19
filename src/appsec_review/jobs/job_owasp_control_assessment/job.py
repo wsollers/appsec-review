@@ -58,7 +58,7 @@ def coverage_disposition(results, *, gaps: bool = False, failed: bool = False) -
     otherwise. Declared gaps always make it partial, so it never contradicts the producer status.
     """
     unresolved = any(row["applicability"] in UNRESOLVED_OUTCOMES
-                     or row["coverage_completeness"] == "unresolved"
+                     or row["coverage_completeness"] in {"unresolved", "partial"}
                      or row["control_status"] == "cannot_verify" for row in results)
     return (CoverageDisposition.PARTIAL if unresolved or gaps or failed else CoverageDisposition.COMPLETE).value
 
@@ -134,6 +134,14 @@ def _resolver(unit: UnitContext) -> EvidenceResolver:
                                                   manifest_sha256=core.manifest_sha256,
                                                   dispositions=typed.source_dispositions),
                             max_source_lines=typed.max_source_lines)
+
+
+def _characterization_gaps(unit: UnitContext) -> list[str]:
+    return sorted({
+        *unit.output("characterization.load_inputs").get("gaps", ()),
+        *(gap for component in unit.output("characterization.classify_components")["classifications"]
+          for gap in component.get("gaps", ())),
+    })
 
 
 def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Job:
@@ -326,11 +334,13 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
     def join(unit: UnitContext) -> Mapping[str, Any]:
         joined = deterministic_join(unit.output("applicability.build_matrix")["rows"],
                                     unit.output("verification.independent_review")["verified_results"])
-        gapped = any(item["gaps"] for item in joined["results"])
+        gaps = _characterization_gaps(unit)
+        gapped = bool(gaps) or any(item["gaps"] for item in joined["results"])
+        disposition = coverage_disposition(joined["results"], gaps=gapped)
         return {"joined": joined, "artifact": _artifact(unit, "control-results.json", joined),
                 "result_count": len(joined["results"]),
-                "coverage_disposition": coverage_disposition(joined["results"], gaps=gapped),
-                "terminal_status": "COMPLETED_WITH_GAPS" if gapped else "SUCCEEDED"}
+                "gaps": gaps, "coverage_disposition": disposition,
+                "terminal_status": "COMPLETED_WITH_GAPS" if disposition == "partial" else "SUCCEEDED"}
 
     def publish_indexes(unit: UnitContext) -> Mapping[str, Any]:
         standards = unit.output("standards_selection.ingest_catalogs")["manifest"]
@@ -401,7 +411,8 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
             "independent_review_attempted_rows": sum(row["reviewer_attempt_count"] > 0 for row in results),
             "independently_reviewed_rows": sum(row["verification_status"] in {
                 "independently_assessed", "dissent"} for row in results),
-            "unresolved_rows": sum(row["coverage_completeness"] == "unresolved"
+            "unresolved_rows": sum(row["coverage_completeness"] in {"unresolved", "partial"}
+                                    or row["applicability"] in UNRESOLVED_OUTCOMES
                                     or row["control_status"] == "cannot_verify" for row in results),
             "lead_producing_rows": sum(row["lead_eligible"] for row in results),
         }
@@ -418,18 +429,20 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         # family ends with a not-applicable ledger and no gap (T-5008).
         value["target_class_ledger"] = unit.output("applicability.build_matrix")["ledger"]
         value["gaps"] = sorted(set([*value["gaps"],
+                                    *_characterization_gaps(unit),
                                     *unit.output("standards_selection.ingest_catalogs")["manifest"]["gaps"]]))
         # D5: the typed coverage disposition is part of the recorded result and of its receipt.
         disposition = coverage_disposition(results, gaps=bool(value["gaps"]), failed=any(validation.values()))
         value["coverage_disposition"] = disposition
         from jsonschema import Draft202012Validator
         from appsec_review.application_paths import application_asset
-        from appsec_review.owasp_workbench.engine import extract_verified_control_gaps
+        from appsec_review.owasp_workbench.engine import extract_verified_control_gaps, verified_control_gap_candidate
         gap_summary = extract_verified_control_gaps(
             unit.job.run_id,
             parse_settings(unit.job.config.settings).mode.value,
             results,
-            resolver=_resolver(unit) if any(row["control_status"] == "not_satisfied" for row in results) else None,
+            resolver=_resolver(unit) if value["assessment_mode"] == "assessment"
+            and any(verified_control_gap_candidate(row) for row in results) else None,
         )
         gap_schema = json.loads(
             application_asset("docs/schemas/owasp-workbench/owasp-control-gap.schema.json").read_text(encoding="utf-8")
@@ -466,7 +479,7 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                 "telemetry": gap_summary["telemetry"],
                 "index_manifest": value["index_manifest"], "accounting": value["accounting"],
                 "gap_count": len(value["gaps"]), "coverage_disposition": disposition, "terminal_status":
-                "COMPLETED_WITH_GAPS" if value["gaps"] or any(validation.values()) else "SUCCEEDED"}
+                "COMPLETED_WITH_GAPS" if disposition == "partial" else "SUCCEEDED"}
 
     u = Unit
     units = (

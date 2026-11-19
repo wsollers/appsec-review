@@ -18,7 +18,7 @@ from appsec_review.observability import PipelineLog
 from appsec_review.storage import canonical_json, file_sha256
 from appsec_review.storage.shared import consume_named, publish_named, safe_path
 from .batching import REQUEST_RULE, Part, estimate_tokens, plan_parts
-from .evidence import EvidenceResolver, redact
+from .evidence import EvidenceResolver, prerequisite_binding, redact
 from .guidance import compose, pin_bundle
 from .obligations import VERSION, procedure_for, subjects
 from .standards import digest
@@ -61,6 +61,39 @@ def _strings(value: object, field: str) -> list[str]:
     return [_text(item, field) for item in value]
 
 
+def _locator(value: object, *, optional: bool = False) -> None:
+    if value is None and optional:
+        return
+    if not isinstance(value, Mapping):
+        raise ValueError("OWASP citation locator must be an object")
+    kind = _text(value.get("kind"), "locator.kind")
+    if kind == "source":
+        span = value.get("lines")
+        if (not isinstance(span, list) or len(span) != 2 or any(type(n) is not int for n in span)
+                or not 1 <= span[0] <= span[1]):
+            raise ValueError("OWASP citation locator.lines must be an ordered integer pair")
+        for field in ("path", "file_sha256"):
+            _text(value.get(field), f"locator.{field}")
+        if value.get("source_custody") is not None and not isinstance(value["source_custody"], Mapping):
+            raise ValueError("OWASP citation source custody must be an object or null")
+    elif kind in {"artifact", "structured_fact"}:
+        _text(value.get("pointer"), "locator.pointer")
+    else:
+        raise ValueError("OWASP citation locator kind is invalid")
+
+
+def _validate_retrieval(proposal: Mapping[str, Any]) -> None:
+    requests = proposal.get("requests")
+    if (set(proposal) != {"schema", "action", "requests"} or not isinstance(requests, list)
+            or not 1 <= len(requests) <= 8):
+        raise ValueError("OWASP retrieval requests must be a bounded array")
+    for query in requests:
+        if not isinstance(query, Mapping) or set(query) != {"source_identity", "locator"}:
+            raise ValueError("OWASP retrieval request has an invalid shape")
+        _text(query["source_identity"], "source_identity")
+        _locator(query["locator"], optional=True)
+
+
 def validate_final(proposal: Mapping[str, Any], packages: Sequence[Mapping[str, Any]]) -> None:
     if set(proposal) != {"schema", "action", "results"} or proposal.get("schema") != TURN_SCHEMA or proposal["action"] != "final":
         raise ValueError("OWASP final response does not match the turn contract")
@@ -73,7 +106,7 @@ def validate_final(proposal: Mapping[str, Any], packages: Sequence[Mapping[str, 
     for row in results:
         if not isinstance(row, Mapping) or set(row) != {"row_id", "obligations"}:
             raise ValueError("OWASP row response has an invalid shape")
-        row_id = row["row_id"]
+        row_id = _text(row["row_id"], "row_id")
         if row_id not in expected or row_id in seen:
             raise ValueError("OWASP proposal has an unknown or duplicate row")
         seen.add(row_id)
@@ -86,8 +119,10 @@ def validate_final(proposal: Mapping[str, Any], packages: Sequence[Mapping[str, 
                       "assumptions", "evidence_requests", "hypotheses", "limitations"}
             if not isinstance(item, Mapping) or set(item) != fields:
                 raise ValueError("OWASP obligation response has an invalid shape")
-            identity = item["obligation_id"]
-            if identity not in expected[row_id] or identity in ids or item["outcome"] not in OUTCOMES:
+            identity = _text(item["obligation_id"], "obligation_id")
+            outcome = _text(item["outcome"], "outcome")
+            _text(item["subject_id"], "subject_id")
+            if identity not in expected[row_id] or identity in ids or outcome not in OUTCOMES:
                 raise ValueError("OWASP proposal has a duplicate, unknown or invalid obligation")
             ids.add(identity)
             _text(item["rationale"], "rationale")
@@ -97,13 +132,16 @@ def validate_final(proposal: Mapping[str, Any], packages: Sequence[Mapping[str, 
                 if not isinstance(item[key], list) or len(item[key]) > 12 or any(
                         not isinstance(ref, Mapping) for ref in item[key]):
                     raise ValueError("OWASP citations must be bounded typed reference arrays")
+                for ref in item[key]:
+                    _text(ref.get("source_identity"), "citation.source_identity")
+                    _locator(ref.get("locator"))
             if not isinstance(item["hypotheses"], list) or len(item["hypotheses"]) > 4:
                 raise ValueError("OWASP hypotheses exceed bound")
             for hypothesis in item["hypotheses"]:
                 if not isinstance(hypothesis, Mapping) or set(hypothesis) != {"mechanism", "severity", "ship_blocking"}:
                     raise ValueError("OWASP hypothesis has an invalid shape")
                 _text(hypothesis["mechanism"], "mechanism")
-                if (hypothesis["severity"] not in {"unknown", "info", "low", "medium", "high", "critical"}
+                if (_text(hypothesis["severity"], "severity") not in {"unknown", "info", "low", "medium", "high", "critical"}
                         or type(hypothesis["ship_blocking"]) is not bool):
                     raise ValueError("OWASP hypothesis severity/ship_blocking is invalid")
 
@@ -230,6 +268,10 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
         outcomes.append(outcome)
         for row_id in part.row_ids:
             row_status[row_id] = outcome["status"]
+            if outcome["proposal"] is None:
+                row_gaps.setdefault(row_id, []).extend(
+                    f"{attempt['error_class']}: {attempt['error']}"
+                    for attempt in outcome["attempts"] if attempt.get("error"))
     results = [row for outcome in outcomes if outcome["proposal"] is not None
                for row in outcome["proposal"]["results"]]
     proposal = ({"schema": TURN_SCHEMA, "action": "final", "results": results}
@@ -266,6 +308,7 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
         if cached.get("key") != key or cached.get("mode") != "assessment":
             raise ValueError("OWASP reuse receipt has incompatible mode or identity")
         try:
+            validate_final(cached["proposal"], packages)
             proposal = _rebind(cached["proposal"], resolver, packages)
             validate_final(proposal, packages)
         except (ValueError, KeyError, OSError) as exc:
@@ -307,6 +350,7 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
                 terminal = "input_budget"
                 break
             attempt = {"role": role, "guidance": guidance["bundle_sha256"],
+                       "row_ids": list(part.row_ids), "part": number, "dispatched": False,
                        "requested_provider": profile["provider"], "requested_model": profile["model"],
                        "served_provider": None, "served_model": None,
                        "input_tokens_reported": None, "output_tokens_reported": None,
@@ -332,7 +376,9 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
                         raise ValueError("OWASP model returned a malformed turn")
                     if proposal.get("action") == "final":
                         validate_final(proposal, packages)
-                    elif proposal.get("action") != "retrieve":
+                    elif proposal.get("action") == "retrieve":
+                        _validate_retrieval(proposal)
+                    else:
                         raise ValueError("OWASP model returned an unsupported action")
                 except ValueError as exc:
                     raise ModelOutputError(str(exc)) from exc
@@ -378,10 +424,7 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
             }), namespace="owasp-shard", computation={"key": key})
             return {"status": "succeeded", "proposal": safe, "attempts": attempts,
                     "receipt": receipt.relative_to(run_root).as_posix(), "retrieval_requests": queries}
-        requests = proposal.get("requests")
-        if set(proposal) != {"schema", "action", "requests"} or not isinstance(requests, list) or not 1 <= len(requests) <= 8:
-            terminal = "invalid_retrieval"
-            break
+        requests = proposal["requests"]
         responses = []
         for query in requests:
             try:
@@ -439,6 +482,7 @@ def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] |
             continue
         value.update({key: item[key] for key in ("rationale", "assumptions", "evidence_requests", "limitations")})
         rule = procedure_for(package["control"])
+        resolved_citations = []
         for relation in ("supporting", "contradictory"):
             for ref in item[relation]:
                 check = {"reference": dict(ref), "resolution": "rejected", "subject_binding": False,
@@ -446,10 +490,11 @@ def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] |
                 try:
                     resolved = resolver.resolve(ref, component_id=package["component"]["component_id"])
                     check["resolution"] = "resolved"
-                    if (rule is None or item["subject_id"] != obligation["subject_id"]
-                            or obligation["subject_id"] not in subjects(rule, resolved)):
+                    if rule is None or item["subject_id"] != obligation["subject_id"]:
                         raise ValueError("authentic evidence does not concern the obligation's named subject")
-                    check["subject_binding"] = True
+                    check["subject_binding"] = obligation["subject_id"] in subjects(rule, resolved)
+                    if not check["subject_binding"] and rule.language != "c-cpp":
+                        raise ValueError("authentic evidence does not concern the obligation's named subject")
                     if (resolved["truncated"] or resolved.get("redaction", {}).get("applied")
                             or any("ambiguous" in gap for gap in resolved["limitations"])
                             or not resolved.get("source_subject", {}).get("complete")):
@@ -458,12 +503,38 @@ def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] |
                             and resolved["source_subject"]["kind"] != "module"):
                         raise ValueError("complete function does not resolve external authorization policy, "
                                          "middleware, consumer identity or service-guard prerequisites")
-                    check["predicate_support"] = "analyst_assessed; not a direct extractor fact"
-                    value[relation].append(resolved["reference"])
+                    resolved_citations.append((relation, resolved, check))
                 except (ValueError, OSError, UnicodeError) as exc:
                     check["reason"] = f"{type(exc).__name__}: {exc}"
                     value["gaps"].append(check["reason"])
                 value["citation_checks"].append(check)
+        primary = [resolved for _, resolved, check in resolved_citations if check["subject_binding"]]
+        admitted = {
+            *(record["reference"]["source_identity"] for record in package.get("evidence_references", ())),
+            *package.get("expansion_identities", ()),
+        }
+        for relation, resolved, check in resolved_citations:
+            try:
+                if not check["subject_binding"]:
+                    if resolved["reference"]["source_identity"] not in admitted:
+                        raise ValueError("prerequisite citation is outside this package's admitted context")
+                    bindings = []
+                    reasons = []
+                    for subject in primary:
+                        try:
+                            bindings.append(prerequisite_binding(subject, resolved))
+                        except ValueError as exc:
+                            reasons.append(str(exc))
+                    if not bindings:
+                        raise ValueError("authentic evidence does not concern the obligation's named subject "
+                                         "or a source-bound caller/callee prerequisite"
+                                         + (": " + "; ".join(sorted(set(reasons))) if reasons else ""))
+                    check["prerequisite_binding"] = bindings[0]
+                check["predicate_support"] = "analyst_assessed; not a direct extractor fact"
+                value[relation].append(resolved["reference"])
+            except ValueError as exc:
+                check["reason"] = f"{type(exc).__name__}: {exc}"
+                value["gaps"].append(check["reason"])
         outcome = item["outcome"]
         if outcome in {"satisfied", "not_satisfied"} and (item["assumptions"] or item["evidence_requests"]):
             value["gaps"].append("material prerequisites remain assumed or requested, not established")
@@ -471,6 +542,11 @@ def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] |
             value["gaps"].append("satisfied proposal has unresolved material proof requirements")
         if outcome == "not_satisfied" and not value["contradictory"]:
             value["gaps"].append("adverse proposal lacks resolving subject-bound contradiction evidence")
+        primary_relation = "supporting" if outcome == "satisfied" else "contradictory"
+        if outcome != "cannot_verify" and not any(
+                relation == primary_relation and check["subject_binding"]
+                for relation, _, check in resolved_citations):
+            value["gaps"].append("decisive proposal requires primary subject evidence, not prerequisite context alone")
         if obligation["evidence_mode"] in {"dynamic_runtime", "manual_observation"}:
             value["gaps"].append("no accepted environment-bound runtime/manual evidence adapter is available")
         value["outcome"] = outcome if not value["gaps"] else "cannot_verify"
@@ -541,7 +617,7 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
         supported_items = [item for item in assessed if item["obligation"].get("supported")]
         verification = ("dissent" if disagreements else "independently_assessed"
                         if supported_items and all(item["disposition"] == "independently_assessed" for item in supported_items)
-                        else "pending" if row_reviewer["proposal"] is None else "unresolved")
+                        else "pending" if package["row_id"] not in review_rows else "unresolved")
         if status == "cannot_verify":
             gaps.append("material obligations remain unresolved; no safe/unsafe conclusion")
         # A batch dispatched in parts (batching.plan_parts) reports each row's own status and budget gaps.
@@ -558,8 +634,10 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
             if any(state == "cannot_verify" for state in states) else "scoped",
             "assessment_mode": "assessment", "obligations": assessed,
             "observations": observations, "disagreements": disagreements,
-            "worker_attempt_count": len(row_worker["attempts"]),
-            "reviewer_attempt_count": len(row_reviewer["attempts"]),
+            "worker_attempt_count": sum(attempt.get("dispatched", False)
+                and package["row_id"] in attempt.get("row_ids", ()) for attempt in row_worker["attempts"]),
+            "reviewer_attempt_count": sum(attempt.get("dispatched", False)
+                and package["row_id"] in attempt.get("row_ids", ()) for attempt in row_reviewer["attempts"]),
             "evidence_used": list({digest(ref): ref for ref in refs}.values()),
             "gaps": sorted(set(gaps)),
             "limitations": sorted(set([*package.get("limitations", ()),

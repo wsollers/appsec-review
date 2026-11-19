@@ -14,6 +14,7 @@ from appsec_review.review.dispositions import FIRST_PARTY
 from appsec_review.review.scope import AcceptedScope, accept_manifest
 from appsec_review.review.secret_redaction import REDACTION_RULE, placeholder
 from .standards import digest
+from . import c_subjects
 from .subject_selection import (
     LANGUAGE_LABELS, SELECTION_RULE, SourceSubject, parse_gaps, parse_subjects, select_subjects, subject_language,
 )
@@ -387,6 +388,54 @@ class EvidenceResolver:
         except (ValueError, OSError, UnicodeError):
             self.metrics["denials"] += 1
             raise
+
+
+def prerequisite_binding(primary: Mapping[str, Any], context: Mapping[str, Any]) -> dict[str, Any]:
+    """Bind already re-resolved C/C++ caller/callee context, not a call-graph or predicate proof."""
+    first, second = primary["reference"], context["reference"]
+    if any(first.get(key) != second.get(key) for key in
+           ("run_id", "target_snapshot", "component_id", "build_unit_id", "environment")):
+        raise ValueError("prerequisite context differs from the primary source scope")
+    functions = []
+    for record in (primary, context):
+        source = record.get("source_subject", {})
+        if (record.get("category") != "source" or source.get("language") != c_subjects.LANGUAGE
+                or source.get("kind") != "function" or not source.get("complete")):
+            raise ValueError("prerequisite context requires complete C/C++ source functions")
+        scan = c_subjects.scan(record["excerpt"])
+        if scan.gaps or len(scan.functions) != 1 or scan.functions[0].kind != "function":
+            raise ValueError("prerequisite context has ambiguous or unresolved source definitions")
+        functions.append(scan.functions[0])
+    for caller_index, callee_index, kind in ((1, 0, "caller"), (0, 1, "callee")):
+        records = (primary, context)
+        callee = functions[callee_index]
+        # Scoped/overloaded methods and indirect dispatch need an accepted semantic adapter.
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", callee.name):
+            continue
+        callee_text = c_subjects.blank(records[callee_index]["excerpt"])
+        head = callee_text[:callee_text.find("{")]
+        if (re.search(r"\bstatic\b", head)
+                and first["locator"]["path"] != second["locator"]["path"]):
+            continue
+        caller_text = c_subjects.blank(records[caller_index]["excerpt"])
+        body_start = caller_text.find("{") + 1
+        body = caller_text[body_start:]
+        call = re.search(r"(?<![\w.>:])\b" + re.escape(callee.name) + r"\s*\(", body)
+        if call is None:
+            continue
+        # A local declaration of that name would make even this contextual link ambiguous.
+        shadow = re.compile(r"\b" + re.escape(callee.name) + r"\b")
+        if shadow.search(caller_text[:body_start]) or shadow.search(body[:call.start()]):
+            continue
+        prefix = re.split(r"[;{}]", body[:call.start()])[-1].strip()
+        words = prefix.replace("*", " ").replace("&", " ").split()
+        if prefix != "return" and words and all(re.fullmatch(r"[A-Za-z_]\w*", word) for word in words):
+            continue
+        return {"kind": kind, "basis": "source_call_context; semantic binding remains analyst_assessed",
+                "primary": dict(first), "context": dict(second), "callee_name": callee.name,
+                "call_line": records[caller_index]["reference"]["locator"]["lines"][0]
+                + caller_text.count("\n", 0, body_start + call.start())}
+    raise ValueError("authentic evidence has no source-bound caller/callee prerequisite relationship")
 
 
 def supported_source(source: Any) -> bool:
