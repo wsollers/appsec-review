@@ -166,6 +166,15 @@ and are counted in the collation artifact under `skipped_dispositions`. The glob
 loader resolves the same table into the tagging job's `collation` settings so there is one source
 of truth, and a run records both in its resolved configuration. A file with no language (a build
 descriptor) is first-party and still collated: it gets `role:build-glue` from the path rules.
+Component facts use that same eligible file set. Documents in excluded paths cannot supply
+facets, and components with no eligible file publish neither document facets nor target classes.
+Capability inputs must belong to the accepted project/component; excluded or unselected file
+capabilities do not become component target-class evidence.
+
+Lexical and model citations retain the original source hash and raw byte offsets. Their one-based,
+exclusive-end columns count UTF-16 code units, not Python characters. Lines follow the accepted
+source offset helper's LF boundaries (including CRLF); combining characters are not normalized.
+Undecodable UTF-8 is a named source-read gap, never replacement-character evidence.
 
 ### 3.2 Sources, in precedence order
 
@@ -173,8 +182,8 @@ descriptor) is first-party and still collated: it gets `role:build-glue` from th
 | --- | --- | --- | --- |
 | Capability tags already collected by the job (`lang:*`, `func:*`, `surface:*`, `data:*`, `infra:*`, `component:*`; `declared` from paths and packages, `invoked` from graph entry/sink sites, `reported` from tools) | facets through the tag-to-facet rules (section 3.3) | `derived`, citing the input assignment | the facets that need them are not assigned; the job's existing `graph-capability:missing_graph` gap already names an absent graph index, and the collation artifact adds `collation:no_graph_facts` |
 | Lexical facts: include, import, identifier and path patterns matched line by line against the hash-verified bytes of each first-party file, from pinned `collation.lexical_rules` and `collation.path_rules` in `data/reference/taxonomy/capability-rules.json` | facets and the `func`/`surface` tags a rule names, with the matched line as the evidence span | `declared` (confidence `high` for includes, imports and paths; `medium` for identifier patterns) | a file over `max_source_bytes_per_file` or unreadable is skipped with gap `collation:source_unread:<path>`; a language with no lexical rules is skipped with `collation:no_lexical_rules:<lang>` |
-| Build receipts (`build` index, `build_action` rows with build points) | `target:library` when a component's build points produce only libraries and no file has an entry mechanism | `derived` | no `build` shard: `collation:no_build_facts`; the library class then rests on the recorded absence of mechanisms (confidence `medium`) |
-| Target documents (`documents` index, kinds `openapi`, `postman`, `graphql`, `protobuf`, `asyncapi`) | `mechanism:http` from an OpenAPI, Postman or GraphQL document, `mechanism:rpc` from a protobuf or AsyncAPI document, on the owning component | `declared` | empty or absent: `collation:no_documents` (the smoke-cpp run indexed none). README text is not read: the catalog does not index it and free text would not give a closed value |
+| Catalog build units and language-build artifacts (`build` index) | Catalog `build_action.build_points` whose sources are eligible, plus produced `library`/`executable` artifacts bound by `build_unit_id` to an unambiguous eligible catalog unit. Library-only facts support `target:library`; executable facts prevent the absence-based library fallback but do not invent a CLI entry mechanism | `derived`, retaining the build row and catalog binding as evidence | Command rows alone are not classification facts: `collation:no_build_facts`. An unbound artifact records `collation:build_scope_unresolved`. Without classification facts, a library inference remains absence-based (`medium`) |
+| Target documents (`documents` index, `document_record.document_kind`: `openapi`, `postman`, `graphql`, `protobuf`, `asyncapi`) | `mechanism:http` from an OpenAPI, Postman or GraphQL document, `mechanism:rpc` from a protobuf or AsyncAPI document, on an eligible owning component | `declared` | empty or absent: `collation:no_documents` (the smoke-cpp run indexed none). README text is not read: the catalog does not index it and free text would not give a closed value |
 | Model pass (section 6) | `role`, `asset`, purpose | `reported` | disabled: a payload fact (`model_pass: disabled`), not a gap; rejected output: `collation:model_pass_rejected:<component>` |
 
 The rules are data, pinned by hash with the capability-rules file (`collation.lexical_rules`,
@@ -184,6 +193,16 @@ classes are structural and live in the collector (`jobs/job_security_tagging/col
 `target:build-tooling` (every first-party file is `role:build-glue`), `target:test-only` (every
 non-glue first-party file is `role:test`) and `target:library` (section 2); the data rules decide
 `web-api`, `mobile` and `cli`.
+
+Artifact classification requires a produced (`artifact_origin=build-output`), exactly mapped
+artifact with accepted `target_source` or `deliverable` scope. Dependencies, retained inputs,
+unknown-delivery artifacts and ambiguous unit ownership do not establish a first-party build
+class. Unknown-delivery artifacts bound to a component also block its absence-based library
+fallback: an unknown output is not evidence that the component builds no executable.
+The collector reads native artifact kinds and JVM archive entities from their actual
+producer projections; it does not expect language-build command rows to carry catalog build
+points. This is classification evidence, not proof of complete build coverage or successful
+execution of a target entry point.
 
 ### 3.3 Tag-to-facet rules (`derived`)
 
@@ -211,7 +230,7 @@ non-glue first-party file is `role:test`) and `target:library` (section 2); the 
 | `surface:entry:env-config` | `role:config` |
 | `data:credential` / `data:session-token` / `data:pii` / `data:key-material` / `data:financial` | `asset:credentials` / `asset:session-tokens` / `asset:pii` / `asset:keys` / `asset:money` |
 | `infra:supply:*`, `infra:ci:*`, `infra:container:*` | `role:build-glue` |
-| `component:android-mobile`, `component:ios-mobile`, `func:mobile:*` (component) | contribute to `target:mobile` |
+| `component:android-mobile`, `component:ios-mobile`, `func:mobile:*` (eligible component or its eligible files) | contribute directly to `target:mobile`, retaining the capability assignment ids rather than requiring an intermediate facet |
 
 ### 3.4 Facet-to-facet rules (`derived`, same file)
 
@@ -291,7 +310,7 @@ Typed settings, all under `[jobs.job_security_tagging.settings.collation]`:
 | `max_files_per_component` | 4096 | Files collated per component; the rest are skipped with a named gap |
 | `source_dispositions` | resolved by the loader from `jobs.job_inference_security_review.settings.source_dispositions` | The T-165 globs; a literal table here must equal that one or configuration loading fails. The resolved table is written into the tagging job's frozen settings (`config/collation.py`, `config/loader.py`) |
 | `model_pass.enabled` | `false` | Section 6; the deterministic pass never depends on it |
-| `model_pass.max_components` | 64 | Components the model pass may describe per run |
+| `model_pass.max_components` | 64 | Eligible first-party components the model pass may describe per run; empty, excluded and foreign components are recorded as skipped before this budget is applied |
 | `model_pass.max_excerpt_lines` | 400 | Source lines sent per component, chosen from facet evidence spans |
 | `model_pass.model` | required only when enabled | A complete model profile (`provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `timeout_seconds`, `retries`) |
 
@@ -359,14 +378,20 @@ purpose.
   claims: [{tag, citations: [{path, line} | {assignment_id}]}], unknown: [facet names]}`.
   Unknown keys, a value outside the vocabulary, a citation that is not a supplied line or a
   deterministic assignment id, or a purpose over the bound reject the whole proposal.
+  Nested JSON values are type-checked before lookup: object/list tags, paths or assignment ids,
+  non-string `unknown` entries and non-integer (including boolean) line numbers are rejections,
+  not escaped job exceptions or empty successful proposals.
 - **Recording.** The call goes through `appsec_review.inference.infer`, so the run-owned recording
   layer records and replays it like every other model call; the proposal, its hash and the
   acceptance decision are written to `artifacts/security-tagging/unit-purposes.json`.
 - **Acceptance.** Each accepted claim becomes a `reported` assignment with producer
   `collation-model-pass`, evidence the cited line (hash-verified span) or the cited assignment, and
   confidence `medium`. A rejected proposal leaves the deterministic tags untouched and records
-  `collation:model_pass_rejected:<component>`; a provider failure records
-  `collation:model_pass_failed:<component>`.
+  `collation:model_pass_rejected:<component>`. Outside active fail-stop admission, a provider
+  failure records `collation:model_pass_failed:<component>`. Under active
+  `first-error-no-retry` admission, the shared inference boundary instead latches the failure
+  and propagates `ReviewStopped`; tagging must not catch it or bypass cancellation. The optional
+  failure-policy reconciliation remains T-5184; enabling this pass is not a waiver of that guard.
 - **Setting.** `model_pass.enabled = false` by default in every shipped profile; when disabled the
   unit publishes an empty proposal set with `mode: disabled` and no gap.
 - **Implementation.** `jobs/job_security_tagging/model_pass.py` (`run_model_pass`), the specialized

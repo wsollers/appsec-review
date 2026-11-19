@@ -345,8 +345,9 @@ def test_collation_and_model_pass_edge_branches(tmp_path: Path) -> None:
     )
     doc_row = Row(
         LogicalIdentity.derive(EntityKind.DOCUMENT_RECORD, SNAPSHOT, {"path": "api/openapi.yaml"}).value,
-        "document_record", "api/openapi.yaml", "openapi.yaml", {"kind": "openapi", "path": "api/openapi.yaml"},
-        {"path": "api/openapi.yaml", "file_sha256": "2" * 64, "start_line": 1, "end_line": 1},
+        "document_record", "api/openapi.yaml", "openapi.yaml", {"document_kind": "openapi"},
+        {"path": "api/openapi.yaml", "file_sha256": "2" * 64, "start_line": 1, "end_line": 1,
+         "target_snapshot": SNAPSHOT},
     )
     unknown_doc = Row(
         LogicalIdentity.derive(EntityKind.DOCUMENT_RECORD, SNAPSHOT, {"path": "api/readme.md"}).value,
@@ -379,7 +380,9 @@ def test_collation_and_model_pass_edge_branches(tmp_path: Path) -> None:
     assert any("no_first_party_files:component:aaa_empty" in g for g in gaps)
     assert any("target_class_unresolved:component:plain" in g for g in gaps)
     assert doc["sources"]["documents"] == "available"
-    assert doc["sources"]["build"] == "available"
+    assert doc["sources"]["build"] == "unavailable"
+    assert any("no_build_facts" in gap for gap in gaps)
+    assert not any(record["subject"].get("component_id") == "component:api" for record in records)
     _, trunc_gaps, _ = collect_facets(idxs, sc, vocabulary, rules, coll_settings, [], 1)
     assert any("collation:build_bound" in g for g in trunc_gaps)
     assert any("collation:documents_bound" in g for g in trunc_gaps)
@@ -413,16 +416,29 @@ def test_collation_and_model_pass_edge_branches(tmp_path: Path) -> None:
     )
     assert any("guidance assembly failed" in g for g in guid_gaps)
 
+    from appsec_review.inference import ModelResult
+    calls = []
+
+    def unknown_purpose(req, timeout_seconds):
+        calls.append(req)
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "component_id": req.allowed_components[0],
+                            "role": [], "asset": [], "purpose": "", "claims": [],
+                            "unknown": ["role", "asset", "purpose"]})
+
     _, bound_gaps, bound_doc = run_model_pass(
         repository_root=ROOT, run_root=tmp_path / "run3", indexes=idxs, scope=sc,
         vocabulary=vocabulary, rules_sha256=rules.sha256, settings=enabled_settings,
-        collation=doc, facet_records=records, infer=lambda req, timeout_seconds: None, limit=10,
+        collation=doc, facet_records=records, infer=unknown_purpose, limit=10,
         unit_id="collation.model_pass",
     )
     assert any("max_components 1 reached" in g for g in bound_gaps)
-    assert bound_doc["components"] == [
-        {"component_id": "component:aaa_empty", "status": "skipped", "reason": "no first-party file"}
-    ]
+    assert bound_doc["components"][0] == {
+        "component_id": "component:aaa_empty", "status": "skipped", "reason": "no first-party file"}
+    assert bound_doc["components"][1] == {
+        "component_id": "component:api", "status": "skipped", "reason": "no first-party file"}
+    assert bound_doc["components"][2]["component_id"] == "component:glue"
+    assert bound_doc["components"][2]["status"] == "accepted"
+    assert len(calls) == 1 and calls[0].allowed_components == ("component:glue",)
 
     err_idxs = CannedIndexes(data=OSError("disk error"))
     ex_gaps: list[str] = []

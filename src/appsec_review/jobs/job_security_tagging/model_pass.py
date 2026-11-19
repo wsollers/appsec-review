@@ -8,9 +8,10 @@ source excerpts (labelled ``path:line``) to the configured model through ``appse
 proposal that validates against the closed ``unit-purpose-proposal/1`` contract: every ``role`` and
 ``asset`` value in the vocabulary, every claim citing a supplied line or a deterministic assignment id,
 a purpose paragraph within its bound. An accepted claim becomes a ``reported`` assignment with the
-cited line (hash-verified span) or the cited assignment as evidence. A rejected or failed proposal
-leaves the deterministic tags untouched and records a named gap. Nothing here is evidence of a
-weakness; tags remain routing data.
+cited line (hash-verified span) or the cited assignment as evidence. A rejected proposal or an
+ordinary transport exception records a named gap. Active run admission can instead stop the review;
+its cancellation control flow is never swallowed. Nothing here is evidence of a weakness; tags
+remain routing data.
 """
 from __future__ import annotations
 
@@ -22,9 +23,10 @@ from typing import Any, Callable
 
 from appsec_review.config.collation import CollationSettings
 from appsec_review.retrieval import EntityKind
+from appsec_review.review.dispositions import FIRST_PARTY
 from appsec_review.storage import canonical_json
 
-from .collation import _lines
+from .collation import _line_location, _lines
 from .producers import AcceptedIndexes, Row, Scope, _evidence
 from .taxonomy import Vocabulary, assignment, merge_assignments
 
@@ -85,7 +87,11 @@ def _excerpts(paths: Iterable[str], cited: Mapping[str, set[int]], sources: Mapp
         if len(data) > settings.max_source_bytes_per_file:
             gaps.append(f"collation:model_pass_source_unread:{component_id}:{path}: exceeds max_source_bytes_per_file")
             continue
-        lines = _lines(data)
+        try:
+            lines = _lines(data)
+        except UnicodeError:
+            gaps.append(f"collation:model_pass_source_unread:{component_id}:{path}: source is not valid UTF-8")
+            continue
         lines_by_path[path] = lines
         wanted = sorted({*cited.get(path, set()), *range(1, min(HEAD_LINES, len(lines)) + 1)})
         for number in wanted:
@@ -117,7 +123,9 @@ def _validate(proposal: Any, *, component_id: str, vocabulary: Vocabulary, excer
     if not isinstance(purpose, str) or len(purpose) > PURPOSE_MAX_CHARS or purpose != purpose.strip():
         raise ProposalRejected(f"purpose must be a trimmed string of at most {PURPOSE_MAX_CHARS} characters")
     unknown_facets = proposal["unknown"]
-    if not isinstance(unknown_facets, list) or not set(unknown_facets) <= _UNKNOWN:
+    if (not isinstance(unknown_facets, list)
+            or any(not isinstance(item, str) for item in unknown_facets)
+            or not set(unknown_facets) <= _UNKNOWN):
         raise ProposalRejected("unknown must name only role, asset or purpose")
     claims = proposal["claims"]
     if not isinstance(claims, list) or len(claims) > 32:
@@ -127,7 +135,7 @@ def _validate(proposal: Any, *, component_id: str, vocabulary: Vocabulary, excer
         if not isinstance(claim, Mapping) or set(claim) != {"tag", "citations"}:
             raise ProposalRejected("claim keys are not {tag, citations}")
         tag = claim["tag"]
-        if tag not in {*values["role"], *values["asset"]}:
+        if not isinstance(tag, str) or tag not in {*values["role"], *values["asset"]}:
             raise ProposalRejected(f"claim names a tag the proposal does not assert: {tag!r}")
         citations = claim["citations"]
         if not isinstance(citations, list) or not citations or len(citations) > 8:
@@ -137,10 +145,12 @@ def _validate(proposal: Any, *, component_id: str, vocabulary: Vocabulary, excer
             if not isinstance(citation, Mapping):
                 raise ProposalRejected("citation is not an object")
             if set(citation) == {"path", "line"}:
-                if (citation["path"], citation["line"]) not in excerpt_keys:
+                if (not isinstance(citation["path"], str) or type(citation["line"]) is not int
+                        or (citation["path"], citation["line"]) not in excerpt_keys):
                     raise ProposalRejected(f"citation names a line that was not supplied: {citation}")
             elif set(citation) == {"assignment_id"}:
-                if citation["assignment_id"] not in assignment_ids:
+                if (not isinstance(citation["assignment_id"], str)
+                        or citation["assignment_id"] not in assignment_ids):
                     raise ProposalRejected("citation names an assignment the request did not carry")
             else:
                 raise ProposalRejected("citation is neither a supplied line nor a deterministic assignment")
@@ -188,19 +198,29 @@ def run_model_pass(*, repository_root: Path, run_root: Path, indexes: AcceptedIn
     sources = _source_rows(indexes, limit)
     records: list[dict[str, Any]] = []
     components = sorted(collation.get("components", ()), key=lambda item: str(item["component_id"]))
-    skipped = components[model_pass.max_components:]
-    for item in skipped:
-        gaps.append(f"collation:model_pass_bound:{item['component_id']}: max_components {model_pass.max_components} reached")
-    for item in components[:model_pass.max_components]:
+    eligible = []
+    for item in components:
         cid = str(item["component_id"])
         subject = scope.component_subject(cid)
-        paths = [file["path"] for file in collation.get("files", ()) if cid in file.get("component_ids", ())]
+        paths = sorted({file["path"] for file in collation.get("files", ())
+                        if cid in file.get("component_ids", ())
+                        and settings.source_dispositions.classify(file["path"]) == FIRST_PARTY
+                        and cid in scope.ownership(file["path"]).component_ids
+                        and file["path"] in sources
+                        and sources[file["path"]][0].location.get("target_snapshot") == scope.target_snapshot})
         if subject is None or not paths:
             document["components"].append({"component_id": cid, "status": "skipped",
                                            "reason": "no first-party file"})
             continue
+        eligible.append((cid, subject, paths))
+    for cid, _, _ in eligible[model_pass.max_components:]:
+        gaps.append(f"collation:model_pass_bound:{cid}: max_components {model_pass.max_components} reached")
+    for cid, subject, paths in eligible[:model_pass.max_components]:
         own = [record for record in facet_records
-               if (record["subject"].get("component_id") == cid or record["subject"].get("path") in paths)]
+               if record["subject"].get("project_id") == scope.project["logical_id"]
+               and (record["subject"].get("component_id") == cid
+                    or (record["subject"].get("component_id") is None
+                        and record["subject"].get("path") in paths))]
         assignment_ids = {record["assignment_id"] for record in own}
         cited: dict[str, set[int]] = {}
         for record in own:
@@ -257,10 +277,8 @@ def run_model_pass(*, repository_root: Path, run_root: Path, indexes: AcceptedIn
                     continue
                 row, identity = sources[citation["path"]]
                 number = int(citation["line"])
-                _n, start, end, text = lines_by_path[citation["path"]][number - 1]
-                location = {**row.location, "start_byte": start, "end_byte": end, "start_line": number,
-                            "end_line": number, "start_column": 1, "end_column": len(text) + 1,
-                            "mapping_method": "collation-model-pass", "confidence": 1.0}
+                location = _line_location(row.location, lines_by_path[citation["path"]][number - 1],
+                                          "collation-model-pass")
                 evidence.append({**_evidence(row, identity), "span": {"start_line": number, "end_line": number},
                                  "location": location, "cited_line": True})
             records.append(assignment(vocabulary=vocabulary, tag=tag, basis="reported", subject=subject,

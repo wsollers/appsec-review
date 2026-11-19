@@ -20,6 +20,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from appsec_review.config.collation import CollationSettings
+from appsec_review.graph.crosscheck import SourceFile
 from appsec_review.retrieval import EntityKind
 from appsec_review.review.dispositions import FIRST_PARTY
 
@@ -33,9 +34,9 @@ from .taxonomy import (
 COLLATION_SCHEMA = "appsec-review/collation-pass/1"
 PRODUCER = "collation"
 RULE_PREFIX = "collation:"
-# Build-point kinds that produce a library rather than a program (build_discovery build points).
-LIBRARY_KINDS = frozenset({"static_library", "shared_library", "object_library", "interface_library", "module_library"})
-EXECUTABLE_KINDS = frozenset({"executable"})
+# Library kinds from catalog build points and language-build artifact projections.
+LIBRARY_KINDS = frozenset({"static_library", "shared_library", "object_library", "interface_library",
+                           "module_library", "jar", "war", "ear"})
 # Target documents that establish a component-level mechanism (indexing.target_documents.KINDS).
 DOCUMENT_MECHANISMS = {"openapi": "mechanism:http", "postman": "mechanism:http", "graphql": "mechanism:http",
                        "protobuf": "mechanism:rpc", "asyncapi": "mechanism:rpc"}
@@ -73,13 +74,26 @@ def _any(patterns: Iterable[str], tags: Iterable[str]) -> list[str]:
 
 def _lines(data: bytes) -> list[tuple[int, int, int, str]]:
     """``(line_number, start_byte, end_byte, text)`` per line, bytes exact, text decoded for matching."""
+    data.decode("utf-8")  # Unknown encodings cannot establish exact UTF-16 locations.
+    source = SourceFile.from_bytes(data)
     result = []
-    offset = 0
-    for number, raw in enumerate(data.splitlines(keepends=True), 1):
-        text = raw.decode("utf-8", errors="replace").rstrip("\r\n")
-        result.append((number, offset, offset + len(raw.rstrip(b"\r\n")), text))
-        offset += len(raw)
+    for number, start in enumerate(source.line_starts, 1):
+        if start == len(data):
+            break
+        end = source.line_starts[number] if number < source.line_count else len(data)
+        raw = data[start:end]
+        if raw.endswith(b"\n"):
+            raw = raw[:-1].removesuffix(b"\r")
+        result.append((number, start, start + len(raw), raw.decode("utf-8")))
     return result
+
+
+def _line_location(location: Mapping[str, Any], line: tuple[int, int, int, str],
+                   method: str) -> dict[str, Any]:
+    number, start, end, text = line
+    return {**location, "start_byte": start, "end_byte": end, "start_line": number,
+            "end_line": number, "start_column": 1, "end_column": len(text.encode("utf-16-le")) // 2 + 1,
+            "mapping_method": method, "confidence": 1.0}
 
 
 class _Collector:
@@ -96,6 +110,8 @@ class _Collector:
         self.skipped: Counter[str] = Counter()
         self.component_inputs: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
         self.component_records: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        self.build_evidence: dict[str, dict[tuple[str, str], Mapping[str, Any]]] = defaultdict(dict)
+        self.uncertain_build_components: set[str] = set()
         self.sources: dict[str, str] = {}
 
     # Records ------------------------------------------------------------------------------------
@@ -123,6 +139,9 @@ class _Collector:
             for row in sorted(rows, key=lambda item: (str((item.location or {}).get("path", "")), item.identity)):
                 if row.location is None:
                     continue
+                if row.location.get("target_snapshot") != self.scope.target_snapshot:
+                    self.gaps.append(f"collation:foreign_source:{row.identity}: source belongs to another snapshot")
+                    continue
                 path = str(row.location["path"])
                 disposition = self.settings.source_dispositions.classify(path)
                 if disposition != FIRST_PARTY:
@@ -144,20 +163,31 @@ class _Collector:
 
     def take_inputs(self, inputs: Iterable[Mapping[str, Any]]) -> None:
         """Capability assignments of the collectors, by first-party file or by component."""
+        eligible = {cid for file in self.files.values() for cid in file.component_ids}
         for record in inputs:
             subject = record.get("subject") or {}
+            cid = subject.get("component_id")
+            if subject.get("project_id") != self.scope.project["logical_id"]:
+                continue
             namespace = str(record.get("namespace") or split_tag(record["tag"])[0])
             if namespace in COLLATION_NAMESPACES or namespace == "gap":
                 continue
             kind = subject.get("kind")
             path = subject.get("path")
+            if isinstance(path, str) and self.settings.source_dispositions.classify(path) != FIRST_PARTY:
+                continue
+            if isinstance(path, str) and cid is not None and cid not in self.scope.ownership(path).component_ids:
+                continue
             if kind in {"source_file", "source_span"} and isinstance(path, str) and path in self.files:
-                self.files[path].inputs.append(record)
-            elif kind == "component" and subject.get("component_id"):
-                self.component_inputs[str(subject["component_id"])].append(record)
-            elif kind == "tool_observation" and record.get("basis") == "declared" and subject.get("component_id"):
+                if cid is None or cid in self.files[path].component_ids:
+                    self.files[path].inputs.append(record)
+            elif kind == "component" and cid in eligible:
+                if subject.get("logical_id") == self.scope.component_subject(cid)["logical_id"]:
+                    self.component_inputs[cid].append(record)
+            elif kind == "tool_observation" and record.get("basis") == "declared" and cid in eligible:
                 # A package capability (declared through a manifest or SBOM entry) is a component fact.
-                self.component_inputs[str(subject["component_id"])].append(record)
+                if isinstance(path, str) and cid in self.scope.ownership(path).component_ids:
+                    self.component_inputs[cid].append(record)
 
     # Lexical and path facts -----------------------------------------------------------------------
     def _language_tag(self, file: _File) -> str | None:
@@ -189,16 +219,18 @@ class _Collector:
                 self.gaps.append(f"collation:source_unread:{path}: {len(data)} bytes exceeds "
                                  f"max_source_bytes_per_file {self.settings.max_source_bytes_per_file}")
                 continue
-            lines = _lines(data)
+            try:
+                lines = _lines(data)
+            except UnicodeError:
+                self.gaps.append(f"collation:source_unread:{path}: source is not valid UTF-8")
+                continue
             for rule in applicable:
                 patterns = self.collation.patterns[rule["id"]]
                 hits = [line for line in lines if any(pattern.search(line[3]) for pattern in patterns)]
                 if not hits:
                     continue
-                number, start, end, text = hits[0]
-                location = {**file.row.location, "start_byte": start, "end_byte": end, "start_line": number,
-                            "end_line": number, "start_column": 1, "end_column": len(text) + 1,
-                            "mapping_method": "collation-lexical", "confidence": 1.0}
+                number = hits[0][0]
+                location = _line_location(file.row.location, hits[0], "collation-lexical")
                 evidence = [{**_evidence(file.row, file.source_identity), "rule": rule["id"],
                              "match_count": len(hits), "span": {"start_line": number, "end_line": number},
                              "location": location}]
@@ -269,26 +301,67 @@ class _Collector:
     def _build_points(self) -> dict[str, set[str]]:
         kinds: dict[str, set[str]] = defaultdict(set)
         shards = self.indexes.shards("build")
-        self.sources["build"] = "available" if shards else "unavailable"
-        if not shards:
-            self.gaps.append("collation:no_build_facts: accepted build index is unavailable; "
-                             "the library class rests on the absence of entry mechanisms")
+        eligible = {cid for file in self.files.values() for cid in file.component_ids}
+        units: dict[str, list[tuple[set[str], Mapping[str, Any]]]] = defaultdict(list)
+        artifacts = []
         for identity in shards:
-            rows, truncated = self.indexes.rows(identity, (EntityKind.BUILD_ACTION.value,), self.limit)
+            rows, truncated = self.indexes.rows(
+                identity, (EntityKind.BUILD_ACTION.value, EntityKind.LIBRARY.value, EntityKind.EXECUTABLE.value),
+                self.limit)
             if truncated:
                 self.gaps.append(f"collation:build_bound: build/{identity.get('shard_id')}: {self.limit}")
             for row in rows:
+                if row.kind != EntityKind.BUILD_ACTION.value:
+                    artifacts.append((row, identity))
+                    continue
+                unit_id, root = row.payload.get("build_unit_id"), row.payload.get("root")
+                if (isinstance(unit_id, str) and isinstance(root, str)
+                        and self.settings.source_dispositions.classify(root) == FIRST_PARTY):
+                    owners = set(self.scope.ownership(root).component_ids) & eligible
+                    units[unit_id].append((owners, _evidence(row, identity)))
                 for point in row.payload.get("build_points") or ():
                     if not isinstance(point, Mapping):
                         continue
                     kind = str(point.get("kind") or "")
                     for source in point.get("sources") or ():
-                        for cid in self.scope.ownership(str(source)).component_ids:
+                        if not isinstance(source, str) or source not in self.files:
+                            continue
+                        for cid in self.files[source].component_ids:
                             kinds[cid].add(kind)
+                            self.build_evidence[cid][(row.identity, identity["sha256"])] = _evidence(row, identity)
+        for row, identity in artifacts:
+            payload = row.payload
+            # Workspace paths are not source ownership. Bind produced first-party artifacts
+            # through the cataloged build unit, never by their output directory or filename.
+            if (payload.get("artifact_origin") != "build-output"
+                    or payload.get("scope_role") not in {None, "unknown", "target_source", "deliverable"}
+                    or payload.get("mapping_confidence") != 1.0):
+                continue
+            unit_id = payload.get("build_unit_id")
+            bindings = units.get(unit_id, ()) if isinstance(unit_id, str) else ()
+            owners = {cid for bound, _ in bindings for cid in bound}
+            if len(owners) != 1:
+                self.gaps.append(f"collation:build_scope_unresolved:{row.identity}: "
+                                 "artifact has no unambiguous eligible catalog build unit")
+                continue
+            cid = next(iter(owners))
+            if payload.get("scope_role") not in {"target_source", "deliverable"}:
+                self.uncertain_build_components.add(cid)
+                self.gaps.append(f"collation:build_scope_unresolved:{row.identity}: "
+                                 "artifact delivery scope does not establish a first-party build kind")
+                continue
+            kind = str(payload.get("kind") or "").replace("-", "_")
+            kinds[cid].add(kind)
+            for evidence in [_evidence(row, identity), *(evidence for _, evidence in bindings)]:
+                self.build_evidence[cid][(evidence["ref"], evidence["index_sha256"])] = evidence
+        self.sources["build"] = "available" if any(kinds.values()) else "unavailable"
+        if self.sources["build"] == "unavailable":
+            self.gaps.append("collation:no_build_facts: no eligible build classification facts")
         return kinds
 
     def _document_facts(self) -> None:
         shards = self.indexes.shards("documents")
+        eligible = {cid for file in self.files.values() for cid in file.component_ids}
         found = False
         for identity in shards:
             rows, truncated = self.indexes.rows(identity, (EntityKind.DOCUMENT_RECORD.value,), self.limit)
@@ -296,13 +369,16 @@ class _Collector:
                 self.gaps.append(f"collation:documents_bound: documents/{identity.get('shard_id')}: {self.limit}")
             for row in sorted(rows, key=lambda item: item.identity):
                 found = True
-                tag = DOCUMENT_MECHANISMS.get(str(row.payload.get("kind") or ""))
+                tag = DOCUMENT_MECHANISMS.get(str(row.payload.get("document_kind") or ""))
                 path = (row.location or {}).get("path") or row.payload.get("path")
-                if tag is None or not isinstance(path, str):
+                if (tag is None or not isinstance(path, str)
+                        or (row.location is not None
+                            and row.location.get("target_snapshot") != self.scope.target_snapshot)
+                        or self.settings.source_dispositions.classify(path) != FIRST_PARTY):
                     continue
                 for cid in self.scope.ownership(path).component_ids:
                     subject = self.scope.component_subject(cid)
-                    if subject is not None:
+                    if subject is not None and cid in eligible:
                         self.component_records[cid].append(self._declared(
                             tag, subject, "document-interface", [{**_evidence(row, identity), "rule": "document-interface"}],
                             "high"))
@@ -353,12 +429,15 @@ class _Collector:
 
     def _target_class(self, cid: str, subject: Mapping[str, Any], files: list[_File],
                       records: list[dict[str, Any]], build_kinds: set[str]) -> None:
-        present = {record["tag"] for record in records}
+        inputs = [*records, *self.component_inputs.get(cid, ()),
+                  *(record for file in files for record in file.inputs
+                    if record["subject"].get("component_id") in {None, cid})]
+        present = {record["tag"] for record in inputs}
         classes: list[tuple[str, str, list[str], list[Mapping[str, Any]], str]] = []
         for rule in self.collation.target_rules:
             hit = _any(rule["any_of"], present)
             if hit and not _any(rule.get("none_of", ()), present):
-                ids = sorted({r["assignment_id"] for r in records if r["tag"] in hit})
+                ids = sorted({r["assignment_id"] for r in inputs if r["tag"] in hit})
                 evidence = ([{"ref": RULE_PREFIX + rule["id"], "condition": {"any_of": list(rule["any_of"]),
                               "none_of": list(rule["none_of"])}, "rests_on_absence": True}]
                             if rule.get("none_of") else [])
@@ -374,11 +453,16 @@ class _Collector:
             ids = sorted({r["assignment_id"] for file in tests for r in file.records if r["tag"] == "role:test"})
             classes.append(("target:test-only", "target-test-only", ids, [], "high"))
         elif not classes and not mechanisms:
+            if cid in self.uncertain_build_components:
+                self.gaps.append(f"collation:target_class_unresolved:{cid}: "
+                                 "build artifacts have unresolved first-party scope")
+                return
             only_libraries = bool(build_kinds) and build_kinds <= LIBRARY_KINDS
             if only_libraries or self.sources.get("build") == "unavailable" or not build_kinds:
                 evidence = [{"ref": RULE_PREFIX + "target-library",
                              "condition": {"build_point_kinds": sorted(build_kinds), "mechanisms": []},
-                             "rests_on_absence": not only_libraries}]
+                             "rests_on_absence": not only_libraries},
+                            *(value for _, value in sorted(self.build_evidence.get(cid, {}).items()))]
                 ids = sorted({r["assignment_id"] for r in records})
                 if ids:
                     classes.append(("target:library", "target-library", ids, evidence,
