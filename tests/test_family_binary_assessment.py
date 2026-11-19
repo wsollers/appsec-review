@@ -90,7 +90,9 @@ def test_flag_driven_families_keep_native_requested_versus_actual_checks(family:
     action = {"classification": "compiler", "build_action_id": "c1", "project": "p",
               "argv": ["cc", "-fstack-protector-strong", "-O2", "-D_FORTIFY_SOURCE=2", "-fPIE", "-c", "x.c"]}
     assert family_expectations(family, True) is None
-    checks = deterministic_checks([action], [_elf("executable", pie=False, nx_stack=True)], family=family)
+    link = {"classification": "linker", "build_action_id": "link", "project": "p",
+            "argv": ["ld", "-pie", "x.o", "-o", "app"], "linked_artifact_ids": ["a" * 64]}
+    checks = deterministic_checks([action, link], [_elf("executable", pie=False, nx_stack=True)], family=family)
     by_id = _by_id(checks)
     assert by_id["gnu.stack_protector"]["status"] == "PASS"
     assert by_id["elf.pie"]["status"] == "FAIL" and "expectation" not in by_id["elf.pie"]

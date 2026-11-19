@@ -23,11 +23,27 @@ from .hardening import Expectation, FamilyExpectations, expectations_for, unknow
 SCHEMA = "appsec-review/post-build-security-assessment/1"
 PROVENANCE_SCHEMA = "appsec-review/build-command-provenance/1"
 INSPECTION_SCHEMA = "appsec-review/binary-inspection/1"
-RULE_VERSION = "build-security-rules/1"
-PARSER_VERSION = "build-security-binary-parser/1"
-NORMALIZER_VERSION = "build-security-command-normalizer/1"
+RULE_VERSION = "build-security-rules/2"
+PARSER_VERSION = "build-security-binary-parser/2"
+NORMALIZER_VERSION = "build-security-command-normalizer/2"
 GUIDANCE_IDENTITY = "build-security-inference-guidance/1"
 INFERENCE_PROPOSAL_SCHEMA = "appsec-review/build-security-inference-proposal/1"
+INFERENCE_RESPONSE_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["schema", "observations"],
+    "properties": {
+        "schema": {"const": INFERENCE_PROPOSAL_SCHEMA},
+        "observations": {"type": "array", "maxItems": 100, "items": {
+            "type": "object", "additionalProperties": False,
+            "required": ["claim", "check_id", "evidence_ids"],
+            "properties": {
+                "claim": {"type": "string", "minLength": 1, "maxLength": 8192},
+                "check_id": {"type": "string", "minLength": 1},
+                "scope": {"type": "string", "minLength": 1},
+                "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+            },
+        }},
+    },
+}
 MAX_ARGV = 4096
 MAX_ARG_BYTES = 1024 * 1024
 MAX_BINARY_BYTES = 512 * 1024 * 1024
@@ -111,8 +127,17 @@ def sanitize_environment(environment: Mapping[str, str]) -> Mapping[str, Any]:
     return {"facts": facts, "omitted_count": omitted}
 
 
-def classify_action(argv: Iterable[str]) -> str:
+def _driver_argv(argv: Iterable[str]) -> tuple[str, ...]:
     values = tuple(argv)
+    while values and PurePosixPath(values[0].replace("\\", "/")).name.lower() in {
+        "ccache", "sccache", "distcc", "ccache.exe", "sccache.exe", "distcc.exe",
+    }:
+        values = values[1:]
+    return values
+
+
+def classify_action(argv: Iterable[str]) -> str:
+    values = _driver_argv(argv)
     if not values:
         return "unknown"
     executable = PurePosixPath(values[0].replace("\\", "/")).name.lower()
@@ -129,7 +154,9 @@ def classify_action(argv: Iterable[str]) -> str:
         return "linker"
     if executable in {"strip", "llvm-strip", "objcopy", "llvm-objcopy", "install_name_tool", "codesign", "signtool"}:
         return "post_link"
-    compiler = any(token in executable for token in ("clang", "gcc", "g++", "cl.exe", "clang-cl"))
+    compiler = bool(re.fullmatch(
+        r"(?:(?:[\w]+-)*)(?:cc|c\+\+|gcc|g\+\+|clang|clang\+\+|clang-cl|cl)(?:-\d+(?:\.\d+)*)?(?:\.exe)?",
+        executable))
     if compiler:
         if {"-c", "/c"} & flags:
             return "compiler"
@@ -148,14 +175,66 @@ def _split_command(value: Mapping[str, Any]) -> list[str]:
     return shlex.split(command, posix=True)
 
 
-def _flag_values(argv: Iterable[str]) -> set[str]:
-    result: set[str] = set()
-    for value in argv:
-        lowered = value.lower()
-        result.add(lowered)
-        if lowered.startswith("-wl,"):
-            result.update(part for part in lowered[4:].split(",") if part)
-    return result
+def _effective_options(argv: Iterable[str]) -> dict[str, bool | None]:
+    """Evaluate the supported ordered switches, not the union of every requested setting."""
+    values = _driver_argv(argv)[1:]
+    state: dict[str, bool | None] = {}
+    if any(value.startswith("@") for value in values):
+        return {"uncertain": True}
+    tokens = []
+    index = 0
+    while index < len(values):
+        value = values[index]
+        if value in {"-D", "-U"} and index + 1 < len(values):
+            index += 1
+            value += values[index]
+        if value.startswith("-Wl,"):
+            tokens.extend(value[4:].split(","))
+        elif value != "-Xlinker":
+            tokens.append(value)
+        index += 1
+    switches = {
+        "-fno-stack-protector": ("stack", False),
+        "-fstack-protector": ("stack", True),
+        "-fstack-protector-strong": ("stack", True),
+        "-fstack-protector-all": ("stack", True),
+        "-fstack-protector-explicit": ("stack", True),
+        "-pie": ("pie", True), "-no-pie": ("pie", False),
+        "-fpie": ("pic", True), "-fpic": ("pic", True),
+        "-fno-pie": ("pic", False), "-fno-pic": ("pic", False),
+        "relro": ("relro", True), "norelro": ("relro", False),
+        "now": ("now", True), "lazy": ("now", False),
+        "noexecstack": ("nx_stack", True), "execstack": ("nx_stack", False),
+        "/gs": ("gs", True), "/gs-": ("gs", False),
+        "/sdl": ("sdl", True), "/sdl-": ("sdl", False),
+        "/guard:cf": ("guard_cf", True), "/guard:cf-": ("guard_cf", False),
+        "/dynamicbase": ("dynamic_base", True), "/dynamicbase:no": ("dynamic_base", False),
+        "/nxcompat": ("nx_compat", True), "/nxcompat:no": ("nx_compat", False),
+        "/highentropyva": ("high_entropy_va", True), "/highentropyva:no": ("high_entropy_va", False),
+    }
+    for index, token in enumerate(tokens):
+        lower = token.lower()
+        if lower.startswith("-z") and len(lower) > 2:
+            lower = lower[2:]
+        elif lower in {"relro", "norelro", "now", "lazy", "execstack", "noexecstack"} and (
+                index == 0 or tokens[index - 1] != "-z"):
+            continue
+        if lower in switches:
+            key, enabled = switches[lower]
+            state[key] = enabled
+        elif re.fullmatch(r"-O(?:[0-3gsz]|fast)?", token):
+            state["optimized"] = token != "-O0"
+        elif token == "-D_FORTIFY_SOURCE" or token.startswith("-D_FORTIFY_SOURCE="):
+            value = token.partition("=")[2] if "=" in token else "1"
+            state["fortify"] = value != "0" if value in {"0", "1", "2", "3"} else None
+        elif token == "-U_FORTIFY_SOURCE":
+            state["fortify"] = False
+        elif token == "-fcf-protection" or token.startswith("-fcf-protection="):
+            value = token.partition("=")[2] or "full"
+            state["control_flow"] = value != "none" if value in {"none", "full", "branch", "return"} else None
+        elif token.startswith("-fvisibility="):
+            state["visibility"] = token == "-fvisibility=hidden"
+    return state
 
 
 def discover_io(argv: Iterable[str], *, working_directory: str) -> tuple[list[str], list[str]]:
@@ -195,7 +274,7 @@ def normalize_action(
 ) -> dict[str, Any]:
     argv = _split_command(row)
     normalized = redact_argv(argv, roots=roots)
-    directory = _safe_path(str(row.get("directory", build_root)), roots=roots)
+    directory = _safe_path(str(row.get("directory") or "<unknown-working-directory>"), roots=roots)
     inputs, outputs = discover_io(normalized, working_directory=directory)
     return {
         "schema": PROVENANCE_SCHEMA,
@@ -230,7 +309,8 @@ def command_fingerprint(action: Mapping[str, Any]) -> str:
         "target_snapshot", "project", "build_root", "configuration", "build_action_id",
         "compile_unit_id", "linked_artifact_ids", "classification", "toolchain", "argv_sha256",
         "working_directory", "environment", "declared_inputs", "discovered_inputs", "outputs",
-        "output_hashes", "start", "end", "exit_status", "timing_granularity", "argv_source", "producer",
+        "output_hashes", "resolved_outputs", "input_artifact_ids", "start", "end", "exit_status",
+        "timing_granularity", "argv_source", "producer",
     )})
 
 
@@ -252,8 +332,25 @@ def _elf(path: Path, data: bytes) -> dict[str, Any]:
     phentsize, phnum, shentsize, shnum, shstrndx = values[8], values[9], values[10], values[11], values[12]
     if phnum > 65535 or shnum > 65535:
         raise ValueError("ELF table count exceeds bound")
+    gaps = []
+    header_size = 64 if bits == 64 else 52
+    phsize, shsize = (56, 64) if bits == 64 else (32, 40)
+
+    def table_complete(offset: int, entry_size: int, count: int, minimum: int, label: str) -> bool:
+        if not count:
+            return True
+        if offset < header_size or entry_size < minimum:
+            gaps.append(f"ELF {label} table has invalid offset or entry size")
+            return False
+        if offset + count * entry_size > len(data):
+            gaps.append(f"ELF {label} table is truncated")
+            return False
+        return True
+
+    programs_complete = table_complete(phoff, phentsize, phnum, phsize, "program header")
+    sections_complete = table_complete(shoff, shentsize, shnum, shsize, "section header")
     program_headers = []
-    for index in range(phnum):
+    for index in range(phnum if phentsize >= phsize and phoff >= header_size else 0):
         offset = phoff + index * phentsize
         fmt = "IIQQQQQQ" if bits == 64 else "IIIIIIII"
         size = struct.calcsize(endian + fmt)
@@ -269,16 +366,23 @@ def _elf(path: Path, data: bytes) -> dict[str, Any]:
     raw_sections = []
     shfmt = "IIQQQQIIQQ" if bits == 64 else "IIIIIIIIII"
     shsize = struct.calcsize(endian + shfmt)
-    for index in range(shnum):
+    for index in range(shnum if shentsize >= shsize and shoff >= header_size else 0):
         offset = shoff + index * shentsize
         if offset + shsize > len(data):
             break
         raw_sections.append(struct.unpack_from(endian + shfmt, data, offset))
     strings = b""
-    if shstrndx < len(raw_sections):
+    names_complete = sections_complete
+    if shstrndx and shstrndx < len(raw_sections):
         item = raw_sections[shstrndx]
         section_offset, section_size = item[4], item[5]
         strings = data[section_offset:section_offset + section_size]
+        if section_offset + section_size > len(data):
+            names_complete = False
+            gaps.append("ELF section name table is truncated")
+    elif shstrndx:
+        names_complete = False
+        gaps.append("ELF section name table is unavailable")
     sections = []
     for item in raw_sections:
         name = _bounded_c_string(strings, item[0], 4096) if strings else ""
@@ -291,15 +395,24 @@ def _elf(path: Path, data: bytes) -> dict[str, Any]:
     dynamic: list[tuple[int, int]] = []
     dynamic_entry = "qQ" if bits == 64 else "iI"
     dynamic_size = struct.calcsize(endian + dynamic_entry)
+    dynamic_complete = programs_complete
     for item in program_headers:
         if item["type"] != 2:
             continue
+        if item["offset"] + item["filesz"] > len(data) or item["filesz"] % dynamic_size:
+            dynamic_complete = False
+            gaps.append("ELF dynamic table is truncated")
         start, end = item["offset"], min(len(data), item["offset"] + item["filesz"])
+        terminated = False
         for offset in range(start, end - dynamic_size + 1, dynamic_size):
             tag, value = struct.unpack_from(endian + dynamic_entry, data, offset)
             if tag == 0:
+                terminated = True
                 break
             dynamic.append((tag, value))
+        if not terminated:
+            dynamic_complete = False
+            gaps.append("ELF dynamic table terminator is unavailable")
     strtab_address = next((value for tag, value in dynamic if tag == 5), None)
     strtab_size = next((value for tag, value in dynamic if tag == 10), 1024 * 1024)
     strtab_offset = None
@@ -346,9 +459,8 @@ def _elf(path: Path, data: bytes) -> dict[str, Any]:
         desc_offset = note["offset"] + 12 + ((namesz + 3) & ~3)
         if note_type == 3 and desc_offset + descsz <= len(data):
             build_id = data[desc_offset:desc_offset + descsz].hex()
-    gaps = []
     stack_header = next((item for item in program_headers if item["type"] == 0x6474E551), None)
-    artifact_kind = ("pie_executable" if interpreter else "shared_library") if e_type == 3 else {
+    artifact_kind = ("pie_executable" if interpreter else "shared_library" if programs_complete else "unknown") if e_type == 3 else {
         1: "object", 2: "executable", 4: "core"}.get(e_type, "unknown")
     if any(item["type"] == 2 for item in program_headers) and not dynamic_strings:
         gaps.append("ELF dynamic string table could not be resolved")
@@ -356,18 +468,21 @@ def _elf(path: Path, data: bytes) -> dict[str, Any]:
         "format": "ELF", "kind": artifact_kind,
         "architecture": machine, "bits": bits,
         "headers": {"type": e_type, "machine": machine, "program_header_count": phnum, "section_count": shnum},
-        "sections": sections[:4096], "symbols": {"present": ".symtab" in names, "stripped": ".symtab" not in names,
+        "sections": sections[:4096], "symbols": {"present": True if ".symtab" in names else False if names_complete else None,
+                                                     "stripped": False if ".symtab" in names else True if names_complete else None,
                                                      "names": sorted(set(symbols))[:100000]},
         "imports": sorted(set(imports))[:100000], "exports": sorted(set(exports))[:100000],
         "relocations": [item["name"] for item in sections if item["name"].startswith((".rel", ".rela"))],
         "interpreter": interpreter, "rpath": rpath, "runpath": runpath,
         "dependencies": dependencies, "archive_members": [],
-        "build_id": build_id, "debug": {"present": any(name.startswith(".debug") for name in names),
+        "build_id": build_id, "debug": {"present": True if any(name.startswith(".debug") for name in names) else
+                                      False if names_complete else None,
                                       "sections": sorted(name for name in names if name.startswith(".debug"))},
         "hardening": {
             "pie": True if artifact_kind == "pie_executable" else False if artifact_kind == "executable" else None,
-            "relro": any(item["type"] == 0x6474E552 for item in program_headers),
-            "now": now if dynamic else None,
+            "relro": True if any(item["type"] == 0x6474E552 for item in program_headers) else
+                     False if programs_complete else None,
+            "now": True if now else False if dynamic and dynamic_complete else None,
             "nx_stack": None if stack_header is None else not bool(stack_header["flags"] & 1),
             "control_flow": None,
             "stack_canary": True if any(name == "__stack_chk_fail" for name in imports) else None,
@@ -601,7 +716,12 @@ def inspect_binary(path: Path) -> dict[str, Any]:
     size = path.stat().st_size
     if size > MAX_BINARY_BYTES:
         return {"schema": INSPECTION_SCHEMA, "path": path.name, "sha256": file_sha256(path),
-                "size_bytes": size, "format": "unsupported", "gaps": ["artifact exceeds binary inspection byte bound"]}
+                "size_bytes": size, "format": "unsupported", "kind": "unknown",
+                "parser_identity": PARSER_VERSION, "executed": False, "headers": {}, "sections": [],
+                "symbols": {"present": None, "stripped": None}, "imports": [], "exports": [],
+                "relocations": [], "interpreter": None, "rpath": [], "runpath": [], "dependencies": [],
+                "archive_members": [], "build_id": None, "debug": {"present": None, "sections": []},
+                "hardening": {}, "gaps": ["artifact exceeds binary inspection byte bound"]}
     data = path.read_bytes()
     base = {"schema": INSPECTION_SCHEMA, "path": path.name, "sha256": hashlib.sha256(data).hexdigest(),
             "size_bytes": len(data), "parser_identity": PARSER_VERSION, "executed": False}
@@ -610,8 +730,6 @@ def inspect_binary(path: Path) -> dict[str, Any]:
             result = _elf(path, data)
         elif data.startswith(b"MZ"):
             result = _pe(path, data)
-        elif path.suffix.lower() in {".obj", ".o"} and len(data) >= 20:
-            result = _coff_object(path, data)
         elif data[:4] in _MACH_MAGICS:
             result = _macho(path, data)
         elif data.startswith((b"!<arch>\n", b"!<thin>\n")):
@@ -622,6 +740,8 @@ def inspect_binary(path: Path) -> dict[str, Any]:
                       "relocations": [], "interpreter": None, "rpath": [], "runpath": [], "dependencies": [],
                       "archive_members": [], "build_id": None, "debug": {"present": None, "sections": []},
                       "hardening": {}, "gaps": ["LLVM bitcode semantic inspection requires pinned llvm-readobj tooling"]}
+        elif path.suffix.lower() in {".obj", ".o"} and len(data) >= 20:
+            result = _coff_object(path, data)
         elif path.suffix.lower() in {".map", ".linkmap"}:
             result = {"format": "link-map", "kind": "link_map", "headers": {}, "sections": [],
                       "symbols": {"present": None, "stripped": None}, "imports": [], "exports": [],
@@ -689,34 +809,36 @@ def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterab
     compile_actions = [item for item in actions if item.get("classification") in {"compiler", "linker_driver"}]
     table = family_expectations(family, bool(compile_actions))
     for action in compile_actions:
-        flags = _flag_values(action.get("argv", ()))
+        options = _effective_options(action.get("argv", ()))
+
+        def posture(key: str) -> str:
+            return "PASS" if options.get(key) is True else "FAIL" if options.get(key) is False else "UNKNOWN"
+
         scope = str(action.get("compile_unit_id") or action.get("build_action_id"))
         evidence = [str(action.get("build_action_id"))]
-        executable = PurePosixPath(str(action.get("argv", [""])[0]).replace("\\", "/")).name.lower()
+        driver = _driver_argv(action.get("argv", ()))
+        executable = PurePosixPath(driver[0].replace("\\", "/")).name.lower() if driver else ""
         windows = executable in {"cl", "cl.exe", "clang-cl", "clang-cl.exe"}
         if windows:
             checks.extend([
-                _check("msvc.gs", "FAIL" if "/gs-" in flags else "PASS" if "/gs" in flags else "UNKNOWN", scope, evidence, "/GS compile protection"),
-                _check("msvc.guard_cf.requested", "PASS" if "/guard:cf" in flags else "UNKNOWN", scope, evidence, "Control Flow Guard compile request"),
-                _check("msvc.sdl", "PASS" if "/sdl" in flags else "UNKNOWN", scope, evidence, "SDL checks"),
+                _check("msvc.gs", posture("gs"), scope, evidence, "/GS compile protection"),
+                _check("msvc.guard_cf.requested", posture("guard_cf"), scope, evidence, "Control Flow Guard compile request"),
+                _check("msvc.sdl", posture("sdl"), scope, evidence, "SDL checks"),
             ])
         else:
-            stack = "FAIL" if "-fno-stack-protector" in flags else "PASS" if flags & {
-                "-fstack-protector", "-fstack-protector-strong", "-fstack-protector-all"} else "UNKNOWN"
-            fortify_requested = any(item.startswith("-d_fortify_source=") and not item.endswith("=0") for item in flags)
-            optimized = bool(flags & {"-o1", "-o2", "-o3", "-os", "-ofast", "-og"})
-            fortify = "PASS" if fortify_requested and optimized else "FAIL" if fortify_requested and not optimized else (
-                "FAIL" if "-d_fortify_source=0" in flags or "-u_fortify_source" in flags else "UNKNOWN")
-            cf = "PASS" if any(item.startswith("-fcf-protection=") and not item.endswith("=none") for item in flags) else (
-                "FAIL" if "-fcf-protection=none" in flags else "UNKNOWN")
-            visibility = "PASS" if "-fvisibility=hidden" in flags else "UNKNOWN"
+            fortify = ("FAIL" if options.get("fortify") is False else
+                       "PASS" if options.get("fortify") is True and options.get("optimized") is True else
+                       "FAIL" if options.get("fortify") is True else "UNKNOWN")
+            insecure = ("UNKNOWN" if options.get("uncertain") else
+                        "FAIL" if any(options.get(key) is False for key in
+                                      ("stack", "pie", "pic", "relro", "now", "nx_stack")) else "PASS")
             checks.extend([
-                _check("gnu.stack_protector", stack, scope, evidence, "stack protector compile posture"),
+                _check("gnu.stack_protector", posture("stack"), scope, evidence, "stack protector compile posture"),
                 _check("gnu.fortify", fortify, scope, evidence, "fortified libc compile posture"),
-                _check("gnu.control_flow", cf, scope, evidence, "compiler control-flow protection"),
-                _check("gnu.visibility", visibility, scope, evidence, "default symbol visibility"),
-                _check("gnu.insecure_override", "FAIL" if flags & {"-fno-stack-protector", "-no-pie", "-fno-pie",
-                       "-fno-pic", "execstack", "norelro", "lazy"} else "PASS", scope, evidence,
+                _check("gnu.control_flow", posture("control_flow"), scope, evidence, "compiler control-flow protection"),
+                _check("gnu.visibility", "PASS" if options.get("visibility") is True else "UNKNOWN",
+                       scope, evidence, "default symbol visibility"),
+                _check("gnu.insecure_override", insecure, scope, evidence,
                        "explicit insecure compile/link overrides"),
             ])
     for artifact in artifacts:
@@ -740,32 +862,41 @@ def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterab
                                   ("pe.high_entropy_va", "high_entropy_va"), ("pe.guard_cf", "guard_cf"),
                                   ("pe.safe_seh", "safe_seh"), ("pe.gs", "gs")):
                 value = hardening.get(key)
-                applicable = not (key == "safe_seh" and artifact.get("bits") == 64)
+                applicable = not ((key == "safe_seh" and artifact.get("bits") == 64) or
+                                  (key == "high_entropy_va" and artifact.get("bits") == 32))
+                if key == "high_entropy_va" and artifact.get("bits") not in {32, 64}:
+                    value = None
                 if not applicable:
                     checks.append(_check(check_id, "NOT_APPLICABLE", scope, evidence, f"observed PE {key}",
                                          applicable=False))
                 else:
                     checks.append(_expected(table, check_id, scope, evidence, value, f"observed PE {key}"))
-    all_flags = set().union(*(_flag_values(item.get("argv", ())) for item in actions)) if actions else set()
     for artifact in artifacts:
         hardening = artifact.get("hardening", {})
         scope = str(artifact.get("artifact_id") or artifact.get("sha256"))
-        evidence = [str(artifact.get("sha256")), *(str(item.get("build_action_id")) for item in actions)]
-        if artifact.get("format") == "ELF":
-            requested_pie = bool(all_flags & {"-pie", "-fpie"})
-            if requested_pie and hardening.get("pie") is False:
+        producers = [action for action in actions
+                     if artifact.get("artifact_id") in action.get("linked_artifact_ids", ())]
+        if len(producers) != 1 or producers[0].get("classification") not in {"linker", "linker_driver"}:
+            continue
+        producer = producers[0]
+        options = _effective_options(producer.get("argv", ()))
+        evidence = [str(artifact.get("sha256")), str(producer.get("build_action_id"))]
+        if artifact.get("format") == "ELF" and artifact.get("kind") in {"executable", "pie_executable", "shared_library"}:
+            if options.get("pie") is True and artifact.get("kind") != "shared_library" and hardening.get("pie") is False:
                 checks.append(_check("command_binary.pie_mismatch", "FAIL", scope, evidence,
                                      "PIE was requested but the linked ELF is not position independent"))
-            if "relro" in all_flags and hardening.get("relro") is False:
+            if options.get("relro") is True and hardening.get("relro") is False:
                 checks.append(_check("command_binary.relro_mismatch", "FAIL", scope, evidence,
                                      "RELRO was requested but absent from the linked ELF"))
-            if "now" in all_flags and hardening.get("now") is False:
+            if options.get("now") is True and hardening.get("now") is False:
                 checks.append(_check("command_binary.now_mismatch", "FAIL", scope, evidence,
                                      "immediate binding was requested but absent from the linked ELF"))
         if artifact.get("format") == "PE/COFF":
             for flag, property_name in (("/dynamicbase", "dynamic_base"), ("/nxcompat", "nx_compat"),
                                         ("/highentropyva", "high_entropy_va"), ("/guard:cf", "guard_cf")):
-                if flag in all_flags and hardening.get(property_name) is False:
+                if property_name == "high_entropy_va" and artifact.get("bits") != 64:
+                    continue
+                if options.get(property_name) is True and hardening.get(property_name) is False:
                     checks.append(_check(f"command_binary.{property_name}_mismatch", "FAIL", scope, evidence,
                                          f"{flag} was requested but absent from the PE image"))
     groups: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
@@ -788,12 +919,17 @@ def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterab
 
 
 def validate_inference(proposal: Mapping[str, Any], *, checks: Iterable[Mapping[str, Any]],
-                       evidence_ids: Iterable[str]) -> dict[str, Any]:
+                       evidence_ids: Iterable[str],
+                       evidence_aliases: Mapping[str, str] | None = None) -> dict[str, Any]:
+    if (not isinstance(proposal, Mapping) or set(proposal) != {"schema", "observations"} or
+            proposal.get("schema") != INFERENCE_PROPOSAL_SCHEMA):
+        raise ValueError("inference proposal must match the closed response schema")
     allowed = set(evidence_ids)
+    aliases = evidence_aliases or {}
     by_check: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for item in checks:
         by_check[str(item["check_id"])].append(item)
-    observations = proposal.get("observations", [])
+    observations = proposal["observations"]
     if not isinstance(observations, list) or len(observations) > 100:
         raise ValueError("inference observations exceed bound")
     accepted, rejected = [], []
@@ -801,25 +937,36 @@ def validate_inference(proposal: Mapping[str, Any], *, checks: Iterable[Mapping[
         if not isinstance(raw, Mapping):
             rejected.append({"index": index, "reason": "observation is not an object"})
             continue
+        if (set(raw) - {"claim", "check_id", "evidence_ids", "scope"} or
+                not {"claim", "check_id", "evidence_ids"} <= set(raw) or
+                not isinstance(raw["claim"], str) or len(raw["claim"]) > 8192 or
+                not isinstance(raw["check_id"], str) or
+                ("scope" in raw and (not isinstance(raw["scope"], str) or not raw["scope"]))):
+            rejected.append({"index": index, "reason": "observation does not match the closed response schema"})
+            continue
         evidence = raw.get("evidence_ids", [])
-        if not isinstance(evidence, list) or not evidence or any(str(item) not in allowed for item in evidence):
+        if not isinstance(evidence, list) or not evidence or any(
+                not isinstance(item, str) or item not in allowed for item in evidence):
             rejected.append({"index": index, "reason": "observation has unresolved evidence"})
             continue
-        claim = str(raw.get("claim", ""))[:8192]
-        check_id = str(raw.get("check_id", ""))
+        claim = raw["claim"]
+        check_id = raw["check_id"]
         candidates = by_check.get(check_id, [])
         requested_scope = raw.get("scope")
         if requested_scope is not None:
             candidates = [item for item in candidates if str(item.get("scope")) == str(requested_scope)]
-        evidence_set = set(map(str, evidence))
-        evidenced = [item for item in candidates if evidence_set & set(map(str, item.get("evidence", ())))]
-        related = evidenced[0] if len(evidenced) == 1 else candidates[0] if len(candidates) == 1 else None
+        evidence_set = {aliases.get(item, item) for item in evidence}
+        evidenced = [item for item in candidates if evidence_set == set(item.get("evidence", ()))
+                     and all(value not in aliases or value == item.get("scope") for value in evidence)]
+        related = evidenced[0] if len(evidenced) == 1 else None
         if not claim or related is None:
             rejected.append({"index": index, "reason": "observation lacks a known deterministic check"})
             continue
         disposition = "CONFIRMED" if related["status"] == "FAIL" else "REFUTED" if related["status"] == "PASS" else "UNVALIDATED"
-        accepted.append({"observation_id": _sha({"index": index, "claim": claim, "evidence": evidence}),
-                         "claim": claim, "check_id": check_id, "evidence_ids": sorted(set(map(str, evidence))),
+        accepted.append({"observation_id": _sha({"index": index, "claim": claim, "evidence": evidence,
+                                               "check_id": check_id, "scope": related["scope"]}),
+                         "claim": claim, "check_id": check_id, "scope": related["scope"],
+                         "evidence_ids": sorted(set(evidence)),
                          "model_status": "OBSERVATION", "validation": disposition})
     return {"observations": accepted, "rejections": rejected,
             "confirmed_count": sum(item["validation"] == "CONFIRMED" for item in accepted),
@@ -829,9 +976,11 @@ def validate_inference(proposal: Mapping[str, Any], *, checks: Iterable[Mapping[
 
 def shard_fingerprint(*, command_artifacts: Iterable[Mapping[str, Any]], binary_hashes: Iterable[str],
                       tool_identity: Mapping[str, Any], model_identity: Mapping[str, Any],
-                      upstream_manifest_sha256: str) -> str:
+                      upstream_manifest_sha256: str, stage_hashes: Mapping[str, str] | None = None,
+                      semantic_inputs: Mapping[str, Any] | None = None) -> str:
     return _sha({"schema": SCHEMA, "commands": sorted(command_artifacts, key=lambda item: str(item.get("sha256"))),
                  "binary_hashes": sorted(binary_hashes), "tool_identity": tool_identity,
                  "rule_version": RULE_VERSION, "parser_version": PARSER_VERSION,
                  "normalizer_version": NORMALIZER_VERSION, "model_identity": model_identity,
-                 "guidance_identity": GUIDANCE_IDENTITY, "upstream_manifest_sha256": upstream_manifest_sha256})
+                 "guidance_identity": GUIDANCE_IDENTITY, "upstream_manifest_sha256": upstream_manifest_sha256,
+                 "stage_hashes": dict(stage_hashes or {}), "semantic_inputs": dict(semantic_inputs or {})})

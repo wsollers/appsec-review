@@ -8,6 +8,7 @@ import pytest
 
 from appsec_review.jobs.job_post_build_security_assessment.assessment import (
     MAX_ARGV,
+    INFERENCE_PROPOSAL_SCHEMA,
     _bounded_c_string,
     _check,
     _safe_path,
@@ -231,6 +232,7 @@ def test_deterministic_checks_cover_msvc_gnu_elf_pe_mismatches_and_cross_tu() ->
         "classification": "linker",
         "argv": ["link.exe", "/DYNAMICBASE", "/NXCOMPAT", "/HIGHENTROPYVA", "/GUARD:CF", "a.obj"],
         "build_action_id": "mlink",
+        "linked_artifact_ids": ["pe64"],
         "project": "winproj",
     }
     win_checks = {(c["check_id"], c["scope"]): c for c in deterministic_checks([*msvc_actions, win_link], [pe64, pe32])}
@@ -303,7 +305,10 @@ def test_deterministic_checks_cover_msvc_gnu_elf_pe_mismatches_and_cross_tu() ->
         "kind": "object",
         "hardening": {},
     }
-    lin_checks = {(c["check_id"], c["scope"]): c for c in deterministic_checks(gnu_actions, [elf_exe, elf_so, elf_obj])}
+    gnu_link = {"classification": "linker", "build_action_id": "glink", "linked_artifact_ids": ["elf-exe"],
+                "argv": ["ld", "-pie", "-z", "relro", "-z", "now", "-o", "elf-exe"]}
+    lin_checks = {(c["check_id"], c["scope"]): c for c in deterministic_checks(
+        [*gnu_actions, gnu_link], [elf_exe, elf_so, elf_obj])}
     assert lin_checks[("gnu.fortify", "cu-g1")]["status"] == "PASS"
     assert lin_checks[("gnu.fortify", "cu-g2")]["status"] == "FAIL"
     assert lin_checks[("gnu.fortify", "cu-g3")]["status"] == "FAIL"
@@ -330,9 +335,10 @@ def test_validate_inference_dispositions_scope_disambiguation_and_rejections() -
         {"check_id": "elf.control_flow", "status": "UNKNOWN", "scope": "bin-1", "evidence": ["sha-1"]},
     ]
     proposal = {
+        "schema": INFERENCE_PROPOSAL_SCHEMA,
         "observations": [
             {"claim": "missing stack protector in cu-1", "check_id": "gnu.stack_protector", "evidence_ids": ["act-1"]},
-            {"claim": "scoped claim on cu-2", "check_id": "gnu.stack_protector", "scope": "cu-2", "evidence_ids": ["sha-1"]},
+            {"claim": "scoped claim on cu-2", "check_id": "gnu.stack_protector", "scope": "cu-2", "evidence_ids": ["act-2"]},
             {"claim": "needs manual CET note verification", "check_id": "elf.control_flow", "evidence_ids": ["sha-1"]},
             "not-an-object",
             {"claim": "unresolved evidence", "check_id": "elf.control_flow", "evidence_ids": ["invented"]},
@@ -357,9 +363,11 @@ def test_validate_inference_dispositions_scope_disambiguation_and_rejections() -
     ]
 
     with pytest.raises(ValueError, match="inference observations exceed bound"):
-        validate_inference({"observations": "not-a-list"}, checks=checks, evidence_ids={"act-1"})
+        validate_inference({"schema": INFERENCE_PROPOSAL_SCHEMA, "observations": "not-a-list"},
+                           checks=checks, evidence_ids={"act-1"})
     with pytest.raises(ValueError, match="inference observations exceed bound"):
-        validate_inference({"observations": [{}] * 101}, checks=checks, evidence_ids={"act-1"})
+        validate_inference({"schema": INFERENCE_PROPOSAL_SCHEMA, "observations": [{}] * 101},
+                           checks=checks, evidence_ids={"act-1"})
 
 
 def test_shard_fingerprint_and_retrieval_mcp_query_scopes(tmp_path: Path) -> None:

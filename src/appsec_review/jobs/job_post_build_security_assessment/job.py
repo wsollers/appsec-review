@@ -7,6 +7,7 @@ from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import posixpath
 import shlex
 import shutil
 import time
@@ -26,8 +27,8 @@ from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, fil
 
 from .assessment import (
     GUIDANCE_IDENTITY, NORMALIZER_VERSION, PARSER_VERSION, PROVENANCE_SCHEMA, RULE_VERSION,
-    INFERENCE_PROPOSAL_SCHEMA, SCHEMA, command_fingerprint, deterministic_checks, inspect_binary,
-    normalize_action, shard_fingerprint, validate_inference,
+    INFERENCE_PROPOSAL_SCHEMA, INFERENCE_RESPONSE_SCHEMA, SCHEMA, command_fingerprint,
+    deterministic_checks, discover_io, inspect_binary, normalize_action, shard_fingerprint, validate_inference,
 )
 from appsec_review.jobs.job_post_build_security_assessment.datasets import CONTRACT, DATASETS
 
@@ -95,8 +96,41 @@ def _link_rows(root: Path) -> list[dict[str, Any]]:
             continue
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[:100]:
             if line.strip():
-                rows.append({"command": line, "directory": str(path.parent), "origin": path.relative_to(root).as_posix()})
+                # A command file's location is not evidence of its invocation directory.
+                rows.append({"command": line, "origin": path.relative_to(root).as_posix()})
     return rows
+
+
+def _case_path(value: str, directory: Any, *, root: Path, run_root: Path,
+               catalog: Mapping[str, Any]) -> Path | None:
+    """Resolve only captured cwd paths and the accepted workspace-to-case copy mapping."""
+    value = value.replace("\\", "/")
+    if not PurePosixPath(value).is_absolute():
+        if not isinstance(directory, str) or not directory:
+            return None
+        value = posixpath.join(directory.replace("\\", "/"), value)
+    receipt, mapping = catalog.get("build_receipt", {}), catalog.get("mapping", {})
+    aliases = [(root.as_posix(), root)]
+    workspace = receipt.get("workspace")
+    if isinstance(workspace, str) and workspace and not PurePosixPath(workspace).is_absolute():
+        recipe = receipt.get("recipe", {})
+        for relative, local in ((recipe.get("build_dir", mapping.get("build_dir")), root / "build"),
+                                (mapping.get("source_dir", mapping.get("root")), root / "source")):
+            if not isinstance(relative, str) or PurePosixPath(relative).is_absolute() or ".." in PurePosixPath(relative).parts:
+                continue
+            for prefix in ("/workspace", (run_root / workspace).as_posix()):
+                aliases.append((posixpath.normpath(posixpath.join(prefix, relative)), local))
+        if not PurePosixPath(value).is_absolute():
+            value = posixpath.join("/workspace", value)
+    normalized = posixpath.normpath(value)
+    for prefix, destination in sorted(aliases, key=lambda pair: -len(pair[0])):
+        if normalized == prefix or normalized.startswith(prefix + "/"):
+            candidate = destination / normalized[len(prefix):].lstrip("/")
+            if candidate.is_symlink():
+                return None
+            resolved = candidate.resolve()
+            return resolved if root == resolved or root in resolved.parents else None
+    return None
 
 
 def _argv(row: Mapping[str, Any]) -> list[str]:
@@ -381,7 +415,8 @@ def build_job(*, infer: Infer | None = None) -> Job:
                 if not argv:
                     gaps.append(f"build action {index} had no parseable argv")
                     continue
-                action_id = hashlib.sha256(canonical_json({"case": case_id, "index": index, "argv": argv})).hexdigest()
+                action_id = hashlib.sha256(canonical_json({"case": case_id, "index": index, "argv": argv,
+                                                          "directory": row.get("directory")})).hexdigest()
                 exact_argv = isinstance(row.get("argv"), list) or isinstance(row.get("arguments"), list)
                 if generic_protected is not None:
                     protected_artifact = generic_protected
@@ -417,20 +452,33 @@ def build_job(*, infer: Infer | None = None) -> Job:
                     gaps.append(f"exact argv unavailable for command-only action {action_id}; protected command text was retained")
                 if not has_action_timing:
                     gaps.append(f"per-action timing/exit status unavailable for {action_id}")
+                if normalized["classification"] == "unknown":
+                    gaps.append(f"compiler/tool identity could not be classified for {action_id}")
+                if any(value.startswith("@") for value in argv):
+                    gaps.append(f"unexpanded response file leaves effective flags unknown for {action_id}")
+                if not row.get("directory"):
+                    gaps.append(f"working directory unavailable for {action_id}; relative paths are unresolved")
+                inputs, outputs = discover_io(argv, working_directory=str(row.get("directory") or ""))
+                if isinstance(row.get("output"), str) and row["output"] not in outputs:
+                    outputs.append(row["output"])
                 discovered = []
-                for declared in normalized["declared_inputs"]:
-                    declared_path = Path(str(declared))
-                    candidates = [] if declared_path.is_absolute() else [root / "build" / declared_path,
-                                                                          root / "source" / declared_path]
-                    match = next((value.resolve() for value in candidates if value.is_file() and not value.is_symlink()), None)
-                    if match is not None and root in match.parents:
+                for declared in inputs:
+                    match = _case_path(declared, row.get("directory"), root=root,
+                                       run_root=unit.job.run_root, catalog=catalog)
+                    if match is not None and match.is_file():
                         discovered.append({"path": match.relative_to(root).as_posix(),
                                            "sha256": file_sha256(match), "size_bytes": match.stat().st_size})
                 normalized["discovered_inputs"] = discovered
+                normalized["resolved_outputs"] = sorted({
+                    match.relative_to(root).as_posix() for output in outputs
+                    if (match := _case_path(output, row.get("directory"), root=root,
+                                           run_root=unit.job.run_root, catalog=catalog)) is not None})
                 actions.append({**normalized, "command_fingerprint": command_fingerprint(normalized)})
             artifacts = []
+            cataloged_paths: set[Path] = set()
             for item in catalog.get("outputs", ()):
                 candidate = (root / str(item.get("path", ""))).resolve()
+                cataloged_paths.add(candidate)
                 if root not in candidate.parents or not candidate.is_file() or candidate.is_symlink():
                     gaps.append(f"cataloged artifact unavailable: {PurePosixPath(str(item.get('path', 'unknown'))).name}")
                     continue
@@ -448,7 +496,10 @@ def build_job(*, infer: Infer | None = None) -> Job:
             for candidate in (sorted(build_root.rglob("*")) if build_root.is_dir() else ()):
                 if candidate.is_symlink() or not candidate.is_file() or candidate.stat().st_size > 512 * 1024 * 1024:
                     continue
-                prefix = candidate.read_bytes()[:8]
+                if candidate.resolve() in cataloged_paths:
+                    continue
+                with candidate.open("rb") as stream:
+                    prefix = stream.read(8)
                 supported_magic = prefix.startswith((b"\x7fELF", b"MZ", b"!<arch>\n", b"!<thin>\n", b"BC\xc0\xde")) or prefix[:4] in {
                     b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"}
                 if candidate.suffix.lower() not in supported_suffixes and not supported_magic:
@@ -463,17 +514,29 @@ def build_job(*, infer: Infer | None = None) -> Job:
                                   "sha256": sha, "size_bytes": candidate.stat().st_size,
                                   "artifact_id": artifact_id, "run_path": run_path})
                 known_paths.add(run_path)
-            by_output = {PurePosixPath(value).name: action for action in actions for value in action.get("outputs", ())}
+            by_output: dict[str, list[dict[str, Any]]] = {}
+            for action in actions:
+                if action["classification"] not in {"compiler", "linker", "linker_driver", "archiver", "librarian"}:
+                    continue
+                for output in action["resolved_outputs"]:
+                    by_output.setdefault(output, []).append(action)
             related_artifacts: set[str] = set()
             for artifact in artifacts:
-                producer = by_output.get(PurePosixPath(str(artifact["path"])).name)
-                if producer:
+                artifact_path = (unit.job.run_root / artifact["run_path"]).relative_to(root).as_posix()
+                producers = by_output.get(artifact_path, [])
+                if len(producers) == 1:
+                    producer = producers[0]
                     producer["linked_artifact_ids"] = sorted(set([*producer["linked_artifact_ids"], artifact["artifact_id"]]))
                     producer["output_hashes"][artifact["artifact_id"]] = artifact["sha256"]
                     related_artifacts.add(artifact["artifact_id"])
                 else:
                     gaps.append(f"no exact producing action resolved for {PurePosixPath(str(artifact['path'])).name}")
             for action in actions:
+                action["input_artifact_ids"] = sorted({
+                    artifact["artifact_id"] for artifact in artifacts
+                    for item in action["discovered_inputs"]
+                    if (unit.job.run_root / artifact["run_path"]).relative_to(root).as_posix() == item["path"]
+                    and artifact["sha256"] == item["sha256"]})
                 action["command_fingerprint"] = command_fingerprint(action)
             document = {"schema": PROVENANCE_SCHEMA, "case_id": _display(case_id), "actions": actions,
                         "artifacts": artifacts,
@@ -510,6 +573,9 @@ def build_job(*, infer: Infer | None = None) -> Job:
                 path = (unit.job.run_root / artifact["run_path"]).resolve()
                 record = {**inspect_binary(path), "artifact_id": artifact["artifact_id"],
                           "run_path": artifact["run_path"], "catalog_kind": artifact.get("kind")}
+                if record["sha256"] != artifact["sha256"]:
+                    gaps.append(f"accepted artifact hash changed before inspection: {path.name}")
+                    continue
                 pinned = pinned_records.get(str(record["sha256"]))
                 if pinned is not None:
                     pinned_symbols = pinned.get("symbols", ()) if isinstance(pinned.get("symbols"), list) else ()
@@ -595,12 +661,14 @@ def build_job(*, infer: Infer | None = None) -> Job:
                         "terminal_status": "NOT_APPLICABLE"}
             actions = [{key: value.get(key) for key in ("project", "build_root", "configuration", "build_action_id",
                         "compile_unit_id", "linked_artifact_ids", "classification", "toolchain", "argv", "declared_inputs",
-                        "discovered_inputs", "outputs", "producer")} for value in provenance_value.get("actions", ())]
+                        "working_directory", "discovered_inputs", "input_artifact_ids", "resolved_outputs",
+                        "outputs", "output_hashes", "producer")} for value in provenance_value.get("actions", ())]
             records = [{key: value.get(key) for key in ("artifact_id", "sha256", "format", "kind", "architecture", "bits",
                         "headers", "sections", "imports", "exports", "relocations", "interpreter", "rpath", "runpath",
                         "dependencies", "archive_members", "build_id", "debug", "symbols", "hardening", "gaps")}
                        for value in inspection_value.get("records", ())]
             request = {"schema": "appsec-review/build-security-inference-request/1", "guidance": GUIDANCE_IDENTITY,
+                       "response_schema": INFERENCE_RESPONSE_SCHEMA,
                        "case_id": _display(case_id), "topology": {"actions": len(actions), "artifacts": len(records)},
                        "actions": actions, "artifacts": records, "deterministic_results": deterministic_value["checks"],
                        "guidance_bundle_sha256": guidance_sha,
@@ -652,6 +720,9 @@ def build_job(*, infer: Infer | None = None) -> Job:
                 known = {str(item.get("build_action_id")) for item in actions} | {
                     str(item.get("compile_unit_id")) for item in actions if item.get("compile_unit_id")} | {
                     str(item.get("artifact_id")) for item in records} | {str(item.get("sha256")) for item in records}
+                aliases = {str(item["compile_unit_id"]): str(item["build_action_id"])
+                           for item in actions if item.get("compile_unit_id")}
+                aliases.update({str(item["artifact_id"]): str(item["sha256"]) for item in records})
                 calls, proposal = 0, None
                 last_error: Exception | None = None
                 policy = RetryPolicy(int(settings["retries"]) + 1, True, True, True)
@@ -669,7 +740,7 @@ def build_job(*, infer: Infer | None = None) -> Job:
                                                retry_count=attempt - 1, retry_reason=retry_reason)
                         try:
                             result = validate_inference(proposal.proposal, checks=deterministic_value["checks"],
-                                                        evidence_ids=known)
+                                                        evidence_ids=known, evidence_aliases=aliases)
                         except ValueError as exc:
                             raise ModelOutputError(str(exc)) from exc
                         accepted = True
@@ -711,6 +782,13 @@ def build_job(*, infer: Infer | None = None) -> Job:
             upstream = unit.output("load.accepted_cpp_build")["upstream_manifest"]
             artifacts = [provenance_value.get("artifact", {}), inspection_value.get("artifact", {}),
                          deterministic_value.get("artifact", {}), inference_value.get("artifact", {})]
+            stage_hashes = {}
+            for stage, value in (("provenance", provenance_value), ("inspection", inspection_value),
+                                 ("deterministic", deterministic_value), ("inference", inference_value)):
+                document = _read_json_artifact(unit.job.run_root, value["artifact"])
+                if document != {key: item for key, item in value.items() if key not in {"artifact", "terminal_status"}}:
+                    raise ValueError(f"{stage} stage content differs from its immutable artifact")
+                stage_hashes[stage] = value["artifact"]["sha256"]
             fingerprint = shard_fingerprint(command_artifacts=[item.get("protected_argv_artifact", {})
                 for item in provenance_value.get("actions", ())],
                 binary_hashes=[item["sha256"] for item in inspection_value.get("records", ())],
@@ -721,7 +799,13 @@ def build_job(*, infer: Infer | None = None) -> Job:
                                                 for item in provenance_value.get("actions", ())}),
                                "executables": sorted({str(item.get("toolchain", {}).get("executable"))
                                                       for item in provenance_value.get("actions", ())})},
-                model_identity=inference_value["model_identity"], upstream_manifest_sha256=upstream["sha256"])
+                model_identity=inference_value["model_identity"], upstream_manifest_sha256=upstream["sha256"],
+                stage_hashes=stage_hashes, semantic_inputs={
+                    "target_snapshot": unit.job.source_fingerprint,
+                    "family": _case_catalog(unit, case_id).get("family") or
+                              _case_catalog(unit, case_id).get("mapping", {}).get("family") or "native",
+                    "model_settings": dict(unit.job.config.settings["model"]),
+                })
             shard_id = f"build-security-{case_id}"
             shard_suffix = hashlib.sha256(shard_id.encode()).hexdigest()[:16]
             path = (unit.job.run_root / "data" / "indices" / "build_security" /
@@ -754,7 +838,6 @@ def build_job(*, infer: Infer | None = None) -> Job:
                                                            identity.value, True, 1.0))
                 binary_ids: dict[str, str] = {}
                 binary_paths: dict[str, str] = {}
-                binary_names: dict[str, set[str]] = {}
                 dependency_ids: set[str] = set()
                 for record in inspection_value.get("records", ()):
                     kind = {"object": EntityKind.OBJECT_FILE, "archive": EntityKind.LIBRARY,
@@ -765,18 +848,11 @@ def build_job(*, infer: Infer | None = None) -> Job:
                     identity = LogicalIdentity.derive(kind, unit.job.source_fingerprint,
                         {"case": case_id, "artifact": record["artifact_id"], "sha256": record["sha256"]})
                     binary_ids[record["artifact_id"]] = identity.value
-                    run_path = PurePosixPath(str(record["run_path"]).replace("\\", "/"))
-                    build_prefix = PurePosixPath("data") / "cpp" / "projects" / case_id / "build"
-                    try:
-                        build_path = run_path.relative_to(build_prefix).as_posix()
-                    except ValueError:
-                        build_path = run_path.as_posix()
-                    previous = binary_paths.setdefault(build_path, identity.value)
-                    if previous != identity.value:
-                        raise ValueError(f"multiple inspected binaries resolve to {build_path}")
-                    binary_names.setdefault(run_path.name, set()).add(identity.value)
+                    run_path = PurePosixPath(str(record["run_path"])).as_posix()
+                    if binary_paths.setdefault(run_path, identity.value) != identity.value:
+                        raise ValueError(f"multiple inspected binaries resolve to {run_path}")
                     builder.add_entity(EntityRecord(identity, record["artifact_id"],
-                        PurePosixPath(str(record["run_path"])).name, f"{record['format']} {record['kind']}",
+                        PurePosixPath(str(record["run_path"])).name, f"{record.get('format', 'unsupported')} {record.get('kind', 'unknown')}",
                         {**dict(record), "project": case_id,
                          "build_root": f"data/cpp/projects/{case_id}/build",
                          "configuration": "RelWithDebInfo", "linked_artifact": record["artifact_id"],
@@ -807,10 +883,9 @@ def build_job(*, infer: Infer | None = None) -> Job:
                             relation = RelationKind.COMPILES_TO if action.get("classification") == "compiler" else RelationKind.LINKS_INTO
                             builder.add_relation(RelationRecord(relation, source, binary_ids[artifact_id], True, 1.0))
                             output_id = binary_ids[artifact_id]
-                            linked_inputs: set[str] = set()
-                            for input_path in action.get("declared_inputs", ()):
-                                normalized_input = PurePosixPath(str(input_path).replace("\\", "/")).as_posix()
-                                input_name = PurePosixPath(normalized_input).name
+                            for item in action.get("discovered_inputs", ()):
+                                input_path = item["path"]
+                                input_name = PurePosixPath(input_path).name
                                 if action.get("classification") == "compiler" and PurePosixPath(str(input_path)).suffix.lower() in {
                                     ".c", ".cc", ".cpp", ".cxx", ".c++", ".m", ".mm", ".s", ".asm"}:
                                     if str(input_path) not in source_ids:
@@ -823,20 +898,23 @@ def build_job(*, infer: Infer | None = None) -> Job:
                                             "producer": action["producer"], "shard": shard_id}))
                                     builder.add_relation(RelationRecord(RelationKind.COMPILES_TO,
                                         source_ids[str(input_path)], output_id, True, 1.0))
-                                else:
-                                    exact = {binary_id for path, binary_id in binary_paths.items()
-                                             if normalized_input == path or normalized_input.endswith("/" + path)}
-                                    if not exact and len(binary_names.get(input_name, ())) == 1:
-                                        exact = set(binary_names[input_name])
-                                    input_id = next(iter(exact)) if len(exact) == 1 else None
-                                    if input_id is None or input_id in linked_inputs:
-                                        continue
-                                    linked_inputs.add(input_id)
+                            for input_artifact in action.get("input_artifact_ids", ()):
+                                input_id = binary_ids.get(input_artifact)
+                                if input_id is not None and input_id != output_id:
                                     builder.add_relation(RelationRecord(RelationKind.LINKS_INTO,
                                         input_id, output_id, True, 1.0))
-                evidence_entities = {**action_ids,
-                    **{str(record["sha256"]): binary_ids[record["artifact_id"]]
-                       for record in inspection_value.get("records", ()) if record["artifact_id"] in binary_ids}}
+                evidence_entities = {**action_ids, **compile_ids, **binary_ids}
+                hash_entities: dict[str, set[str]] = {}
+                for record in inspection_value.get("records", ()):
+                    hash_entities.setdefault(record["sha256"], set()).add(binary_ids[record["artifact_id"]])
+                evidence_entities.update({sha: next(iter(ids)) for sha, ids in hash_entities.items() if len(ids) == 1})
+
+                def evidence_entity(evidence_id: str, scope: str) -> str | None:
+                    subject = evidence_entities.get(scope)
+                    if subject in hash_entities.get(evidence_id, ()):
+                        return subject
+                    return evidence_entities.get(evidence_id)
+
                 first_action = next(iter(provenance_value.get("actions", ())), {})
                 common_scope = {"project": first_action.get("project", case_id),
                                 "build_root": first_action.get("build_root", f"data/cpp/projects/{case_id}/build"),
@@ -851,9 +929,10 @@ def build_job(*, infer: Infer | None = None) -> Job:
                         str(check.get("check_id")), f"{check.get('status')} {check.get('rationale')}",
                         {**dict(check), **common_scope, "producer": "deterministic-build-security-rules"}))
                     for evidence_id in check.get("evidence", ()):
-                        if str(evidence_id) in evidence_entities:
+                        endpoint = evidence_entity(str(evidence_id), str(check.get("scope")))
+                        if endpoint:
                             builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT,
-                                check_identity.value, evidence_entities[str(evidence_id)], True, 1.0))
+                                check_identity.value, endpoint, True, 1.0))
                 for observation in inference_value.get("observations", ()):
                     identity = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, unit.job.source_fingerprint,
                         {"case": case_id, "observation": observation["observation_id"]})
@@ -861,9 +940,10 @@ def build_job(*, infer: Infer | None = None) -> Job:
                         observation["check_id"], observation["claim"], {**dict(observation), "project": case_id,
                         "configuration": "RelWithDebInfo", "producer": "bounded_inference", "shard": shard_id}))
                     for evidence_id in observation.get("evidence_ids", ()):
-                        if str(evidence_id) in evidence_entities:
+                        endpoint = evidence_entity(str(evidence_id), str(observation.get("scope")))
+                        if endpoint:
                             builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT,
-                                identity.value, evidence_entities[str(evidence_id)], True, 1.0))
+                                identity.value, endpoint, True, 1.0))
                 gaps = list(dict.fromkeys([*provenance_value.get("gaps", ()), *inspection_value.get("gaps", ()),
                                           *deterministic_value.get("gaps", ()), *inference_value.get("gaps", ())]))
                 builder.add_coverage("post-build-security", "partial" if gaps else "complete",

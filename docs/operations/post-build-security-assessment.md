@@ -23,6 +23,10 @@ restricted to the creating account where the host supports file modes. Retrieval
 bounded redacted form. The record binds run, target snapshot, project, build root, configuration,
 action and compile-unit identities, tool/image identity, working directory, sanitized environment
 facts, inputs, outputs and hashes, timing/status when observable, and the producing job/task.
+Producing and linked-input relationships require unique full paths resolved against the captured
+working directory and accepted workspace-to-case mapping. Basenames, suffix matches and a
+`link.txt` file's parent directory do not establish that relationship. Missing or ambiguous
+attribution stays a gap. A rejected catalog hash is excluded from subsequent discovery too.
 
 Per project, the job's task directories under the attempt hold `build-command-provenance.json`
 (`appsec-review/build-command-provenance/1`) and `binary-inspections.json`
@@ -39,14 +43,26 @@ read as data; target binaries are never loaded or executed. The built-in bounded
 the facts they can prove and name gaps for facts that require unavailable pinned tooling. Rules are
 selected by compiler, platform, artifact kind, configuration, and observed capability. Unknown or
 irrelevant properties are respectively `UNKNOWN` or `NOT_APPLICABLE`, never `PASS`.
+Supported compiler options are evaluated in order, including disabling overrides and FORTIFY
+macro undefines; unexpanded response files leave flag posture unknown. Compiler aliases (`cc`,
+`c++`, `cl`) and direct ccache/sccache/distcc wrappers retain compile checks. Requested-versus-actual
+link checks use only the uniquely resolved producing linker/driver, not flags from unrelated
+artifacts or compile actions. PE32 high-entropy VA is not applicable; Mach-O magic takes priority
+over an `.o` suffix; incomplete ELF tables retain partial facts and explicit unknowns.
 
 Inference is disabled by default. When a model client is centrally configured and injected, it
 receives only structured normalized flags, topology, deterministic results, and inspected facts.
-Every proposed observation must cite supplied evidence identities. The validator confirms it only
+Every proposed observation must cite the selected deterministic check's complete resolving evidence
+set (action/compile-unit and artifact/hash aliases are resolved without crossing subjects).
+The selected scope is retained. The validator confirms it only
 when deterministic evidence is failing, refutes it when deterministic evidence passes, and leaves
 unknown evidence unvalidated. Provider failures and budget overflow complete with explicit gaps.
 The model must answer with an `appsec-review/build-security-inference-proposal/1` object; the
 validated outcome is written to `inference-results.json` (`appsec-review/build-security-inference/1`).
+The request includes the closed response schema: `schema` and `observations` are required,
+unknown/error fields are rejected, and claim/check/scope/evidence types are not coerced.
+Malformed top-level replies use the existing bounded retries and exhaust to a named gap, never
+successful empty coverage.
 
 Blocked upstream cases still publish hash-bound empty stage documents. A case without build
 actions or binary artifacts makes no model call and records the missing-evidence reason. Actual
@@ -89,7 +105,7 @@ Summary of the table:
 | --- | --- | --- |
 | Go (linux/amd64) | non-executable stack | PIE (needs `-buildmode=pie`), RELRO, immediate binding, CET, stack canary, FORTIFY |
 | Rust (x86_64-unknown-linux-gnu) | PIE, full RELRO, immediate binding, non-executable stack | stack protector, CET, FORTIFY |
-| .NET native AOT | PE `/DYNAMICBASE`, `/NXCOMPAT`, `/HIGHENTROPYVA` | `/GS`, SafeSEH (64-bit) |
+| .NET native AOT | PE `/DYNAMICBASE`, `/NXCOMPAT`, `/HIGHENTROPYVA` (PE32+ only) | `/GS`, SafeSEH (64-bit) |
 
 For .NET native AOT, ELF defaults and Control Flow Guard are `unknown`. A family with no table
 (`unknown_family` in `hardening.py`: Python, PHP, Node, Java or WebAssembly units that produced a
@@ -110,8 +126,12 @@ unavailable.
 Each dynamically discovered build unit publishes an immutable `build_security` shard. Query through
 `query_build_security` with one or more exact scopes: `project`, `build_root`, `build_action`,
 `configuration`, `compile_unit`, `linked_artifact`, `producer`, or `shard`. The shard fingerprint
-is local to its command and binary dependency closure, so unchanged units reuse their immutable
-shards while changed units and their linked outputs are rebuilt.
+binds its command/binary closure, verified content hashes of all four stage documents, family
+selection, model settings and target/upstream identities. Unchanged stage content can reuse an
+immutable shard even from another attempt. Changed model responses, deterministic results,
+provenance or inspection facts produce a new shard without changing the prior one. Indexing
+rejects an in-memory stage result that differs from its referenced document. Oversized binaries
+remain indexable unsupported records with a byte-bound gap.
 
 Inspect `data/logs/pipeline.jsonl` for job/step/task lifecycle events,
 `BUILD_COMMAND_PROVENANCE_CAPTURED`, `BUILD_ARTIFACTS_INSPECTED`,

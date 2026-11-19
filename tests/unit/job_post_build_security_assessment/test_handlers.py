@@ -460,8 +460,8 @@ def test_handler_executes_native_family_na_and_blocked_cases_and_reuses_shards(t
     _write_elf64_with_dep(mismatched, executable=False)
 
     (case_root / "build" / "CMakeFiles" / "app.dir" / "link.txt").write_text(
-        "llvm-ar rcs libapp.a app.o var_a/dup.cpp.o var_b/dup.cpp.o\n"
-        "clang++ app.o -Wl,-z,relro,-z,now -pie -o app\n",
+        f"llvm-ar rcs {archive} {obj} {case_root / 'build/var_a/dup.cpp.o'} {case_root / 'build/var_b/dup.cpp.o'}\n"
+        f"clang++ {obj} -Wl,-z,relro,-z,now -pie -o {binary}\n",
         encoding="utf-8",
     )
     (case_root / "analysis" / "binary").mkdir(parents=True)
@@ -488,7 +488,7 @@ def test_handler_executes_native_family_na_and_blocked_cases_and_reuses_shards(t
                     "arguments": [
                         "clang++",
                         "-c",
-                        "main.cpp",
+                        str(source),
                         "-o",
                         "app.o",
                         "-fstack-protector-strong",
@@ -796,11 +796,13 @@ def test_handler_inference_modes_retries_empty_cases_and_snapshot_drift(tmp_path
     def flaky_infer(request: ModelRequest, *, timeout_seconds: int) -> ModelResult:
         attempts["count"] += 1
         if attempts["count"] == 1:
-            return ModelResult({"observations": "not-a-list"}, input_tokens=5, output_tokens=2, cache_tokens=0)
+            return ModelResult({"schema": job_mod.INFERENCE_PROPOSAL_SCHEMA, "observations": "not-a-list"},
+                               input_tokens=5, output_tokens=2, cache_tokens=0)
         act = request.summary["actions"][0]
         art = request.summary["artifacts"][0]
         return ModelResult(
             {
+                "schema": job_mod.INFERENCE_PROPOSAL_SCHEMA,
                 "observations": [
                     {"claim": "non-PIE binary", "check_id": "elf.pie", "evidence_ids": [art["sha256"]]},
                     {"claim": "no insecure override", "check_id": "gnu.insecure_override", "evidence_ids": [act["build_action_id"]]},

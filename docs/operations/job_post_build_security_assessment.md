@@ -339,9 +339,10 @@ The job reads binaries as bytes; it does not execute them or launch a new native
 3. Keep protected raw commands separate from sanitized searchable argv. Normalize action/toolchain
    facts and declared/discovered inputs; distinguish action-level timing from whole-build fallback.
 4. Verify cataloged artifact bytes, then inspect supported candidates in the run-owned build
-   directory within the local size policy. Associate producing actions by the implemented output
-   mapping and retain unresolved attribution; `relationships_exact` is a producer field, not a
-   stronger independent guarantee than that mapping.
+   directory within the local size policy. Keep rejected catalog paths excluded from discovery.
+   Resolve outputs and inputs against captured cwd and the accepted workspace-to-case copy mapping;
+   require a unique full-path producer. Never join by basename/suffix or guess cwd from `link.txt`.
+   Retain missing/ambiguous attribution; only resolved paths produce exact indexed relations.
 5. For family cases, verify receipt artifacts and extract only bounded selected binary members
    of wheels into run-owned paths, retaining archive/member identity. No captured native actions
    means family hardening expectations, not fabricated C flags.
@@ -349,7 +350,10 @@ The job reads binaries as bytes; it does not execute them or launch a new native
 ### `inspection`
 
 1. Inspect retained artifacts using bounded ELF, PE/COFF, Mach-O, archive and other format readers.
-   Preserve unsupported or malformed formats and missing semantic decoding.
+   Preserve unsupported or malformed formats and missing semantic decoding. Recheck the inspected
+   hash against provenance. Oversized artifacts publish uniform unsupported records, not an index
+   exception. Recognize Mach-O magic before COFF suffix fallback. Incomplete ELF tables name the
+   omission and leave unavailable protection/symbol/debug absence unknown.
 2. Join bounded retained native nm/readelf records by binary hash where available; do not invoke
    those tools again here. Missing pinned ELF observation remains a gap.
 3. Publish `binary-inspections.json` with inspected counts, raw binary hashes, parser identity,
@@ -358,7 +362,11 @@ The job reads binaries as bytes; it does not execute them or launch a new native
 ### `deterministic`
 
 1. Evaluate supported compiler/flag and binary-format rules with action/artifact evidence IDs.
-   Flag-driven native/mixed cases differ from no-compile-action family cases.
+   Flag-driven native/mixed cases differ from no-compile-action family cases. Supported aliases and
+   direct compiler wrappers retain classification; unresolved tool identities remain gaps.
+   Evaluate options in order, including disabling overrides and macro undefines; unexpanded
+   response files leave posture unknown. Link mismatches require a unique producing linker/driver
+   for that artifact, and linked-output/architecture applicability (high-entropy VA is PE32+ only).
 2. Use documented family expectations where applicable. Required protections are tested against
    observed facts; not-offered or undocumented family defaults yield not-applicable with rationale,
    not a pass. Missing applicable facts yield unknown.
@@ -372,9 +380,11 @@ The job reads binaries as bytes; it does not execute them or launch a new native
    the worker's authority.
 2. For a not-applicable case, publish zero-call results. For no actions/artifacts, an over-budget
    request, disabled model or absent injected client, publish zero-call results with reasons.
-3. Otherwise run bounded inference/retries. Validate proposal shape and observation count, require
-   supplied evidence IDs and a resolvable known deterministic check/scope, and reject unusable
-   observations. Exhausted retries becomes a named failure.
+3. Otherwise run bounded inference/retries. Supply and enforce the closed response shape with
+   explicit `schema` and `observations`, no unknown/error fields, and non-coerced claim types.
+   Require the selected deterministic check's complete resolving evidence set; resolve supplied
+   compile-unit/artifact aliases only for their own subject and retain the resolved scope.
+   Reject unusable observations. Malformed proposals exhaust bounded retries to a named gap.
 4. Label accepted observations confirmed for a failing related check, refuted for a passing check,
    otherwise unvalidated. This is the validator's deterministic-check comparison, not independent
    proof of every sentence in the model's claim. Publish request/guidance/model identities,
@@ -382,8 +392,9 @@ The job reads binaries as bytes; it does not execute them or launch a new native
 
 ### `index`
 
-1. Bind protected-command references, binary hashes, tool identities, rule/parser/normalizer,
-   model/guidance identity and upstream manifest into a per-case shard fingerprint.
+1. Verify all four stage documents against their references and in-memory results. Bind their
+   content hashes, protected commands, binary hashes, tool identities, rule/parser/normalizer,
+   family selection, model settings/guidance and target/upstream identities into the shard fingerprint.
 2. Build or reuse a `build_security` shard with actions, compile units, artifacts, archive members,
    loader dependencies, deterministic checks and validated model observations.
 3. Add source/compile/link/dependency and observed-at relationships only where this producer resolves
@@ -405,11 +416,13 @@ flowchart LR
   cpp["accepted compiled catalogs"] --> job["job_post_build_security_assessment"]
   family["admitted language-build binaries / wheel members"] --> job
   job --> provenance["provenance.native_units: protected + sanitized commands"]
-  provenance --> inspect["inspection.native_units: bounded binary facts"]
+  provenance --> inspect["inspection.native_units: hash-verified bounded binary facts"]
   inspect --> checks["deterministic.native_units"]
   provenance --> checks
   checks --> model["inference.native_units: optional bounded proposals"]
-  model --> index["index.native_units: build_security shards"]
+  model --> index["index.native_units: stage-content-bound build_security shards"]
+  provenance --> index
+  inspect --> index
   checks --> index
   index --> publish["publication.publish_handoff"]
   provenance -. "missing capture / attribution / artifact" .-> gaps["case reasons"]
@@ -463,11 +476,13 @@ No gap is automatically expected for a particular walk.
 
 Case-stage reuse follows [runtime receipts](../architecture/jobs-and-runtime.md#wave-1-resumability).
 Local shard reuse hashes protected commands, binary contents, tool identities, parser/normalizer/
-rule versions, model identity including guidance hash, guidance identity and upstream manifest.
-The [fingerprint helper](../../src/appsec_review/jobs/job_post_build_security_assessment/assessment.py#L830)
-does not hash the actual inference-result document or every stage artifact; matching model
-configuration is not proof of an identical new model response. Reconcile retained `source_artifacts`
-with any reused shard rather than claiming response-sensitive invalidation.
+rule versions, model identity including guidance hash, guidance identity and upstream manifest,
+plus verified content hashes of provenance, inspection, deterministic and inference documents,
+family selection, complete model settings and target snapshot. The
+[fingerprint helper](../../src/appsec_review/jobs/job_post_build_security_assessment/assessment.py)
+therefore invalidates on changed model results even when commands and binaries are unchanged.
+Identical document content can reuse a shard across attempts; changed stage content gets a new
+immutable path. `source_artifacts` identifies the verified documents used by that invocation.
 
 The final summary is intentionally narrower than the union of originating unit outcomes; read the
 verified outcome artifact for admission. Source metadata also contains fixed producer/configuration
