@@ -40,7 +40,7 @@ from appsec_review.storage import canonical_json, tool_input_json
 from .clang_cfg import NO_BLOCK_LINES_GAP, SourceCfg, parse_cfgs
 from .llvm_ir import IrFunction
 
-SEEDED_IMPL = "cpp-seeded-compiled/5"
+SEEDED_IMPL = "cpp-seeded-compiled/6"
 MAX_IR_BYTES = 64 * 1024 * 1024
 MAX_CFG_BYTES = 16 * 1024 * 1024
 REPLAY = {"ir": "replay-ir.json", "ast": "replay-ast.json", "cfg": "replay-cfg.json"}
@@ -560,7 +560,8 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
             if rows & resolved_rows & dumped_rows(name) - failed_rows:
                 document["rows"].append([*seed.key, name])
             elif rows & resolved_rows & bounded_rows - failed_rows:
-                reasons[seed.key] = "ast_detail_limit"
+                # A later bound cannot erase a missing requested linkage for the same seed.
+                reasons.setdefault(seed.key, "ast_detail_limit")
                 gaps.append(f"ast_function_bounded: {name} was not observed before the AST node-detail limit")
             else:
                 reasons[seed.key] = record.REASON_RUN_FAILED

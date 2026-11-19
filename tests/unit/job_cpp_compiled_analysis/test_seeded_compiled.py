@@ -442,6 +442,63 @@ def test_ast_detail_bound_is_reusable_but_true_callable_absence_is_not(tmp_path,
         assert expanded["projects"][sc.CASE]["seeded"]["resolved_seed_count"] == 2
 
 
+@pytest.mark.parametrize("missing_first", [True, False], ids=["missing-first", "bounded-first"])
+def test_same_seed_missing_linkage_cannot_be_hidden_by_a_later_bound(tmp_path, monkeypatch, missing_first):
+    from appsec_review.jobs.job_cpp_compiled_analysis import job
+    from appsec_review.storage import canonical_json
+
+    staged = sc.stage(tmp_path, observations=[sc.observation("proj/include/util.h", 3)])
+    data = (b"#pragma once\nint missing_marker, bounded_marker;\n"
+            b'extern "C" inline int missing() { return 1; } '
+            b'extern "C" inline int bounded() { return 2; }\n// end\n')
+    for path in (staged.target / "proj/include/util.h", staged.case_root / "source/include/util.h"):
+        path.write_bytes(data)
+    source = next(row for row in staged.mapping["files"] if row["target_path"] == "proj/include/util.h")
+    source["sha256"] = hashlib.sha256(data).hexdigest()
+    ir, _ = _run(staged, CannedExecutor(staged, ir={
+        "net": _canned_ir([("missing", "missing", 3, (), False)], "include/util.h"),
+        "util": _canned_ir([("bounded", "bounded", 3, (), False)], "include/util.h"),
+    }), "ir")
+    handoff = ir["projects"][sc.CASE]["handoff"]
+    assert len(handoff["seed_functions"]) == 2
+    assert {tuple(row[:3]) for row in handoff["seed_functions"]} == {("include/util.h", 3, 3)}
+    # Permute the real producer's two function records, without changing either linkage or TU.
+    handoff["seed_functions"].sort(key=lambda row: (
+        handoff["functions"][row[3]]["name"] != ("missing" if missing_first else "bounded")))
+    ir["projects"][sc.CASE]["handoff_sha256"] = hashlib.sha256(canonical_json(handoff)).hexdigest()
+
+    class MixedExecutor(sc.FixtureExecutor):
+        def execute(self, request):
+            result = super().execute(request)
+            rows = json.loads((request.scratch_root / "replay-ast.json").read_text())
+            for index, row in enumerate(rows):
+                name = "missing" if row["target_path"].endswith("/net.cpp") else "bounded"
+                nodes = [{"kind": "VarDecl", "id": name + "-marker", "name": name + "_marker",
+                          "loc": {"file": "/scratch/source/include/util.h", "line": 2,
+                                  "col": data.splitlines()[1].index((name + "_marker").encode()) + 1}}]
+                if name == "bounded":
+                    nodes.append({"kind": "FunctionDecl", "id": name, "name": name, "mangledName": name,
+                                  "loc": {"file": "/scratch/source/include/util.h", "line": 3,
+                                          "col": data.splitlines()[2].index(name.encode()) + 1}})
+                (request.scratch_root / "analysis/ast" / f"tu-{index:04d}.json").write_text(json.dumps({
+                    "kind": "TranslationUnitDecl", "inner": nodes}))
+            return result
+
+    monkeypatch.setattr(job, "AST_NODE_LIMIT", 1)
+    executor = MixedExecutor(staged.run_root)
+    ast, _ = _run(staged, executor, "ast", ir=ir)
+    result = ast["projects"][sc.CASE]
+    assert any("ast_function_unavailable" in gap and "missing" in gap for gap in result["gaps"])
+    assert any("ast_function_bounded" in gap and "bounded" in gap for gap in result["gaps"])
+    assert result["seeded"]["resolved_seed_count"] == 0
+    assert result["checkpointable"] is False
+    ledger = json.loads((staged.run_root / result["ledger"]["path"]).read_text())["seeded"]["seeds"]
+    assert len(ledger) == 1 and ledger[0]["reason"] == "producer_failed"
+    repeated, _ = _run(staged, executor, "ast", ir=ir)
+    assert len(executor.calls) == 2
+    assert not repeated["projects"][sc.CASE].get("checkpoint_reused")
+
+
 def test_equal_source_ranges_do_not_arbitrarily_resolve_an_overload_seed(tmp_path):
     staged = sc.stage(tmp_path, observations=[sc.observation("proj/src/util.cpp", 12)])
     text = _canned_ir([("_Z1fd", "f", 11, (), False), ("_Z1fi", "f", 11, (), False)])
