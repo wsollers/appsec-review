@@ -317,23 +317,23 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5083 | [Separate validation execution receipts from source custody and expected compile failures](#t-5083-separate-validation-execution-receipts-from-source-custody-and-expected-compile-failures) | review | done (2026-11-19, 9d141ce1135406d4bf19657c420cefaaa3b70ade) |
 | T-5084 | [Keep composite priority scores and consumer ordering coherent](#t-5084-keep-composite-priority-scores-and-consumer-ordering-coherent) | review | in-progress |
 | T-5085 | [Rank remediation from the actual accepted finding projection](#t-5085-rank-remediation-from-the-actual-accepted-finding-projection) | review | done (2026-11-19, 7cc5c7c564f0081afb4d3eb94ff6488dae74e0bd) |
-| T-5086 | [Render dossier claims only from explicit accepted evidence](#t-5086-render-dossier-claims-only-from-explicit-accepted-evidence) | review | in-progress |
-| T-5087 | [Render accepted patches and validation tiers truthfully](#t-5087-render-accepted-patches-and-validation-tiers-truthfully) | review | in-progress |
-| T-5088 | [Derive report coverage and chain dimensions from certified evidence](#t-5088-derive-report-coverage-and-chain-dimensions-from-certified-evidence) | review | in-progress |
+| T-5086 | [Render dossier claims only from explicit accepted evidence](#t-5086-render-dossier-claims-only-from-explicit-accepted-evidence) | review | done (2026-11-19, 7ccbafbb4f72604498c25750f74fd9d3d5a34043) |
+| T-5087 | [Render accepted patches and validation tiers truthfully](#t-5087-render-accepted-patches-and-validation-tiers-truthfully) | review | done (2026-11-19, 7ccbafbb4f72604498c25750f74fd9d3d5a34043) |
+| T-5088 | [Derive report coverage and chain dimensions from certified evidence](#t-5088-derive-report-coverage-and-chain-dimensions-from-certified-evidence) | review | done (2026-11-19, 38707646255ff5122caca9498989847dade2b02e) |
 | T-5089 | [Preserve certified chain severity and dossier availability in executive output](#t-5089-preserve-certified-chain-severity-and-dossier-availability-in-executive-output) | review | open |
-| T-5090 | [Require real header release evidence for dependency versions](#t-5090-require-real-header-release-evidence-for-dependency-versions) | evidence | open |
-| T-5091 | [Bind advisory reachability to exact package symbols and bounded call sites](#t-5091-bind-advisory-reachability-to-exact-package-symbols-and-bounded-call-sites) | evidence | open |
-| T-5092 | [Preserve clangd call occurrences locations and coverage](#t-5092-preserve-clangd-call-occurrences-locations-and-coverage) | graph | open |
-| T-5093 | [Preserve overload linkage and exact AST source identities](#t-5093-preserve-overload-linkage-and-exact-ast-source-identities) | graph | open |
+| T-5090 | [Require real header release evidence for dependency versions](#t-5090-require-real-header-release-evidence-for-dependency-versions) | evidence | done (2026-11-19, b577faf8fe20300ec0572a1e6780dbdf26b6b350) |
+| T-5091 | [Bind advisory reachability to exact package symbols and bounded call sites](#t-5091-bind-advisory-reachability-to-exact-package-symbols-and-bounded-call-sites) | evidence | done (2026-11-19, 874b13235ffcc340072489cda97da1840d372e2a) |
+| T-5092 | [Preserve clangd call occurrences locations and coverage](#t-5092-preserve-clangd-call-occurrences-locations-and-coverage) | graph | in-progress |
+| T-5093 | [Preserve overload linkage and exact AST source identities](#t-5093-preserve-overload-linkage-and-exact-ast-source-identities) | graph | done (2026-11-19, 081722277a076f38db3b95082611c343ee430bc9) |
 | T-5094 | [Preserve failed and partial compiled-analysis outcomes through reuse](#t-5094-preserve-failed-and-partial-compiled-analysis-outcomes-through-reuse) | graph | open |
 | T-5095 | [Preserve full-mode control flow under presentation and AST filtering bounds](#t-5095-preserve-full-mode-control-flow-under-presentation-and-ast-filtering-bounds) | graph | open |
 | T-5096 | [Retain accepted native link source and compile-directory context](#t-5096-retain-accepted-native-link-source-and-compile-directory-context) | build | open |
 | T-5097 | [Select header seeds and enforce actual include-read budgets](#t-5097-select-header-seeds-and-enforce-actual-include-read-budgets) | graph | open |
-| T-5098 | [Preserve alternate graph symbol kinds identities and disputed evidence](#t-5098-preserve-alternate-graph-symbol-kinds-identities-and-disputed-evidence) | graph | open |
-| T-5099 | [Keep alternate graph storage immutable and traversal honestly bounded](#t-5099-keep-alternate-graph-storage-immutable-and-traversal-honestly-bounded) | graph | open |
+| T-5098 | [Preserve alternate graph symbol kinds identities and disputed evidence](#t-5098-preserve-alternate-graph-symbol-kinds-identities-and-disputed-evidence) | graph | in-progress |
+| T-5099 | [Keep alternate graph storage immutable and traversal honestly bounded](#t-5099-keep-alternate-graph-storage-immutable-and-traversal-honestly-bounded) | graph | in-progress |
 | T-5100 | [Preserve artifact index content and unambiguous relationship identities](#t-5100-preserve-artifact-index-content-and-unambiguous-relationship-identities) | evidence | open |
-| T-5101 | [Validate artifact scanner native selectors output shapes and staging custody](#t-5101-validate-artifact-scanner-native-selectors-output-shapes-and-staging-custody) | scanners | open |
-| T-5102 | [Bound artifact scan reads and guarantee archive parser progress](#t-5102-bound-artifact-scan-reads-and-guarantee-archive-parser-progress) | scanners | open |
+| T-5101 | [Validate artifact scanner native selectors output shapes and staging custody](#t-5101-validate-artifact-scanner-native-selectors-output-shapes-and-staging-custody) | scanners | in-progress |
+| T-5102 | [Bound artifact scan reads and guarantee archive parser progress](#t-5102-bound-artifact-scan-reads-and-guarantee-archive-parser-progress) | scanners | in-progress |
 | T-5103 | [Recognize imported Wasm features and universal Mach-O format correctly](#t-5103-recognize-imported-wasm-features-and-universal-mach-o-format-correctly) | binary | open |
 | T-5104 | [Deliver artifact risks without losing identity or inventing severity](#t-5104-deliver-artifact-risks-without-losing-identity-or-inventing-severity) | review | open |
 | T-5105 | [Bind artifact scan indexes to immutable result content](#t-5105-bind-artifact-scan-indexes-to-immutable-result-content) | evidence | open |
@@ -442,7 +442,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5208 | [Return snapshot identities from the publisher transaction actually completed](#t-5208-return-snapshot-identities-from-the-publisher-transaction-actually-completed) | data | open |
 | T-5209 | [Index the real threat-model schema without dropping owners and threats](#t-5209-index-the-real-threat-model-schema-without-dropping-owners-and-threats) | evidence | open |
 | T-5210 | [Retain graph eligibility language restrictions and distinct threat sites](#t-5210-retain-graph-eligibility-language-restrictions-and-distinct-threat-sites) | evidence | open |
-| T-5211 | [Preserve language control flow and explicit CFG incompleteness](#t-5211-preserve-language-control-flow-and-explicit-cfg-incompleteness) | graph | open |
+| T-5211 | [Preserve language control flow and explicit CFG incompleteness](#t-5211-preserve-language-control-flow-and-explicit-cfg-incompleteness) | graph | in-progress |
 | T-5212 | [Bind CFG cache semantics and apply bounds before materialization](#t-5212-bind-cfg-cache-semantics-and-apply-bounds-before-materialization) | graph | open |
 | T-5213 | [Align optional intake declarations and Tree-sitter loader behavior](#t-5213-align-optional-intake-declarations-and-tree-sitter-loader-behavior) | pipeline | open |
 | T-5214 | [Verify every native scope checkpoint evidence artifact](#t-5214-verify-every-native-scope-checkpoint-evidence-artifact) | graph | open |
@@ -454,7 +454,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5220 | [Align CodeQL optional declarations with required loader inputs](#t-5220-align-codeql-optional-declarations-with-required-loader-inputs) | pipeline | open |
 | T-5221 | [Reject missing claimed acquisitions and inconsistent intake identities](#t-5221-reject-missing-claimed-acquisitions-and-inconsistent-intake-identities) | pipeline | open |
 | T-5222 | [Reconcile actual payload shapes declarations and schema versions](#t-5222-reconcile-actual-payload-shapes-declarations-and-schema-versions) | evidence | blocked |
-| T-5223 | [Repair the four audited stale unit cases against current contracts](#t-5223-repair-the-four-audited-stale-unit-cases-against-current-contracts) | testing | open |
+| T-5223 | [Repair the four audited stale unit cases against current contracts](#t-5223-repair-the-four-audited-stale-unit-cases-against-current-contracts) | testing | done (2026-11-19, 100dfd75fdeb5e0b0cb4f34341691e970cac7454) |
 | T-5224 | [Grant querying capabilities only for admitted evidence](#t-5224-grant-querying-capabilities-only-for-admitted-evidence) | review | open |
 | T-5225 | [Honor the resolved structural fallback policy](#t-5225-honor-the-resolved-structural-fallback-policy) | codeql | open |
 | T-5226 | [Emit dependency gaps only for applicable required evidence](#t-5226-emit-dependency-gaps-only-for-applicable-required-evidence) | evidence | open |
@@ -481,7 +481,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5247 | [Resolve third party data sync conditional audit boundaries](#t-5247-resolve-third-party-data-sync-conditional-audit-boundaries) | pipeline | open |
 | T-5248 | [Resolve tree sitter ast conditional audit boundaries](#t-5248-resolve-tree-sitter-ast-conditional-audit-boundaries) | pipeline | open |
 | T-5249 | [Reproduce and repair recurrent Grype database listing selection](#t-5249-reproduce-and-repair-recurrent-grype-database-listing-selection) | data | open |
-| T-5250 | [Repair the three stateful guidance prompt-size test failures](#t-5250-repair-the-three-stateful-guidance-prompt-size-test-failures) | testing | open |
+| T-5250 | [Repair the three stateful guidance prompt-size test failures](#t-5250-repair-the-three-stateful-guidance-prompt-size-test-failures) | testing | done (2026-11-19, 86d81cae0680fd8fa97ffe6c7fd773fdc55e3a8e) |
+| T-5251 | [Bound shared subprocess stream capture before materialization](#t-5251-bound-shared-subprocess-stream-capture-before-materialization) | pipeline | open |
 
 ## Active entries
 
@@ -945,6 +946,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   shuffled workers and no case over ten seconds. These are stale verifier/model assertions;
   preserve the checked-in profile policy when repairing them. Four other audited stale cases
   are separately registered in T-5223, not included in this count.
+  The five profile assertions were repaired in `100dfd75fdeb5e0b0cb4f34341691e970cac7454`,
+  preserving declared models and verifier policy. The combined six-file selection passed
+  134 cases in 33.54 s on main, two shuffled workers, no skips or cases over ten seconds.
+  This closes those five named cases, not this broader baseline-triage item.
 - **Done when:** the differential against `fe328d76`'s baseline shows no failures attributable to
   the merge.
 - **Refs:** `docs/tasks/2026-11-07-job-control-schema-standardization.md` (differential method).
@@ -3600,9 +3605,11 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   and `package_view.py` still failed. That initial experiment was not a full exact-base
   reproduction. The priority-scale owner subsequently confirmed the failure on unchanged
   `d492b21b0d7736441a1cb41ca728a6f534235d62`: 1 failed in 4.14 s, with eight hunts (seven
-  operation hunts and one fallback). The singleton expectation is stale; no test change has
-  been made. Correct that bounded expectation without suppressing valid hunts, inferring a
-  CBMC regression or expanding CBMC scope.
+  operation hunts and one fallback). Commit `100dfd75fdeb5e0b0cb4f34341691e970cac7454`
+  repairs that expectation by selecting the fallback explicitly and checking all seven operation
+  hunts and their source labels. The combined six-file main selection passed 134 cases in
+  33.54 s, two shuffled workers, no skips or cases over ten seconds. No CBMC semantics changed;
+  the other failures in this entry remain open.
   Possible overlap with T-5060's differently located historical label failure is unconfirmed.
 - **Done when:** the named node ids pass shuffled with `-n 4`.
 - **Refs:** the files above, T-5043, T-5032.
@@ -3836,7 +3843,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Done when:** supported wired combinations compose without the count guard and invalid
   authority still fails. Owner differential: 12 fixed, 0 new, 3 unchanged stateful-size failures.
   Coordinator main check: `tests/test_guidance_procedures.py`, 53 passed in 4.23 s, no skips
-  or slow cases. The three unchanged failures remain open under T-5250, not relabelled passes.
+  or slow cases. The three unchanged failures were tracked separately and subsequently repaired
+  under T-5250; the original differential remains a record of that earlier validation.
 - **Refs:** user decision and coordinator handoff, 2026-11-19;
   `docs/architecture/guidance-procedures.md`; follow-up to closed T-173 (not reopened).
 
@@ -3867,9 +3875,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   Coordinator-owned `priority-scale` assignment, based on `d492b21b0d7736441a1cb41ca728a6f534235d62`.
   User decision, 2026-11-19: normalize to the existing 0–1 scale without clipping, using
   the maximum contribution allowed by the frozen run configuration while preserving raw
-  components and ordering. Owner `131ded6a-712b-4534-bfd9-3a398997c6b9` has resumed under
-  that policy; no alternative mapping is selected by this ledger. RP-08 remains tracked here
-  but outside that active assignment according to the owner.
+  components and ordering. RP-01 was integrated in
+  `ee228e5a90eba054e95653f25137c5c5d43a62db`; combined priority/compiled/Clang verification
+  passed 119 cases in 9.11 s, with no skips or cases over ten seconds. RP-08 threshold
+  validation remains outstanding, so this entry is not closed.
 - **Done when:** Frozen-configuration maximum-contribution normalization preserves the existing 0–1 scale, raw components and ordering without clipping or magnitude-based percentage inference. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-171 (not reopened).
 
@@ -3887,41 +3896,45 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5086 — Render dossier claims only from explicit accepted evidence
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 7ccbafbb4f72604498c25750f74fd9d3d5a34043)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: DP-01, DP-03. Fallback dossier sections invent taint paths and guard/verification conclusions; Markdown dossiers silently drop decision basis, qualifications, risk and provenance.
 - **Scope:** `src/appsec_review/reporting/dossiers.py`
   One coordinator-owned assignment with T-5087, based on
   `d492b21b0d7736441a1cb41ca728a6f534235d62`; do not assign their shared renderer concurrently.
-  Ready commit `7ccbafbb4f72604498c25750f74fd9d3d5a34043` has 92 passing units in 9.16 s
-  (owner-reported). It awaits coordinator review/integration and is not closed here.
+  The State commit is integrated. Coordinator verification passed 98 dossier/registry/docs
+  cases in 10.97 s; the subsequent combined report/dossier selection passed 154 cases in
+  12.33 s after correcting an integration-only private-helper test caller in `1bfda0e8`.
+  Neither selection had skips or cases over ten seconds.
 - **Done when:** Missing taint/guard/verification evidence generates no invented claims, and Markdown retains available counterevidence, qualifications and provenance. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dossier_publication.md`; follow-up to closed T-176 (not reopened).
 
 ### T-5087 — Render accepted patches and validation tiers truthfully
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 7ccbafbb4f72604498c25750f74fd9d3d5a34043)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: DP-02, RV-F05. Remediation projection cannot render the actual accepted patch format; Dossier labels a statically failed, rejected patch `static_checked`.
 - **Scope:** `src/appsec_review/jobs/job_dossier_publication/inputs.py`, `src/appsec_review/reporting/dossiers.py`
   Owned with T-5086 as one assignment at `d492b21b0d7736441a1cb41ca728a6f534235d62`.
-  Shares ready commit `7ccbafbb4f72604498c25750f74fd9d3d5a34043` and its owner-reported
-  92-pass validation with T-5086; awaiting coordinator review/integration, not yet closed.
+  Shares the integrated State commit and coordinator 98-case and 154-case verification with
+  T-5086. DP-04 publication/gate binding remains separately open under T-5216.
 - **Done when:** Real exact-patch and rejected/static/build validation projections retain patch contents and never imply stronger assurance than accepted status. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dossier_publication.md`, `audit-results/job-audit-job_remediation_validation.md`; follow-up to closed T-176 (not reopened).
 
 ### T-5088 — Derive report coverage and chain dimensions from certified evidence
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 38707646255ff5122caca9498989847dade2b02e)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: FR-F01, FR-F03. A withheld, unconfirmed package can certify 100% domain coverage with no findings; Radar ignores every gate-shaped chain membership.
 - **Scope:** `src/appsec_review/jobs/job_final_report_publication/report.py`, `src/appsec_review/reporting/dimensions.py`
   Coordinator-owned `report-coverage` assignment, based on
   `d492b21b0d7736441a1cb41ca728a6f534235d62`.
   User decision, 2026-11-19: versioned schemas/readers represent an unknown metric as `null`
-  with a gap reason, rendered as N/A; a measured zero stays `0`. The report-coverage owner
-  `b6fd8094-6d6a-4970-8d06-18ddd7ecb588` has resumed bounded schema, reader, renderer and test
-  work. This resolves this representation question, not unrelated schema-policy decisions.
+  with a gap reason, rendered as N/A; a measured zero stays `0`. Report/3 and radar/2 preserve
+  the legacy schema bytes, distinguish missing telemetry from zero and use certified chain
+  membership. The State commit also removes the package-count proxy for corroborated leads.
+  Combined report/dossier verification passed 154 cases in 12.33 s on `1bfda0e8`, no skips or
+  cases over ten seconds. Other report findings and live quality validation remain outstanding.
 - **Done when:** Withheld or uninspected work cannot become verified-no-findings; gate-shaped chain memberships produce correct dimension counts. Paired versioned-schema/reader/rendering regressions distinguish unknown (`null` plus gap reason, N/A) from measured zero (`0`). Each cited case passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
 
@@ -3936,25 +3949,31 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5090 — Require real header release evidence for dependency versions
 
-- **State:** open
+- **State:** done (2026-11-19, b577faf8fe20300ec0572a1e6780dbdf26b6b350)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: DI-01. Commented header text becomes a corroborated release and published SPDX version.
-- **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/discovery.py`, `src/appsec_review/jobs/job_dependency_intelligence/sbom.py`
+- **Scope:** shared header comment/continuation lexing in discovery and metadata investigation,
+  preserving original source bytes/spans through real normalization and SPDX publication.
 - **Done when:** Commented defines are not release evidence; active corroborated definitions retain SPDX versions. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`.
+  Main unit selections: discovery 99 passed/3.34 s; SPDX 136 passed/3.96 s;
+  metadata investigation 118 passed/3.75 s; two workers, seed 5090, no skips or slow cases.
 
 ### T-5091 — Bind advisory reachability to exact package symbols and bounded call sites
 
-- **State:** open
+- **State:** done (2026-11-19, 874b13235ffcc340072489cda97da1840d372e2a)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: DI-02, DI-03, DI-07. Imports and unrelated local calls are promoted to vulnerable-symbol reachability; Scanner advisories attach to fixed versions and foreign ecosystems sharing a name.
 - **Scope:** `src/appsec_review/jobs/job_dependency_intelligence/reachability.py`
 - **Done when:** Imports and same-named unrelated calls cannot prove reachability; version/ecosystem matching and all configured call-site limits preserve uncertainty. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dependency_intelligence.md`; follow-up to closed T-170 (not reopened).
+  Main reachability selection: 43 passed/3.04 s, two workers, seed 5091, no skips or slow cases.
+  Positive evidence is bounded Python static symbol use, not whole-program execution;
+  unsupported native/non-Python bindings retain explicit gaps.
 
 ### T-5092 — Preserve clangd call occurrences locations and coverage
 
-- **State:** open
+- **State:** in-progress
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CSI-F02, CSI-F03, CSI-F04, CSI-F05, CSI-F06, CSI-F07. Resolved recursive calls are discarded as unresolved references; Exact symbol locations carry whole-file byte spans and unchecked coordinates.
 - **Scope:** `src/appsec_review/jobs/job_cpp_symbol_index/job.py`
@@ -3963,12 +3982,15 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5093 — Preserve overload linkage and exact AST source identities
 
-- **State:** open
+- **State:** done (2026-11-19, 081722277a076f38db3b95082611c343ee430bc9)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CPP-F01, CPP-F02. Seeded IR joins distinct C++ overloads and emits the wrong exact call; AST nodes get incorrect source files/lines with exact confidence.
 - **Scope:** `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/llvm_ir.py`; paired callers/tests identified by those cases.
 - **Done when:** Tiny overloaded functions and header-origin nodes retain exact linkage, file and line identities in production-normalized graph output. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+  Primary integration `90f3212e8f1ae5b87fb5637aec63ac1fe0422e64`; the State commit preserves
+  all TU-scoped seed functions in the coupled Clang consumer. Combined priority/compiled/Clang
+  selection: 119 passed/9.11 s, two shuffled workers, no skips or slow cases.
 
 ### T-5094 — Preserve failed and partial compiled-analysis outcomes through reuse
 
@@ -4008,7 +4030,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5098 — Preserve alternate graph symbol kinds identities and disputed evidence
 
-- **State:** open
+- **State:** in-progress
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CSI-F01, CGI-F01, CGI-F03, CGI-F04, CGI-F05, CGI-F06, CGI-F07, CGI-F10, CGI-F11. Alternate CPG turns a variable reference into a function call; Alternate nodes fabricate source digests when catalog shards are absent.
 - **Scope:** `src/appsec_review/graph/normalize.py`, `src/appsec_review/jobs/job_code_graph_index/alternate_cpg.py`
@@ -4017,7 +4039,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5099 — Keep alternate graph storage immutable and traversal honestly bounded
 
-- **State:** open
+- **State:** in-progress
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CGI-F02, CGI-F08, CGI-F09, CGI-F13. Same-count alternate rebuild overwrites a previously referenced shard; `enabled` and `max_slice_depth` settings have no effect.
 - **Scope:** `src/appsec_review/jobs/job_code_graph_index/alternate_cpg.py`
@@ -4035,7 +4057,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5101 — Validate artifact scanner native selectors output shapes and staging custody
 
-- **State:** open
+- **State:** in-progress
 - **Area:** scanners
 - **Why:** Archived audit/feedback cases: ASA-F01, ASA-F03, ASA-F10. Every positive CVE-bin-tool array has a nonresolving native selector; Incompatible scanner JSON becomes a complete zero-finding scan.
 - **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/findings.py`, `src/appsec_review/jobs/job_artifact_security_analysis/job.py`; paired callers/tests identified by those cases.
@@ -4044,7 +4066,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5102 — Bound artifact scan reads and guarantee archive parser progress
 
-- **State:** open
+- **State:** in-progress
 - **Area:** scanners
 - **Why:** Archived audit/feedback cases: ASA-F02, ASA-F09. Scanner adapter ignores execution bounds and eagerly reads unbounded report files; Negative ar member size makes the builtin archive reader stop making progress.
 - **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/formats.py`, `src/appsec_review/jobs/job_artifact_security_analysis/scanners.py`
@@ -5033,7 +5055,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5211 — Preserve language control flow and explicit CFG incompleteness
 
-- **State:** open
+- **State:** in-progress
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: TS-F01, TS-F02, TS-F03, TS-F04. Real Rust CST statement wrappers erase branches, loops and early returns; `finally` is bypassed by terminating paths.
 - **Scope:** `src/appsec_review/jobs/job_tree_sitter_ast/cfg.py`
@@ -5141,12 +5163,15 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5223 — Repair the four audited stale unit cases against current contracts
 
-- **State:** open
+- **State:** done (2026-11-19, 100dfd75fdeb5e0b0cb4f34341691e970cac7454)
 - **Area:** testing
 - **Why:** Archived audit/feedback cases: TG-01, ST-08, TM-05. Repeatable stale fixture, not demonstrated production failure; direct-parent assertion rejects valid transitive scheduling.
 - **Scope:** `tests/orchestration/dagster/test_security_tagging.py`, `tests/test_threat_model_generation_job.py`; paired callers/tests identified by those cases.
 - **Done when:** The four exact recorded nodes pass alone and shuffled/parallel with real admitted catalog fixtures and correct transitive topology/consumer expectations; do not alter working production contracts to satisfy stale assertions.
 - **Refs:** `audit-results/job-audit-job_security_tagging.md`, `audit-results/job-audit-job_target_analysis_plan.md`, `audit-results/job-audit-job_threat_model_generation.md`; follow-up to closed T-172 (not reopened).
+  Real admitted/tamper-checked catalog fixtures and current topology/consumer expectations are
+  preserved. Combined six-file main selection: 134 passed/33.54 s, two workers, seed 5223,
+  no skips or slow cases; includes only the explicitly repaired portions of T-047/T-5056.
 
 ### T-5224 — Grant querying capabilities only for admitted evidence
 
@@ -5391,7 +5416,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5250 — Repair the three stateful guidance prompt-size test failures
 
-- **State:** open
+- **State:** done (2026-11-19, 86d81cae0680fd8fa97ffe6c7fd773fdc55e3a8e)
 - **Area:** testing
 - **Why:** after T-5081, three unchanged
   `tests/test_stateful_guidance.py::test_stateful_selection_uses_only_trusted_dispatch_ids`
@@ -5404,9 +5429,31 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Done when:** each exact parameterized node passes alone and shuffled/parallel with its
   meaningful size/selection/custody assertions intact; record the actual rendered byte counts.
   No model/provider or live review is required for these unit regressions.
+  Hunter-role prose/formatting compaction preserves all seven parsed example values, authority
+  and every wired procedure. Rendered sizes are 25991, 25173 and 25463 bytes respectively,
+  with the original strict 26000-byte assertion unchanged. Main: 137 passed/6.18 s,
+  two workers, seed 5250, no skips or cases over ten seconds.
 - **Refs:** `tests/test_stateful_guidance.py`;
   `tests/test_guidance_procedures.py`; coordinator differential (12 fixed, 0 new,
   3 unchanged failures), 2026-11-19; T-5081.
+
+### T-5251 — Bound shared subprocess stream capture before materialization
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** `ContainerExecutor` applies `tool.output_bytes` after its runner returns.
+  `_default_runner` uses `subprocess.run(capture_output=True)` and the active-safety path
+  uses `process.communicate()`, so retained-stream limits do not bound capture memory.
+  T-5102 narrows dispatch/retention and native-file reads but does not repair this shared path.
+- **Scope:** the shared container runner and execution-safety stream path, using existing
+  cancellation, process-identity and native-broker contracts. Preserve complete/truncated
+  receipts and configured caps; do not silently discard failures or widen worker authority.
+- **Done when:** focused offline regressions exercise bounded capture rather than only
+  post-return slicing, including both streams, timeout/cancellation and truncated receipts.
+  Existing callers retain their semantics; live/native validation remains separately authorized.
+- **Refs:** `src/appsec_review/container_runtime/executor.py`,
+  `src/appsec_review/runtime/execution_safety.py`; coordinator source review, 2026-11-19;
+  T-5102.
 
 ## Legacy backlog
 
