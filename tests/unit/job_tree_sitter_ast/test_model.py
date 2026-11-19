@@ -238,3 +238,26 @@ def test_canonical_node_identity_and_scope_fingerprint_are_deterministic_and_par
         normalizer_schema=NORMALIZER_SCHEMA,
         limits={"max_file_bytes": 100, "max_nodes": 10},
     )
+
+
+@pytest.mark.parametrize("change", ["legacy", "algorithm", "bound"])
+def test_scope_fingerprint_binds_cfg_builder_semantics_and_actual_bound(monkeypatch, change):
+    from appsec_review.jobs.job_tree_sitter_ast import cfg
+
+    def fingerprint():
+        return scope_fingerprint(
+            target_snapshot="snapshot", scope=_scope(), grammar=_lock(),
+            image_id="sha256:" + "d" * 64, normalizer_schema=NORMALIZER_SCHEMA,
+            limits={"max_nodes": 10, "max_file_bytes": 100},
+        )
+
+    first = fingerprint()
+    if change == "legacy":
+        # Recorded from the same inputs before the CFG identity entered the key.
+        assert first != "2670daac2dfa7ef464438807b0f8e6b37dbd82a66ed9a14d9e8bdc695b5c9aae"
+    else:
+        if change == "algorithm":
+            monkeypatch.setattr(cfg, "CFG_BUILDER_IDENTITY", "test-cfg-builder/next", raising=False)
+        else:
+            monkeypatch.setattr(cfg, "MAX_CFG_NODES_PER_FUNCTION", cfg.MAX_CFG_NODES_PER_FUNCTION - 1)
+        assert fingerprint() != first

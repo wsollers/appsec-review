@@ -127,6 +127,10 @@ semantics or guard-sufficiency proofs. Per-scope `cfg-nodes.jsonl`, `cfg-edges.j
   resumes the saved destination; an abrupt completion in cleanup replaces it. Separate CFG
   copies of cleanup retain separate pending continuations, preventing a return from acquiring
   a path to the normal successor.
+- Try regions retain conservative exception edges even without explicit calls or throws:
+  property access and arithmetic can also throw. These region edges use the same pending
+  completion routing through finally; they are an overapproximation, not exception-type
+  resolution.
 
 ```mermaid
 flowchart LR
@@ -153,6 +157,28 @@ Ambiguous AST-level flow edges/block IDs are omitted with a `cfg_ast_context_pro
 and partial `cfg-ast-projection:<function_id>` coverage; the context-specific CFG remains
 available. Common source-occurrence guards are intersected across the copies.
 
-`job_code_graph_index` consumes these indexed CFGs alongside other admitted graph evidence.
-CFG queries must retain the function's completeness information; successful parsing or a
-nonempty graph does not establish complete control flow.
+Public `query_cfg_function` and `query_guard_dominators` retain their existing row shapes.
+The response's existing `coverage_gaps` carries function incompleteness, raw parse gaps and
+contextual AST-projection gaps. A mismatch between the producer's node/edge counts and the
+indexed payload is an explicit `cfg_payload_incomplete` gap, without raising storage or query
+bounds. Missing completeness metadata in an older payload is reported
+as unknown, never silently complete. Incomplete/unknown CFGs or partial raw parses publish no
+guard-dominator claims through these queries.
+
+Line, AST-subject and source-file guard queries intersect guards across all CFG contexts of the
+selected source occurrence, including contexts with no guards. Common guards must identify the
+same source branch, arm and predicate; identical expression text alone is insufficient. A
+deterministic representative node ID carries these common facts without introducing new result
+fields. An explicitly requested CFG `node_id` retains that execution context's guards; full CFG
+queries retain the separate nodes and edges. An unresolved AST subject never falls back to
+unrelated functions.
+
+Scope checkpoints bind `cfg_builder.algorithm` (`appsec-review/tree-sitter-cfg-builder/1`) and
+the builder's actual `max_nodes_per_function` in their fingerprint and metadata. Builder semantics
+have their own identity, separate from the unchanged CFG and normalizer domain schemas. A changed
+algorithm or node bound selects new artifact paths rather than reusing/overwriting the old
+checkpoint. A hash-valid checkpoint under the current key with missing/mismatched builder metadata
+is rejected, not relabeled. Future lowering changes must advance the builder identity.
+
+`job_code_graph_index` consumes these indexed CFGs alongside other admitted graph evidence;
+successful parsing or a nonempty graph does not establish complete control flow.

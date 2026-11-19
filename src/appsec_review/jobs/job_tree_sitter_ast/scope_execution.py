@@ -17,6 +17,7 @@ from appsec_review.retrieval.source_resolution import read_source_bytes, source_
 from appsec_review.jobs.delivery_scope import source_in_scope
 
 from .model import GrammarLock, Scope, scope_fingerprint
+from .cfg import cfg_builder_identity
 from .normalize import NORMALIZER_SCHEMA, attest_reused_shard, normalize_scope, reusable_shard
 
 
@@ -82,13 +83,17 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
             path=item["path"], sha256=item["sha256"], native=source_native(item), limit=limits["max_file_bytes"])
         for item in scope.files if generated
     }
+    cfg_builder = cfg_builder_identity()
     fingerprint = scope_fingerprint(target_snapshot=unit.job.source_fingerprint, scope=scope,
-        grammar=grammar, image_id=loaded["image_id"], normalizer_schema=NORMALIZER_SCHEMA, limits=limits)
+        grammar=grammar, image_id=loaded["image_id"], normalizer_schema=NORMALIZER_SCHEMA, limits=limits,
+        cfg_builder=cfg_builder)
     artifact_path = unit.job.run_root / "data" / "treesitter" / "shards" / f"{fingerprint}.jsonl"
     index_path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}.sqlite"
     metadata_path = unit.job.run_root / "data" / "treesitter" / "shards" / f"{fingerprint}.json"
     metadata = reusable_shard(metadata_path, artifact_path, index_path, fingerprint)
     if metadata is not None:
+        if metadata.get("cfg_builder") != cfg_builder:
+            raise ValueError("CFG checkpoint builder identity mismatch")
         attest_reused_shard(unit.job.run_root, index_path, metadata, target_snapshot=unit.job.source_fingerprint)
         record_reuse(unit, scope.scope_id, fingerprint, metadata.get("tree_sitter_invocation_id"))
         return {**metadata, "index_reused": True}
@@ -133,7 +138,8 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
         target_snapshot=unit.job.source_fingerprint, scope=scope, grammar=grammar,
         fingerprint=fingerprint, container_output=container_output,
         producer={"job": "job_tree_sitter_ast", "scope_id": scope.scope_id,
-                  "language": scope.language, "image_id": execution.image_id, "grammar": asdict(grammar)},
+                  "language": scope.language, "image_id": execution.image_id, "grammar": asdict(grammar),
+                  "cfg_builder": cfg_builder},
         artifact_path=artifact_path, index_path=index_path,
         source_bytes={item["path"]: read_source_bytes(
             unit.job.run_root, unit.job.target_root or Path(), target_snapshot=unit.job.source_fingerprint,
@@ -148,6 +154,7 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
     result = {"schema": SCHEMA, "scope_id": scope.scope_id, "project_id": scope.project_id,
               "translation_scope_id": scope.translation_scope_id, "language": scope.language,
               "fingerprint": fingerprint, "grammar": asdict(grammar), "artifact": artifact,
+              "cfg_builder": cfg_builder,
               "cfg_artifacts": cfg_artifacts,
               "index_identity": asdict(identity), "counts": counts_dict, "execution": asdict(execution),
               "gaps": list(identity.gaps), "truncated": any("limit" in gap for gap in identity.gaps),

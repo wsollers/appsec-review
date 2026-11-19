@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 from pathlib import Path
+import sqlite3
 from typing import Any
 
 import pytest
@@ -16,6 +17,7 @@ from appsec_review.jobs.job_tree_sitter_ast.cfg import (
     EDGE_KINDS,
     GUARD_POLARITIES,
     classify_guard_polarity,
+    flatten_syntax_tree,
     synthesize_file_cfg,
     write_scope_cfg_artifacts,
 )
@@ -536,3 +538,185 @@ def test_normalize_scope_and_retrieval_cfg_and_guard_dominator_queries(tmp_path:
     by_src = query_cfg_function(core, subject=src_id)
     assert len(by_src["results"]) == 1
     assert by_src["results"][0]["function_id"] == fn_rec["function_id"]
+
+
+def _public_finally_cfg(tmp_path: Path, *, legacy: bool = False, parse_partial: bool = False,
+                        unmodeled: bool = False, extra_statements: int = 0):
+    source = (
+        "function f(flag, user) {\n"
+        "  if (!has_role(user)) { return; }\n"
+        "  try {\n"
+        "    if (flag) { return; }\n"
+        "    normal();\n"
+        "  } finally {\n"
+        "    if (is_valid(user)) {\n"
+        "      cleanup();\n"
+        "    }\n"
+        "  }\n"
+        "  after();\n"
+        "}\n"
+    )
+    if unmodeled:
+        source = source.replace("  after();", "  done: after();")
+    elif extra_statements:
+        source = source.replace("  after();", "".join(f"  tail_{i}();\n" for i in range(extra_statements)) + "  after();")
+
+    def n(kind, text, *children, field=None, after=0):
+        start = source.index(text, after)
+        end = start + len(text)
+        return {
+            "type": kind, "field": field, "children": list(children),
+            "start_byte": start, "end_byte": end,
+            "start_line": source.count("\n", 0, start) + 1,
+            "end_line": source.count("\n", 0, end) + 1,
+        }
+
+    def call(name):
+        return n("expression_statement", f"{name}();",
+                 n("call_expression", f"{name}()",
+                   n("identifier", name, field="function")))
+
+    auth = n("if_statement", "if (!has_role(user)) { return; }",
+             n("parenthesized_expression", "(!has_role(user))", field="condition"),
+             n("statement_block", "{ return; }", n("return_statement", "return;"), field="consequence"))
+    flag_pos = source.index("if (flag)")
+    flag = n("if_statement", "if (flag) { return; }",
+             n("parenthesized_expression", "(flag)", field="condition"),
+             n("statement_block", "{ return; }",
+               n("return_statement", "return;", after=flag_pos), field="consequence", after=flag_pos))
+    inner = n("if_statement", "if (is_valid(user)) {\n      cleanup();\n    }",
+              n("parenthesized_expression", "(is_valid(user))", field="condition"),
+              n("statement_block", "{\n      cleanup();\n    }", call("cleanup"), field="consequence"))
+    protected = n("try_statement", "try {\n    if (flag) { return; }\n    normal();\n  } finally {\n    if (is_valid(user)) {\n      cleanup();\n    }\n  }",
+                  n("statement_block", "{\n    if (flag) { return; }\n    normal();\n  }",
+                    flag, call("normal"), field="body"),
+                  n("finally_clause", "finally {\n    if (is_valid(user)) {\n      cleanup();\n    }\n  }",
+                    n("statement_block", "{\n    if (is_valid(user)) {\n      cleanup();\n    }\n  }",
+                      inner, field="body")))
+    after_statement = n("labeled_statement", "done: after();", call("after")) if unmodeled else call("after")
+    tree = n("program", source, n(
+        "function_declaration", source, n("identifier", "f", field="name", after=source.index(" f")),
+        n("statement_block", source[source.index("{"):].rstrip(), auth, protected,
+          *(call(f"tail_{i}") for i in range(extra_statements)), after_statement, field="body")))
+    data = source.encode()
+    nodes, _ = flatten_syntax_tree(tree, data)
+    digest = hashlib.sha256(data).hexdigest()
+    scope = Scope("scope", "component", ".", "source:component", ".", "JavaScript",
+                  ({"path": "app.js", "sha256": digest, "size_bytes": len(data), "language": "JavaScript"},))
+    grammar = GrammarLock("JavaScript", "javascript", "https://example.invalid/grammar", "a" * 40,
+                          "MIT", "grammar.so", "b" * 64)
+    run_id = "2026-11-19-0001"
+    run_root = tmp_path / run_id
+    _, identity, _ = normalize_scope(
+        run_root=run_root, target_snapshot="a" * 64, scope=scope, grammar=grammar, fingerprint="f" * 64,
+        container_output={"schema": "appsec-review/tree-sitter-container-output/1",
+                          "scope_id": scope.scope_id, "language": scope.language, "records": [
+                              {"path": "app.js", "sha256": digest, "status": "SUCCEEDED",
+                               "bytes": len(data), "nodes": nodes, "truncated": parse_partial},
+                          ]},
+        producer={"job": "job_tree_sitter_ast"}, artifact_path=run_root / "ast.jsonl",
+        index_path=run_root / "ast.sqlite", source_bytes={"app.js": data},
+    )
+    with sqlite3.connect(run_root / "ast.sqlite") as db:
+        rows = list(db.execute("SELECT identity,payload_json FROM entities"))
+        raw_cfg = next(json.loads(p) for _, p in rows if "cfg_nodes" in json.loads(p))
+        cleanup = [x for x in raw_cfg["cfg_nodes"] if "cleanup" in x["calls"]]
+        if legacy:
+            for entity_id, payload_json in rows:
+                payload = json.loads(payload_json)
+                if "cfg" in payload:
+                    for key in ("coverage_status", "gaps", "truncated", "unmodeled_constructs"):
+                        payload["cfg"].pop(key)
+                    db.execute("UPDATE entities SET payload_json=? WHERE identity=?", (json.dumps(payload), entity_id))
+    if legacy:
+        identity = replace(identity, sha256=file_sha256(run_root / "ast.sqlite"))
+    manifest = run_root / "manifest.json"
+    write_manifest(manifest, run_id=run_id, target_snapshot="a" * 64, target_root=run_root, indexes=[identity])
+    return (RetrievalCore(tmp_path, run_id, manifest_path=manifest, manifest_sha256=file_sha256(manifest)),
+            raw_cfg, cleanup)
+
+
+@pytest.mark.parametrize("reason", ["node_cap", "legacy", "parse_partial", "unmodeled"])
+def test_public_cfg_and_guard_queries_surface_incomplete_producer_coverage(tmp_path, monkeypatch, reason):
+    if reason == "node_cap":
+        from appsec_review.jobs.job_tree_sitter_ast import cfg
+        monkeypatch.setattr(cfg, "MAX_CFG_NODES_PER_FUNCTION", 8)
+    core, raw, _ = _public_finally_cfg(tmp_path, legacy=reason == "legacy",
+                                     parse_partial=reason == "parse_partial", unmodeled=reason == "unmodeled")
+    response = core.query_cfg_function(path="app.js")
+    assert response["results"]
+    expected = {"node_cap": "cfg_node_limit_reached", "legacy": "unknown", "parse_partial": "node limit reached",
+                "unmodeled": "cfg_unmodeled_construct:labeled_statement"}[reason]
+    assert any(expected in gap for gap in response["coverage_gaps"])
+    assert all(not n["guard_dominators"] for n in response["results"][0]["nodes"])
+    guarded = next(n for n in raw["cfg_nodes"] if n["kind"] not in {"entry", "exit"})
+    guards = core.query_guard_dominators(path="app.js", node_id=guarded["node_id"])
+    assert guards["results"]
+    assert not guards["results"][0]["guard_dominators"]
+    assert any(expected in gap for gap in guards["coverage_gaps"])
+
+
+@pytest.mark.parametrize("selector", ["line", "ast", "source", "source_all"])
+def test_public_source_occurrence_guards_intersect_all_finally_contexts(tmp_path, selector):
+    core, raw, cleanup = _public_finally_cfg(tmp_path)
+    assert len(cleanup) >= 2
+    assert len({n["ast_identity"] for n in cleanup}) == 1
+    params = {"path": "app.js", "line": 8}
+    if selector == "ast":
+        params = {"subject": cleanup[0]["ast_identity"]}
+    elif selector == "source":
+        params = {"subject": raw["cfg"]["source_identity"], "line": 8}
+    elif selector == "source_all":
+        params = {"subject": raw["cfg"]["source_identity"]}
+    response = core.query_guard_dominators(**params, limit=20 if selector == "source_all" else 1)
+    cleanup_rows = [r for r in response["results"] if r["ast_identity"] == cleanup[0]["ast_identity"]]
+    assert len(cleanup_rows) == 1
+    guards = cleanup_rows[0]["guard_dominators"]
+    assert {g["guard_expression"] for g in guards} == {
+        "(!has_role(user))", "(is_valid(user))",
+    }
+    assert {(g["guard_polarity"], g["branch_arm"]) for g in guards} == {
+        ("auth_or_role_check", "false_branch"), ("sanitization_guard", "true_branch"),
+    }
+    assert any("cfg_ast_context_projection" in gap for gap in response["coverage_gaps"])
+    assert not any(r["ast_identity"] == cleanup[0]["ast_identity"] for r in
+                   core.query_guard_dominators(**params, polarity="general_condition")["results"])
+
+
+def test_explicit_cfg_node_keeps_its_context_guards_and_function_keeps_context_edges(tmp_path):
+    core, raw, cleanup = _public_finally_cfg(tmp_path)
+    contextual = next(n for n in cleanup if any(g["guard_expression"] == "(flag)" for g in n["guard_dominators"]))
+    response = core.query_guard_dominators(node_id=contextual["node_id"])
+    assert response["results"][0]["guard_dominators"] == contextual["guard_dominators"]
+    function_response = core.query_cfg_function(subject=raw["cfg"]["source_identity"])
+    assert len(function_response["results"]) == 1
+    assert len(function_response["results"][0]["nodes"]) == len(raw["cfg_nodes"])
+    assert {e["edge_id"] for e in function_response["results"][0]["edges"]} == {e["edge_id"] for e in raw["cfg_edges"]}
+    assert any("cfg_ast_context_projection" in gap for gap in function_response["coverage_gaps"])
+    assert not {"coverage_status", "gaps", "truncated", "unmodeled_constructs"} & function_response["results"][0].keys()
+    assert set(response["results"][0]) == {
+        "schema", "function_id", "function_name", "node_id", "ast_identity", "kind", "language",
+        "source_identity", "path", "file_sha256", "start_line", "end_line", "statement_text", "guard_dominators",
+    }
+
+
+def test_unresolved_ast_subject_does_not_fall_back_to_other_function_guards(tmp_path):
+    core, _, cleanup = _public_finally_cfg(tmp_path)
+    response = core.query_guard_dominators(subject="asr:ast_node:" + "0" * 64)
+    assert not response["results"]
+    assert response["coverage_gaps"]
+    assert not core.query_guard_dominators(subject="asr:source_file:" + "0" * 64,
+                                          node_id=cleanup[0]["node_id"])["results"]
+
+
+def test_public_cfg_names_payload_loss_from_real_index_serialization_bounds(tmp_path):
+    core, raw, _ = _public_finally_cfg(tmp_path, extra_statements=501)
+    assert raw["cfg"]["coverage_status"] == "complete"
+    assert raw["cfg"]["node_count"] > len(raw["cfg_nodes"])
+    response = core.query_cfg_function(path="app.js")
+    assert response["truncated"] and not response["results"]
+    assert any("cfg_payload_incomplete" in gap for gap in response["coverage_gaps"])
+    guarded = next(n for n in raw["cfg_nodes"] if n["guard_dominators"])
+    guards = core.query_guard_dominators(node_id=guarded["node_id"])
+    assert guards["results"] and not guards["results"][0]["guard_dominators"]
+    assert any("cfg_payload_incomplete" in gap for gap in guards["coverage_gaps"])

@@ -141,11 +141,14 @@ def partition_scopes(scopes: Iterable[Scope], locks: Mapping[str, GrammarLock]) 
 
 
 def scope_fingerprint(*, target_snapshot: str, scope: Scope, grammar: GrammarLock,
-                      image_id: str, normalizer_schema: str, limits: Mapping[str, int]) -> str:
+                      image_id: str, normalizer_schema: str, limits: Mapping[str, int],
+                      cfg_builder: Mapping[str, str | int] | None = None) -> str:
     from appsec_review.retrieval.syntax_contract import SCHEMA as PROJECTION_SCHEMA
+    from .cfg import cfg_builder_identity
     return hashlib.sha256(canonical_json({
         "schema": "appsec-review/tree-sitter-scope-fingerprint/1",
         "syntax_projection": PROJECTION_SCHEMA,
+        "cfg_builder": dict(cfg_builder if cfg_builder is not None else cfg_builder_identity()),
         "target_snapshot": target_snapshot,
         "delivery_policy": POLICY_IDENTITY,
         "source_resolution": SOURCE_IDENTITY,

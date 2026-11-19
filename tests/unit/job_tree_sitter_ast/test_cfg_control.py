@@ -195,6 +195,15 @@ def test_throw_reaches_local_catch_before_finally_and_outer_catch_after_finally(
     assert calls(fn, "outer_catch") & reachable(fn, second.node_id)
 
 
+def test_noncall_expression_keeps_conservative_catch_reachability():
+    read = node("lexical_declaration", node(
+        "variable_declarator", node("identifier", text="x", field="name"),
+        node("member_expression", node("identifier", text="obj", field="object"),
+             node("property_identifier", text="field", field="property"), field="value")))
+    fn = lower(node("try_statement", block(read), node("catch_clause", block(call("recover")))))
+    assert calls(fn, "recover") & reachable(fn, fn.entry_node_id)
+
+
 @pytest.mark.parametrize("transfer", [None, "continue_statement", "break_statement"])
 def test_do_while_executes_body_before_condition_and_continue_tests_condition(transfer):
     statements = [call("work")]

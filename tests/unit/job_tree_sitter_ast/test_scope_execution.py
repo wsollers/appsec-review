@@ -330,6 +330,63 @@ def test_parse_scope_executes_reuses_records_metrics_and_stages_generated_inputs
         assert (staged.stat().st_mode & 0o777) == 0o444
 
 
+@pytest.mark.parametrize("change", ["algorithm", "bound"])
+def test_changed_cfg_identity_creates_new_checkpoint_and_preserves_old_bytes(tmp_path, monkeypatch, change):
+    from appsec_review.jobs.job_tree_sitter_ast import cfg
+    target = tmp_path / "target"
+    (target / "python").mkdir(parents=True)
+    data = b"x = 1\n"
+    (target / "python/app.py").write_bytes(data)
+    scope = _scope(digest=hashlib.sha256(data).hexdigest(), size=len(data))
+    unit, owner, asset_lock, image_id = _make_unit(tmp_path, target)
+    fake = _FakeScopeExecutor(image_id=image_id, asset_lock=asset_lock)
+    with publication_scope_for_owner(owner):
+        first = parse_scope(unit, asdict(scope), lambda _: fake)
+    old_paths = [
+        unit.job.run_root / first["artifact"]["path"],
+        unit.job.run_root / first["index_identity"]["relative_path"],
+        unit.job.run_root / f"data/treesitter/shards/{first['fingerprint']}.json",
+        *(unit.job.run_root / ref["path"] for ref in first["cfg_artifacts"].values()),
+    ]
+    old_bytes = {p: p.read_bytes() for p in old_paths}
+    if change == "algorithm":
+        monkeypatch.setattr(cfg, "CFG_BUILDER_IDENTITY", "test-cfg-builder/next", raising=False)
+    else:
+        monkeypatch.setattr(cfg, "MAX_CFG_NODES_PER_FUNCTION", cfg.MAX_CFG_NODES_PER_FUNCTION - 1)
+    next_unit, next_owner, _, _ = _make_unit(tmp_path, target, "attempt_0002")
+    with publication_scope_for_owner(next_owner):
+        second = parse_scope(next_unit, asdict(scope), lambda _: fake)
+        reused = parse_scope(next_unit, asdict(scope), lambda _: fake)
+    assert second["fingerprint"] != first["fingerprint"]
+    assert second["artifact"]["path"] != first["artifact"]["path"]
+    assert fake.calls == 2
+    assert not second["index_reused"] and reused["index_reused"]
+    assert second["cfg_builder"]["max_nodes_per_function"] == cfg.MAX_CFG_NODES_PER_FUNCTION
+    assert second["cfg_builder"]["algorithm"] == cfg.CFG_BUILDER_IDENTITY
+    assert {p: p.read_bytes() for p in old_paths} == old_bytes
+
+
+def test_checkpoint_missing_cfg_builder_identity_is_not_relabelled_or_overwritten(tmp_path):
+    target = tmp_path / "target"
+    (target / "python").mkdir(parents=True)
+    data = b"x = 1\n"
+    (target / "python/app.py").write_bytes(data)
+    scope = _scope(digest=hashlib.sha256(data).hexdigest(), size=len(data))
+    unit, owner, asset_lock, image_id = _make_unit(tmp_path, target)
+    fake = _FakeScopeExecutor(image_id=image_id, asset_lock=asset_lock)
+    with publication_scope_for_owner(owner):
+        first = parse_scope(unit, asdict(scope), lambda _: fake)
+        metadata_path = unit.job.run_root / f"data/treesitter/shards/{first['fingerprint']}.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata.pop("cfg_builder", None)
+        atomic_json(metadata_path, metadata)
+        before = metadata_path.read_bytes()
+        with pytest.raises(ValueError, match="CFG checkpoint builder identity mismatch"):
+            parse_scope(unit, asdict(scope), lambda _: fake)
+    assert fake.calls == 1
+    assert metadata_path.read_bytes() == before
+
+
 def test_recorded_unsupported_cfg_makes_successful_parser_scope_partial(tmp_path: Path) -> None:
     fixture = ROOT / "tests/fixtures/review_prioritization"
     path = "native/src/codec.c"

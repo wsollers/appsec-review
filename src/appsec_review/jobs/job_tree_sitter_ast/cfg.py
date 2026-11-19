@@ -19,6 +19,7 @@ from typing import Any
 from appsec_review.storage import atomic_bytes, atomic_json, file_sha256
 
 CFG_SCHEMA = "appsec-review/tree-sitter-cfg/1"
+CFG_BUILDER_IDENTITY = "appsec-review/tree-sitter-cfg-builder/1"
 
 EDGE_KINDS = (
     "entry",
@@ -173,6 +174,10 @@ STATEMENT_IGNORE_TYPES: frozenset[str] = frozenset({
 MAX_STATEMENT_TEXT_CHARS = 240
 MAX_GUARD_EXPR_CHARS = 240
 MAX_CFG_NODES_PER_FUNCTION = 2048
+
+
+def cfg_builder_identity() -> dict[str, str | int]:
+    return {"algorithm": CFG_BUILDER_IDENTITY, "max_nodes_per_function": MAX_CFG_NODES_PER_FUNCTION}
 
 
 class _CfgLimitReached(Exception):
@@ -1454,6 +1459,9 @@ def synthesize_file_cfg(
                 handler_ids = [chdr.node_id for chdr, _ in catch_hdr_nodes]
                 if handler_ids:
                     catch_targets.append((handler_ids, len(finalizers)))
+                # Calls are not the only throwing expressions (property access,
+                # division, etc.). Preserve the region's conservative escape.
+                exceptional(try_hdr.node_id)
 
                 normal_tails: list[tuple[str, str, str | None, str | None]] = []
                 if try_body is not None:

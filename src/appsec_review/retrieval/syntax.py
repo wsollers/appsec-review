@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from typing import TYPE_CHECKING, Any, Mapping
 
 from .model import EntityKind, LogicalIdentity, normalize_relative_path
@@ -121,6 +122,56 @@ def query_syntax(core: "RetrievalCore", *, mode: str, subject: str, name: str | 
     return core._execute(QUERY_SYNTAX, parameters, operation)
 
 
+def _cfg_coverage(
+    database: sqlite3.Connection, payload: Mapping[str, Any], path: str,
+) -> tuple[list[str], bool]:
+    cfg = payload.get("cfg") or {}
+    label = f"{path}: {cfg.get('function_id', '')}"
+    reasons = list(cfg.get("gaps") or ())
+    for count, records in (("node_count", "cfg_nodes"), ("edge_count", "cfg_edges")):
+        if cfg.get(count) != len(payload.get(records) or ()):
+            reasons.append(f"cfg_payload_incomplete:{records}")
+    if cfg.get("truncated"):
+        reasons.append("cfg_node_limit_reached")
+    reasons.extend(f"cfg_unmodeled_construct:{kind}" for kind in cfg.get("unmodeled_constructs") or ())
+    complete = cfg.get("coverage_status") == "complete" and not reasons
+    status = cfg.get("coverage_status")
+    if status not in {"complete", "partial"}:
+        reasons.append("CFG coverage unknown: missing completeness metadata")
+    elif not complete and not reasons:
+        reasons.append("CFG coverage partial")
+    gaps = [f"{label}: {reason}" for reason in dict.fromkeys(reasons)]
+    areas = (path, "cfg:" + str(cfg.get("source_identity", "")),
+             "cfg-ast-projection:" + str(cfg.get("function_id", "")))
+    for row in database.execute("SELECT area,status,gap FROM coverage WHERE area IN (?,?,?) ORDER BY area,status,gap", areas):
+        if row["status"] != "complete":
+            gaps.append(f"{row['area']}: coverage {row['status']}: {row['gap'] or 'coverage incomplete'}")
+            if row["area"] == path:
+                complete = False
+    return gaps, complete
+
+
+def _cfg_occurrence(node: Mapping[str, Any]) -> tuple:
+    if node.get("ast_identity"):
+        return ("ast", node["ast_identity"])
+    if node.get("ordinal_path"):
+        return ("ordinal", tuple(node["ordinal_path"]))
+    return ("node", node["node_id"])
+
+
+def _common_occurrence_guards(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def key(guard: Mapping[str, Any]) -> str:
+        # Cloned branch nodes differ by CFG id, but a common guard must still
+        # resolve to the same source branch, arm and predicate in every context.
+        return json.dumps({**guard, "branch_node_id": guard.get("branch_ast_identity") or guard["branch_node_id"]},
+                          sort_keys=True, separators=(",", ":"))
+
+    common = {key(g) for g in nodes[0].get("guard_dominators") or ()}
+    for node in nodes[1:]:
+        common.intersection_update(key(g) for g in node.get("guard_dominators") or ())
+    return [g for g in nodes[0].get("guard_dominators") or () if key(g) in common]
+
+
 def _sanitize_cfg_function_record(
     raw_payload: Mapping[str, Any],
     *,
@@ -128,6 +179,7 @@ def _sanitize_cfg_function_record(
     rel_path: str,
     file_sha256: str,
     shard_id: str,
+    guards_complete: bool,
 ) -> dict[str, Any]:
     cfg = dict(raw_payload.get("cfg") or {})
     nodes = [dict(n) for n in (raw_payload.get("cfg_nodes") or ())]
@@ -135,6 +187,8 @@ def _sanitize_cfg_function_record(
     for node in nodes:
         node["path"] = rel_path
         node["file_sha256"] = file_sha256
+        if not guards_complete:
+            node["guard_dominators"] = []
     for edge in edges:
         edge["path"] = rel_path
     nodes.sort(key=lambda n: (int(n.get("start_line", 0)), int(n.get("start_byte", 0)), str(n.get("node_id", ""))))
@@ -246,12 +300,15 @@ def query_cfg_function(
                 for row in database.execute(sql, values):
                     rel_p = normalize_relative_path(str(row["path"]))
                     raw_payload = json.loads(row["payload_json"])
+                    coverage_gaps, guards_complete = _cfg_coverage(database, raw_payload, rel_p)
+                    gaps.extend(coverage_gaps)
                     rec = _sanitize_cfg_function_record(
                         raw_payload,
                         ast_identity=str(row["identity"]),
                         rel_path=rel_p,
                         file_sha256=str(row["file_sha256"]),
                         shard_id=str(shard.get("shard_id", "default")),
+                        guards_complete=guards_complete,
                     )
                     found.setdefault(rec["function_id"], rec)
         if not any_ts_shard:
@@ -311,31 +368,33 @@ def query_guard_dominators(
         matches: dict[str, dict[str, Any]] = {}
         gaps: list[str] = []
         any_ts_shard = False
-        target_block_id = node_id
-        target_source_id: str | None = subject if subject_kind == "source_file" else None
-        target_line = line
-
         for shard in core.indexes.get("analysis", ()):
             if shard.get("producer", {}).get("job") != "job_tree_sitter_ast":
                 continue
             any_ts_shard = True
             with core._database(shard, deadline) as database:
-                if subject_kind == "ast_node" and target_block_id is None:
+                occurrence_block_id = None
+                target_span = None
+                target_source_id = subject if subject_kind == "source_file" else None
+                target_line = line
+                if subject_kind == "ast_node":
                     ast_row = database.execute(
-                        "SELECT e.payload_json, l.path, l.file_sha256, l.start_line "
+                        "SELECT e.payload_json, l.path, l.file_sha256, l.start_line, l.start_byte, l.end_byte "
                         "FROM entities e JOIN locations l ON l.entity_id=e.identity WHERE e.identity=?",
                         (subject,),
                     ).fetchone()
-                    if ast_row is not None:
-                        ast_payload = json.loads(ast_row["payload_json"])
-                        target_block_id = ast_payload.get("cfg_block_id")
-                        if target_line is None:
-                            target_line = int(ast_row["start_line"])
-                        target_source_id = LogicalIdentity.derive(
-                            EntityKind.SOURCE_FILE,
-                            core.manifest["target_snapshot"],
-                            {"path": normalize_relative_path(str(ast_row["path"])), "sha256": str(ast_row["file_sha256"])},
-                        ).value
+                    if ast_row is None:
+                        continue
+                    ast_payload = json.loads(ast_row["payload_json"])
+                    occurrence_block_id = ast_payload.get("cfg_block_id")
+                    target_span = (int(ast_row["start_byte"]), int(ast_row["end_byte"]))
+                    if target_line is None:
+                        target_line = int(ast_row["start_line"])
+                    target_source_id = LogicalIdentity.derive(
+                        EntityKind.SOURCE_FILE,
+                        core.manifest["target_snapshot"],
+                        {"path": normalize_relative_path(str(ast_row["path"])), "sha256": str(ast_row["file_sha256"])},
+                    ).value
 
                 clauses = ["e.kind='ast_node'", "json_extract(e.payload_json, '$.cfg.schema')=?"]
                 values: list[Any] = [CFG_SCHEMA]
@@ -357,16 +416,35 @@ def query_guard_dominators(
                 for row in database.execute(sql, values):
                     rel_p = normalize_relative_path(str(row["path"]))
                     raw_payload = json.loads(row["payload_json"])
+                    coverage_gaps, guards_complete = _cfg_coverage(database, raw_payload, rel_p)
                     rec = _sanitize_cfg_function_record(
                         raw_payload,
                         ast_identity=str(row["identity"]),
                         rel_path=rel_p,
                         file_sha256=str(row["file_sha256"]),
                         shard_id=str(shard.get("shard_id", "default")),
+                        guards_complete=guards_complete,
                     )
                     candidates = rec["nodes"]
-                    if target_block_id is not None:
-                        candidates = [n for n in candidates if n.get("node_id") == target_block_id]
+                    if node_id is not None:
+                        candidates = [n for n in candidates if n.get("node_id") == node_id]
+                        if target_span is not None:
+                            candidates = [n for n in candidates
+                                          if (n["start_byte"] <= target_span[0] and n["end_byte"] >= target_span[1])
+                                          or (target_span[0] <= n["start_byte"] and target_span[1] >= n["end_byte"])]
+                        if not candidates:
+                            continue
+                        groups = [[n] for n in candidates]
+                    elif target_span is not None:
+                        anchors = [n for n in candidates if n["node_id"] == occurrence_block_id]
+                        if not anchors:
+                            anchors = [n for n in candidates if n["kind"] not in {"entry", "exit"}
+                                       and n["start_byte"] <= target_span[0] and n["end_byte"] >= target_span[1]]
+                        anchors.sort(key=lambda n: (n["end_byte"] - n["start_byte"], n["node_id"]))
+                        groups = (
+                            [[n for n in candidates if _cfg_occurrence(n) == _cfg_occurrence(anchors[0])]]
+                            if anchors else []
+                        )
                     elif target_line is not None:
                         spanning = [
                             n for n in candidates
@@ -374,16 +452,25 @@ def query_guard_dominators(
                             and int(n.get("start_line", 0)) <= target_line <= int(n.get("end_line", 0))
                         ]
                         if spanning:
-                            # Most narrow spanning block first
-                            spanning.sort(key=lambda n: (int(n["end_line"]) - int(n["start_line"]), str(n["node_id"])))
-                            candidates = [spanning[0]]
+                            spanning.sort(key=lambda n: (
+                                int(n["end_line"]) - int(n["start_line"]),
+                                int(n["end_byte"]) - int(n["start_byte"]), str(n["node_id"]),
+                            ))
+                            groups = [[n for n in candidates if _cfg_occurrence(n) == _cfg_occurrence(spanning[0])]]
                         else:
-                            candidates = []
+                            groups = []
                     else:
-                        candidates = [n for n in candidates if n.get("guard_dominators")]
+                        by_occurrence: dict[tuple, list[dict[str, Any]]] = {}
+                        for n in candidates:
+                            by_occurrence.setdefault(_cfg_occurrence(n), []).append(n)
+                        groups = list(by_occurrence.values())
 
-                    for cnode in candidates:
-                        gdoms = list(cnode.get("guard_dominators") or ())
+                    gaps.extend(coverage_gaps)
+                    for contexts in groups:
+                        cnode = contexts[0]
+                        gdoms = _common_occurrence_guards(contexts)
+                        if node_id is None and target_span is None and target_line is None and not gdoms:
+                            continue
                         if polarity is not None:
                             gdoms = [g for g in gdoms if g.get("guard_polarity") == polarity]
                             if not gdoms:
@@ -412,7 +499,7 @@ def query_guard_dominators(
         if not any_ts_shard:
             gaps.append("no accepted job_tree_sitter_ast analysis shards available")
         elif not matches:
-            gaps.append("no matching CFG guard-dominated block found; absence of guards is only established within parsed functions")
+            gaps.append("no matching CFG guard-dominated block found; consult coverage gaps before interpreting absence")
         ordered = sorted(
             matches.values(),
             key=lambda m: (m["path"], m["start_line"], m["end_line"], m["node_id"]),

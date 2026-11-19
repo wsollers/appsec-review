@@ -30,7 +30,10 @@ accepted handoff, and the central run log remain authoritative.
 
 For recovery, inspect scope dispositions in the accepted Tree-sitter artifact and central pipeline
 log. Rerunning a partial attempt reuses hash-verified successful scope shards and retries failed or
-invalidated scopes. Do not delete locks, edit accepted pointers, or remove successful shards to
+invalidated scopes. Reuse also requires the same CFG builder algorithm and actual node bound;
+changed semantics use a new fingerprint and preserve the old checkpoint bytes. Missing or
+mismatched builder metadata under a current fingerprint is rejected, not overwritten.
+Do not delete locks, edit accepted pointers, or remove successful shards to
 force recovery. An unsupported grammar or bounded parse is a named gap, not clean coverage.
 
 CFG completeness is separate from parsing. Inspect each `cfg-manifest.json` function's
@@ -42,6 +45,10 @@ the scope partial and suppress CFG guard-dominator claims; a bounded prefix is n
 function. A `cfg_ast_context_projection` gap instead means context-specific cleanup CFG nodes
 cannot be collapsed into unique AST flow edges: use the per-function CFG, not an invented
 AST-level path. See the [control-flow semantics](../architecture/tree-sitter-ast.md#intra-procedural-cfg-and-guard-polarity-t-169-t-5211).
+The public CFG/guard queries carry these limitations in their existing `coverage_gaps` envelope.
+Older CFG payloads without completeness metadata are unknown and yield no guard claims.
+Source-line/AST/source-file guard answers contain only guards common across possible execution
+contexts; use an explicit CFG `node_id` only when examining that particular context.
 
 For source-only navigation, call `query_syntax` with an accepted `source_file` identity and mode
 `definitions`, `calls`, `imports` or `references`; optionally filter an exact written `name`.
