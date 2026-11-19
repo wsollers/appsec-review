@@ -42,33 +42,37 @@ _FAT_MAGICS = {
 }
 
 
-def _java_header(data: bytes) -> bool:
-    """Distinguish the shared magic using a bounded constant-pool walk, not a filename."""
+def _java_header(data: bytes, *, file_bytes: int) -> str | None:
+    """Distinguish a malformed discriminator from an unfinished bounded JVM header walk."""
     if len(data) < 10:
-        return False
+        return None
     minor, major, count = struct.unpack_from(">HHH", data, 4)
     if major < 45 or (minor not in {0, 65535} and not (major == 45 and minor <= 3)) or count < 1:
-        return False
+        return None
     offset, index = 10, 1
     sizes = {3: 4, 4: 4, 5: 8, 6: 8, 7: 2, 8: 2, 9: 4, 10: 4, 11: 4,
              12: 4, 15: 3, 16: 2, 17: 4, 18: 4, 19: 2, 20: 2}
     while index < count:
         if offset >= len(data):
-            return False
+            return "partial" if offset + 15 <= file_bytes else None
         tag = data[offset]
         offset += 1
         if tag == 1:
             if offset + 2 > len(data):
-                return False
+                return "partial" if offset + 16 <= file_bytes else None
             size = int.from_bytes(data[offset:offset + 2], "big")
             offset += 2
         elif tag in sizes:
             size = sizes[tag]
         else:
-            return False
+            return None
         offset += size
         index += 2 if tag in {5, 6} else 1
-    return index == count and offset + 14 <= len(data)
+        if index > count or offset + 14 > file_bytes:
+            return None
+    if offset + 14 > file_bytes:
+        return None
+    return "complete" if offset + 14 <= len(data) else "partial"
 
 
 def _universal_macho(path: Path, head: bytes) -> dict[str, Any]:
@@ -105,8 +109,12 @@ def _universal_macho(path: Path, head: bytes) -> dict[str, Any]:
                     raise ValueError("universal Mach-O slice architecture disagrees with table")
         return {"format": "macho", "family": "native", "universal": True, "architecture_count": count}
     except ValueError as exc:
-        if head[:4] == b"\xca\xfe\xba\xbe" and _java_header(head):
-            return {"format": "jvm-class", "family": "jvm"}
+        java_header = (_java_header(head, file_bytes=path.stat().st_size)
+                       if head[:4] == b"\xca\xfe\xba\xbe" else None)
+        if java_header is not None:
+            return {"format": "jvm-class", "family": "jvm", "classification_complete": java_header == "complete",
+                    **({"gaps": ["JVM classification incomplete: constant pool/header exceeds bounded probe"]}
+                       if java_header == "partial" else {})}
         return {"format": "unrecognized-native", "family": "native", "gaps": [str(exc)]}
 
 
@@ -457,6 +465,7 @@ def builtin_observation(path: Path, classification: Mapping[str, Any], capabilit
         return value, [*gaps, "SBOM/dependency vulnerability matching requires available pinned Syft and vulnerability data"]
     with path.open("rb") as stream:
         data = stream.read(16 * 1024 * 1024)
+        input_truncated = bool(stream.read(1)) if capability == "wasm" else False
     if capability == "native" and fmt == "elf":
         if len(data) < 20: return {}, ["ELF header is truncated"]
         endian = "little" if data[5] == 1 else "big" if data[5] == 2 else "unknown"
@@ -478,13 +487,17 @@ def builtin_observation(path: Path, classification: Mapping[str, Any], capabilit
         if len(data) < 8: return {}, ["JVM class header is truncated"]
         return {"major_version": int.from_bytes(data[6:8], "big"),
                 "minor_version": int.from_bytes(data[4:6], "big")}, [
-                "JVM bytecode security rules require a pinned scanner"]
+                *gaps, "JVM bytecode security rules require a pinned scanner"]
     if capability == "jvm" and fmt == "jvm-archive":
         return {"archive": inspect_archive(path, limits)}, ["JVM bytecode security rules require a pinned scanner"]
     if capability == "jvm" and fmt == "jvm-resource-archive":
         archive = inspect_archive(path, limits)
         return {"archive": archive, "class_count": 0}, list(archive["gaps"])
     if capability == "wasm" and fmt == "wasm":
+        if input_truncated:
+            return {"input_complete": False, "inspected_bytes": len(data)}, [
+                *gaps, "WebAssembly input truncated at builtin byte bound; resource and feature facts unavailable",
+                "WebAssembly feature and capability policy requires a pinned validator"]
         try: return parse_wasm(data), ["WebAssembly feature and capability policy requires a pinned validator"]
         except ValueError as exc: return {}, [f"WebAssembly parse failure: {exc}"]
     return {}, [f"unsupported format for {capability}: {fmt}"]

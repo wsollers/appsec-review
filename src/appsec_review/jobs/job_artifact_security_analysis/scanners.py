@@ -13,6 +13,7 @@ from itertools import islice
 import json
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
+import uuid
 import xml.etree.ElementTree as ET
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
@@ -372,8 +373,8 @@ class ContainerScannerRunner:
         if identity.get("unavailable"):
             raise RuntimeError(str(identity["unavailable"]))
         token = _execution_token(capability, artifact)
-        scratch = self.scratch_root / "containers" / token
-        scratch.mkdir(parents=True, exist_ok=True)
+        scratch = self.scratch_root / "containers" / token / uuid.uuid4().hex
+        scratch.mkdir(parents=True, exist_ok=False)
         mounts: list[Mount] = []
         input_name, target_root = path.name, path.parent
         presented = scanner_input(artifact, capability)

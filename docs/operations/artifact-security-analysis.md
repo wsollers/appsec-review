@@ -92,9 +92,18 @@ CPU identities. The shared `CAFEBABE` magic is not sufficient to call a file Jav
 Java constant-pool/header structure distinguishes it. Invalid or over-bound universal headers
 remain explicit classification gaps, not SpotBugs inputs. Valid universal files use the existing
 `macho` native scanner support; builtin Mach-O security assessment still requires a pinned scanner.
+When a valid JVM header/constant-pool prefix outgrows the classification probe, it remains a
+`jvm-class` candidate for SpotBugs with `classification_complete: false` and an explicit probe gap.
+This does not validate the unread class contents. Malformed inspected entries or lengths beyond
+the actual file remain invalid rather than being disguised as probe exhaustion. No larger
+classification read is performed, and the partial-classification gap travels with the scan.
 WebAssembly memory/table presence and feature summaries include imports as well as definitions,
 while the separate `imports`, `memories` and `tables` lists preserve their origins. Memory64
 limits retain their full unsigned width; truncated or invalid limits are parse gaps.
+The builtin Wasm reader also checks for unread bytes after its 16 MiB bound. Even when that prefix
+ends exactly at a section boundary, a truncated input publishes only `input_complete: false`,
+the inspected byte count and coverage gaps, not negative resource or feature facts about the
+unread suffix. An entire module ending exactly at the bound remains inspectable.
 
 ## Builtin artifact-risk candidates
 
@@ -130,7 +139,10 @@ spans; conflicting duplicate identities are rejected instead of selecting the la
 ## Immutable scan reuse
 
 Each execution has separate protected stream storage, including repeated invocations within one
-attempt. Result JSON is published without replacement at
+attempt. The executor's own `containers/<input-token>/<invocation-id>/` directory is unique too:
+native reports and `execution.json` are not overwritten by a rerun or a fresh runner object.
+Separating retained diagnostic copies alone would not preserve those native execution references.
+Result JSON is published without replacement at
 `data/artifact-security/shards/<capability>/<result-sha256>/result.json`. A complete declared release
 identity permits an immutable input-fingerprint checkpoint to reference those exact result bytes.
 Checkpoint metadata under `data/artifact-security/checkpoints/` belongs to protected
@@ -410,7 +422,7 @@ with additive common/provenance metadata. Finding normalization is
 preserved reported severity);
 a finding-normalizer-only change rebuilds the observations shard but keeps scan checkpoints reusable.
 The native-report contracts, bounded readers, resource/format corrections and builtin risk producer
-use parser identity `appsec-review/artifact-security-parsers/5+<policy-identity>`, invalidating older
+use parser identity `appsec-review/artifact-security-parsers/6+<policy-identity>`, invalidating older
 scan checkpoints. Normalization uses `appsec-review/artifact-security-normalizer/3` for
 content-bound immutable execution results.
 Keep original scanner result identity, parser, retained byte count/hash, selector, and completeness

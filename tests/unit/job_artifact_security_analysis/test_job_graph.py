@@ -246,7 +246,7 @@ def test_blint_native_directory_contract_is_validated_before_assembly(tmp_path, 
         assert scan["terminal_status"] == "COMPLETED_WITH_GAPS"
         assert any("parse or execution failure" in gap for gap in scan["gaps"])
         assert summary.payload["findings_complete"] is False and not findings
-        [raw] = ctx.unit_root.glob("containers/*/findings.json")
+        [raw] = ctx.unit_root.glob("containers/*/*/findings.json")
         assert raw.read_bytes() == reports[mode]
     for path in sorted(ctx.unit_root.rglob("*")):
         if path.is_file():

@@ -43,6 +43,10 @@ See [builtin artifact risks and immutable scan reuse](artifact-security-analysis
 for inspection scope and explicit coverage limits. Results and diagnostic streams are immutable
 per execution; checkpoints and indexes bind actual result content and coverage, so same-count
 changed findings cannot reuse stale observations.
+This includes invocation-unique native executor scratch and execution receipts, not only retained
+diagnostic copies. Probe-limited JVM classes retain SpotBugs applicability with explicit partial
+classification; oversized Wasm inputs publish an incomplete-input gap and no definitive negative
+resource facts, even if the bounded prefix ends cleanly at a section boundary.
 
 The stream cap is **retention**, not bounded live subprocess capture: the shared executor uses
 `capture_output=True`, or `communicate()` under execution safety, and truncates streams after the

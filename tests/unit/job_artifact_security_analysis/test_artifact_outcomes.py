@@ -10,6 +10,7 @@ from pathlib import Path
 import sqlite3
 import struct
 import tarfile
+from types import SimpleNamespace
 import zipfile
 
 import pytest
@@ -443,3 +444,135 @@ def test_reused_scan_reindexes_changed_coverage_without_rerunning_scanner(tmp_pa
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT status FROM coverage").fetchall() == [("partial",)]
     assert "upstream incomplete" in second["acceptance.publish_handoff"]["gaps"]
+
+
+@pytest.mark.parametrize("fresh_runner", [False, True], ids=["same-runner", "fresh-runner"])
+def test_real_runner_same_attempt_reruns_preserve_actual_execution_receipts(tmp_path, monkeypatch, fresh_runner):
+    from appsec_review.container_runtime import ContainerExecutor
+    from appsec_review.jobs.job_artifact_security_analysis.findings import scan_records
+    from appsec_review.jobs.job_artifact_security_analysis.scanners import ContainerScannerRunner
+    from appsec_review.provenance import validate_observation_provenance
+
+    root = tmp_path / "run"
+    artifact = _seed_artifact(root, payload=_minimal_elf64())
+    ctx, _ = _context(root, [artifact], releases=False)
+    monkeypatch.setattr(ContainerExecutor, "resolve_image", lambda *args: "sha256:" + "1" * 64)
+    requests = []
+
+    def execute(executor, request):
+        requests.append(request)
+        scratch = request.scratch_root
+        atomic_json(scratch / "execution.json", {"exit_code": 0, "invocation": len(requests)})
+        atomic_json(scratch / "app-metadata.json", {"file_path": "/target/app.elf", "has_nx": False})
+        atomic_json(scratch / "findings.json", {"findings": [{
+            "id": "CHECK_NX", "filename": "/target/app.elf",
+            "severity": "high" if len(requests) == 1 else "medium",
+        }]})
+        (scratch / "stdout.bin").write_bytes(b"")
+        (scratch / "stderr.bin").write_bytes(b"")
+        relative = scratch.relative_to(root).as_posix()
+        return SimpleNamespace(
+            stdout_path=relative + "/stdout.bin", stderr_path=relative + "/stderr.bin",
+            receipt_path=relative + "/execution.json", stdout_truncated=False, stderr_truncated=False,
+            exit_code=0, timed_out=False, file_size_limit_reached=False)
+
+    monkeypatch.setattr(ContainerExecutor, "execute", execute)
+    runner = ContainerScannerRunner(ROOT, root, ctx.unit_root)
+    with publication_scope_for_owner(SharedArtifacts.for_job(ctx.job)):
+        first = security._scan_one(ctx, artifact, "blint", runner)
+        references = [first["execution_receipt"], first["result_artifact"],
+                      first["native_output"]["artifact"], first["native_reports"]["findings.json"]["artifact"]]
+        original = {ref["path"]: (root / ref["path"]).read_bytes() for ref in references}
+        if fresh_runner:
+            runner = ContainerScannerRunner(ROOT, root, ctx.unit_root)
+        second = security._scan_one(ctx, artifact, "blint", runner)
+        assert original == {path: (root / path).read_bytes() for path in original}
+        assert first["execution_receipt"]["path"] != second["execution_receipt"]["path"]
+        assert file_sha256(root / first["execution_receipt"]["path"]) == first["execution_receipt"]["sha256"]
+        for scan in (first, second):
+            summary, findings = scan_records(scan)
+            assert len(findings) == 1
+            validate_observation_provenance(root, [record.payload for record in (summary, *findings)],
+                                            parser_identity=security.PARSER_IDENTITY)
+    assert len(requests) == 2 and requests[0].scratch_root != requests[1].scratch_root
+
+
+def _large_jvm_class():
+    minimal = _minimal_jvm_class()
+    extra = 17 * (b"\x01\xff\xff" + b"x" * 65535)
+    return minimal[:8] + struct.pack(">H", 22) + minimal[10:-14] + extra + minimal[-14:]
+
+
+def test_probe_limited_real_java_class_stays_applicable_with_a_classification_gap(tmp_path):
+    root = tmp_path / "run"
+    payload = _large_jvm_class()
+    assert len(payload) == 1_114_205
+    artifact = _seed_artifact(root, "data/build/misleading.bin", payload, kind="jvm-class")
+    path = root / artifact["path"]
+    for bound in (128, 1024 * 1024):
+        facts = classify(path, artifact, probe_bytes=bound)
+        assert facts["format"] == "jvm-class" and facts["family"] == "jvm"
+        assert facts["classification_complete"] is False
+        assert any("probe" in gap for gap in facts["gaps"])
+        assert not partition_artifacts("artifact:tool-spotbugs", (("a", path.name, facts["format"]),)).not_applicable
+        for capability in ("inventory", "jvm"):
+            _, gaps = builtin_observation(path, facts, capability, ArchiveLimits())
+            assert any("probe" in gap for gap in gaps)
+    assert classify(path, artifact, probe_bytes=len(payload))["classification_complete"] is True
+    ctx, outputs = _context(root, [artifact], capability="spotbugs")
+    receipt = ctx.job.attempt_root / "artifacts/asa/execution.json"
+    atomic_json(receipt, {"exit_code": 0})
+
+    def execute(*args):
+        return {"exit_code": 0, "payload": b"<BugCollection/>",
+                "execution_receipt": security._identity(root, receipt)}
+
+    _run(ctx, outputs, "spotbugs", execute)
+    assert outputs["analyze.spotbugs"]["observation_count"] == 1
+    assert any("probe" in gap for gap in outputs["analyze.spotbugs"]["gaps"])
+    unavailable, _ = _context(root, [artifact], attempt="attempt_0002", releases=False, capability="spotbugs")
+    with publication_scope_for_owner(SharedArtifacts.for_job(unavailable.job)):
+        scan = security._scan_one(unavailable, artifact, "spotbugs", None)
+    assert any("probe" in gap for gap in scan["gaps"])
+    assert "no pinned executor configured" in (root / scan["raw_artifacts"][1]["path"]).read_text()
+
+
+@pytest.mark.parametrize("damage", ["bad-tag", "past-eof", "empty-pool-tail"])
+def test_malformed_java_constant_pool_is_not_reported_as_probe_exhaustion(tmp_path, damage):
+    data = bytearray(_large_jvm_class())
+    if damage == "bad-tag":
+        data[10] = 0xff
+    elif damage == "empty-pool-tail":
+        data = bytearray(_minimal_jvm_class()[:8] + b"\0\x01")
+    else:
+        # A complete short file whose final UTF8 entry advertises bytes beyond EOF.
+        data = bytearray(_minimal_jvm_class()[:8] + b"\0\x02\x01\xff\xff" + b"x" * 32)
+    path = tmp_path / "malformed.class"
+    path.write_bytes(data)
+    facts = classify(path, {}, probe_bytes=128)
+    assert facts["format"] != "jvm-class" and facts["gaps"]
+
+
+@pytest.mark.parametrize("tail", [False, True], ids=["exact-bound", "unread-import"])
+def test_wasm_bound_aligned_custom_section_never_hides_unread_shared_memory(tmp_path, tail):
+    bound = 16 * 1024 * 1024
+    payload = b"\0asm\x01\0\0\0" + _wasm_section(0, b"\0" * (bound - 13))
+    assert len(payload) == bound
+    if tail:
+        imports = b"\x01" + _wasm_name("env") + _wasm_name("memory") + b"\x02\x03\x01\x02"
+        payload += _wasm_section(2, imports)
+        assert parse_wasm(payload)["features"]["shared_memory"] is True
+    root = tmp_path / "run"
+    artifact = _seed_artifact(root, payload=payload, kind="wasm-module")
+    ctx, outputs = _context(root, [artifact], capability="wasm")
+    _run(ctx, outputs, "wasm")
+    [scan] = outputs["analyze.wasm"]["observations"]
+    facts = scan["observation"]
+    if tail:
+        assert any("input" in gap and "truncated" in gap for gap in scan["gaps"])
+        assert facts["input_complete"] is False and facts["inspected_bytes"] == bound
+        assert "has_memory" not in facts and "features" not in facts
+        assert outputs["acceptance.publish_handoff"]["terminal_status"] == "COMPLETED_WITH_GAPS"
+    else:
+        assert facts["has_memory"] is False and facts["features"]["shared_memory"] is False
+        assert not any("truncated" in gap for gap in scan["gaps"])

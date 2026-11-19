@@ -44,7 +44,7 @@ from appsec_review.jobs.job_artifact_security_analysis.datasets import CONTRACT,
 
 SCHEMA = "appsec-review/artifact-security-analysis/1"
 OBSERVATION_SCHEMA = "appsec-review/artifact-security-observation/1"
-PARSER_IDENTITY = "appsec-review/artifact-security-parsers/5+" + POLICY_IDENTITY
+PARSER_IDENTITY = "appsec-review/artifact-security-parsers/6+" + POLICY_IDENTITY
 NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/3"
 # The observations shard is a function of the scan results (parser and normalizer identities, which also key the
 # scan checkpoints) and of the splitting of a scan into one summary and per-finding records (``findings.py``).
@@ -398,7 +398,7 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     from appsec_review.runtime import execution_safety as safety
     safety.check_running()
     observation: Mapping[str, Any] = {}
-    gaps: list[str] = []
+    gaps: list[str] = list(classification.get("gaps", ()))
     stdout = b""
     stderr = b""
     exit_code: int | None = 0
@@ -430,8 +430,8 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         elif runner is None:
             stop("artifact scanner executor is unavailable", action="artifact.scan")
             exit_code = None
-            gaps = [f"{capability} scanner unavailable: no pinned executor configured"]
-            stderr = gaps[0].encode()
+            gaps.append(f"{capability} scanner unavailable: no pinned executor configured")
+            stderr = gaps[-1].encode()
         else:
             raw = runner(capability, path, artifact, int(settings["timeout_seconds"]), int(settings["stream_limit_bytes"]))
             stdout, stderr = bytes(raw.get("stdout", b"")), bytes(raw.get("stderr", b""))
