@@ -289,13 +289,18 @@ Source: [handler and branch normalizers](../../src/appsec_review/jobs/job_cpp_co
    normalized database. Relative paths resolve from the accepted command directory; the recipe's
    exact source/build roots map to distinct scratch roots, including nonstandard build layouts.
    A filename suffix is never source admission. Directory plus arguments define command identity.
-   Invalid/missing compile data yields `INVALID_COMPILE_DATABASE` and reasons.
+   The mutable replay database is reconstructed from verified immutable commands on catalog reuse
+   and before AST/IR branch reuse or execution; altered staging never becomes new authority.
+   Changed immutable bytes or conflicting embedded command context reject before replay.
+   Invalid/missing compile data during normalization yields `INVALID_COMPILE_DATABASE` and reasons.
 3. Catalog accepted build objects/libraries/executables and normalize bounded captured link
    commands from the receipt's hash-verified `link_database`, not a guessed workspace filename.
    A valid empty link list is distinct from absent or malformed data. Publish immutable
    artifact/link/compile catalogs and counts, then checkpoint an eligible catalog. Downstream
    C++ scopes verify the database's embedded command context and retained build bytes, preserve
    the working directory, and rebase path operands without changing macro values.
+   Account for every accepted input/output link pair: a missing input creates a named relationship
+   gap even when other inputs in the same link row survive. Retain the valid edges.
 
 ### `compiled`
 
@@ -329,8 +334,12 @@ Source: [handler and branch normalizers](../../src/appsec_review/jobs/job_cpp_co
 3. Normalize bounded AST declarations/calls. Full-mode source admission uses accepted paths before
    applying the node-detail limit; both source exclusions and detail truncation are named gaps.
    Missing/malformed output is a failed unit, not an empty valid translation unit. Finalize seeded
-   resolution only after parsing and observing the requested linkage. A failed parse or absent
-   requested function cannot create a reusable resolved-seed result.
+   resolution only after parsing and observing the requested linkage. Callable declarations include
+   functions, methods, conversions, constructors and destructors; ABI variants are not rewritten or
+   joined by display name. A failed parse or genuinely absent requested function cannot create a
+   reusable resolved-seed result. An unobserved function in a unit stopped at the node-detail limit
+   instead keeps an `ast_detail_limit` reason and a named gap, without scanning beyond the cutoff.
+   That valid bounded partial result is reusable at the same limit; changing the limit invalidates it.
 
 Seeded IR joins and handoff keys use compile-unit plus compiler linkage identity, never an
 overload's display name. Local definitions take precedence; cross-TU matches require unique

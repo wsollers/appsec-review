@@ -339,6 +339,109 @@ def test_seeded_ast_filters_overloads_by_mangled_identity_not_the_display_filter
     assert ir["projects"][sc.CASE]["seeded"]["neighborhood_function_count"] == 2
 
 
+@pytest.mark.parametrize("kind,name,body,linkage,return_type,returned", [
+    ("CXXConversionDecl", "operator bool", "operator bool() const { return true; }", "_ZNK1XcvbEv", "i1", " true"),
+    ("CXXConstructorDecl", "X", "X() {}", "_ZN1XC1Ev", "void", ""),
+    ("CXXDestructorDecl", "~X", "~X() {}", "_ZN1XD1Ev", "void", ""),
+], ids=["conversion", "constructor", "destructor"])
+def test_seeded_cpp_callable_kinds_keep_exact_linkage_and_reuse(
+        tmp_path, kind, name, body, linkage, return_type, returned):
+    from appsec_review.jobs.job_cpp_compiled_analysis import job
+    staged = sc.stage(tmp_path, observations=[sc.observation("proj/src/util.cpp", 2)])
+    data = f"struct X {{\n  {body}\n}};\n".encode()
+    for path in (staged.target / "proj/src/util.cpp", staged.case_root / "source/src/util.cpp"):
+        path.write_bytes(data)
+    source = next(row for row in staged.mapping["files"] if row["target_path"] == "proj/src/util.cpp")
+    source["sha256"] = hashlib.sha256(data).hexdigest()
+    command = next(row for row in staged.rows if row["target_path"] == "proj/src/util.cpp")
+    command["source_sha256"] = source["sha256"]
+    command["compile_unit_id"] = job._tu_identity(staged.mapping, command)
+    database = staged.case_root / "normalized-compile-commands.json"
+    database.write_text(json.dumps(staged.rows))
+    staged.cataloged["compile_database"] = job._artifact(staged.run_root, database)
+    ir_text = f"""
+define {return_type} @{linkage}(ptr %this) !dbg !1 {{
+entry:
+  ret {return_type}{returned}, !dbg !2
+}}
+!1 = distinct !DISubprogram(name: "{name}", scope: !3, file: !4, line: 2)
+!2 = !DILocation(line: 2, column: 3, scope: !1)
+!3 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "X")
+!4 = !DIFile(filename: "src/util.cpp", directory: "/scratch/source")
+"""
+    ast_text = json.dumps({"id": "0xcallable", "kind": kind, "name": name, "mangledName": linkage,
+                           "loc": {"file": "/scratch/source/src/util.cpp", "line": 2, "col": 3},
+                           "inner": [{"kind": "CompoundStmt", "inner": []}]})
+
+    class CallableExecutor(CannedExecutor):
+        def execute(self, request):
+            result = super().execute(request)
+            if request.argv[1] == "cfg":
+                (request.scratch_root / "analysis/cfg/tu-0000.cfg.txt").write_text(
+                    f"X::{name}()\n [B1 (ENTRY)]\n   Succs (1): B0\n [B0 (EXIT)]\n   Preds (1): B1\n")
+            return result
+
+    executor = CallableExecutor(staged, ir={"util": ir_text}, ast=ast_text)
+    ir, ast = _pair(staged, executor)
+    result = ast["projects"][sc.CASE]
+    assert result["seeded"]["resolved_seed_count"] == 1
+    assert result["checkpointable"]
+    with _indexed(staged, ast) as db:
+        rows = [json.loads(row[0]) for row in db.execute("select payload_json from entities")]
+    assert len(rows) == 1 and rows[0]["kind"] == kind
+    assert rows[0]["mangled_name"] == linkage
+    assert rows[0]["compile_unit_id"] == command["compile_unit_id"]
+    repeated = _pair(staged, executor)
+    assert len(executor.calls) == 3
+    assert all(output["projects"][sc.CASE]["checkpoint_reused"] for output in repeated)
+
+
+def test_cpp_constructor_abi_variants_are_not_joined_by_display_name(tmp_path):
+    staged = sc.stage(tmp_path, observations=[sc.observation("proj/src/util.cpp", 4)])
+    ir_text = _canned_ir([("_ZN1XC2Ev", "X", 3, (), False)])
+    ast_text = json.dumps({"kind": "CXXConstructorDecl", "name": "X", "mangledName": "_ZN1XC1Ev",
+                           "loc": {"file": "/scratch/source/src/util.cpp", "line": 3, "col": 1}})
+    _, ast = _pair(staged, CannedExecutor(staged, ir={"util": ir_text}, ast=ast_text))
+    result = ast["projects"][sc.CASE]
+    assert result["seeded"]["resolved_seed_count"] == 0
+    assert result["entity_count"] == 0 and result["checkpointable"] is False
+    assert any("ast_function_unavailable" in gap and "_ZN1XC2Ev" in gap for gap in result["gaps"])
+
+
+@pytest.mark.parametrize("has_second", [True, False], ids=["bounded-second", "missing-second"])
+def test_ast_detail_bound_is_reusable_but_true_callable_absence_is_not(tmp_path, monkeypatch, has_second):
+    from appsec_review.jobs.job_cpp_compiled_analysis import job
+    staged = sc.stage(tmp_path, observations=[
+        sc.observation("proj/src/util.cpp", 4), sc.observation("proj/src/util.cpp", 8)])
+    ir_text = _canned_ir([("first", "first", 3, (), False), ("second", "second", 7, (), False)])
+    functions = [("first", 3), ("second", 7)] if has_second else [("first", 3)]
+    ast_text = "\n".join(json.dumps({
+        "id": name, "kind": "FunctionDecl", "name": name, "mangledName": name,
+        "loc": {"file": "/scratch/source/src/util.cpp", "line": line, "col": 1},
+    }) for name, line in functions)
+    ir, _ = _run(staged, CannedExecutor(staged, ir={"util": ir_text}), "ir")
+    monkeypatch.setattr(job, "AST_NODE_LIMIT", 1)
+    executor = CannedExecutor(staged, ast=ast_text)
+    ast, _ = _run(staged, executor, "ast", ir=ir)
+    result = ast["projects"][sc.CASE]
+    assert result["seeded"]["resolved_seed_count"] == 1
+    assert result["seeded"]["neighborhood_function_count"] == 1
+    ledger = json.loads((staged.run_root / result["ledger"]["path"]).read_text())["seeded"]["seeds"]
+    unresolved = next(row for row in ledger if row["start_line"] == 8)
+    assert unresolved["reason"] == ("ast_detail_limit" if has_second else "producer_failed")
+    assert result["checkpointable"] is has_second
+    assert any("ast_truncated" in gap for gap in result["gaps"]) is has_second
+    repeated, _ = _run(staged, executor, "ast", ir=ir)
+    assert len(executor.calls) == (1 if has_second else 2)
+    assert bool(repeated["projects"][sc.CASE].get("checkpoint_reused")) is has_second
+    if has_second:
+        monkeypatch.setattr(job, "AST_NODE_LIMIT", 2)
+        expanded, _ = _run(staged, executor, "ast", ir=ir)
+        assert len(executor.calls) == 2
+        assert not expanded["projects"][sc.CASE].get("checkpoint_reused")
+        assert expanded["projects"][sc.CASE]["seeded"]["resolved_seed_count"] == 2
+
+
 def test_equal_source_ranges_do_not_arbitrarily_resolve_an_overload_seed(tmp_path):
     staged = sc.stage(tmp_path, observations=[sc.observation("proj/src/util.cpp", 12)])
     text = _canned_ir([("_Z1fd", "f", 11, (), False), ("_Z1fi", "f", 11, (), False)])

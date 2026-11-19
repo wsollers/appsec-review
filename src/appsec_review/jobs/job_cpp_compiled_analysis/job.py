@@ -35,8 +35,12 @@ SCHEMA = "appsec-review/cpp-compiled-analysis/2"
 PROJECT_TASKS = ("projects",)
 BRANCHES = ("compiled", "ast", "ir", "infer", "binary")
 AST_NODE_LIMIT = 20000
-BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/3", "ast": "clang-ast/4",
-                   "ir": "llvm-ir/3",
+AST_CALLABLE_KINDS = frozenset({"FunctionDecl", "CXXMethodDecl", "CXXConversionDecl",
+                               "CXXConstructorDecl", "CXXDestructorDecl"})
+AST_ENTITY_KINDS = AST_CALLABLE_KINDS | {"VarDecl", "RecordDecl", "CallExpr", "DeclRefExpr",
+                                        "FieldDecl", "ParmVarDecl", "TypedefDecl"}
+BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/4", "ast": "clang-ast/5",
+                   "ir": "llvm-ir/4",
                    "infer": "infer-cpp-adapter/2",
                    "binary": "elf-symbols/3"}
 
@@ -423,6 +427,25 @@ def normalize_compile_db(root: Path, mapping: Mapping[str, Any]) -> list[dict[st
                            "arguments": arguments, "directory": directory})).hexdigest()})
         result[-1]["compile_unit_id"] = _tu_identity(mapping, result[-1])
     return sorted(result, key=lambda item: (item["target_path"], item["command_sha256"]))
+
+
+def _restore_replay_commands(unit: UnitContext, case_id: str, catalog: Mapping[str, Any]) -> None:
+    """Recreate tool staging only from the accepted, hash-bound command artifact."""
+    identity = catalog["compile_database"]
+    path = unit.job.run_root / str(identity.get("path", ""))
+    if (path.is_symlink() or unit.job.run_root.resolve() not in path.resolve().parents
+            or not path.is_file() or path.stat().st_size > 64 * 1024 * 1024):
+        raise ValueError("accepted compile database is unavailable or unsafe")
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != identity.get("sha256"):
+        raise ValueError("accepted compile database identity changed")
+    commands = json.loads(data)
+    if not isinstance(commands, list) or len(commands) > 4096 or commands != catalog["compile_commands"]:
+        raise ValueError("accepted compile database command context changed")
+    destination = _case_root(unit, case_id) / "normalized-compile-commands.json"
+    # Historical catalogs can pin this same file. Verify their bytes, never rewrite their authority.
+    if destination.resolve() != path.resolve():
+        tool_input_json(destination, commands)
 
 
 _MISSING_HEADER = (
@@ -814,7 +837,8 @@ def _ast_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], exec
 
 def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
                       failures: dict[int, str], builder: IndexBuilder, shard: str,
-                      gaps: list[str], parsed_units: dict[int, set[str]] | None = None) -> int:
+                      gaps: list[str], parsed_units: dict[int, set[str]] | None = None,
+                      bounded_units: set[int] | None = None) -> int:
     root = _case_root(unit, case_id)
     count = 0
     seen_entities: set[str] = set()
@@ -843,7 +867,7 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
             location, location_gap = locations.resolve(node)
             if id(node) in excluded:
                 continue
-            if admitted and node.get("kind") in {"FunctionDecl", "CXXMethodDecl"}:
+            if admitted and node.get("kind") in AST_CALLABLE_KINDS:
                 linkage = node.get("mangledName")
                 if linkage and linkage not in admitted:
                     excluded.update(id(child) for child in _walk_ast(node))
@@ -851,8 +875,7 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
                 elif not linkage:
                     location_gaps.add("function linkage is absent; neighborhood membership is unresolved")
             kind = str(node.get("kind", ""))
-            if kind not in {"FunctionDecl", "CXXMethodDecl", "VarDecl", "RecordDecl", "CallExpr",
-                            "DeclRefExpr", "FieldDecl", "ParmVarDecl", "TypedefDecl"}:
+            if kind not in AST_ENTITY_KINDS:
                 continue
             if not command.get("ast_filters") and locations.last_file:
                 raw = locations.last_file
@@ -863,10 +886,14 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
                     continue
             if retained >= AST_NODE_LIMIT:
                 gaps.append(f"ast_truncated: {command['target_path']}: node detail cut at {AST_NODE_LIMIT}")
+                if bounded_units is not None:
+                    bounded_units.add(index)
                 break
             retained += 1
-            if parsed_units is not None and kind in {"FunctionDecl", "CXXMethodDecl"}:
-                parsed_units[index].add(str(node.get("mangledName") or node.get("name") or ""))
+            if parsed_units is not None and kind in AST_CALLABLE_KINDS:
+                linkage = node.get("mangledName")
+                if isinstance(linkage, str) and linkage:
+                    parsed_units[index].add(linkage)
             declared = _callee_decl(node)
             name = str(node.get("name") or (declared.get("name") if isinstance(declared, Mapping) else None) or kind)
             if location_gap:
@@ -1453,9 +1480,10 @@ def build_job(*, executor_factory=None) -> Job:
                                              "mapping": prepared[case_id]["artifact"]["sha256"],
                                              "accepted_compile": compiled["build_receipt"].get("native_compile_database"),
                                              "accepted_links": compiled["build_receipt"].get("link_database"),
-                                             "normalizer": "native-compile-link-normalizer/4"})
+                                             "normalizer": "native-compile-link-normalizer/5"})
             reused = _load_checkpoint(unit, case_id, "catalog", identity)
             if reused is not None:
+                _restore_replay_commands(unit, case_id, reused)
                 projects[case_id] = reused
                 continue
             root = _case_root(unit, case_id)
@@ -1485,6 +1513,12 @@ def build_job(*, executor_factory=None) -> Job:
             link_commands = normalize_link_commands(candidate_links, outputs)
             if len(link_commands) != len(candidate_links):
                 link_gaps.append("accepted link relationships could not all resolve to retained build artifacts")
+            expected_edges = {(row["output_path"], source) for row in candidate_links for source in row["input_paths"]}
+            retained_edges = {(row["output_path"], source) for row in link_commands for source in row["input_paths"]}
+            missing_edges = sorted(expected_edges - retained_edges)
+            if missing_edges:
+                link_gaps.append(f"{len(missing_edges)} accepted link relationship(s) unavailable: " +
+                                 "; ".join(f"{source} -> {output}" for output, source in missing_edges[:20]))
             output_artifact = _json_artifact(unit, root / "artifact-catalog.json", outputs, immutable=True)
             link_artifact = _json_artifact(unit, root / "normalized-link-commands.json", link_commands, immutable=True)
             result = {"project_key": case_id, "mapping": mapping, "compile_commands": commands,
@@ -1524,6 +1558,8 @@ def build_job(*, executor_factory=None) -> Job:
                     projects[case_id] = _finish_index(unit, builder, path, fingerprint, shard,
                                                       builder.name, name, [gap])
                     continue
+                if name in {"ast", "ir"}:
+                    _restore_replay_commands(unit, case_id, cataloged)
                 identity_values = {
                     "compile_database": cataloged["compile_database"]["sha256"],
                     "branch_identity": BRANCH_IDENTITY[name],
@@ -1531,6 +1567,8 @@ def build_job(*, executor_factory=None) -> Job:
                 }
                 if seeded_settings is not None:
                     identity_values["settings"] = asdict(seeded_settings)
+                if name == "ast":
+                    identity_values["node_limit"] = AST_NODE_LIMIT
                 if name != "infer":
                     identity_values.update({
                         "artifact_catalog": cataloged["artifact_catalog"]["sha256"],

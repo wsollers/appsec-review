@@ -674,6 +674,105 @@ def test_scope_rechecks_generated_build_bytes_and_accepted_command_context(tmp_p
         _scope(unit.job.run_root, "proj-app", catalog)
 
 
+@pytest.mark.parametrize("tamper_after_cache", [False, True], ids=["catalog-cache", "before-execution"])
+def test_native_replay_reconstructs_commands_from_the_accepted_immutable_catalog(tmp_path, tamper_after_cache):
+    import importlib.util
+    unit, handlers = _prepared_catalog_inputs(tmp_path)
+    original = handlers["catalog.projects"](unit)["projects"]["proj-app"]
+    immutable = unit.job.run_root / original["compile_database"]["path"]
+    accepted_bytes = immutable.read_bytes()
+    accepted = json.loads(accepted_bytes)
+    root = cpp_job._case_root(unit, "proj-app")
+    mutable = root / "normalized-compile-commands.json"
+
+    def tamper():
+        changed = json.loads(accepted_bytes)
+        changed[0]["arguments"].insert(1, "-DREVIEW_DIFFERENT_CODE=1")
+        mutable.write_text(json.dumps(changed))
+
+    tamper()
+    cached = handlers["catalog.projects"](unit)["projects"]["proj-app"]
+    assert cached["checkpoint_reused"]
+    if tamper_after_cache:
+        tamper()
+    unit._store["catalog.projects"] = {"projects": {"proj-app": cached}}
+    observed = []
+    spec = importlib.util.spec_from_file_location("native_replay_authority", ROOT / "containers/tools/native-cpp/native.py")
+    driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver)
+
+    class Replay:
+        def execute(self, request):
+            driver.ROOT = request.scratch_root
+            commands = driver.load_commands("ast")
+            observed.extend(commands)
+            destination = request.scratch_root / "analysis/ast"
+            destination.mkdir(parents=True, exist_ok=True)
+            for index in range(len(commands)):
+                atomic_json(destination / f"tu-{index:04d}.json", {"kind": "TranslationUnitDecl", "inner": []})
+            atomic_json(destination / "receipt.json", [
+                {"index": index, "source": row["file"], "exit_code": 0}
+                for index, row in enumerate(commands)])
+            return _exec_result(unit.job.run_root, request.scratch_root)
+
+    replay_handlers = {item.unit_id: item.handler for item in cpp_job.build_job(executor_factory=lambda _: Replay()).units}
+    result = replay_handlers["ast.projects"](unit)["projects"]["proj-app"]
+    assert result["terminal_status"] == "SUCCEEDED"
+    assert observed == accepted
+    assert json.loads(mutable.read_text()) == accepted
+    assert immutable.read_bytes() == accepted_bytes
+    assert cached["compile_commands"] == original["compile_commands"]
+
+
+def test_native_replay_rejects_changed_immutable_command_authority(tmp_path):
+    unit, handlers = _prepared_catalog_inputs(tmp_path)
+    catalog = handlers["catalog.projects"](unit)["projects"]["proj-app"]
+    immutable = unit.job.run_root / catalog["compile_database"]["path"]
+    changed = json.loads(immutable.read_text())
+    changed[0]["arguments"].insert(1, "-DREVIEW_DIFFERENT_CODE=1")
+    immutable.write_text(json.dumps(changed))
+    unit._store["catalog.projects"] = {"projects": {"proj-app": catalog}}
+    executions = []
+
+    def forbidden(_unit):
+        executions.append(True)
+        raise AssertionError("an invalid immutable command set must be rejected before native execution")
+
+    replay = {item.unit_id: item.handler for item in cpp_job.build_job(executor_factory=forbidden).units}
+    with pytest.raises(ValueError, match="accepted compile database.*changed"):
+        replay["ast.projects"](unit)
+    assert executions == []
+
+
+def test_partially_missing_link_inputs_keep_valid_edges_and_publish_the_gap(tmp_path):
+    import sqlite3
+    unit, handlers = _prepared_catalog_inputs(tmp_path)
+    receipt = unit._store["prepare.projects"]["projects"]["proj-app"]["build_receipt"]
+    links = unit.job.run_root / "data/language_build/partial-links.json"
+    atomic_json(links, [{"output_path": "build/app_bin",
+                        "input_paths": ["build/main.o", "build/missing.o"]}])
+    receipt["link_database"] = {**cpp_job._artifact(unit.job.run_root, links), "relationship_count": 1}
+    catalog = handlers["catalog.projects"](unit)["projects"]["proj-app"]
+    assert catalog["link_commands"][0]["input_paths"] == ["build/main.o"]
+    assert any("build/missing.o" in gap and "build/app_bin" in gap for gap in catalog["gaps"])
+    unit._store["catalog.projects"] = {"projects": {"proj-app": catalog}}
+    output = handlers["compiled.projects"](unit)
+    result = output["projects"]["proj-app"]
+    assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
+    with sqlite3.connect(unit.job.run_root / result["artifact"]["path"]) as db:
+        assert db.execute("select count(*) from relations where kind='LINKS_INTO'").fetchone()[0] == 1
+    upstream = unit.job.run_root / "partial-link-upstream.json"
+    write_manifest(upstream, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
+                   target_root=unit.job.target_root, indexes=[])
+    unit.job.input_manifest_path, unit.job.input_manifest_sha256 = upstream, file_sha256(upstream)
+    unit._store.update({f"{name}.projects": {"projects": {}} for name in cpp_job.BRANCHES})
+    unit._store["compiled.projects"] = output
+    published = handlers["acceptance.publish_handoff"](unit)
+    summary = json.loads((unit.job.run_root / published["artifact"]["path"]).read_text())
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any("build/missing.o" in gap for gap in summary["gaps"])
+
+
 def test_full_whole_program_pipeline_units_and_publish(tmp_path: Path) -> None:
     base = _make_unit(tmp_path, "plan.accepted_cpp_plan")
     _stage_language_build(base.job.run_root, base.job.target_root, base.job.source_fingerprint)

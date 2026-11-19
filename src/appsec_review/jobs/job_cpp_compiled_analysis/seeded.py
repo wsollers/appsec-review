@@ -40,7 +40,7 @@ from appsec_review.storage import canonical_json, tool_input_json
 from .clang_cfg import NO_BLOCK_LINES_GAP, SourceCfg, parse_cfgs
 from .llvm_ir import IrFunction
 
-SEEDED_IMPL = "cpp-seeded-compiled/4"
+SEEDED_IMPL = "cpp-seeded-compiled/5"
 MAX_IR_BYTES = 64 * 1024 * 1024
 MAX_CFG_BYTES = 16 * 1024 * 1024
 REPLAY = {"ir": "replay-ir.json", "ast": "replay-ast.json", "cfg": "replay-cfg.json"}
@@ -534,9 +534,12 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
     builder, path, fingerprint, shard = base._new_builder(
         unit, "analysis", case_id, "ast", artifacts, gaps, tool_identity, mapping["case_snapshot"])
     parsed_units: dict[int, set[str]] = {}
+    bounded_units: set[int] = set()
     count = 0 if tool_gap else base._add_ast_entities(
-        unit, case_id, {**cataloged, "compile_commands": subset}, failures, builder, shard, gaps, parsed_units)
+        unit, case_id, {**cataloged, "compile_commands": subset}, failures, builder, shard, gaps,
+        parsed_units, bounded_units)
     failed_rows = {selected[pos] for pos in failures}
+    bounded_rows = {selected[pos] for pos in bounded_units}
     resolved_rows = set(selected) if not tool_gap else set()
     # A seed is resolved for the AST when its function was dumped by a unit that replayed cleanly.
     functions: dict[tuple[str, int, int], list[str]] = {}
@@ -546,7 +549,9 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
                 "rows": []}
 
     def dumped_rows(name):
-        linkage = handoff.get("functions", {}).get(name, {}).get("linkage_name", name)
+        linkage = handoff.get("functions", {}).get(name, {}).get("linkage_name")
+        if not isinstance(linkage, str) or not linkage:
+            return set()
         return {selected[pos] for pos, linkages in parsed_units.items() if linkage in linkages}
 
     for seed in scope_seeds.seeds:
@@ -554,6 +559,9 @@ def ast_result(unit: UnitContext, case_id: str, cataloged: Mapping[str, Any], se
             rows = set(handoff["function_units"].get(name, ()))
             if rows & resolved_rows & dumped_rows(name) - failed_rows:
                 document["rows"].append([*seed.key, name])
+            elif rows & resolved_rows & bounded_rows - failed_rows:
+                reasons[seed.key] = "ast_detail_limit"
+                gaps.append(f"ast_function_bounded: {name} was not observed before the AST node-detail limit")
             else:
                 reasons[seed.key] = record.REASON_RUN_FAILED
                 if rows & resolved_rows - failed_rows:
