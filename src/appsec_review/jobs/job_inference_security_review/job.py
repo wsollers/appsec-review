@@ -412,7 +412,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings),
                                          collection=collection, cwe_reference=reference,
                                          slice_sources=AcceptedSliceSources(scope, core=core), behavior_core=core,
-                                         hunt_selection=hunt_plan.selection_from_document(plan_doc))
+                                         hunt_selection=hunt_plan.selection_from_document(plan_doc),
+                                         document_navigation=True)
             manifest_path = publish_packages(assembly, unit.unit_root / "assembly", run_root=unit.job.run_root)
             excluded = _excluded(scope)
             mine = [package for package in assembly.packages if package.lane == lane.value]

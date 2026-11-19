@@ -71,6 +71,24 @@ method documented. GraphQL root types and protobuf package/service/RPC context u
 canonical interface parser; implementation mapping for these non-HTTP operations is
 an explicit gap, not an invented HTTP route.
 
-Both ledger and drift remain artifact-only. Their delivery to inference is tracked by
-[T-5131](../TODO.md#t-5131-deliver-document-drift-through-the-actual-inference-retrieval-path);
-declared consumption alone is not evidence that inference received them.
+## Bounded inference delivery
+
+The ledger and drift payloads remain artifact-only. A separate `document_navigation` dataset
+projects provisional mapping summaries and drift records into `precomputed/document-issues`,
+queryable through `query_doc_drift` and `query_precomputed(query_set="document_context")`.
+The producer publishes the shard, checkpoint and
+`data/document-issues/<attempt-id>/retrieval-manifest.json` with exact hashes. The manifest
+inherits the analyzed input set; the existing attempt-manifest merger supplies it to inference
+after document analysis, without a new indexing/package-assembly dependency.
+
+`max_source_files` also bounds projected records; the existing fact contract bounds each
+record's evidence references to 32. Truncation is named, not clean coverage. Records retain
+source/document identities, source-shard/file hashes, original payload hashes and analyzed
+manifest identity. Consumers retain actual admitted-shard read receipts. A changed shard or
+manifest fails closed; ordinary declaration-context shards alone produce a missing-drift gap.
+
+Inference attaches matching source-unit records as bounded `control_context` without a control
+assessment or scanner lead. The view marks them `provisional_navigation_lead`; existing
+package/context bounds and hunt selection still apply, with explicit omission gaps. Unmapped
+records remain queryable but cannot invent an implementation unit. No new tool or raw-stream
+lookup is granted, and the original private ledger never enters confirmed findings or scores.

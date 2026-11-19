@@ -14,9 +14,9 @@ Target-owned design docs, STRIDE models, DFDs, OpenAPI, Postman collections, and
 reviewers discover routes, trust boundaries, and intended controls. They are untrusted target data.
 The system must preserve their exact source identity and distinguish a declaration or test from
 observed enforcement. The accepted collection, bounded context facts, document hunts, and first
-source-mapping candidate ledger are implemented. The general inference, finding, scoring and
-final-publication jobs also exist; what remains unimplemented here is admission of these
-document-hunt candidates into that review path. See the current
+source-mapping candidate ledger are implemented. A bounded provisional navigation projection now
+delivers drift and mapping records to the inference job's existing source-scoped package context.
+It does not turn the private ledger into adjudicated findings. See the current
 [document-analysis job](../operations/job_document_issue_analysis.md) and
 [review subsystem](review-inference-and-guidance.md).
 
@@ -32,7 +32,9 @@ flowchart LR
   P --> M[job_document_issue_analysis: private candidate ledger]
   C --> M
   M --> DRI[Attempt-local API drift: provisional leads and coverage gaps]
-  M -. planned .-> R[job_inference_security_review]
+  M --> N[Late document_navigation shard and pinned manifest]
+  DRI --> N
+  N --> R[job_inference_security_review: bounded provisional package context]
   R --> J[adjudicated finding packages]
   J --> E[gate-certified final publication]
 ```
@@ -126,12 +128,29 @@ of effective authentication. OpenAPI anonymous alternatives, method distinctions
 same-line registration multiplicity are preserved. GraphQL root operation and protobuf
 service context remain non-HTTP declarations with explicit unsupported-mapping gaps.
 See [drift operations and bounds](../operations/document-issue-analysis.md#api-declaration-drift).
-This artifact-only output does not yet reach inference through a payload reader (T-5131).
+The original ledger and drift payloads stay artifact-only. The producer additionally publishes
+the `document_navigation` dataset: a `precomputed/document-issues` shard under the existing
+`document_context` query set, plus a manifest retaining the original input lineage. The runner's
+existing attempt-manifest merger admits this late input directly into inference; indexing and
+the earlier package-assembly job do not depend on the document producer, so no cycle is added.
+
+The projection keeps original payload hashes, input-manifest identity and exact source/document
+identities and shard/file hashes. Its record bound is `max_source_files`; per-record evidence
+references use the existing 32-reference fact bound. Omission, unmapped-source and upstream
+coverage gaps remain explicit. `query_doc_drift` reads the real drift facts; ordinary
+`document_context` alone is not drift coverage. Raw payload paths remain hidden by the normal
+retrieval sanitizer; there is no raw-stream lookup.
 
 ## Inference and findings design
 
-The existing inference job consumes its own accepted-scope lead/hunt packages. A future
-document-candidate integration may nominate a security hypothesis from a document-context fact, but
+The inference job consumes its own accepted-scope lead/hunt packages. It attaches the late
+document records to matching accepted source units through the existing bounded `control_context`
+role, **without** an OWASP assessment, scanner severity, or finding-lead admission. The package view
+shows `provisional_navigation_lead` summaries and retains exact retrievable fact identities.
+Unselected units, missing source mappings and context/byte truncation are named gaps rather
+than invented coverage. Actual shard opens retain the admitted producer handoff and read receipts.
+
+A reviewer may nominate a security hypothesis from this context, but
 the hypothesis must identify an affected source construct or accepted tool observation and state
 which behavior needs verification. Document text is evidence of *intent*; OpenAPI is evidence of
 a *declared* interface. Neither is direct proof of implementation behavior. A Postman assertion
@@ -152,14 +171,11 @@ context, severity policy, and remediation work without reinterpreting the adjudi
 
 1. Extend literal route registration mapping to framework mounts, dynamic routes, handler bodies,
    guards, and source/AST facts. A registration match alone is only a candidate link.
-2. Link document hunts to exact source components and attach relevant document-context identities
-   to scanner-lead packages when an implementation route mapping resolves. Keep ambiguous or
-   missing mappings as gaps and retrieval grants scoped to those identities.
-3. Connect document candidates to the existing `job_inference_security_review` and its independent
-   cells, adjudication, scores and final publication without bypassing their evidence rules.
-   The document issue ledger remains private pre-adjudication material; no current job promotes
-   it to confirmed findings. General finding/score publication is already implemented, not an
-   open prerequisite for this document-specific integration.
+2. The literal-mapping and drift navigation delivery is implemented; broader semantic mapping
+   remains outside it. Ambiguous or missing implementation mappings cannot certify behavior.
+3. Independent review quality and final finding usefulness still require an explicitly requested
+   review. Offline producer/projection/consumer units establish delivery and custody, not live
+   adjudication results. The private document ledger is never directly promoted to findings.
 4. Add Northwind v1/v2 comparison tests: verify that the same document intent yields different
    decisions only when implementation evidence differs, with explicit false-positive and
    missing-coverage accounting.

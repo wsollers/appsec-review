@@ -949,7 +949,9 @@ def test_sixteen_units_execute_end_to_end_via_unit_executor_with_restored_shard(
     assert outputs["links.cross_domain"]["terminal_status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
     for name in PRODUCT_SETS:
         assert outputs[f"precompute.{name}"]["query_set"] == name
-    assert outputs["precompute.scanner_correlation"]["status"] == "complete"
+    assert outputs["precompute.scanner_correlation"]["status"] == "partial"
+    assert any("scanner dispositions are unknown" in gap
+               for gap in outputs["precompute.scanner_correlation"]["gaps"])
     assert outputs["fts.image_validation"]["terminal_status"] == "SUCCEEDED"
     assert fts_exec.calls == ["probe", "build", "verify"]
     assert outputs["audit.inventory"]["audit_status"] == "PASSED"

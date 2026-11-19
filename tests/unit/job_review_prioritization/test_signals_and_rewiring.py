@@ -579,18 +579,20 @@ def test_end_to_end_engineering_signal_rewiring_and_sast_silence_hunt(tmp_path: 
     })
 
     # 7. Seed job_evidence_collection covering ONLY web/src/server.js so other complex surface units are SAST-silent!
-    ev_corr = _artifact_ref(run_root, run_root / "fixture" / "corroborated.json", {
+    ev_corr = _artifact_ref(run_root, run_root / "data" / "fixture" / "corroborated.json", {
         "schema": "appsec-review/corroborated-sast-evidence/1",
+        "target_fingerprint": snapshot,
         "clusters": [
-            {"path": "web/src/server.js", "start_line": 1, "end_line": 120, "cwe_family": "CWE-89",
+            {"location": {"path": "web/src/server.js", "start_line": 1, "end_line": 120}, "cwe_family": "CWE-89",
              "corroborating_scanners": ["semgrep", "opengrep"], "corroboration_count": 2, "scanner_rule_ids": ["js.sqli"]},
         ],
     })
     ev_mf = run_root / "data" / "indices" / "manifests" / "evidence.json"
     write_manifest(ev_mf, run_id=run_root.name, target_snapshot=snapshot, target_root=target, indexes=[])
     ev_doc = _artifact_ref(run_root, run_root / "fixture" / "evidence.json", {
-        "schema": "appsec-review/evidence-collection/1",
-        "tools": {"semgrep": {"terminal_status": "SUCCEEDED", "gaps": []}},
+        "schema": "appsec-review/evidence-collection-handoff/1", "target_fingerprint": snapshot,
+        "dispositions": [{"tool_id": "tool-semgrep", "terminal_status": "SUCCEEDED"}],
+        "gaps": [], "corroborated_sast_evidence": ev_corr,
     })
     handoffs["job_evidence_collection"] = _publish_handoff(run_root, "job_evidence_collection", {
         "evidence_publication.publish_handoff": {

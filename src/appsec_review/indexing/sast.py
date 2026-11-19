@@ -10,6 +10,8 @@ make a lead disappear. Scanner severity orders attention only; it is never adjud
 from __future__ import annotations
 
 from collections import defaultdict
+import json
+from pathlib import Path
 from typing import Any, Mapping
 
 from appsec_review.retrieval.observations import (
@@ -43,6 +45,34 @@ _SUPPRESSION_TOOLS = {
 # Scanners whose suppression directives the accepted syntax facts record; any other scanner's suppression state
 # is unknown (for example shellcheck's ``# shellcheck disable=`` is not a tracked directive).
 SUPPRESSION_TRACKED_SCANNERS = frozenset().union(*_SUPPRESSION_TOOLS.values())
+
+
+def read_scanner_output(run_root: Path, handoff: Mapping[str, Any], output_kind: str,
+                        reference: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Read only a domain artifact retained by the exact accepted scanner handoff."""
+    from appsec_review.runtime.inputs import observe_output
+    from appsec_review.storage.shared import verify_reference
+
+    if not any(item["path"] == reference.get("path") and item["sha256"] == reference.get("sha256")
+               for item in handoff["artifacts"]):
+        raise ValueError("scanner domain artifact is not bound to its accepted handoff")
+    observe_output(run_root, "job_evidence_collection", output_kind, reference)
+    document = json.loads(verify_reference(run_root, reference).read_bytes())
+    if document.get("target_fingerprint") != handoff["target_snapshot"]:
+        raise ValueError("scanner domain artifact target identity mismatch")
+    return document
+
+
+def scanner_handoff_payload(run_root: Path, handoff: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    outputs = handoff.get("outputs") or {}
+    output = outputs.get("evidence_publication.publish_handoff") or outputs.get("publish_evidence.publish_handoff") or {}
+    reference = output.get("artifact")
+    if not isinstance(reference, Mapping):
+        return None
+    document = read_scanner_output(run_root, handoff, "static_tool_evidence", reference)
+    if document.get("schema") != "appsec-review/evidence-collection-handoff/1":
+        raise ValueError("scanner domain handoff schema mismatch")
+    return document
 
 
 class LeadAuditError(ValueError):
@@ -86,8 +116,10 @@ def _match_suppressions(lead: Mapping[str, Any], by_path: Mapping[str, list[Mapp
 
 def build_scanner_correlation(shards: AcceptedShards, syntax: Mapping[str, Any] | None,
                               dispositions: list[Mapping[str, Any]], settings: Mapping[str, Any],
-                              rule_version: str = RULE_VERSION) -> Product:
+                              rule_version: str = RULE_VERSION, *, scanner_gaps: tuple[str, ...] = ()) -> Product:
     product = Product("scanner_correlation", rule_version, complete_or_fail=True)
+    for gap in scanner_gaps:
+        product.partial(gap)
     observation_shards = shards.select("observations")
     product.use(observation_shards)
     priority_shards = shards.select("priority")

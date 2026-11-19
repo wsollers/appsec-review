@@ -20,12 +20,14 @@ from appsec_review.document_issues import (
     verify_document_issue_ledger,
 )
 from appsec_review.indexing.store import accepted_handoff
+from appsec_review.indexing.derive import Derived, fact, publish_derived
 from appsec_review.observability.spans import count_work
-from appsec_review.retrieval import RetrievalCore
+from appsec_review.retrieval import EntityKind, LogicalIdentity, RetrievalCore
 from appsec_review.retrieval.core import resolve_context_manifest
+from appsec_review.retrieval.index import IndexIdentity, load_verified_manifest, write_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import canonical_json, file_sha256
-from appsec_review.storage.shared import SharedArtifacts, immutable_bytes, put_bytes, verify_reference
+from appsec_review.storage.shared import SharedArtifacts, immutable_bytes, put_bytes, reference, verify_reference
 
 from .datasets import CONTRACT, DATASETS
 
@@ -33,6 +35,96 @@ from .datasets import CONTRACT, DATASETS
 JOB_ID = "job_document_issue_analysis"
 UNADJUDICATED_GAP = ("document issue candidates are not adjudicated: finding publication is not "
                      "implemented, so an empty ledger says nothing about target security")
+PROJECTION_RULE = "appsec-review/document-navigation/1"
+
+
+def _publish_projection(unit: UnitContext, core: RetrievalCore, ledger: Mapping[str, Any],
+                        drift: Mapping[str, Any], artifact: Mapping[str, Any],
+                        drift_artifact: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Project bounded navigation records, never claims or adjudicated findings, after package assembly."""
+    derived = Derived()
+    derived.gap(UNADJUDICATED_GAP)
+    for gap in drift["gaps"]:
+        derived.gap(gap)
+    rows = [("drift", item["drift_id"], item) for item in drift["mismatches"]]
+    rows.extend(("mapping", item["candidate_id"], item) for item in ledger["candidates"])
+    bound = unit.job.config.settings["max_source_files"]
+    ordered = sorted(rows, key=lambda row: (row[0], row[1]))
+    if len(ordered) > bound:
+        derived.gap(f"document navigation projection truncated: {len(ordered) - bound} records beyond {bound}")
+    resolved: dict[str, Mapping[str, Any]] = {}
+    shard_hashes = {(name, item.get("shard_id", "default")): item["sha256"]
+                    for name, items in core.indexes.items() for item in items}
+
+    def evidence(identity: str) -> Mapping[str, Any]:
+        if identity not in resolved:
+            found = core.find(identity=identity, indexes=("source", "documents"), limit=2)
+            if len(found["results"]) != 1 or found["truncated"]:
+                raise ValueError("document navigation source is not uniquely bound to accepted catalog evidence")
+            row = found["results"][0]
+            resolved[identity] = {"identity": identity, "index": row["index"],
+                                  "shard_id": row["shard_id"],
+                                  "shard_sha256": shard_hashes[(row["index"], row["shard_id"])],
+                                  "location": row.get("location")}
+        return resolved[identity]
+
+    for kind, key, item in ordered[:bound]:
+        gaps = [UNADJUDICATED_GAP]
+        if kind == "drift":
+            ids = [value for value in (item["handler_source_id"], item["spec_source_id"]) if value]
+            result = dict(item)
+            path = item["handler_path"] or item["spec_path"]
+            payload = drift_artifact
+            summary = item["summary"]
+        else:
+            ids = sorted({entry["entity_id"] for entry in item["implementation_evidence"]})
+            ids.extend(sorted({entry["entity_id"] for entry in item["document_evidence"]
+                               if LogicalIdentity.parse(entry["entity_id"]).kind is EntityKind.DOCUMENT_RECORD}))
+            result = {name: item[name] for name in ("candidate_id", "package_id", "subject", "mapping_status")}
+            result["state"] = "insufficient_evidence"
+            result["document_evidence"] = item["document_evidence"][:32]
+            if len(item["document_evidence"]) > 32:
+                gaps.append(f"document evidence references truncated: {len(item['document_evidence']) - 32} omitted")
+            path = next((entry["path"] for entry in item["implementation_evidence"]), None)
+            payload = artifact
+            summary = "Verify document-to-implementation mapping; no behavior conclusion"
+            gaps.extend(gap["reason"] for gap in item["coverage_gaps"])
+        if len(ids) > 32:
+            gaps.append(f"document navigation source references truncated: {len(ids) - 32} omitted")
+        sources = [evidence(identity) for identity in ids[:32]]
+        result.update(authority="provisional_navigation_lead", source_evidence=sources,
+                      payload_artifact=dict(payload), accepted_manifest_sha256=core.manifest_sha256)
+        if path is None:
+            derived.gap(f"document mapping {key}: no implementation path; not admitted to a source hunt")
+        derived.entities.append(fact(
+            core.manifest["target_snapshot"], "document_context", PROJECTION_RULE,
+            {"kind": kind, "id": key}, name=f"document {kind}: {summary}", text=summary,
+            result=result, basis="provisional document navigation only; independent adjudication required",
+            upstream=sources, subject_identity=ids[0] if ids else None, subject_path=path,
+            status="partial", gaps=gaps, fact_type=f"document_{kind}"))
+    derived.coverage.append(("document_navigation", "partial", "; ".join(derived.gaps[:20])[:1000]))
+    published = publish_derived(
+        unit.job.run_root, index="precomputed", shard_id="document-issues", job_id=JOB_ID,
+        unit_id=unit.unit_id, rule="document_navigation", rule_version=PROJECTION_RULE,
+        snapshot=unit.job.source_fingerprint,
+        inputs={"ledger": dict(artifact), "drift": dict(drift_artifact),
+                "manifest_sha256": core.manifest_sha256, "max_records": bound},
+        build=lambda: derived, producer={"query_set": "document_context", "authority": "provisional"})
+    manifest_path, manifest_sha = resolve_context_manifest(unit.job)
+    path = unit.job.run_root / "data/document-issues" / unit.job.attempt_id / "retrieval-manifest.json"
+    identities = [IndexIdentity(**item) for item in core.manifest["indexes"]
+                  if item.get("producer", {}).get("job") != JOB_ID]
+    identities.append(IndexIdentity(**published["index_identity"]))
+    write_manifest(path, run_id=core.run_id, target_snapshot=core.manifest["target_snapshot"],
+                   target_root=core.target_root, indexes=identities,
+                   upstream_manifests=({"path": manifest_path.relative_to(core.run_root).as_posix(),
+                                        "sha256": manifest_sha},))
+    return {"index_identity": published["index_identity"],
+            "index_manifest": {"path": path.relative_to(core.run_root).as_posix(), "sha256": file_sha256(path)},
+            "shard_artifact": reference(core.run_root, core.run_root / published["index_identity"]["relative_path"]),
+            "checkpoint": reference(core.run_root, core.run_root / "data/indexing/checkpoints/precomputed/document-issues"
+                                    / f"{published['fingerprint']}.json"),
+            "gaps": published["gaps"]}
 
 
 def _schema_path() -> Path:
@@ -70,6 +162,11 @@ def _validate_output(unit: UnitContext, result: Mapping[str, Any] | None) -> Non
         if unit.job.run_root.resolve() not in drift_path.parents or file_sha256(drift_path) != result["drift_artifact"]["sha256"]:
             raise ValueError("document drift report receipt failed verification")
         verify_document_drift_issues(core, drift_path)
+    if "index_manifest" in result:
+        manifest = result["index_manifest"]
+        document, _ = load_verified_manifest(unit.job.run_root, unit.job.run_root / manifest["path"], manifest["sha256"])
+        if not any(canonical_json(result["index_identity"]) == canonical_json(item) for item in document["indexes"]):
+            raise ValueError("document projection shard is not bound to its manifest")
 
 
 def build_job() -> Job:
@@ -139,6 +236,7 @@ def build_job() -> Job:
             f"data/document-issues/{unit.job.attempt_id}/drift-issues.json",
             canonical_json(drift_report),
         )
+        projection = _publish_projection(unit, core, ledger, drift_report, artifact, drift_artifact)
 
         unit.job.events.write("DOCUMENT_ISSUES_PUBLISHED", **ledger["counts"])
         unit.job.events.write(
@@ -152,7 +250,9 @@ def build_job() -> Job:
             "drift_schema": DRIFT_SCHEMA,
             "artifact": artifact,
             "drift_artifact": drift_artifact,
-            "artifacts": [artifact, drift_artifact],
+            "artifacts": [artifact, drift_artifact, projection["shard_artifact"], projection["checkpoint"]],
+            "index_identity": projection["index_identity"],
+            "index_manifest": projection["index_manifest"],
             "shared_receipt": receipt,
             "reused": hit is not None,
             "counts": ledger["counts"],
@@ -166,6 +266,7 @@ def build_job() -> Job:
                 UNADJUDICATED_GAP,
                 *(gap["gap_id"] for candidate in ledger["candidates"] for gap in candidate["coverage_gaps"]),
                 *drift_report["gaps"],
+                *projection["gaps"][1:],
             ],
             "terminal_status": "COMPLETED_WITH_GAPS",
         }

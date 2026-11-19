@@ -350,7 +350,9 @@ def test_analyze_handler_computes_and_reuses_private_candidate_ledger(
     assert out1["gaps"][0] == UNADJUDICATED_GAP
     assert len(out1["gaps"]) > 1
     assert out1["counts"] == {"candidates": 2, "supported": 0, "unmapped": 1, "ambiguous": 0}
-    assert out1["artifacts"] == [out1["artifact"], out1["drift_artifact"]]
+    assert out1["artifacts"][:2] == [out1["artifact"], out1["drift_artifact"]]
+    assert out1["artifacts"][2]["sha256"] == out1["index_identity"]["sha256"]
+    assert all(file_sha256(run_root / item["path"]) == item["sha256"] for item in out1["artifacts"])
     drift1 = json.loads((run_root / out1["drift_artifact"]["path"]).read_text())
     assert out1["drift_counts"] == {"specs_parsed": 1, "handlers_scanned": 1, "mismatches": 1}
     assert drift1["mismatches"][0]["drift_kind"] == "missing_auth_middleware"

@@ -423,13 +423,17 @@ def build_job(*, providers: Providers = registry_providers,
                 if isinstance(syntax_reference, Mapping):
                     syntax = _read(run_root, syntax_reference)
                 evidence = accepted_handoff(run_root, "job_evidence_collection")
-                dispositions = list(((evidence.handoff.get("outputs", {}).get("evidence_publication.assemble_manifest")
-                                      or {}).get("dispositions") or []) if evidence else [])
+                from appsec_review.indexing.sast import scanner_handoff_payload
+                scanner = scanner_handoff_payload(run_root, evidence.handoff) if evidence else None
+                dispositions = list((scanner or {}).get("dispositions") or [])
+                scanner_gaps = tuple(scanner.get("gaps") or ()) if scanner is not None else (
+                    "accepted scanner domain handoff unavailable; scanner dispositions are unknown",)
                 inputs.update(sast_shards=ShardSet.identities([*view.select("observations"), *view.select("priority")]),
                               syntax_sha256=(syntax_reference or {}).get("sha256"), dispositions=digest(dispositions),
+                              scanner_gaps=scanner_gaps,
                               menu_partition_size=int(settings["menu_partition_size"]))
-                build = lambda: to_derived(build_scanner_correlation(view, syntax, dispositions, settings, version),
-                                           snapshot, max_facts)
+                build = lambda: to_derived(build_scanner_correlation(
+                    view, syntax, dispositions, settings, version, scanner_gaps=scanner_gaps), snapshot, max_facts)
             elif query_set == "history_context":
                 inputs["metric_shards"] = ShardSet.identities([*view.select("history"), *view.select("priority")])
 

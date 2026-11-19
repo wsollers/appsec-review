@@ -645,23 +645,29 @@ def _collect_sast_spans(
             else "publish_evidence.publish_handoff"
         )
         out = outputs.get(mf_key_name) or {}
-        corr = out.get("corroborated_sast_evidence") or out.get("corroborated_artifact")
+        from appsec_review.indexing.sast import read_scanner_output, scanner_handoff_payload
+        document = scanner_handoff_payload(run_root, handoff)
+        corr = (document or {}).get("corroborated_sast_evidence")
         if isinstance(corr, Mapping):
-            cdoc = read_json(run_root, corr)
-            if cdoc.get("schema") == "appsec-review/corroborated-sast-evidence/1":
-                for cl in cdoc.get("clusters", ()) or ():
-                    if isinstance(cl, Mapping):
-                        p = _norm_path(cl.get("path"))
-                        s = cl.get("start_line")
-                        e = cl.get("end_line") or s
-                        if p and isinstance(s, int) and s >= 1:
-                            spans[p].add((s, max(s, int(e) if isinstance(e, int) else s)))
+            cdoc = read_scanner_output(run_root, handoff, "corroborated_sast_evidence", corr)
+            if cdoc.get("schema") != "appsec-review/corroborated-sast-evidence/1":
+                raise ValueError("scanner corroboration schema mismatch")
+            for cl in cdoc.get("clusters", ()) or ():
+                loc = cl.get("location") if isinstance(cl, Mapping) else None
+                if isinstance(loc, Mapping):
+                    p = _norm_path(loc.get("path"))
+                    s = loc.get("start_line")
+                    e = loc.get("end_line") or s
+                    if p and isinstance(s, int) and s >= 1:
+                        spans[p].add((s, max(s, int(e) if isinstance(e, int) else s)))
         if isinstance(out.get("index_manifest"), Mapping):
-            for _shard, entity in producer_entities(
-                run_root, out["index_manifest"],
-                job="job_evidence_collection",
-                kind=EntityKind.TOOL_OBSERVATION.value,
-            ):
+            from appsec_review.indexing.store import ShardSet
+            from appsec_review.retrieval.index import load_verified_manifest
+            manifest = out["index_manifest"]
+            document, _ = load_verified_manifest(run_root, run_root / manifest["path"], manifest["sha256"])
+            store = ShardSet(run_root, document["indexes"])
+            for entity in store.entities(store.select(index="observations", job="job_evidence_collection"),
+                                         kinds=(EntityKind.TOOL_OBSERVATION.value,)):
                 loc = entity.get("location")
                 if isinstance(loc, Mapping):
                     p = _norm_path(loc.get("path"))

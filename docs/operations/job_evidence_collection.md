@@ -68,6 +68,21 @@ Final `not_applicable_inputs` sums complete per-tool counts and reason counters 
 at most 200 detail items. Any upstream truncation remains visible; bounded samples never replace
 the totals or become evidence of complete coverage.
 
+## Canonical consumer delivery
+
+The runner's closed control projection deliberately omits domain fields such as corroboration,
+telemetry and scanner dispositions. Prioritization and review-data indexing follow the accepted
+`evidence_publication.publish_handoff` artifact instead. Its retained domain document points to
+the hash-pinned corroboration payload, whose source spans are under `cluster.location`.
+Both domain reads record `observe_output` receipts against the claim's admitted handoff; changed,
+foreign-target or unbound artifacts fail closed.
+
+Prioritization preserves ordinary observation-shard fallback when corroboration is absent,
+including actual shard-read receipts. Scanner correlation uses domain dispositions and coverage
+gaps even when an observation shard itself says complete. A missing domain handoff names unknown
+scanner dispositions rather than claiming complete coverage. This delivery does not widen
+`UNIT_OUTPUT_KEYS`, expose protected raw streams, or turn corroboration into a confirmed finding.
+
 <!-- generated:begin job=job_evidence_collection -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

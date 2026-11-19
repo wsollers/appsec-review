@@ -1,9 +1,16 @@
 """Run-owned document candidate ledger; no unreviewed claim is indexed as a finding."""
 
 from appsec_review.runtime.datasets import EvidenceAuthority
-from appsec_review.runtime.datasets import artifact_only
+from appsec_review.runtime.datasets import artifact_only, indexed
 
 DATASETS = (
+    indexed("document_navigation", "analysis", "documents", "appsec-review/retrieval-index/2",
+            "Bounded provisional drift and mapping navigation; never adjudicated findings.",
+            indexes=("precomputed",), prefixes=("document-issues",),
+            artifacts=("data/document-issues/*/retrieval-manifest.json",
+                       "data/indexing/checkpoints/precomputed/document-issues/*.json"),
+            route="query_doc_drift; query_precomputed query_set=document_context",
+            authority=EvidenceAuthority.PROVISIONAL),
     artifact_only("document_issue_ledger", "analysis", "documents",
                   "appsec-review/document-issue-ledger/1",
                   "Verified document hunts, source mappings, candidates, gaps, and supported findings.",

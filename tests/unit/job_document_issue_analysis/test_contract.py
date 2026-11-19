@@ -43,9 +43,10 @@ def test_job_contract_datasets_and_registry_parity() -> None:
     assert _schema_path().is_file()
     assert "not adjudicated" in UNADJUDICATED_GAP
 
-    assert len(DATASETS) == 2
-    assert {item.output_kind for item in DATASETS} == {"document_issue_ledger", "document_drift_issues"}
-    ds = DATASETS[0]
+    assert len(DATASETS) == 3
+    assert {item.output_kind for item in DATASETS} == {
+        "document_issue_ledger", "document_drift_issues", "document_navigation"}
+    ds = next(item for item in DATASETS if item.output_kind == "document_issue_ledger")
     assert ds.output_kind == "document_issue_ledger"
     assert ds.step == "analysis"
     assert ds.family == "documents"
@@ -55,6 +56,10 @@ def test_job_contract_datasets_and_registry_parity() -> None:
         "data/document-issues/*/ledger.json",
         "data/jobs/job_document_issue_analysis/attempts/*/shared/document-issues/*.json",
     )
+    navigation = next(item for item in DATASETS if item.output_kind == "document_navigation")
+    assert navigation.disposition == "indexed"
+    assert navigation.authority is EvidenceAuthority.PROVISIONAL
+    assert navigation.shard_prefixes == ("document-issues",)
 
     CONTRACT.validate(JOB_ID)
     assert CONTRACT.dispatch is DispatchClass.REVIEW_GRAPH

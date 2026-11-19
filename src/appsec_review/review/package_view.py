@@ -526,8 +526,21 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
         ref, role = entry["id"], entry["role"]
         if ref in neighborhood_refs or ref in lead_refs:
             continue
+        navigation = {}
+        if role == "control_context" and entry["kind"] == "precomputed_fact" and not entry.get("control_assessment"):
+            found = core.find(identity=ref, indexes=("precomputed",), limit=1)["results"]
+            payload = found[0]["payload"] if found else {}
+            result = payload.get("result") or {}
+            if payload.get("fact_type") in {"document_drift", "document_mapping"}:
+                if result.get("authority") != "provisional_navigation_lead":
+                    raise ValueError("document package context lost its provisional authority")
+                navigation = {"document_navigation": {
+                    key: result[key] for key in ("authority", "drift_kind", "mapping_status", "subject",
+                                                "summary", "method", "route", "handler_path", "handler_line",
+                                                "spec_path") if key in result}}
         if unit_reference is not None:
             unit_rows.append({"ref": ref, "role": role, "kind": entry["kind"],
+                              **navigation,
                               **({"control_assessment": entry["control_assessment"]}
                                  if entry.get("control_assessment") is not None else {})})
         elif entry["kind"] == "tag_assignment":
@@ -536,6 +549,7 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
             memory.append({"ref": ref, "role": role, "kind": entry["kind"]})
         else:
             other.append({"ref": ref, "role": role, "kind": entry["kind"],
+                          **navigation,
                           **({"control_assessment": entry["control_assessment"]}
                              if entry.get("control_assessment") is not None else {})})
 

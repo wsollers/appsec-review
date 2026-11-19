@@ -1917,8 +1917,9 @@ class RetrievalCore:
                 if str(s.get("producer", {}).get("job", "")) == "job_document_issue_analysis"
                 or str(s.get("shard_id", "")).startswith("document")
             ]
-            if not doc_shards and not obs_shards:
-                gaps.append("document drift shards (document_context / document_issue_analysis) are unavailable")
+            if not any(s.get("producer", {}).get("job") == "job_document_issue_analysis"
+                       for s in doc_shards) and not obs_shards:
+                gaps.append("accepted document drift projection is unavailable; document_context alone is not drift coverage")
             for shard in doc_shards:
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
@@ -1929,7 +1930,9 @@ class RetrievalCore:
                     ):
                         payload = json.loads(row["payload_json"])
                         res = payload.get("result") if isinstance(payload.get("result"), Mapping) else {}
-                        if subject is not None and payload.get("subject_identity") != subject and row["identity"] != subject:
+                        subjects = {row["identity"], payload.get("subject_identity"),
+                                    res.get("handler_source_id"), res.get("spec_source_id")}
+                        if subject is not None and subject not in subjects:
                             continue
                         row_path = row["path"] or payload.get("subject_path")
                         if norm_path is not None and row_path != norm_path:

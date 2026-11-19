@@ -1515,6 +1515,8 @@ class _Assembler:
         # Collation facets (T-5008) by subject logical id, path and component id: tag, basis, ids.
         self.facet_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self.control_context: dict[str, list[ContextEntry]] = defaultdict(list)
+        self.document_context: dict[str, list[ContextEntry]] = defaultdict(list)
+        self.document_gaps: list[ScopeGap] = []
         from appsec_review.indexing.products import load_control_assessment
         control_cache: dict[str, Any] = {}
         for shard in scope.producer("control_evidence").shards:
@@ -1548,6 +1550,46 @@ class _Assembler:
                             "assignment_id": str(payload.get("assignment_id") or row["identity"]),
                             "subject": str(subject.get("logical_id") or ""),
                             "subject_kind": str(subject.get("kind") or "")})
+
+    def load_document_navigation(self) -> None:
+        """Late provisional context shares the existing bounded context lane, not scanner admission."""
+        shards = [shard for shard in self.scope.shards
+                  if shard["name"] == "precomputed"
+                  and shard.get("producer", {}).get("job") == "job_document_issue_analysis"]
+        if not shards:
+            self.document_gaps.append(ScopeGap(
+                "job_document_issue_analysis", "document_navigation", "missing",
+                "accepted document navigation is unavailable; document review coverage is unknown"))
+        for shard in shards:
+            for coverage in self.scope.store.coverage((shard,)):
+                if coverage["status"] != "complete":
+                    self.document_gaps.append(ScopeGap(
+                        "job_document_issue_analysis", "document_navigation", "partial",
+                        coverage["gap"] or "document navigation remains provisional"))
+            for row in self.scope.store.entities((shard,), kinds=("precomputed_fact",)):
+                payload = row["payload"]
+                result = payload.get("result") or {}
+                if (payload.get("fact_type") not in {"document_drift", "document_mapping"}
+                        or result.get("authority") != "provisional_navigation_lead"):
+                    raise IntegrityError("document navigation projection is not provisional")
+                paths = {payload.get("subject_path")}
+                if payload["fact_type"] == "document_mapping":
+                    paths.update(source.get("location", {}).get("path")
+                                 for source in result.get("source_evidence", ())
+                                 if source.get("index") == "source" and source.get("location"))
+                paths = {path for path in paths if path and self.scope.source_for(path) is not None}
+                if not paths:
+                    self.document_gaps.append(ScopeGap(
+                        "job_document_issue_analysis", row["identity"], "unavailable",
+                        "document navigation has no accepted source unit; no implementation claim is admitted"))
+                    continue
+                for path in sorted(paths):
+                    self.document_context[path].append(context_entry(
+                        row["identity"], "control_context", self.scope.shard_sha256(shard)))
+        self.extra_gaps.extend(self.document_gaps)
+
+    def document_entries(self, paths: Iterable[str]) -> list[ContextEntry]:
+        return [entry for path in sorted(set(paths)) for entry in self.document_context.get(path, ())]
 
     def unit_facets(self, component_id: str, source_ids: Iterable[str], paths: Iterable[str]) -> dict[str, Any]:
         """``unit-facets/1``: the unit's facet tags (union over its files and component) and target classes.
@@ -1983,6 +2025,7 @@ class _Assembler:
         paths = tuple(dict.fromkeys(member.path for member in leads if member.path))
         context.extend(self.scoped_tags(component_id, sources, paths))
         context.extend(self.control_context.get(component_id, ()))
+        context.extend(self.document_entries(paths))
         for member in leads:
             if member.duplicate_of:
                 context.append(context_entry(member.duplicate_of, "duplicate_of"))
@@ -2130,8 +2173,9 @@ class _Assembler:
         graph_context, graph_omitted = ([], 0) if unit.operation else self.graph.unit_context(unit.paths, budget)
         context, omitted, gaps = self._cap(
             (*unit.context, *graph_context, *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths),
-             *self.control_context.get(unit.component_id, ())),
+             *self.control_context.get(unit.component_id, ()), *self.document_entries(unit.paths)),
             unit.key, "lane_b_hunt")
+        gaps.extend(self.document_gaps)
         if graph_omitted:
             omitted += graph_omitted
             gaps.append(ScopeGap(GRAPH_PRODUCER, unit.key, "truncated",
@@ -2292,7 +2336,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
                       collection: LeadCollection | None = None,
                       cwe_reference: CweReference | None = None,
                       graph_settings: GraphSettings | None = None, slice_sources: Any = None,
-                      behavior_core: Any = None, hunt_selection: Any = None) -> Assembly:
+                      behavior_core: Any = None, hunt_selection: Any = None,
+                      document_navigation: bool = False) -> Assembly:
     """Assemble both lanes and the package manifest; raises on any membership or integrity failure.
 
     ``cwe_reference`` is the run-pinned MITRE CWE catalog (``review.references``); without it,
@@ -2308,6 +2353,8 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
     collection = sorted_collection(collection if collection is not None else collect_leads(scope))
     graph_settings = graph_settings if graph_settings is not None else run_graph_settings(scope.run_root)
     assembler = _Assembler(scope, settings, collection, cwe_reference, graph_settings, slice_sources)
+    if document_navigation:
+        assembler.load_document_navigation()
     admitted = admitted_leads(collection, settings)
     admitted_ids = {lead.observation_id for lead in admitted}
     # Unknown is never treated as low: a lead the policy leaves out because no assessed severity exists is a
@@ -2337,6 +2384,14 @@ def assemble_packages(scope: AcceptedScope, settings: PackageSettings | None = N
         packages.extend(assembler.hunts(
             item, hunt_selection.campaign(item.unit, hunt_areas[item.unit.key]) if hunt_selection is not None else None))
     lane_b = audit_hunts(hunted, packages)
+    if document_navigation:
+        admitted_context = {entry["id"] for package in packages for entry in package.resolved()["context"]}
+        for path, entries in sorted(assembler.document_context.items()):
+            omitted = sum(entry.id not in admitted_context for entry in entries)
+            if omitted:
+                assembler.extra_gaps.append(ScopeGap(
+                    "job_document_issue_analysis", path, "truncated",
+                    f"{omitted} provisional document records not admitted by package/context bounds or hunt selection"))
     packages.sort(key=lambda package: package.package_id)
     if len({package.package_id for package in packages}) != len(packages):
         raise IntegrityError("package identity collision")
