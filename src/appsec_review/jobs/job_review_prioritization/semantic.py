@@ -87,6 +87,28 @@ def semgrep_signals(run_root: Path, repository_root: Path) -> dict[str, Any]:
             "handoff_sha256": handoff_sha, "gaps": gaps}
 
 
+def _flow_location(location: Mapping[str, Any]) -> dict[str, Any]:
+    result = {key: location.get(key) for key in (
+        "path", "file_sha256", "start_line", "end_line", "start_column", "end_column",
+        "start_byte", "end_byte")}
+    native = location.get("producer_location")
+    if isinstance(native, Mapping):
+        result["producer_location"] = dict(native)
+        region = native.get("region")
+        if isinstance(region, Mapping):
+            # The SARIF normalizer defaults absent columns to 1 for display. Only an explicitly
+            # reported column may be used as an exact point for function ownership.
+            result["start_column"] = region.get("startColumn")
+            result["end_column"] = region.get("endColumn")
+            if "byteOffset" in region:
+                result["start_byte"] = region["byteOffset"]
+                if type(region["byteOffset"]) is int and type(region.get("byteLength")) is int:
+                    result["end_byte"] = region["byteOffset"] + region["byteLength"]
+    result["column_encoding"] = location.get("column_encoding") or (
+        native.get("columnKind") if isinstance(native, Mapping) else None)
+    return result
+
+
 def codeql_paths(run_root: Path, *, limit: int, step_limit: int = 128) -> dict[str, Any]:
     if not has_handoff(run_root, "job_codeql_analysis"):
         return {"status": "UNAVAILABLE", "paths": [], "languages": {},
@@ -145,6 +167,7 @@ def codeql_paths(run_root: Path, *, limit: int, step_limit: int = 128) -> dict[s
                 for path in {step["location"]["path"] for step in mapped}:
                     coverage["omitted_paths"].setdefault(path, []).append(reason)
                 continue
+            mapped = [{**step, "location": _flow_location(step["location"])} for step in mapped]
             source, sink = mapped[0]["location"], mapped[-1]["location"]
             key = (str(payload.get("rule_id")),
                    f"{source['path']}:{source['start_line']}:{source.get('start_column')}:{source.get('start_byte')}",
@@ -155,14 +178,9 @@ def codeql_paths(run_root: Path, *, limit: int, step_limit: int = 128) -> dict[s
                 "language": payload.get("language"), "observation": entity["identity"], "steps": len(mapped),
                 "code_flow": flow_key[0], "thread_flow": flow_key[1],
                 "flow_steps": [{"ordinal": index, "message": str(step.get("message") or "")[:256],
-                                "location": {name: step["location"].get(name) for name in (
-                                    "path", "file_sha256", "start_line", "end_line", "start_column", "end_column",
-                                    "start_byte", "end_byte")}}
+                                "location": dict(step["location"])}
                                for index, step in enumerate(mapped)],
-                "source": {key_: source.get(key_) for key_ in ("path", "file_sha256", "start_line", "end_line",
-                                                               "start_column", "end_column", "start_byte", "end_byte")},
-                "sink": {key_: sink.get(key_) for key_ in ("path", "file_sha256", "start_line", "end_line",
-                                                           "start_column", "end_column", "start_byte", "end_byte")},
+                "source": dict(source), "sink": dict(sink),
                 "message": str(payload.get("message") or "")[:512],
             }
             current = best.get(key)

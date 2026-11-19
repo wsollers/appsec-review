@@ -101,6 +101,12 @@ delivered in a resulting package is a named, identity-specific truncation gap, i
 with no matching source or lead. This does not add worker tools, create scanner findings, or
 grant workers access to the ranking artifact.
 
+For an operation-specific unit, a function route must contain the operation's exact byte span
+in the same source hash. The unique innermost matching function owns the route; line-only
+containment cannot join byte-disjoint same-line siblings. Missing or conflicting ownership does
+not contribute a function route or its LPS to the operation. Whole-file fallback context remains
+available under its existing bounds.
+
 ## Retrieval examples
 
 Use the generic retrieval tools; there is no prioritization-specific tool. In Python:
@@ -195,7 +201,7 @@ Recompute old composite artifacts through the normal admitted rerun; do not rela
 - Import-budget omissions and resolved targets excluded from the syntax population carry explicit
   per-file counts and module-shared coupling gaps. Unexamined imports can affect incoming coupling
   in any module. Ca/Ce remain observed lower-bound counts; a qualified instability ratio is `null`,
-  not an exact zero. Functions inherit their file's qualification.
+  not an exact zero, for files, modules and components alike. Functions inherit their file's qualification.
 - CodeQL coverage retains every scope/root/build-unit/query-profile disposition. A successful
   scope cannot hide a failed profile or another failed scope. Missing matching scope coverage is
   unknown. Path/step bounds, unbound paths and missing locations qualify affected items; positive
@@ -209,6 +215,10 @@ Recompute old composite artifacts through the normal admitted rerun; do not rela
   Line-only ambiguous locations, invalid positions, and non-ASCII columns whose encoding was
   not retained remain unassigned with `semantic_function_attribution_unavailable`; file-level
   evidence is preserved. Explicit byte offsets still resolve non-ASCII source positions.
+  SARIF region provenance distinguishes absent columns from the normalizer's display default
+  of column 1. Possible owning functions retain attribution gaps in their published feature
+  vectors: zero without ownership evidence is `null`, and positive observed counts stay
+  qualified rather than becoming complete coverage.
 
 ## Recovery
 

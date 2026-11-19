@@ -564,7 +564,7 @@ def build_job() -> Job:
         cached_path: str | None = None
         cached_source = b""
 
-        def owner(location: Mapping[str, Any]) -> str | None:
+        def owner(location: Mapping[str, Any], producer: str, feature: str) -> str | None:
             nonlocal cached_path, cached_source
             path, line = location["path"], int(location["start_line"])
             units = facts.get(path, {}).get("units", [])
@@ -575,8 +575,20 @@ def build_job() -> Job:
                 cached_path = path
             identity = _innermost(units, line, source=cached_source,
                                   start_byte=location.get("start_byte"), start_column=location.get("start_column"))
-            if identity is None and any(item["start_line"] <= line <= item["end_line"] for item in units):
-                gaps.append(f"{path}:{line}:{location.get('start_column')}: semantic_function_attribution_unavailable")
+            possible = [item["function_id"] for item in units if item["start_line"] <= line <= item["end_line"]]
+            if identity is None and possible:
+                reason = (f"{path}:{line}:{location.get('start_column')}: "
+                          f"semantic_function_attribution_unavailable:{producer}:{feature}")
+                gaps.append(reason)
+                metadata = codeql if producer == "codeql" else semgrep
+                metadata["status"] = "PARTIAL"
+                if reason not in metadata["gaps"]:
+                    metadata["gaps"].append(reason)
+                for function_id in possible:
+                    affected = metadata.setdefault("function_gaps", {}).setdefault(function_id, {})
+                    reasons = affected.setdefault(feature, [])
+                    if reason not in reasons:
+                        reasons.append(reason)
             return identity
 
         signals = []
@@ -586,7 +598,7 @@ def build_job() -> Job:
                 gaps.append(f"{path}: semgrep_signal_not_bound_to_accepted_file")
                 continue
             item["file_sha256"] = files[path]["sha256"]
-            item["function_id"] = owner(item)
+            item["function_id"] = owner(item, "semgrep", item["category"])
             item["signal_id"] = _identity("sig", "semgrep", item["rule_id"], path, item["start_line"],
                                           item["end_line"], item.get("start_byte"), item.get("start_column"),
                                           item.get("end_column"), item["category"], item.get("observation"))
@@ -605,9 +617,9 @@ def build_job() -> Job:
                 continue
             item["flow_functions"] = list(dict.fromkeys(
                 function_id for step in item["flow_steps"]
-                if (function_id := owner(step["location"])) is not None))
-            item["source_function"] = owner(item["source"])
-            item["sink_function"] = owner(item["sink"])
+                if (function_id := owner(step["location"], "codeql", "semantic_path")) is not None))
+            item["source_function"] = owner(item["source"], "codeql", "semantic_path")
+            item["sink_function"] = owner(item["sink"], "codeql", "semantic_path")
             item["signal_id"] = item["path_id"]
             paths.append(item)
         if settings["sources"]["codeql"]:
@@ -722,17 +734,23 @@ def build_job() -> Job:
                                "gaps": [*record["gaps"], *coupling_gaps, *semantic_gaps]})
             for item in record["units"]:
                 function_id = item["function_id"]
+                ownership_gaps = semantic["codeql"].get("function_gaps", {}).get(function_id, {})
+                unit_semantic_gaps = [*semantic_gaps, *ownership_gaps.get("semantic_path", ())]
+                signal_gaps = semantic["semgrep"].get("function_gaps", {}).get(function_id, {})
                 semgrep_owned = [signal for signal in semgrep_by_file.get(path, ()) if signal["function_id"] == function_id]
                 owned_paths = [value for value in file_paths
                                if function_id in value.get("flow_functions", ())]
+                signal_counts = {
+                    name: int(item["signal_counts"].get(name, 0)) +
+                    sum(1 for signal in semgrep_owned if signal["category"] == name)
+                    for name in scoring.SIGNAL_FEATURES}
                 unit_features = {
                     "cyclomatic": item["cyclomatic"], "cognitive": item["cognitive"],
                     "complexity_density": item["complexity_density"],
                     "suppression_density": round(item["suppression_count"] / item["sloc"], 6) if item["sloc"] else None,
-                    **{name: int(item["signal_counts"].get(name, 0)) +
-                       sum(1 for signal in semgrep_owned if signal["category"] == name)
-                       for name in scoring.SIGNAL_FEATURES},
-                    "semantic_path": len(owned_paths) if owned_paths or not semantic_gaps else None, **inherited,
+                    **{name: count if count or not signal_gaps.get(name) else None
+                       for name, count in signal_counts.items()},
+                    "semantic_path": len(owned_paths) if owned_paths or not unit_semantic_gaps else None, **inherited,
                 }
                 unit_features["history_hotspot"] = history["symbols"].get(
                     (path, int(item["start_byte"]), int(item["end_byte"]))) if history_status in {"EXACT", "PARTIAL"} else None
@@ -755,8 +773,9 @@ def build_job() -> Job:
                         "error_propagation", "decisions", "increments", "max_nesting", "recursive", "parse_error",
                         "unsupported_constructs", "custom_parsing", "state_mutation", "wrapper_surfaces")},
                     "coupling_lower_bound": coupling.get("coupling_lower_bound", False),
-                    "semantic_path_lower_bound": bool(semantic_gaps),
-                    "gaps": [*(["parse_error"] if item["parse_error"] else []), *coupling_gaps, *semantic_gaps],
+                    "semantic_path_lower_bound": bool(unit_semantic_gaps),
+                    "gaps": [*(["parse_error"] if item["parse_error"] else []), *coupling_gaps,
+                             *unit_semantic_gaps, *(gap for reasons in signal_gaps.values() for gap in reasons)],
                 })
         weights = {key: float(value) for key, value in settings["priority_weights"].items()}
         population = str(settings["normalization_population"])

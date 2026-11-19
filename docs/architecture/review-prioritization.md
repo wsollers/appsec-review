@@ -76,6 +76,12 @@ resolve exactly only where byte/code-point/UTF-16 coordinates agree (an ASCII pr
 explicit accepted byte offset is available. Invalid or ambiguous positions retain file evidence
 with a named function-attribution gap.
 
+The original SARIF `producer_location.region` is retained: a normalizer's default column `1`
+is not an explicitly reported column. Missing column-encoding provenance remains unknown.
+Attribution uncertainty follows each possible owning function into scoring and the priority
+index. Its unobserved function count is `null`; positive counts remain qualified lower bounds.
+File-level observed paths/signals are retained independently of function attribution.
+
 ## Structural complexity
 
 ### Functional units
@@ -227,7 +233,7 @@ Import-budget omissions and resolved inventory targets excluded from the analyze
 separately as `omitted_import_count` and `excluded_target_count`. All files in a module inherit
 its `coupling_lower_bound` and `coupling_gaps`; functions inherit them during scoring.
 Unexamined imports also leave incoming coupling uncertain. Qualified Ca/Ce remain observed counts,
-but instability becomes `null`: an incomplete ratio is not a lower bound. Suppression-only evidence
+but file, module and component instability become `null`: an incomplete ratio is not a lower bound. Suppression-only evidence
 truncation similarly retains the complete count and names the exact number of omitted records.
 
 ### Coverage-preserving routing

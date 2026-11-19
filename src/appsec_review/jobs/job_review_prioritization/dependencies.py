@@ -458,12 +458,17 @@ class GraphBuilder:
                            "omitted_import_count": omitted[path], "excluded_target_count": len(excluded[path]),
                            "imports": outcomes}
         component_ids = sorted({value for value in components.values() if value})
+        component_metrics = {}
+        for component in component_ids:
+            reasons = list(dict.fromkeys(gap for path in self.files if components.get(path) == component
+                                         for gap in module_gaps[self.module_of(path)]))
+            metrics = coupling(component_out[component], component_in[component])
+            component_metrics[component] = {
+                **metrics, "coupling_lower_bound": bool(reasons), "coupling_gaps": reasons,
+                "instability": None if reasons else metrics["instability"],
+            }
         return {"identity": GRAPH_IDENTITY, "min_edge_confidence": self.min_confidence,
                 "files": files, "modules": module_metrics, "edges": sorted(edges, key=lambda item: (
                     item["from"], item["to"], item["line"] or 0)),
-                "components": {component: {**coupling(component_out[component], component_in[component]),
-                                           "coupling_lower_bound": any(
-                                               module_gaps[self.module_of(path)] for path in self.files
-                                               if components.get(path) == component)}
-                               for component in component_ids},
+                "components": component_metrics,
                 "record_count": total, "omitted_import_count": sum(omitted.values()), "truncated": truncated}

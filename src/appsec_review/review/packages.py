@@ -2335,8 +2335,14 @@ def _routing_matches(row: Mapping[str, Any], paths: Iterable[str], leads: Iterab
     if location and location["path"] in paths:
         if operation is None or payload.get("scope") != "function":
             return True
-        return (operation["start_line"] <= payload["start_line"]
-                and payload["end_line"] <= operation["end_line"])
+        start, end = payload.get("start_byte"), payload.get("end_byte")
+        first, last = operation.get("start_byte"), operation.get("end_byte")
+        return (all(type(value) is int for value in (start, end, first, last))
+                and isinstance(payload.get("function_id"), str)
+                and location.get("file_sha256") == operation.get("file_sha256")
+                and start <= first < end and first <= last <= end
+                and payload["start_line"] <= operation["start_line"]
+                and operation["end_line"] <= payload["end_line"])
     return any(payload.get("observation_identity") == lead.observation_id or
                any(payload.get("subject_artifact") == identity for identity, role in lead.related
                    if role == "artifact") for lead in leads)
@@ -2362,7 +2368,20 @@ def _matching_routes(by_key: Mapping[tuple[str, str], list[dict[str, Any]]], pat
         keys.add(("observation_identity", lead.observation_id))
         keys.update(("subject_artifact", identity) for identity, role in lead.related if role == "artifact")
     candidates = {row["identity"]: row for key in keys for row in by_key.get(key, ())}
-    return [row for _, row in sorted(candidates.items()) if _routing_matches(row, paths, leads, operation)]
+    matching = [row for _, row in sorted(candidates.items()) if _routing_matches(row, paths, leads, operation)]
+    functions = [row for row in matching if row["payload"].get("scope") == "function"]
+    if operation is not None and functions:
+        best = min(functions, key=lambda row: row["payload"]["end_byte"] - row["payload"]["start_byte"])["payload"]
+        span = best["start_byte"], best["end_byte"]
+        owners = {row["payload"]["function_id"] for row in functions
+                  if (row["payload"]["start_byte"], row["payload"]["end_byte"]) == span}
+        unambiguous = len(owners) == 1 and all(
+            row["payload"]["start_byte"] <= span[0] and span[1] <= row["payload"]["end_byte"]
+            for row in functions)
+        matching = [row for row in matching if row["payload"].get("scope") != "function" or (
+            unambiguous and row["payload"]["function_id"] in owners
+            and (row["payload"]["start_byte"], row["payload"]["end_byte"]) == span)]
+    return matching
 
 
 def rank_hunt_candidates(scope: AcceptedScope, settings: PackageSettings, collection: LeadCollection, *,
