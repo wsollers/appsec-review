@@ -554,6 +554,8 @@
         "tests/test_poc_policy.py",
         "tests/test_poc_writer.py",
         "tests/unit/job_poc_generation/test_brief_inputs_and_helpers.py",
+        "tests/unit/job_poc_generation/test_buildctx_locate.py",
+        "tests/unit/job_poc_generation/test_context_bounds_regressions.py",
         "tests/unit/job_poc_generation/test_job_units.py",
         "tests/unit/job_poc_generation/test_policy_regressions.py"
       ],

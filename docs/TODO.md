@@ -388,9 +388,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5154 | [Conserve OWASP dispatch and characterization gap accounting](#t-5154-conserve-owasp-dispatch-and-characterization-gap-accounting) | review | open |
 | T-5155 | [Accept resolving OWASP prerequisite citations and adverse qualifications](#t-5155-accept-resolving-owasp-prerequisite-citations-and-adverse-qualifications) | review | open |
 | T-5156 | [Make workbench filters retrieve finding-package records](#t-5156-make-workbench-filters-retrieve-finding-package-records) | review | open |
-| T-5157 | [Resolve bounded PoC declarations from the correct accepted build](#t-5157-resolve-bounded-poc-declarations-from-the-correct-accepted-build) | review | open |
+| T-5157 | [Resolve bounded PoC declarations from the correct accepted build](#t-5157-resolve-bounded-poc-declarations-from-the-correct-accepted-build) | review | done (2026-11-19, e5cc0b31a47de2447c3d9a7ed6e7bdb39b224d2b) |
 | T-5158 | [Validate actual PoC calls bounds numeric triggers and denied names](#t-5158-validate-actual-poc-calls-bounds-numeric-triggers-and-denied-names) | review | done (2026-11-19, 77d228461b7a2ee344cef5587b26ad387a4d2761) |
-| T-5159 | [Bound PoC briefs and retain nested compile qualifications](#t-5159-bound-poc-briefs-and-retain-nested-compile-qualifications) | review | open |
+| T-5159 | [Bound PoC briefs and retain nested compile qualifications](#t-5159-bound-poc-briefs-and-retain-nested-compile-qualifications) | review | done (2026-11-19, e5cc0b31a47de2447c3d9a7ed6e7bdb39b224d2b) |
 | T-5160 | [Bind hardening conclusions to the exact binary command and evidence](#t-5160-bind-hardening-conclusions-to-the-exact-binary-command-and-evidence) | evidence | open |
 | T-5161 | [Keep post-build shards immutable and rejected artifact hashes rejected](#t-5161-keep-post-build-shards-immutable-and-rejected-artifact-hashes-rejected) | evidence | open |
 | T-5162 | [Reject error-shaped post-build model assessments](#t-5162-reject-error-shaped-post-build-model-assessments) | review | open |
@@ -4763,11 +4763,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5157 — Resolve bounded PoC declarations from the correct accepted build
 
-- **State:** open
+- **State:** done (2026-11-19, e5cc0b31a47de2447c3d9a7ed6e7bdb39b224d2b)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: POC-F01, POC-F02, POC-F05, POC-F08. Build lookup stops at an unrelated workspace containing the same source; Declaration retrieval is not hash-verified accepted-source retrieval.
-- **Scope:** `src/appsec_review/jobs/job_poc_generation/buildctx.py`
+- **Scope:** `src/appsec_review/jobs/job_poc_generation/buildctx.py` and the private
+  `buildcheck.py` materialization/replay path.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 151 passed/11.18 s, two workers, seed 9157, no skips or cases over 10 s; independent
+  review found no significant issue. Lookup searches eligible accepted receipts without an
+  unrelated workspace masking the matching command. Actual byte/hash/path custody applies to
+  source reads and materialization; combined object limits and macro operands remain explicit.
+  Compilers, models, PoCs, integration, acceptance and live validation were not executed.
 - **Refs:** `audit-results/job-audit-job_poc_generation.md`.
 
 ### T-5158 — Validate actual PoC calls bounds numeric triggers and denied names
@@ -4786,11 +4792,16 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5159 — Bound PoC briefs and retain nested compile qualifications
 
-- **State:** open
+- **State:** done (2026-11-19, e5cc0b31a47de2447c3d9a7ed6e7bdb39b224d2b)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: POC-F06, POC-F09. `max_brief_bytes` is not an enforced bound; Nested compile/brief qualifications disappear from published coverage.
-- **Scope:** `src/appsec_review/jobs/job_poc_generation/job.py`
+- **Scope:** `src/appsec_review/jobs/job_poc_generation/job.py`, `brief.py` and `writer.py`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5157's 151-case main selection. Complete canonical brief bytes, including newline,
+  must fit the configured budget at publication and consumption; oversized evidence is refused,
+  not trimmed. Nested qualifications and unchecked triggers remain in coverage, with an explicit
+  public overflow count and complete protected details. `compile_verified` remains compile-only
+  assurance; qualified output is not presented as clean coverage or runtime verification.
 - **Refs:** `audit-results/job-audit-job_poc_generation.md`.
 
 ### T-5160 — Bind hardening conclusions to the exact binary command and evidence

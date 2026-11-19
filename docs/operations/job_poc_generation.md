@@ -164,7 +164,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | None declared |
 | integration | `tests/integration/job_poc_generation/test_poc_generation_job.py`<br>`tests/integration/test_authentic_poc_contract.py` |
 | live | `tests/integration/test_poc_live_compile.py` |
-| unit | `tests/test_poc_generation_contracts.py`<br>`tests/test_poc_generation_units.py`<br>`tests/test_poc_policy.py`<br>`tests/test_poc_writer.py`<br>`tests/unit/job_poc_generation/test_brief_inputs_and_helpers.py`<br>`tests/unit/job_poc_generation/test_job_units.py`<br>`tests/unit/job_poc_generation/test_policy_regressions.py` |
+| unit | `tests/test_poc_generation_contracts.py`<br>`tests/test_poc_generation_units.py`<br>`tests/test_poc_policy.py`<br>`tests/test_poc_writer.py`<br>`tests/unit/job_poc_generation/test_brief_inputs_and_helpers.py`<br>`tests/unit/job_poc_generation/test_buildctx_locate.py`<br>`tests/unit/job_poc_generation/test_context_bounds_regressions.py`<br>`tests/unit/job_poc_generation/test_job_units.py`<br>`tests/unit/job_poc_generation/test_policy_regressions.py` |
 
 ### Dagster placement
 

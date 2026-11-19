@@ -29040,6 +29040,8 @@
           "tests/test_poc_policy.py",
           "tests/test_poc_writer.py",
           "tests/unit/job_poc_generation/test_brief_inputs_and_helpers.py",
+          "tests/unit/job_poc_generation/test_buildctx_locate.py",
+          "tests/unit/job_poc_generation/test_context_bounds_regressions.py",
           "tests/unit/job_poc_generation/test_job_units.py",
           "tests/unit/job_poc_generation/test_policy_regressions.py"
         ]
@@ -46544,13 +46546,13 @@
     "src/appsec_review/jobs/job_owasp_control_assessment/job.py": "0b6ff441724159bbf427dac00acc95872e72e007f6fc11181ff2ef6e21fcf537",
     "src/appsec_review/jobs/job_poc_generation/__init__.py": "14894a1b3c6274086002bae9ffd0f4df3a4f6b976cfc38cb601a7ecea5002dbf",
     "src/appsec_review/jobs/job_poc_generation/ast_reduce.py": "736ca527a96f443874ff43ff49085bf3baddc4570d256c7498f1fd56ba99c5b9",
-    "src/appsec_review/jobs/job_poc_generation/brief.py": "93e1f186fd55964f0142e80d71979aad1f87ac0356eddfc362f9ee61922bf18e",
-    "src/appsec_review/jobs/job_poc_generation/buildcheck.py": "078eb41a26e922eb5f4fe685bf8684c21df19496ad85c74c07ec5db868f4e1c6",
-    "src/appsec_review/jobs/job_poc_generation/buildctx.py": "a2007bb11bf97b8e055b037a039df756c37717616c3da313a47c80f9c832ee10",
+    "src/appsec_review/jobs/job_poc_generation/brief.py": "1cc986127443845769782a2c8dc81a120fccbae087719f37a492fb2a164c6efb",
+    "src/appsec_review/jobs/job_poc_generation/buildcheck.py": "fb60cdeed6a85dfde3ed6ad58af802413fec807b2f5366b22bb5c2f6b2682f1e",
+    "src/appsec_review/jobs/job_poc_generation/buildctx.py": "0d3666abf5bf7d139d6d550bb24f894703d51d326def88c52f9bf6a86ea8567f",
     "src/appsec_review/jobs/job_poc_generation/candidates.py": "7d35c502e5a2219e5bc9e0e70f32fc664f3cbd2e53afacdf76daaa18fe590684",
     "src/appsec_review/jobs/job_poc_generation/datasets.py": "a17565d3e929f3eb8281eef92ac0257f60d2ae50ae94b7a580a91df06fc8ec72",
     "src/appsec_review/jobs/job_poc_generation/inputs.py": "3b8abfd3b32e00f9b019cd8091c0b71fbf79318a2b7f6b9e1930ed4d851fc788",
-    "src/appsec_review/jobs/job_poc_generation/job.py": "15fcde7c0ee2ef5418fdde2b9956622bcff0adca8e02b17e2d451e0ebc6ee6ac",
+    "src/appsec_review/jobs/job_poc_generation/job.py": "defb8ecf2d4490bbe6af28eab02a9cae518034a00263001887790987c1f2ab89",
     "src/appsec_review/jobs/job_poc_generation/package.py": "d3e36ea454f73dd0bdffd75ed736bfd7aa1a10e9e47e6d43d6597adcb77365b6",
     "src/appsec_review/jobs/job_poc_generation/poc_execution_gate.py": "59404c90e0f7c153f24a541f3653bc99a775a3fd30a9f7fd3703629358f29257",
     "src/appsec_review/jobs/job_poc_generation/policy.py": "3a4026bdb4e147ffa985bc31e1417378dae9d8ca9fbd7342f35a72b1046c463e",
@@ -46558,7 +46560,7 @@
     "src/appsec_review/jobs/job_poc_generation/source.py": "7f2a87ef271771de44c5b87266f8c2cfbfad15c3a8dac53c42f39752d334b494",
     "src/appsec_review/jobs/job_poc_generation/static_compile_check.py": "9b6e1b25d73758904457d46ec1a9ed7f9e7666a28e998fed04e588482635b4cf",
     "src/appsec_review/jobs/job_poc_generation/statuses.py": "97536237521e288feac01bd2a197a13a01cc0e3ce0d2923b63a3e48cf0d16c93",
-    "src/appsec_review/jobs/job_poc_generation/writer.py": "0cb1001ccb9983f9b26b6128462debf714969c5c543ebe492cf6f23ccdc143ca",
+    "src/appsec_review/jobs/job_poc_generation/writer.py": "1e8a2ec2c84cf4cadd14e1bc0c4b5bdd4d0c9003ce0be3c60cd2a08ee1013dc0",
     "src/appsec_review/jobs/job_post_build_security_assessment/__init__.py": "ced9e038e7a2b3cd3ad8a939773bd40d6f8e6f5f341167d3ab6ee2fe6bf623dc",
     "src/appsec_review/jobs/job_post_build_security_assessment/assessment.py": "4c4805e9a0c28896ab3f6c09113b53f1eeea895d6bca0ae492c69bc358f51c7c",
     "src/appsec_review/jobs/job_post_build_security_assessment/datasets.py": "dc55b4b31423e9116482cbbc829744a7db9b24d0e2af0d7340690718f360f3f7",
@@ -47002,7 +47004,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0dbd7fcf731c377d078bc076282bc9b3c72a732541e2adbbd6086ef29507e2da",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "42a79424c182ff4b8e7223be67a945eb00d2fbd520918903f61a6b35286f1d68"
+    "tests/job-test-map.json": "dbeafa6fab57d67a483f65814a5e6dc9a7b025cc0653aebe048c9f517d69702e"
   },
   "tool_policy": {
     "disable_grype": true,
