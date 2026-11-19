@@ -546,7 +546,7 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
         # Configured binaries are review inputs as a whole, so their decompiled entities are granted by kind.
         entity_prefixes=BINARY_ENTITY_PREFIXES if BINARY_INDEX in indexes else (),
         graph_scopes=tuple((work.document.get("retrieval") or {}).get("graph_scopes", ())),
-        max_queries=max(1, profile.max_queries), max_turns=profile.max_turns,
+        max_queries=profile.max_queries, max_turns=profile.max_turns,
         page_size=min(100, ctx.max_page_size), max_depth=min(8, ctx.max_depth), max_result_bytes=MAX_RESULT_BYTES)
     stack = str(routing["stack"])
     guidance = ctx.bundle(role=role, persona=persona, stack=stack, task=task, lane=work.lane, capability=capability)

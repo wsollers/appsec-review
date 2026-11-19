@@ -56,7 +56,7 @@ def _cell(ctx: ReviewContext, kind: str, inputs: Mapping[str, Any], entities: Se
         package_sha256=package_sha, role=role, round=0,
         tools=tuple(sorted(set(ctx.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS)),
         indexes=ctx.index_names, entities=entities,
-        max_queries=max(1, min(profile.max_queries, bounds.max_queries)),
+        max_queries=min(profile.max_queries, bounds.max_queries),
         max_turns=min(profile.max_turns, bounds.max_turns), page_size=min(ctx.max_page_size, 100),
         max_depth=1, max_result_bytes=bounds.max_result_bytes)
     guidance = ctx.bundle(role=role, persona="generalist", stack="generic", task=task,

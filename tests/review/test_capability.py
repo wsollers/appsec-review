@@ -132,7 +132,8 @@ def test_capability_is_hash_bound_and_tampering_is_an_integrity_error() -> None:
 @pytest.mark.parametrize("overrides", [
     {"tools": ("query_owasp_workbench",)}, {"tools": ("shell",)}, {"indexes": ("ground_truth",)},
     {"entities": ("src/main.c",)}, {"entity_prefixes": ("",)}, {"entity_prefixes": ("/home",)},
-    {"max_queries": 0}, {"page_size": 101}, {"max_depth": 9},
+    {"max_queries": -1}, {"max_turns": 0}, {"page_size": 0}, {"max_depth": 0}, {"max_result_bytes": 0},
+    {"page_size": 101}, {"max_depth": 9},
 ])
 def test_the_application_cannot_issue_an_unbounded_or_unknown_capability(overrides) -> None:
     with pytest.raises(ValueError):

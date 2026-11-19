@@ -210,7 +210,9 @@ class CellCapability:
             raise ValueError("capability graph scope is not a CodeQL scope id")
         if values["graph_scopes"] and GRAPH_INDEX not in values["indexes"]:
             raise ValueError("a graph scope grant requires the graph index")
-        if values["round"] < 0 or min(values["max_queries"], values["max_turns"], values["page_size"],
+        if values["round"] < 0 or values["max_queries"] < 0:
+            raise ValueError("capability round and query cap must be non-negative")
+        if min(values["max_turns"], values["page_size"],
                                       values["max_depth"], values["max_result_bytes"]) < 1:
             raise ValueError("capability caps must be positive")
         if values["page_size"] > 100 or values["max_depth"] > 8:

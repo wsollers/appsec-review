@@ -1,6 +1,8 @@
 """Focused T-173 unit tests for Round 2 requests_evidence fulfillment, thinking token floors, and 6-step chains."""
 from __future__ import annotations
 
+from dataclasses import replace
+import json
 from pathlib import Path
 
 import pytest
@@ -17,66 +19,274 @@ from appsec_review.jobs.job_inference_security_review.evidence_fulfillment impor
     fulfill_evidence_requests,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import schema_set
+from appsec_review.retrieval import (
+    EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RetrievalCore,
+    SourceLocation, write_manifest,
+)
+from appsec_review.review.evidence_obligations import (
+    RequestSubmission, coalesce_obligations, pending_followup_requests,
+)
+from appsec_review.review.identity import sha256_hex
+from appsec_review.review.models import Claim, ClaimState, Lane, Predicate, SecurityPredicate
+from appsec_review.storage import file_sha256
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
-class _FakeCore:
-    def __init__(self, records: dict[str, dict]) -> None:
-        self._records = records
+@pytest.fixture
+def evidence_core(tmp_path):
+    run_id = "2026-11-19-0001"
+    run_root = tmp_path / "runs" / run_id
+    target = tmp_path / "target"
+    target.mkdir()
+    snapshot = "target-sha256:" + "1" * 64
+    index_path = run_root / "data" / "analysis.sqlite"
+    builder = IndexBuilder(index_path, name="analysis", fingerprint="2" * 64,
+                           target_snapshot=snapshot, shard_id="symbols")
+    identities = {}
+    for name, path, start in (("parse_token", "src/auth.py", 40),
+                              ("run_export_query", "src/export.py", 75)):
+        identity = LogicalIdentity.derive(EntityKind.SYMBOL, snapshot, {"name": name})
+        identities[name] = identity.value
+        location = SourceLocation(snapshot, path, "3" * 64, 0, 100, start, start + 10, 1, 1,
+                                  {"native": name}, "fixture-exact", 1.0)
+        builder.add_entity(EntityRecord(
+            identity, name, name, name,
+            {"guard_polarity": "auth_or_role_check", "resolution_tier": "hybrid_fused"}, location))
+    opaque = LogicalIdentity.derive(EntityKind.SYMBOL, snapshot, {"name": "opaque"})
+    builder.add_entity(EntityRecord(opaque, "opaque", "opaque", "opaque", {}))
+    builder.add_coverage("symbols", "complete")
+    shard = IndexIdentity("analysis", "appsec-review/retrieval-index/2", builder.build(), "2" * 64,
+                          index_path.relative_to(run_root).as_posix(), {}, (), "symbols")
+    manifest_path = run_root / "data" / "manifest.json"
+    write_manifest(manifest_path, run_id=run_id, target_snapshot=snapshot,
+                   target_root=target, indexes=[shard])
+    core = RetrievalCore(tmp_path / "runs", run_id, manifest_path=manifest_path,
+                         manifest_sha256=file_sha256(manifest_path))
+    return core, identities
 
-    def find(self, *, identity: str = "", limit: int = 1) -> dict:
-        rec = self._records.get(identity)
-        return {"results": [rec]} if rec is not None else {"results": []}
+
+def _pending(requests, affected):
+    claim = Claim(
+        claim_id="claim-" + "c" * 64, lane=Lane.LEAD, package_id="package",
+        security_predicate=SecurityPredicate.SQL_INJECTION, affected_entities=(affected,),
+        preconditions=(), weakness_cwe="CWE-89", state=ClaimState.PROPOSED,
+        origin_cell_ids=(), statement="Untrusted data reaches query",
+    )
+    submissions = [
+        RequestSubmission("evreq-" + sha256_hex({"index": i}), claim.claim_id,
+                          Predicate.ATTACKER_INPUT_CONTROL, "symbol", tuple(anchors), question, round=i)
+        for i, (question, anchors) in enumerate(requests)
+    ]
+    obligations = coalesce_obligations(submissions, claims_by_id={claim.claim_id: claim},
+                                      scope_ceiling="package")
+    return pending_followup_requests(obligations, max_requests=len(requests))[0]
 
 
-def test_round2_requests_evidence_fulfillment_bounded_and_counted() -> None:
-    assert DEFAULT_MAX_EVIDENCE_REQUESTS == 4
-    records = {
-        "asr:symbol:parse_token": {
-            "entity_id": "asr:symbol:parse_token",
-            "kind": "symbol",
-            "name": "parse_token",
-            "index": "code_graph",
-            "shard_id": "shard-1",
-            "shard_sha256": "a" * 64,
-            "content_sha256": "b" * 64,
-            "source_location": {"path": "src/auth.py", "start_line": 40, "end_line": 58},
-            "payload": {"guard_polarity": "auth_or_role_check", "resolution_tier": "hybrid_fused"},
-        },
-        "asr:flow:sql_sink": {
-            "entity_id": "asr:flow:sql_sink",
-            "kind": "taint_flow",
-            "name": "run_export_query",
-            "index": "cpg",
-            "shard_id": "shard-2",
-            "shard_sha256": "c" * 64,
-            "content_sha256": "d" * 64,
-            "source_location": {"path": "src/export.py", "start_line": 75, "end_line": 82},
-            "payload": {"resolution_tier": "codeql_semantic"},
-        },
-    }
-    core = _FakeCore(records)
+@pytest.mark.parametrize("anchored", [True, False], ids=["anchor", "question"])
+def test_round2_consumes_canonical_requests_and_retrieval_rows(evidence_core, anchored):
+    core, ids = evidence_core
+    entity_id = ids["parse_token"]
+    pending = _pending([("Check parse_token in src/auth.py:45", [entity_id] if anchored else [])],
+                       entity_id)
+    outcome = fulfill_evidence_requests(core, list(ids.values()), pending)
+    assert (outcome.fulfilled_count, outcome.unfulfilled_count) == (1, 0)
+    item, = outcome.fulfilled_items
+    assert item["obligation_id"] == pending[0]["obligation_id"]
+    assert item["question"] == pending[0]["question"]
+    assert item["requested_kind"] == "symbol"
+    citation, = item["resolved_citations"]
+    row, = core.find(identity=entity_id, limit=1)["results"]
+    assert citation["entity_id"] == entity_id
+    assert citation["location"] == row["location"]
+    assert citation["shard_sha256"] == core.indexes["analysis"][0]["sha256"]
+    assert citation["content_sha256"] == sha256_hex(row)
+    assert citation["index_manifest_sha256"] == core.manifest_sha256
+    assert citation["guard_polarity"] == "auth_or_role_check"
+
+
+def test_round2_requests_evidence_fulfillment_bounded_and_counted(evidence_core) -> None:
+    core, ids = evidence_core
     requests = [
-        {"request_id": "req-1", "claim_id": "c-1", "predicate": "authz_bypass", "need": "Check parse_token in src/auth.py:45", "anchors": ["asr:symbol:parse_token"]},
-        {"request_id": "req-2", "claim_id": "c-1", "predicate": "sql_injection", "need": "Verify sink at src/export.py:77", "anchors": []},
-        {"request_id": "req-3", "claim_id": "c-1", "predicate": "sql_injection", "need": "Unrelated widget zzz_not_found", "anchors": []},
-        {"request_id": "req-4", "claim_id": "c-1", "predicate": "sql_injection", "need": "Another missing target qqq_missing", "anchors": []},
-        {"request_id": "req-5-overflow", "claim_id": "c-1", "predicate": "sql_injection", "need": "parse_token overflow", "anchors": ["asr:symbol:parse_token"]},
+        ("Check parse_token in src/auth.py:45", [ids["parse_token"]]),
+        ("Verify sink at src/export.py:77", []),
+        ("Unrelated widget zzz_not_found", []),
+        ("Another missing target qqq_missing", []),
+        ("parse_token overflow", [ids["parse_token"]]),
     ]
     outcome = fulfill_evidence_requests(
         core,
-        package_entities=list(records.keys()),
-        pending_requests=requests,
+        package_entities=list(ids.values()),
+        pending_requests=_pending(requests, ids["parse_token"]),
         unfulfilled_prior=1,
-        max_requests=4,
+        max_requests=DEFAULT_MAX_EVIDENCE_REQUESTS,
     )
     assert outcome.fulfilled_count == 2
     assert outcome.unfulfilled_count == 4
     assert len(outcome.fulfilled_items) == 2
     assert outcome.fulfilled_items[0]["resolved_citations"][0]["guard_polarity"] == "auth_or_role_check"
-    assert outcome.fulfilled_items[1]["resolved_citations"][0]["resolution_tier"] == "codeql_semantic"
-    assert set(outcome.extra_entities) == {"asr:symbol:parse_token", "asr:flow:sql_sink"}
+    assert outcome.fulfilled_items[1]["resolved_citations"][0]["resolution_tier"] == "hybrid_fused"
+    assert set(outcome.extra_entities) == set(ids.values())
+
+
+def test_round2_zero_requests_does_not_read(evidence_core, monkeypatch):
+    core, ids = evidence_core
+    pending = _pending([("Check parse_token", [ids["parse_token"]])], ids["parse_token"])
+    monkeypatch.setattr(core, "find", lambda **kw: pytest.fail("zero requests must not retrieve"))
+    outcome = fulfill_evidence_requests(core, list(ids.values()), pending, max_requests=0)
+    assert (outcome.fulfilled_count, outcome.unfulfilled_count) == (0, 1)
+    assert outcome.fulfilled_items == outcome.extra_entities == ()
+
+
+def test_round2_missing_and_out_of_package_evidence_stays_unfulfilled(evidence_core):
+    core, ids = evidence_core
+    missing = "asr:symbol:" + "f" * 64
+    pending = _pending([("Unknown zzz_missing", [missing]),
+                        ("Check run_export_query at src/export.py:77", [ids["run_export_query"]])],
+                       ids["parse_token"])
+    outcome = fulfill_evidence_requests(core, [ids["parse_token"], missing], pending)
+    assert (outcome.fulfilled_count, outcome.unfulfilled_count) == (0, 2)
+    assert outcome.fulfilled_items == outcome.extra_entities == ()
+
+
+def test_round2_locationless_row_does_not_match_an_arbitrary_source_path(evidence_core):
+    core, ids = evidence_core
+    row, = core.find(name="opaque", limit=1)["results"]
+    pending = _pending([("Check src/absent.py:17", [])], ids["parse_token"])
+    outcome = fulfill_evidence_requests(core, [row["identity"]], pending)
+    assert (outcome.fulfilled_count, outcome.unfulfilled_count) == (0, 1)
+
+
+def test_round2_rejects_citation_without_accepted_shard_identity(evidence_core, monkeypatch):
+    from appsec_review.review.models import IntegrityError
+
+    core, ids = evidence_core
+    entity_id = ids["parse_token"]
+    response = core.find(identity=entity_id, limit=1)
+    response["indexes"] = []
+    monkeypatch.setattr(core, "find", lambda **kw: response)
+    pending = _pending([("Check parse_token", [entity_id])], entity_id)
+    with pytest.raises(IntegrityError, match="not bound to one accepted shard"):
+        fulfill_evidence_requests(core, [entity_id], pending)
+
+
+@pytest.mark.parametrize("delivered", [True, False], ids=["partial", "unavailable"])
+def test_round2_retains_retrieval_qualifications(evidence_core, monkeypatch, delivered):
+    core, ids = evidence_core
+    entity_id = ids["parse_token"]
+    response = core.find(identity=entity_id, limit=1)
+    response.update(coverage_gaps=["query execution-time budget exceeded"], truncated=True)
+    if not delivered:
+        response["results"] = []
+    monkeypatch.setattr(core, "find", lambda **kw: response)
+    pending = _pending([("Check parse_token", [entity_id])], entity_id)
+    outcome = fulfill_evidence_requests(core, [entity_id], pending)
+    assert (outcome.fulfilled_count, outcome.unfulfilled_count) == (int(delivered), int(not delivered))
+    if delivered:
+        citation, = outcome.fulfilled_items[0]["resolved_citations"]
+        assert citation["coverage_gaps"] == response["coverage_gaps"]
+        assert citation["truncated"] is True
+    else:
+        assert outcome.fulfilled_items == ()
+
+
+@pytest.fixture
+def review_context(evidence_core):
+    from appsec_review.config import load_config
+    from appsec_review.jobs.job_inference_security_review.job import _taxonomy
+    from appsec_review.jobs.job_inference_security_review.teams import ReviewContext
+    from appsec_review.review.budget import JobBudget
+    from appsec_review.review.models import Role
+    from appsec_review.review.teams import ReviewTeamSemaphore
+
+    core, _ = evidence_core
+    settings = load_config(ROOT / "appsec-review.toml").job("job_inference_security_review").typed_settings
+    settings = replace(settings, models={name: replace(profile, max_queries=0)
+                                        for name, profile in settings.models.items()})
+    vocabulary, crosswalk = _taxonomy(ROOT)
+    return ReviewContext(
+        run_root=core.run_root, run_id=core.run_id, repository_root=ROOT, settings=settings,
+        core=core, infer=lambda *a, **kw: pytest.fail("no model should be called during construction"),
+        receipts_root=core.run_root / "data" / "cells",
+        budget=JobBudget.for_run(core.run_root, settings.budgets),
+        semaphore=ReviewTeamSemaphore.for_run(core.run_root, 1),
+        vocabulary=vocabulary, crosswalk=crosswalk, covers={},
+        role_tools={role.value: ("find",) for role in Role}, schemas=schema_set(ROOT),
+        accepted_cwe_ids=frozenset(), rule_predicates={}, source_languages={},
+        build_unit_languages={}, index_names=("analysis",), available_sources=(),
+    )
+
+
+def test_round2_deliveries_reach_discovery_cells_without_new_grants(review_context, evidence_core):
+    from appsec_review.jobs.job_inference_security_review import teams
+
+    ctx = review_context
+    core, ids = evidence_core
+    entity_id = ids["parse_token"]
+    pending = _pending([("Check parse_token at src/auth.py:45", [entity_id])], entity_id)
+    delivered = fulfill_evidence_requests(core, [entity_id], pending)
+    work = teams.PackageWork(
+        "package", Lane.LEAD, "4" * 64, {}, (1, "package"), "basis", (entity_id,), None,
+        round_index=1, pending_requests=pending, fulfilled_evidence=delivered.fulfilled_items)
+    cells = teams._red_cells(ctx, work, {"stack": "generic", "persona": "generalist"})
+    assert cells
+    for cell in cells:
+        request, = cell.spec.task_input["evidence_requests"]
+        fulfillment, = cell.spec.task_input["fulfilled_evidence"]
+        assert request["obligation_id"] == fulfillment["obligation_id"] == pending[0]["obligation_id"]
+        assert request["question"] == fulfillment["question"] == pending[0]["question"]
+        citation, = fulfillment["resolved_citations"]
+        assert citation["label"] == request["anchors"][0] != "?"
+        assert citation["location"]["file_sha256"] == "3" * 64
+        assert cell.capability.entities == (entity_id,)
+        assert cell.capability.max_queries == 0
+
+
+@pytest.mark.parametrize("kind", ["team", "composer", "refuter", "weakest_link_verifier"])
+def test_zero_query_profile_is_not_widened_in_cell_construction(review_context, kind):
+    from appsec_review.jobs.job_inference_security_review import chains, teams
+    from appsec_review.review.capability import AuthorityDenied
+    from appsec_review.review.models import Role
+
+    ctx = review_context
+    if kind == "team":
+        work = teams.PackageWork("package", Lane.LEAD, "4" * 64, {}, (1, "package"), "basis", (), None)
+        cell = teams._cell(ctx, work, {"stack": "generic"}, role=Role.RED_TEAM_ANALYST,
+                           persona="generalist", task=teams.LEAD_LENSES[0], kind="red", task_input={})
+    else:
+        cell = chains._cell(ctx, kind, {}, (), "package")
+    assert cell.capability.max_queries == 0
+    cell.capability.verify()
+    request = {"tool": "find", "parameters": {"name": "parse_token"}}
+    decision = cell.capability.authorize(request)
+    assert isinstance(decision, AuthorityDenied)
+    assert decision.code == "query_cap_exceeded"
+    assert cell.capability.indexes == ("analysis",)
+    assert set(cell.capability.tools) <= {"find", "expand"}
+
+
+@pytest.mark.parametrize("action", ["final", "retrieve"])
+def test_zero_query_cell_is_final_only_and_never_retrieves(tmp_path, action):
+    from appsec_review.review.models import CellStatus
+    from tests.review.test_cells import FakeCore, ScriptedInfer, capability, final, retrieve, run
+
+    core = FakeCore()
+    turn = final() if action == "final" else retrieve({"tool": "search", "parameters": {"query": "token"}})
+    infer = ScriptedInfer(turn)
+    outcome = run(tmp_path, infer, cap=capability(max_queries=0), core=core)
+    assert core.calls == []
+    assert outcome.counts["queries"] == 0
+    assert len(infer.requests) == 1
+    assert infer.requests[0].task_input["capability"]["max_queries"] == 0
+    receipt = json.loads(outcome.receipt_paths[0].read_text())
+    assert receipt["turns"][0]["final_required"] is True
+    assert receipt["turns"][0]["retrievals"] == []
+    if action == "final":
+        assert outcome.record.status is CellStatus.SUCCEEDED
+        assert outcome.gaps == ()
+    else:
+        assert outcome.record.status is CellStatus.TIMED_OUT
+        assert any(gap.reason == "cap_reached_without_final" for gap in outcome.gaps)
 
 
 @pytest.mark.parametrize(

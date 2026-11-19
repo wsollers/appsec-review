@@ -120,6 +120,10 @@ model_profile = "default"
 ```
 
 The checked-in default is the current Haiku model, which keeps development and fixture runs cheap.
+`max_queries = 0` is a final-only cell: ordinary review and attack-chain cells preserve zero,
+execute no worker retrieval requests, and retain a budget gap if the worker asks to retrieve
+instead of returning a final answer. Positive query caps and all other resource bounds remain
+unchanged; zero never falls back to one query.
 To upgrade for a real review:
 
 1. Change `model`, and `reasoning` if needed, in the `default` profile. To use a different model
@@ -344,6 +348,11 @@ Round/usage cutoffs, missing seed sources, omitted strategies/specialists, and u
 requests are named gaps. Bounded evidence requests are re-presented to discovery cells as questions
 with scope labels, not accepted claims or worker instructions. Requests without a verified resolution
 close unsatisfied, including explicit specialist referrals; no automatic worker delegation occurs.
+Follow-up fulfillment consumes canonical `obligation_id`/`question` requests and accepted retrieval
+`identity`/`location` rows. Delivered citations retain the obligation identity, exact source mapping,
+accepted shard and manifest hashes, a hash of the returned row, and retrieval coverage/truncation
+qualifications. Only package entities may be delivered. A delivered citation is not proof that its
+obligation is satisfied; missing evidence and request cutoffs remain unfulfilled.
 **Cross-package and cross-lane seed sharing is not implemented** and is explicitly reported as a gap.
 Convergence is not a clean verdict.
 

@@ -10,7 +10,8 @@ from appsec_review.guidance.compose import bundle_sha256, section_sha256, verify
 from appsec_review.guidance.fragments import GuidanceError
 from appsec_review.guidance.skills import load_runtime_skill
 from appsec_review.review.fact_summary import summarize_fact
-from appsec_review.review.models import Role
+from appsec_review.review.identity import sha256_hex
+from appsec_review.review.models import IntegrityError, Role
 
 EVIDENCE_QUERYING_SKILL_ID = "evidence-and-graph-querying"
 DEFAULT_MAX_EVIDENCE_REQUESTS = 4
@@ -88,25 +89,28 @@ def _extract_query_terms(need: str) -> tuple[list[tuple[str, int]], list[str]]:
     return line_refs, tokens[:8]
 
 
-def _citation_from_record(record: Mapping[str, Any]) -> dict[str, Any]:
+def _citation_from_record(record: Mapping[str, Any], response: Mapping[str, Any]) -> dict[str, Any]:
     payload = record.get("payload") if isinstance(record.get("payload"), Mapping) else {}
-    loc = record.get("source_location") if isinstance(record.get("source_location"), Mapping) else None
+    loc = record.get("location") if isinstance(record.get("location"), Mapping) else None
+    shards = [item for item in response["indexes"]
+              if (item["name"], item["shard_id"]) == (record["index"], record["shard_id"])]
+    if len(shards) != 1:
+        raise IntegrityError("follow-up evidence is not bound to one accepted shard")
     citation: dict[str, Any] = {
-        "entity_id": str(record["entity_id"]),
+        "entity_id": str(record["identity"]),
         "kind": str(record.get("kind", "")),
         "name": str(record.get("name", ""))[:200],
         "index": str(record.get("index", "")),
         "shard_id": str(record.get("shard_id", "")),
-        "shard_sha256": str(record.get("shard_sha256", "")),
-        "content_sha256": str(record.get("content_sha256", "")),
+        "shard_sha256": shards[0]["sha256"],
+        "content_sha256": sha256_hex(record),
+        "index_manifest_sha256": response["index_manifest"]["sha256"],
+        "coverage_gaps": list(response["coverage_gaps"]),
+        "truncated": response["truncated"],
         "summary": summarize_fact(str(record.get("kind", "")), payload, line=loc.get("start_line") if isinstance(loc, Mapping) and isinstance(loc.get("start_line"), int) else None)[:400],
     }
     if loc:
-        citation["location"] = {
-            "path": str(loc.get("path", ""))[:500],
-            "start_line": loc.get("start_line"),
-            "end_line": loc.get("end_line"),
-        }
+        citation["location"] = dict(loc)
     for key in ("guard_polarity", "resolution_tier", "verdict", "control_id"):
         if key in payload and payload[key] is not None:
             citation[key] = str(payload[key])[:120]
@@ -122,7 +126,7 @@ def _matches_record(
     score = 0
     name = str(record.get("name", ""))
     kind = str(record.get("kind", ""))
-    loc = record.get("source_location") if isinstance(record.get("source_location"), Mapping) else {}
+    loc = record.get("location") if isinstance(record.get("location"), Mapping) else {}
     path = str(loc.get("path", ""))
     start = loc.get("start_line")
     end = loc.get("end_line") or start
@@ -130,7 +134,7 @@ def _matches_record(
     haystack = f"{name} {kind} {path} {payload.get('guard_polarity', '')} {payload.get('symbol', '')}".lower()
 
     for ref_path, ref_line in line_refs:
-        if path.endswith(ref_path) or ref_path.endswith(path and Path(path).name or ref_path):
+        if path and (path.endswith(ref_path) or ref_path.endswith(Path(path).name)):
             score += 3
             if isinstance(start, int) and isinstance(end, int) and start <= ref_line <= end:
                 score += 5
@@ -151,17 +155,24 @@ def fulfill_evidence_requests(
     unfulfilled_prior: int = 0,
     max_requests: int = DEFAULT_MAX_EVIDENCE_REQUESTS,
 ) -> EvidenceFulfillmentOutcome:
-    """Deterministically resolve bounded Round 1 ``requests_evidence`` against ``core`` within package scope."""
+    """Deliver canonical pending-obligation evidence within package scope, not semantic satisfaction."""
+    if max_requests < 0:
+        raise ValueError("max_requests must be non-negative")
     allowed = frozenset(package_entities)
     admitted = list(pending_requests[:max_requests])
     overflow = max(0, len(pending_requests) - len(admitted))
 
     records_by_id: dict[str, Mapping[str, Any]] = {}
+    responses_by_id: dict[str, Mapping[str, Any]] = {}
     if admitted and allowed and hasattr(core, "find"):
         for eid in sorted(allowed):
-            found = core.find(identity=eid, limit=1).get("results", ())
+            response = core.find(identity=eid, limit=1)
+            found = response["results"]
             if found:
+                if found[0]["identity"] != eid:
+                    raise IntegrityError("follow-up retrieval returned a different entity")
                 records_by_id[eid] = found[0]
+                responses_by_id[eid] = response
 
     fulfilled_items: list[dict[str, Any]] = []
     extra_entities: set[str] = set()
@@ -169,10 +180,10 @@ def fulfill_evidence_requests(
     unfulfilled_count = unfulfilled_prior + overflow
 
     for req in admitted:
-        request_id = str(req.get("request_id", ""))
-        need = str(req.get("need", ""))
+        obligation_id = str(req["obligation_id"])
+        question = str(req["question"])
         anchors = [str(a) for a in req.get("anchors", ()) if str(a) in allowed]
-        line_refs, tokens = _extract_query_terms(need)
+        line_refs, tokens = _extract_query_terms(question)
 
         citations: list[dict[str, Any]] = []
         seen_eids: set[str] = set()
@@ -182,7 +193,7 @@ def fulfill_evidence_requests(
             if rec is not None and anchor_id not in seen_eids:
                 seen_eids.add(anchor_id)
                 extra_entities.add(anchor_id)
-                citations.append(_citation_from_record(rec))
+                citations.append(_citation_from_record(rec, responses_by_id[anchor_id]))
                 if len(citations) >= MAX_CITATIONS_PER_REQUEST:
                     break
 
@@ -198,15 +209,16 @@ def fulfill_evidence_requests(
             for _score, eid, rec in scored[: MAX_CITATIONS_PER_REQUEST - len(citations)]:
                 seen_eids.add(eid)
                 extra_entities.add(eid)
-                citations.append(_citation_from_record(rec))
+                citations.append(_citation_from_record(rec, responses_by_id[eid]))
 
         if citations:
             fulfilled_count += 1
             fulfilled_items.append({
-                "request_id": request_id,
+                "obligation_id": obligation_id,
                 "claim_id": str(req.get("claim_id", "")),
                 "predicate": str(req.get("predicate", "")),
-                "need": need[:500],
+                "requested_kind": req["requested_kind"],
+                "question": question[:500],
                 "resolved_citations": citations,
             })
         else:
