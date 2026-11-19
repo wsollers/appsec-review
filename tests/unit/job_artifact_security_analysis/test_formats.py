@@ -43,6 +43,13 @@ def _wasm_name(text: str) -> bytes:
     return _leb128(len(raw)) + raw
 
 
+def _minimal_jvm_class() -> bytes:
+    return (b"\xca\xfe\xba\xbe\0\0\0\x41\0\x05"
+            b"\x01\0\x07Minimal\x07\0\x01"
+            b"\x01\0\x10java/lang/Object\x07\0\x03"
+            + struct.pack(">7H", 0x21, 2, 4, 0, 0, 0, 0))
+
+
 def _ar_entry(name: str, data: bytes, *, size_text: str | None = None, end: bytes = b"`\n") -> bytes:
     size_str = f"{len(data):<10}" if size_text is None else f"{size_text:<10}"[:10]
     header = (
@@ -135,7 +142,7 @@ def test_classify_recognizes_binary_container_producer_and_media_formats(tmp_pat
     for idx, magic in enumerate((b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe")):
         assert check(f"mach{idx}", magic + b"\0" * 12, {})["format"] == "macho"
     assert check("mod.txt", b"\0asm\x01\0\0\0", {"kind": "generated-output"})["format"] == "wasm"
-    assert check("cls.bin", b"\xca\xfe\xba\xbe\0\0\0\x3d", {})["format"] == "jvm-class"
+    assert check("cls.bin", _minimal_jvm_class(), {})["format"] == "jvm-class"
     assert check("native.exe", b"MZ" + b"\0" * 32, {}) == {
         "format": "pe",
         "family": "native",
@@ -400,7 +407,7 @@ def test_parse_wasm_parses_sections_features_and_rejects_malformed_modules() -> 
         (b"\0asm\x01\0\0\0" + _wasm_section(5, _leb128(1) + b"\x01\x01"), "truncated WebAssembly LEB128"),
         (
             b"\0asm\x01\0\0\0" + bytes([5]) + _leb128(2) + b"\x01\x01\x01\x02",
-            "limits exceed section",
+            "truncated WebAssembly LEB128",
         ),
         (b"\0asm\x01\0\0\0" + _wasm_section(2, _leb128(10_001)), "import count exceeds bound"),
         (b"\0asm\x01\0\0\0" + _wasm_section(2, _leb128(1) + _wasm_name("m") + _wasm_name("f")), "truncated WebAssembly import"),

@@ -50,6 +50,7 @@ def _unit_context(
     source_fingerprint: str = "a" * 64,
     outputs: dict | None = None,
     unit_id: str = "analyze.syft",
+    attempt_id: str = "attempt_0001",
 ) -> tuple[SimpleNamespace, list[tuple[str, dict]]]:
     config = load_config(ROOT / "appsec-review.toml")
     job_cfg = config.job("job_artifact_security_analysis")
@@ -64,7 +65,7 @@ def _unit_context(
         if declared_releases
         else {}
     )
-    attempt_root = run_root / "data/jobs/job_artifact_security_analysis/attempts/attempt_0001"
+    attempt_root = run_root / "data/jobs/job_artifact_security_analysis/attempts" / attempt_id
     attempt_root.mkdir(parents=True, exist_ok=True)
     claim_path = attempt_root / "claim.json"
     if not claim_path.is_file():
@@ -73,7 +74,7 @@ def _unit_context(
             {
                 "run_id": run_root.name,
                 "job_id": "job_artifact_security_analysis",
-                "attempt_id": "attempt_0001",
+                "attempt_id": attempt_id,
                 "attempt_path": attempt_root.relative_to(run_root).as_posix(),
                 "orchestration": {"system": "cli"},
                 "dataset_contract": dataset_contract(
@@ -95,7 +96,7 @@ def _unit_context(
         unit_root=attempt_root / "steps/analyze/tasks/syft",
         job=SimpleNamespace(
             run_id=run_root.name,
-            attempt_id="attempt_0001",
+            attempt_id=attempt_id,
             run_root=run_root,
             attempt_root=attempt_root,
             repository_root=ROOT,
@@ -672,7 +673,7 @@ def test_scan_one_covers_checkpoint_reuse_runner_outcomes_and_native_reports(
     tampered = json.loads(ckpt_path.read_text(encoding="utf-8"))
     tampered["fingerprint"] = "0" * 64
     ckpt_path.write_text(json.dumps(tampered), encoding="utf-8")
-    with pytest.raises(security.FrameworkIntegrityError, match="checkpoint fingerprint changed"):
+    with pytest.raises(security.FrameworkIntegrityError, match="identity changed"):
         security._scan_one(ctx, elf, "native", None)
 
     class _Runner:

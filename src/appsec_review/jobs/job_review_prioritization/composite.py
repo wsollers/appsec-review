@@ -426,16 +426,17 @@ def _load_artifact_leads(run_root: Path, enabled: bool) -> tuple[str, list[dict[
     handoff, _ = accepted_handoff(run_root, "job_artifact_security_analysis")
     status = str(handoff.get("terminal_status") or "UNAVAILABLE")
     out = handoff.get("outputs", {}).get("acceptance.publish_handoff") or {}
-    candidates: list[tuple[str | None, int | None, Mapping[str, Any]]] = []
+    candidates: list[tuple[str, str | None, str | None, int | None, Mapping[str, Any]]] = []
     art = out.get("artifact")
     if isinstance(art, Mapping):
         doc = read_json(run_root, art)
         for key in ("promoted_findings", "security_findings", "findings"):
-            for item in doc.get(key, ()) or ():
+            for ordinal, item in enumerate(doc.get(key, ()) or ()):
                 if isinstance(item, Mapping):
-                    p = _norm_path(item.get("path") or item.get("artifact_path")) or None
+                    p = _norm_path(item.get("path")) or None
                     ln = item.get("line", item.get("start_line"))
-                    candidates.append((p, int(ln) if isinstance(ln, int) and ln >= 1 else None, item))
+                    identity = _lead_id("artifact_document", art["sha256"], key, ordinal)
+                    candidates.append((identity, None, p, int(ln) if type(ln) is int and ln >= 1 else None, item))
     if isinstance(out.get("index_manifest"), Mapping):
         for _shard, entity in producer_entities(
             run_root, out["index_manifest"],
@@ -449,24 +450,36 @@ def _load_artifact_leads(run_root: Path, enabled: bool) -> tuple[str, list[dict[
             payload = entity["payload"]
             nested = payload.get("findings")
             if isinstance(nested, list):
-                for nf in nested:
+                for ordinal, nf in enumerate(nested):
                     if isinstance(nf, Mapping):
                         p = _norm_path(nf.get("path")) or loc_path or None
                         ln = nf.get("line", loc_line)
-                        candidates.append((p, int(ln) if isinstance(ln, int) and ln >= 1 else None, nf))
+                        identity = _lead_id("artifact_nested", entity["identity"], ordinal)
+                        candidates.append((identity, str(entity["identity"]), p,
+                                           int(ln) if type(ln) is int and ln >= 1 else None, nf))
             if bool(payload.get("lead_candidate")):
-                candidates.append((loc_path or None, loc_line, payload))
+                candidates.append((str(entity["identity"]), str(entity["identity"]), loc_path or None, loc_line, payload))
 
     leads: dict[str, dict[str, Any]] = {}
-    for path, line, item in candidates:
+    seen_observations: dict[str, bytes] = {}
+    for candidate_identity, observation_identity, path, line, item in candidates:
         if not bool(item.get("lead_candidate")):
             continue
-        rule_id = str(item.get("rule_id") or item.get("code") or item.get("id") or "artifact-security-risk")
+        content = canonical_json([path, line, item])
+        if candidate_identity in seen_observations and seen_observations[candidate_identity] != content:
+            raise ValueError("conflicting artifact finding identity in accepted priority inputs")
+        seen_observations[candidate_identity] = content
+        common = item.get("common") if isinstance(item.get("common"), Mapping) else {}
+        rule_id = str(common.get("rule_id") or item.get("rule_id") or item.get("code")
+                      or item.get("id") or "artifact-security-risk")
         attack_class = str(item.get("attack_class") or "packaged_artifact_risk")
-        severity_hint = _norm_severity(item.get("severity_hint") or item.get("severity"), default="high")
+        severity_hint = _norm_severity(item.get("severity_hint") or item.get("severity"), default="unknown")
         summary = str(item.get("summary") or item.get("message") or item.get("detail") or rule_id)
-        lid = _lead_id("artifact_security", path, line, rule_id, attack_class)
-        leads[lid] = {
+        artifact = item.get("artifact") if isinstance(item.get("artifact"), Mapping) else {}
+        subject_artifact = item.get("subject_artifact") or artifact.get("canonical_identity")
+        lid = _lead_id("artifact_security", candidate_identity, subject_artifact,
+                       item.get("subject"), item.get("occurrence"), rule_id, attack_class)
+        lead = {
             "lead_id": lid,
             "lead_source": "artifact_security",
             "producer": "job_artifact_security_analysis",
@@ -478,8 +491,16 @@ def _load_artifact_leads(run_root: Path, enabled: bool) -> tuple[str, list[dict[
             "end_line": line,
             "rule_id": rule_id,
             "summary": summary,
+            **({"observation_identity": observation_identity} if observation_identity is not None else {}),
+            "subject_artifact": subject_artifact,
+            "subject": item.get("subject"),
+            "evidence_refs": list(common.get("evidence_refs") or ()),
         }
-    ordered = sorted(leads.values(), key=lambda x: (_SEVERITIES.index(x["severity_hint"]), x["path"] or "", x["line"] or 0, x["lead_id"]))
+        if lid in leads and leads[lid] != lead:
+            raise ValueError("conflicting artifact finding identity in accepted priority inputs")
+        leads[lid] = lead
+    ordered = sorted(leads.values(), key=lambda x: (
+        (*_SEVERITIES, "unknown").index(x["severity_hint"]), x["path"] or "", x["line"] or 0, x["lead_id"]))
     return status, ordered
 
 

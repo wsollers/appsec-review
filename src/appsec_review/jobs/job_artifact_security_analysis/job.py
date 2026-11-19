@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import time
+import uuid
 from typing import Any
 import xml.etree.ElementTree as ET
 
@@ -22,6 +23,7 @@ from appsec_review.provenance import (
     consume_native_references, retain_native_output, validate_observation_provenance,
 )
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
+from appsec_review.storage.shared import immutable_bytes
 from appsec_review.tool_inputs import (
     InputDecision, bounded_diagnostic, not_applicable_summary, osv_missing_ecosystem_gap,
     osv_missing_ecosystems, osv_reported_no_package_sources, partition_artifacts,
@@ -42,8 +44,8 @@ from appsec_review.jobs.job_artifact_security_analysis.datasets import CONTRACT,
 
 SCHEMA = "appsec-review/artifact-security-analysis/1"
 OBSERVATION_SCHEMA = "appsec-review/artifact-security-observation/1"
-PARSER_IDENTITY = "appsec-review/artifact-security-parsers/4+" + POLICY_IDENTITY
-NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/2"
+PARSER_IDENTITY = "appsec-review/artifact-security-parsers/5+" + POLICY_IDENTITY
+NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/3"
 # The observations shard is a function of the scan results (parser and normalizer identities, which also key the
 # scan checkpoints) and of the splitting of a scan into one summary and per-finding records (``findings.py``).
 # Changing only the splitting re-indexes without re-running a scanner.
@@ -372,12 +374,16 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         "parser": PARSER_IDENTITY, "normalizer": NORMALIZER_IDENTITY,
         **({"scanner_input": presented} if presented is not None else {}),
         "configuration": {key: settings[key] for key in sorted(settings) if key != "scanner_identities"}})).hexdigest()
-    checkpoint = unit.job.run_root / "data" / "artifact-security" / "shards" / capability / fingerprint / "result.json"
+    checkpoint = unit.job.run_root / "data" / "artifact-security" / "checkpoints" / capability / (fingerprint + ".json")
     if not reusable:
         unit.job.events.write("CHECKPOINT_MISSED", artifact_id=artifact["artifact_id"],
                               action=capability, reason=reuse_reason)
     if reusable and checkpoint.is_file():
-        prior = json.loads(checkpoint.read_text(encoding="utf-8"))
+        pointer = json.loads(checkpoint.read_text(encoding="utf-8"))
+        if pointer.get("fingerprint") != fingerprint:
+            raise FrameworkIntegrityError("artifact-security checkpoint fingerprint changed")
+        result_artifact = pointer["result_artifact"]
+        prior = json.loads(_safe_file(unit.job.run_root, result_artifact).read_text(encoding="utf-8"))
         if prior.get("fingerprint") != fingerprint:
             raise FrameworkIntegrityError("artifact-security checkpoint fingerprint changed")
         for identity in prior.get("raw_artifacts", ()):
@@ -385,8 +391,8 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         consume_native_references(unit.job.run_root, [
             *([prior["native_output"]] if prior.get("native_output") else []),
             *prior.get("native_reports", {}).values()])
-        return {**prior, "reused": True, "result_artifact": _identity(unit.job.run_root, checkpoint)}
-    root = unit.job.attempt_root / "artifacts" / "asa" / artifact["artifact_id"][-12:] / capability
+        return {**prior, "reused": True, "result_artifact": result_artifact}
+    root = unit.job.attempt_root / "artifacts" / "asa" / artifact["artifact_id"][-12:] / capability / uuid.uuid4().hex
     root.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     from appsec_review.runtime import execution_safety as safety
@@ -514,7 +520,8 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         native_output = retain_native_output(
             unit.job.run_root, root / "parser-input.bin", parser_identity=PARSER_IDENTITY,
             expected=parser_identity, complete=parser_complete and not parser_identity["truncated"],
-            native_result_count=int(observation.get("_native_result_count", native_result_count(observation))),
+            native_result_count=int(observation.get("_native_result_count",
+                native_result_count(observation.get("security_risks", observation)))),
             execution_reference=execution_receipt,
             events=unit.job.events, unit_id=unit.unit_id).as_dict()
         if parser_identity["truncated"]:
@@ -553,9 +560,14 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         "reused": False, "not_applicable": not_applicable,
         "terminal_status": ("SKIPPED_NA" if not_applicable is not None else
                             "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED")}
-    checkpoint.parent.mkdir(parents=True, exist_ok=True)
-    atomic_json(checkpoint, result)
-    return {**result, "result_artifact": _identity(unit.job.run_root, checkpoint)}
+    payload = canonical_json(result)
+    digest = hashlib.sha256(payload).hexdigest()
+    result_artifact = immutable_bytes(
+        unit.job.run_root, f"data/artifact-security/shards/{capability}/{digest}/result.json", payload)
+    if reusable:
+        immutable_bytes(unit.job.run_root, checkpoint.relative_to(unit.job.run_root).as_posix(),
+                        canonical_json({"fingerprint": fingerprint, "result_artifact": result_artifact}))
+    return {**result, "result_artifact": result_artifact}
 
 
 def _validate_config(context, _result) -> None:
@@ -726,12 +738,13 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
         loaded = unit.output("load.accepted_artifacts")
         observations = [row for capability in CAPABILITIES
                         for row in unit.output(f"analyze.{capability}")["observations"]]
-        producer = [{"sha256": item["fingerprint"]} for item in observations]
-        fingerprint = index_fingerprint(name="observations", target_snapshot=unit.job.source_fingerprint,
-            producer_artifacts=producer, tool_identity={"job": "job_artifact_security_analysis"},
-            parser_identity=PARSER_IDENTITY, normalizer_identity=INDEX_NORMALIZER_IDENTITY,
-            mapping_identity="exact-run-artifact/1", upstream_manifests=[loaded["artifact_index"]["sha256"]])
-        path = unit.job.run_root / "data" / "indices" / "observations" / f"artifact-security-{fingerprint}.sqlite"
+        for row in observations:
+            bound = json.loads(_safe_file(unit.job.run_root, row["result_artifact"]).read_text(encoding="utf-8"))
+            if {k: v for k, v in row.items() if k not in {"result_artifact", "reused"}} != {
+                    k: v for k, v in bound.items() if k != "reused"}:
+                raise FrameworkIntegrityError("artifact-security result content differs from its bound bytes")
+            for raw in row["raw_artifacts"]:
+                _safe_file(unit.job.run_root, raw)
         gaps = [*loaded["producer_gaps"], *[gap for capability in CAPABILITIES
                  for gap in unit.output(f"analyze.{capability}")["gaps"]]]
         records = [scan_records(row) for row in observations]
@@ -740,6 +753,19 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                    for summary, findings in records]
         gaps = list(dict.fromkeys((*gaps, *(gap for summary, _ in records
                                            for gap in summary.payload["gaps"]))))
+        for summary, findings in records:
+            validate_observation_provenance(
+                unit.job.run_root, (record.payload for record in (summary, *findings)),
+                parser_identity=PARSER_IDENTITY, events=unit.job.events, unit_id=unit.unit_id)
+        producer = [row["result_artifact"] for row in observations]
+        producer.append({"sha256": hashlib.sha256(canonical_json({
+            "records": [[asdict(summary), [asdict(finding) for finding in findings]]
+                        for summary, findings in records], "gaps": gaps})).hexdigest()})
+        fingerprint = index_fingerprint(name="observations", target_snapshot=unit.job.source_fingerprint,
+            producer_artifacts=producer, tool_identity={"job": "job_artifact_security_analysis"},
+            parser_identity=PARSER_IDENTITY, normalizer_identity=INDEX_NORMALIZER_IDENTITY,
+            mapping_identity="exact-run-artifact/1", upstream_manifests=[loaded["artifact_index"]["sha256"]])
+        path = unit.job.run_root / "data" / "indices" / "observations" / f"artifact-security-{fingerprint}.sqlite"
         if not path.is_file():
             builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                                    target_snapshot=unit.job.source_fingerprint, shard_id="artifact-security")
@@ -752,9 +778,6 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
                     builder.add_entity(EntityRecord(artifact_id, artifact["sha256"],
                         PurePosixPath(str(artifact.get("workspace_path") or artifact["path"])).name,
                         f"produced artifact {row['classification']['format']}", artifact))
-                validate_observation_provenance(
-                    unit.job.run_root, (record.payload for record in (summary, *findings)),
-                    parser_identity=PARSER_IDENTITY, events=unit.job.events, unit_id=unit.unit_id)
                 evidence = {"evidence_identities": [{"relative_path": raw["path"], "sha256": raw["sha256"],
                     "byte_count": raw["byte_count"], "captured_bytes": raw["captured_bytes"],
                     "truncated": raw["truncated"]} for raw in row["raw_artifacts"]],

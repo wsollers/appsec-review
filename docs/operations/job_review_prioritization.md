@@ -16,6 +16,14 @@ dependency, semantic-path and history signals. A high score means “review firs
 “vulnerable.” Missing features remain missing and reduce feature coverage rather than quietly
 becoming zero-valued evidence that code is safe.
 
+Artifact-native leads retain distinct observation/artifact/subject identities and resolving native
+evidence references even when they have no source span. Missing severity remains `unknown`, not
+`high`; duplicate identity conflicts are rejected rather than overwritten. These changes do not
+alter the normalized 0–1 score scale or the typed silence-hunt threshold.
+The four artifact metadata fields are optional in `review-prioritization-signals/1`, preserving
+older records. Native evidence uses the existing closed `native-result-reference/1` shape; offline
+JSON Schema validation registers `job-interchange.schema.json` alongside the signals schema.
+
 <!-- generated:begin job=job_review_prioritization -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract

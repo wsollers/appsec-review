@@ -15,6 +15,7 @@ from typing import Any
 
 import jsonschema
 import pytest
+from referencing import Registry, Resource
 
 from appsec_review.config import load_config
 from appsec_review.jobs.job_review_prioritization import (
@@ -59,6 +60,8 @@ BASE_CONFIG = load_config(ROOT / "appsec-review.toml")
 SIGNALS_SCHEMA = json.loads(
     (ROOT / "docs" / "schemas" / "review-prioritization" / "prioritization-signals.schema.json").read_text(encoding="utf-8")
 )
+INTERCHANGE_SCHEMA = json.loads((ROOT / "docs/schemas/job-interchange.schema.json").read_text(encoding="utf-8"))
+SIGNALS_REGISTRY = Registry().with_resource(INTERCHANGE_SCHEMA["$id"], Resource.from_contents(INTERCHANGE_SCHEMA))
 
 
 def _sources(*enabled: str) -> dict[str, bool]:
@@ -633,7 +636,7 @@ def test_end_to_end_engineering_signal_rewiring_and_sast_silence_hunt(tmp_path: 
 
     signals_doc = read_json(run_root, pub["prioritization_signals_artifact"])
     assert signals_doc["schema"] == PRIORITIZATION_SIGNALS_SCHEMA
-    jsonschema.validate(instance=signals_doc, schema=SIGNALS_SCHEMA)
+    jsonschema.validate(instance=signals_doc, schema=SIGNALS_SCHEMA, registry=SIGNALS_REGISTRY)
 
     telemetry = signals_doc["telemetry"]
     assert telemetry["leads_promoted_ci"] == 1
@@ -812,7 +815,7 @@ def test_composite_maximum_matches_attainable_factor_bounds(tmp_path: Path, weig
         assert item["raw_score"] == round(0.5 + 5 * maximum_boost, 6)
         assert item["score"] == item["raw_score"] / maximum
         assert 0 <= item["score"] <= 1
-    jsonschema.validate(signals, SIGNALS_SCHEMA)
+    jsonschema.validate(signals, SIGNALS_SCHEMA, registry=SIGNALS_REGISTRY)
 
 
 def test_normalization_is_configuration_bound_not_availability_bound(tmp_path: Path) -> None:

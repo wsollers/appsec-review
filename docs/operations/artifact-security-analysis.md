@@ -86,6 +86,62 @@ metadata without extracting or executing members. Traversal, absolute paths, lin
 member count or size, expansion ratios, corrupt containers, and unsupported formats become precise
 coverage gaps.
 
+Universal Mach-O headers (32/64-bit architecture tables, either byte order) are checked with
+bounded architecture counts, nonoverlapping in-file slices, alignment, and matching thin-header
+CPU identities. The shared `CAFEBABE` magic is not sufficient to call a file Java: the bounded
+Java constant-pool/header structure distinguishes it. Invalid or over-bound universal headers
+remain explicit classification gaps, not SpotBugs inputs. Valid universal files use the existing
+`macho` native scanner support; builtin Mach-O security assessment still requires a pinned scanner.
+WebAssembly memory/table presence and feature summaries include imports as well as definitions,
+while the separate `imports`, `memories` and `tables` lists preserve their origins. Memory64
+limits retain their full unsigned width; truncated or invalid limits are parse gaps.
+
+## Builtin artifact-risk candidates
+
+The existing `native` and `packages` tasks publish bounded `security_risks` through the same
+per-finding normalizer, native-result retention, observation index and artifact relations as
+scanner findings. Native ELF inspection reports ET_EXEC and executable-stack indicators, and
+missing PT_GNU_RELRO only after reading the complete bounded program-header table. Absent symbol
+strings never establish missing stack canaries. Invalid, truncated, absent or over-bound header
+tables are named coverage gaps; symbol/loader/canary assessment still requires a pinned scanner.
+
+Package inspection reads first-level regular UTF-8 configuration members of accepted ZIP/TAR
+containers without extracting or executing them. Selected members have suffix `.yaml`, `.yml`,
+`.json`, `.toml`, `.ini`, `.cfg`, `.conf`, `.properties` or `.env`, or basename `Dockerfile`/`.env`.
+This is the declared text-inspection scope, not filename-based binary-format classification.
+Archive custody checks precede reads. Member count, per-member bytes and aggregate bytes retain
+the configured archive limits; each selected text read is additionally bounded to 1 MiB.
+Oversized/undecodable members, duplicate paths, unsafe entries and unsupported archive readers
+remain gaps. No nested archive traversal or dependency/vulnerability matching is implied.
+
+These are **unrated review candidates**, not proof of active configuration, usable credentials,
+exploitability or severity. Only the rule, member/binary identity and redacted message are
+published; matching values are not copied. `severity` remains null and `severity_hint` unknown
+with `severity_missing_or_unrated`. Native selectors resolve to the retained builtin observation's
+`security_risks` entries. The index's common metadata retains the exact rule identity even when
+generic display-field redaction hides a secret-related label. Reported scanner severity is
+preserved, never upgraded because a rule name contains NX, CANARY or another high-risk token.
+
+Prioritization keys artifact leads by their observation and artifact/subject identity, including
+distinct repeated findings, rather than null source locations. It carries the original native
+evidence references and retains unknown severity. Artifact paths do not become invented source
+spans; conflicting duplicate identities are rejected instead of selecting the last row.
+
+## Immutable scan reuse
+
+Each execution has separate protected stream storage, including repeated invocations within one
+attempt. Result JSON is published without replacement at
+`data/artifact-security/shards/<capability>/<result-sha256>/result.json`. A complete declared release
+identity permits an immutable input-fingerprint checkpoint to reference those exact result bytes.
+Checkpoint metadata under `data/artifact-security/checkpoints/` belongs to protected
+`artifact_scanner_io`; it is not finding evidence. Without complete releases a fresh scan is
+required, never an overwrite of an earlier result.
+
+Index reuse binds the verified result identities, normalized record contents and coverage gaps,
+not only input fingerprints or finding counts. Changed same-count findings and changed upstream
+coverage materialize different indexes/manifests; unchanged released inputs retain exact result
+and index reuse. Bound result/native/diagnostic bytes are verified before reuse.
+
 Pinned scanners run only on the inputs `appsec_review.tool_inputs` declares for them: BLint on
 ELF, PE/.NET, COFF, Mach-O, and Android packages; cve-bin-tool on ELF (executables, shared and
 relocatable objects), PE/.NET, COFF and Mach-O files, never on `ar` archives or sources; SpotBugs
@@ -306,8 +362,8 @@ the user's request:
 ## Units, recovery, and invalidation
 
 Dagster exposes independent inventory, native, JVM, package, WebAssembly, SpotBugs, BLint, Syft,
-Grype, and OSV capability units. Below that graph, each artifact/capability pair has a content-addressed shard
-fingerprinted by:
+Grype, OSV and cve-bin-tool capability units. Below that graph, each artifact/capability pair has an
+input-cache fingerprint covering:
 
 - accepted artifact hash and detected format;
 - producer/build identity and accepted language-build handoff;
@@ -350,12 +406,13 @@ The [interchange upgrade](../architecture/job-interchange.md) adds common observ
 and native-result references to this scanner lane. The implementation keeps
 `appsec-review/artifact-security-record/2` and `appsec-review/artifact-security-observation/1`,
 with additive common/provenance metadata. Finding normalization is
-`appsec-review/artifact-security-findings/5` (native CVE-bin-tool root-array selectors);
+`appsec-review/artifact-security-findings/6` (native selectors, unrated builtin candidates and
+preserved reported severity);
 a finding-normalizer-only change rebuilds the observations shard but keeps scan checkpoints reusable.
-The repaired native-report contracts and bounded reads use parser identity
-`appsec-review/artifact-security-parsers/4+<policy-identity>`, invalidating older scan checkpoints.
-Normalization remains
-`appsec-review/artifact-security-normalizer/2` for retained parser-input semantics.
+The native-report contracts, bounded readers, resource/format corrections and builtin risk producer
+use parser identity `appsec-review/artifact-security-parsers/5+<policy-identity>`, invalidating older
+scan checkpoints. Normalization uses `appsec-review/artifact-security-normalizer/3` for
+content-bound immutable execution results.
 Keep original scanner result identity, parser, retained byte count/hash, selector, and completeness
 alongside domain-specific artifact/package fields. A synthesized BLint report or partitioned result
 must not replace the original report/invocation provenance. Distinct selectors/invocations remain

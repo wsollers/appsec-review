@@ -1,4 +1,4 @@
-"""Unit tests for packaged secret, container config, and ELF hardening lead promotion (T-171)."""
+"""Bounded candidate metadata and reported scanner severity (T-170, T-5104)."""
 
 from __future__ import annotations
 
@@ -60,23 +60,23 @@ def test_packaged_secrets_and_dangerous_container_configs_emit_lead_metadata() -
     by_check = {r["check_id"]: r for r in risks}
     assert by_check["SECRET_PRIVATE_KEY"]["lead_candidate"] is True
     assert by_check["SECRET_PRIVATE_KEY"]["attack_class"] == "packaged_hardcoded_secret"
-    assert by_check["SECRET_PRIVATE_KEY"]["severity_hint"] == "critical"
+    assert by_check["SECRET_PRIVATE_KEY"]["severity_hint"] == "unknown"
     assert by_check["SECRET_HARDCODED_CREDENTIAL"]["lead_candidate"] is True
 
     assert by_check["CONTAINER_PRIVILEGED_MODE"]["lead_candidate"] is True
     assert by_check["CONTAINER_PRIVILEGED_MODE"]["attack_class"] == "dangerous_container_configuration"
-    assert by_check["CONTAINER_PRIVILEGED_MODE"]["severity_hint"] == "critical"
+    assert by_check["CONTAINER_PRIVILEGED_MODE"]["severity_hint"] == "unknown"
     assert by_check["CONTAINER_ROOT_USER"]["lead_candidate"] is True
     assert by_check["CONTAINER_DEBUG_PORT"]["port"] == "9229"
     assert by_check["CONTAINER_HOST_NETWORK"]["lead_candidate"] is True
 
 
-def test_elf_missing_nx_pie_relro_canary_and_blint_scan_records_promote_leads() -> None:
+def test_elf_header_indicators_and_blint_scan_records_preserve_assessment_limits() -> None:
     unhardened = _minimal_elf64(e_type=2, exec_stack=True, include_relro=False, include_canary=False)
     elf_risks = inspect_elf_hardening_indicators(unhardened, binary_name="daemon")
     checks = {r["check_id"]: r for r in elf_risks}
-    assert {"CHECK_PIE", "CHECK_NX", "CHECK_RELRO", "CHECK_CANARY"} <= set(checks)
-    assert checks["CHECK_NX"]["severity_hint"] == "critical"
+    assert set(checks) == {"CHECK_PIE", "CHECK_NX", "CHECK_RELRO"}
+    assert checks["CHECK_NX"]["severity_hint"] == "unknown"
     assert all(r["lead_candidate"] is True and r["attack_class"] == "binary_missing_hardening" for r in elf_risks)
 
     hardened = _minimal_elf64(e_type=3, exec_stack=False, include_relro=True, include_canary=True)

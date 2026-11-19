@@ -80,6 +80,24 @@
             "type": "string",
             "minLength": 1
           },
+          "observation_identity": {
+            "type": "string",
+            "pattern": "^asr:tool_observation:[0-9a-f]{64}$"
+          },
+          "subject_artifact": {
+            "type": ["string", "null"],
+            "pattern": "^asr:[a-z][a-z0-9_]*:[0-9a-f]{64}$"
+          },
+          "subject": {
+            "type": ["string", "null"],
+            "minLength": 1
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "../job-interchange.schema.json#/$defs/nativeResultReference"
+            }
+          },
           "path": {
             "type": [
               "string",

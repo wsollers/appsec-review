@@ -35,6 +35,15 @@ file-size-limit outcomes remain explicit coverage gaps. Input-mount placeholders
 `target-inputs/` and `installer-records/` are protected `artifact_scanner_io`, not finding evidence.
 Archive readers reject negative member sizes before reading or moving their cursor.
 
+Imported Wasm resources participate in feature summaries without losing import provenance.
+Universal Mach-O files are recognized by bounded architecture/slice validation rather than being
+treated as JVM bytecode because of their shared magic. Builtin native/package tasks now emit
+bounded, unrated header/text-pattern candidates, not vulnerability verdicts or invented severity.
+See [builtin artifact risks and immutable scan reuse](artifact-security-analysis.md#builtin-artifact-risk-candidates)
+for inspection scope and explicit coverage limits. Results and diagnostic streams are immutable
+per execution; checkpoints and indexes bind actual result content and coverage, so same-count
+changed findings cannot reuse stale observations.
+
 The stream cap is **retention**, not bounded live subprocess capture: the shared executor uses
 `capture_output=True`, or `communicate()` under execution safety, and truncates streams after the
 runner returns. Noisy commands can still exceed that cap in application memory. This job's timeout,

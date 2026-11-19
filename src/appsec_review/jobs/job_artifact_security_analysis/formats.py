@@ -32,6 +32,84 @@ def _safe_member(name: str) -> bool:
     return not any(part in {"", ".", ".."} for part in PurePosixPath(normalized).parts)
 
 
+_MACHO_MAGICS = {
+    b"\xfe\xed\xfa\xce": (">", 28), b"\xce\xfa\xed\xfe": ("<", 28),
+    b"\xfe\xed\xfa\xcf": (">", 32), b"\xcf\xfa\xed\xfe": ("<", 32),
+}
+_FAT_MAGICS = {
+    b"\xca\xfe\xba\xbe": (">", False), b"\xbe\xba\xfe\xca": ("<", False),
+    b"\xca\xfe\xba\xbf": (">", True), b"\xbf\xba\xfe\xca": ("<", True),
+}
+
+
+def _java_header(data: bytes) -> bool:
+    """Distinguish the shared magic using a bounded constant-pool walk, not a filename."""
+    if len(data) < 10:
+        return False
+    minor, major, count = struct.unpack_from(">HHH", data, 4)
+    if major < 45 or (minor not in {0, 65535} and not (major == 45 and minor <= 3)) or count < 1:
+        return False
+    offset, index = 10, 1
+    sizes = {3: 4, 4: 4, 5: 8, 6: 8, 7: 2, 8: 2, 9: 4, 10: 4, 11: 4,
+             12: 4, 15: 3, 16: 2, 17: 4, 18: 4, 19: 2, 20: 2}
+    while index < count:
+        if offset >= len(data):
+            return False
+        tag = data[offset]
+        offset += 1
+        if tag == 1:
+            if offset + 2 > len(data):
+                return False
+            size = int.from_bytes(data[offset:offset + 2], "big")
+            offset += 2
+        elif tag in sizes:
+            size = sizes[tag]
+        else:
+            return False
+        offset += size
+        index += 2 if tag in {5, 6} else 1
+    return index == count and offset + 14 <= len(data)
+
+
+def _universal_macho(path: Path, head: bytes) -> dict[str, Any]:
+    order, wide = _FAT_MAGICS[head[:4]]
+    try:
+        if len(head) < 8:
+            raise ValueError("universal Mach-O header is truncated")
+        count = struct.unpack_from(order + "I", head, 4)[0]
+        width = 32 if wide else 20
+        table_end = 8 + count * width
+        if not 1 <= count <= 128:
+            raise ValueError("universal Mach-O architecture count is invalid or exceeds bound")
+        if table_end > len(head):
+            raise ValueError("universal Mach-O architecture table is truncated or exceeds probe bound")
+        size = path.stat().st_size
+        ranges = []
+        with path.open("rb") as stream:
+            for index in range(count):
+                fields = struct.unpack_from(order + ("IIQQII" if wide else "IIIII"), head, 8 + index * width)
+                cpu, subtype, offset, length, align = fields[:5]
+                if (align > 63 or offset % (1 << align) or offset < table_end or length < 28
+                        or offset + length > size or (wide and fields[5] != 0)):
+                    raise ValueError("universal Mach-O slice range or alignment is invalid")
+                if any(offset < end and start < offset + length for start, end in ranges):
+                    raise ValueError("universal Mach-O slices overlap")
+                ranges.append((offset, offset + length))
+                stream.seek(offset)
+                header = stream.read(32)
+                thin = _MACHO_MAGICS.get(header[:4])
+                if thin is None or length < thin[1] or len(header) < thin[1]:
+                    raise ValueError("universal Mach-O slice header is invalid or truncated")
+                slice_cpu, slice_subtype = struct.unpack_from(thin[0] + "II", header, 4)
+                if (slice_cpu, slice_subtype) != (cpu, subtype):
+                    raise ValueError("universal Mach-O slice architecture disagrees with table")
+        return {"format": "macho", "family": "native", "universal": True, "architecture_count": count}
+    except ValueError as exc:
+        if head[:4] == b"\xca\xfe\xba\xbe" and _java_header(head):
+            return {"format": "jvm-class", "family": "jvm"}
+        return {"format": "unrecognized-native", "family": "native", "gaps": [str(exc)]}
+
+
 def classify(path: Path, producer: Mapping[str, Any], *, name: str = "",
              probe_bytes: int = 1024 * 1024) -> dict[str, Any]:
     """Classify from bounded bytes plus accepted producer metadata.
@@ -47,12 +125,12 @@ def classify(path: Path, producer: Mapping[str, Any], *, name: str = "",
                               "classification_basis": ["bounded-magic"]}
     if head.startswith(b"\x7fELF"):
         result.update(format="elf", family="native")
-    elif head[:4] in {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe"}:
+    elif head[:4] in _MACHO_MAGICS:
         result.update(format="macho", family="native")
+    elif head[:4] in _FAT_MAGICS:
+        result.update(_universal_macho(path, head))
     elif head.startswith(b"\0asm"):
         result.update(format="wasm", family="wasm")
-    elif head.startswith(b"\xca\xfe\xba\xbe"):
-        result.update(format="jvm-class", family="jvm")
     elif head.startswith(b"MZ"):
         managed = b"BSJB" in head or declared in {"managed-assembly", "dotnet-assembly"}
         result.update(format="dotnet-assembly" if managed else "pe", family="dotnet" if managed else "native")
@@ -262,25 +340,30 @@ def inspect_archive(path: Path, limits: ArchiveLimits = ArchiveLimits(), *, dept
 def parse_wasm(data: bytes) -> dict[str, Any]:
     if not data.startswith(b"\0asm") or len(data) < 8:
         raise ValueError("invalid WebAssembly header")
-    def leb(offset: int) -> tuple[int, int]:
+    def leb(offset: int, end: int = len(data), bits: int = 32) -> tuple[int, int]:
         value = shift = 0
-        for _ in range(5):
-            if offset >= len(data): raise ValueError("truncated WebAssembly LEB128")
+        for _ in range((bits + 6) // 7):
+            if offset >= end: raise ValueError("truncated WebAssembly LEB128")
             byte = data[offset]; offset += 1; value |= (byte & 0x7f) << shift
+            if value >= 1 << bits: raise ValueError("WebAssembly LEB128 exceeds bound")
             if not byte & 0x80: return value, offset
             shift += 7
         raise ValueError("WebAssembly LEB128 exceeds bound")
     def name(offset: int, end: int) -> tuple[str, int]:
-        size, offset = leb(offset)
+        size, offset = leb(offset, end)
         if size > 4096 or offset + size > end:
             raise ValueError("WebAssembly name exceeds bound or section")
         return data[offset:offset + size].decode("utf-8", errors="replace"), offset + size
     def limits(offset: int, end: int) -> tuple[dict[str, int], int]:
-        flags, offset = leb(offset)
-        minimum, offset = leb(offset)
+        flags, offset = leb(offset, end)
+        if flags > 7 or (flags & 2 and not flags & 1):
+            raise ValueError("WebAssembly limits flags are invalid or unsupported")
+        bits = 64 if flags & 4 else 32
+        minimum, offset = leb(offset, end, bits)
         value = {"minimum": minimum, "shared": int(bool(flags & 0x2)), "memory64": int(bool(flags & 0x4))}
         if flags & 0x1:
-            maximum, offset = leb(offset); value["maximum"] = maximum
+            maximum, offset = leb(offset, end, bits); value["maximum"] = maximum
+            if maximum < minimum: raise ValueError("WebAssembly limits maximum is below minimum")
         if offset > end: raise ValueError("WebAssembly limits exceed section")
         return value, offset
     sections, imports, exports, memories, tables, custom = [], [], [], [], [], []
@@ -295,14 +378,14 @@ def parse_wasm(data: bytes) -> dict[str, Any]:
         if section_id == 0 and cursor < end:
             value, _ = name(cursor, end); custom.append(value)
         elif section_id == 2:
-            count, cursor = leb(cursor)
+            count, cursor = leb(cursor, end)
             if count > 10_000: raise ValueError("WebAssembly import count exceeds bound")
             for _ in range(count):
                 module, cursor = name(cursor, end); field, cursor = name(cursor, end)
                 if cursor >= end: raise ValueError("truncated WebAssembly import")
                 kind = data[cursor]; cursor += 1
                 row: dict[str, Any] = {"module": module, "name": field, "kind": kind}
-                if kind == 0: row["type_index"], cursor = leb(cursor)
+                if kind == 0: row["type_index"], cursor = leb(cursor, end)
                 elif kind == 1:
                     if cursor >= end: raise ValueError("truncated WebAssembly table import")
                     row["element_type"] = data[cursor]; cursor += 1
@@ -310,55 +393,68 @@ def parse_wasm(data: bytes) -> dict[str, Any]:
                 elif kind == 2: row["limits"], cursor = limits(cursor, end)
                 elif kind == 3: cursor += 2
                 elif kind == 4:
-                    _, cursor = leb(cursor); row["type_index"], cursor = leb(cursor)
+                    _, cursor = leb(cursor, end); row["type_index"], cursor = leb(cursor, end)
                 else: raise ValueError("unknown WebAssembly import kind")
                 imports.append(row)
         elif section_id == 4:
-            count, cursor = leb(cursor)
+            count, cursor = leb(cursor, end)
             if count > 10_000: raise ValueError("WebAssembly table count exceeds bound")
             for _ in range(count):
                 if cursor >= end: raise ValueError("truncated WebAssembly table")
                 element = data[cursor]; cursor += 1
                 value, cursor = limits(cursor, end); tables.append({"element_type": element, **value})
         elif section_id == 5:
-            count, cursor = leb(cursor)
+            count, cursor = leb(cursor, end)
             if count > 10_000: raise ValueError("WebAssembly memory count exceeds bound")
             for _ in range(count):
                 value, cursor = limits(cursor, end); memories.append(value)
         elif section_id == 7:
-            count, cursor = leb(cursor)
+            count, cursor = leb(cursor, end)
             if count > 10_000: raise ValueError("WebAssembly export count exceeds bound")
             for _ in range(count):
                 field, cursor = name(cursor, end)
                 if cursor >= end: raise ValueError("truncated WebAssembly export")
                 kind = data[cursor]; cursor += 1
-                index, cursor = leb(cursor); exports.append({"name": field, "kind": kind, "index": index})
+                index, cursor = leb(cursor, end); exports.append({"name": field, "kind": kind, "index": index})
+        if section_id in {2, 4, 5, 7} and cursor != end:
+            raise ValueError("WebAssembly entries do not match section bounds")
         offset = end
     if offset != len(data): raise ValueError("WebAssembly section count exceeds bound")
     version = int.from_bytes(data[4:8], "little")
     capabilities = sorted({row["module"] for row in imports} |
                           {f"{row['module']}::{row['name']}" for row in imports})
+    all_memories = [*memories, *(row["limits"] for row in imports if row["kind"] == 2)]
+    all_tables = [*tables, *(row for row in imports if row["kind"] == 1)]
     return {"version": version, "encoding": "module" if version == 1 else "component-or-unknown",
             "sections": sections, "custom_sections": custom, "imports": imports, "exports": exports,
             "memories": memories, "tables": tables, "capabilities": capabilities,
             "has_imports": bool(imports), "has_exports": bool(exports),
-            "has_memory": bool(memories), "has_tables": bool(tables),
-            "features": {"shared_memory": any(row.get("shared") for row in memories),
-                         "memory64": any(row.get("memory64") for row in memories),
-                         "multiple_memories": len(memories) > 1,
-                         "reference_tables": any(row.get("element_type") != 0x70 for row in tables)}}
+            "has_memory": bool(all_memories), "has_tables": bool(all_tables),
+            "features": {"shared_memory": any(row.get("shared") for row in all_memories),
+                         "memory64": any(row.get("memory64") for row in all_memories),
+                         "multiple_memories": len(all_memories) > 1,
+                         "reference_tables": any(row.get("element_type") != 0x70 for row in all_tables)}}
 
 
 def builtin_observation(path: Path, classification: Mapping[str, Any], capability: str,
                         limits: ArchiveLimits) -> tuple[dict[str, Any], list[str]]:
     fmt = classification["format"]
-    gaps: list[str] = []
+    gaps: list[str] = list(classification.get("gaps", ()))
     if capability == "inventory":
         value: dict[str, Any] = {"classification": dict(classification), "size_bytes": path.stat().st_size}
         if classification.get("container"):
             value["archive"] = inspect_archive(path, limits)
             gaps.extend(value["archive"]["gaps"])
         return value, gaps
+    if capability == "packages":
+        value = {"package_format": fmt}
+        if classification.get("container"):
+            value["archive"] = inspect_archive(path, limits)
+            gaps.extend(value["archive"]["gaps"])
+            if not gaps:
+                value["security_risks"], risk_gaps = _packaged_archive_risks(path, limits)
+                gaps.extend(risk_gaps)
+        return value, [*gaps, "SBOM/dependency vulnerability matching requires available pinned Syft and vulnerability data"]
     with path.open("rb") as stream:
         data = stream.read(16 * 1024 * 1024)
     if capability == "native" and fmt == "elf":
@@ -366,13 +462,18 @@ def builtin_observation(path: Path, classification: Mapping[str, Any], capabilit
         endian = "little" if data[5] == 1 else "big" if data[5] == 2 else "unknown"
         order = "<" if endian == "little" else ">"
         machine = struct.unpack(order + "H", data[18:20])[0] if endian != "unknown" else None
+        risks, risk_gaps = _elf_hardening(data, binary_name=path.name)
         return {"binary_format": "ELF", "class_bits": {1: 32, 2: 64}.get(data[4]),
                 "endian": endian, "machine": machine, "symbols": "requires-pinned-scanner",
-                "imports": "requires-pinned-scanner", "hardening": "requires-pinned-scanner"}, [
-                "native symbols/imports/exports/loader and hardening require a pinned scanner"]
+                "imports": "requires-pinned-scanner", "hardening": "bounded-header-indicators",
+                "security_risks": risks}, [
+                *gaps, *risk_gaps, "native symbols/imports/exports/loader and stack canary assessment require a pinned scanner"]
+    if capability == "native" and fmt == "macho":
+        return {"binary_format": fmt, "universal": classification.get("universal", False)}, [
+            *gaps, "Mach-O symbols/imports/exports/loader and hardening require a pinned scanner"]
     if capability == "native" and fmt in {"pe", "coff", "dotnet-assembly", "unrecognized-native"}:
         return {"binary_format": fmt, "managed": fmt == "dotnet-assembly"}, [
-            "PE/COFF symbols/imports/exports/loader and hardening require a pinned scanner"]
+            *gaps, "PE/COFF symbols/imports/exports/loader and hardening require a pinned scanner"]
     if capability == "jvm" and fmt == "jvm-class":
         if len(data) < 8: return {}, ["JVM class header is truncated"]
         return {"major_version": int.from_bytes(data[6:8], "big"),
@@ -386,10 +487,6 @@ def builtin_observation(path: Path, classification: Mapping[str, Any], capabilit
     if capability == "wasm" and fmt == "wasm":
         try: return parse_wasm(data), ["WebAssembly feature and capability policy requires a pinned validator"]
         except ValueError as exc: return {}, [f"WebAssembly parse failure: {exc}"]
-    if capability == "packages":
-        value = {"package_format": fmt}
-        if classification.get("container"): value["archive"] = inspect_archive(path, limits)
-        return value, ["SBOM/dependency vulnerability matching requires available pinned Syft and vulnerability data"]
     return {}, [f"unsupported format for {capability}: {fmt}"]
 
 
@@ -407,49 +504,50 @@ _PACKAGED_SECRET_RULES: tuple[tuple[str, _re.Pattern[str], str], ...] = (
     ), "Packaged configuration assigns a hardcoded secret or credential value."),
 )
 
-_CONTAINER_RISK_RULES: tuple[tuple[str, _re.Pattern[str], str, str], ...] = (
+_CONTAINER_RISK_RULES: tuple[tuple[str, _re.Pattern[str], str], ...] = (
     ("CONTAINER_PRIVILEGED_MODE", _re.compile(r"(?i)\bprivileged\s*:\s*true\b|--privileged\b"),
-     "critical", "Container configuration enables privileged execution."),
+     "Matched a privileged-execution directive."),
     ("CONTAINER_ROOT_USER", _re.compile(r"(?im)(?:^\s*USER\s+(?:root|0(?::0)?)\s*$|\buser\s*:\s*['\"]?(?:root|0)['\"]?\s*$)"),
-     "high", "Container runs explicitly as root (UID 0)."),
+     "Matched an explicit root-user directive."),
     ("CONTAINER_DEBUG_PORT", _re.compile(r"(?im)(?:^\s*EXPOSE\s+[^\n]*\b(2375|5005|5678|9229|2345|40000)\b|\bports\s*:\s*(?:\n\s*-\s*['\"]?(?:\d+:)?(2375|5005|5678|9229|2345|40000)\b))"),
-     "high", "Container exposes a sensitive remote debug or daemon port."),
+     "Matched a sensitive remote debug or daemon port directive."),
     ("CONTAINER_HOST_NETWORK", _re.compile(r"(?i)\b(?:network_mode\s*:\s*['\"]?host['\"]?|hostNetwork\s*:\s*true)\b"),
-     "high", "Container shares the host network namespace."),
+     "Matched a host-network directive."),
 )
 
 
 def inspect_packaged_text_risks(text: str, *, member_path: str) -> list[dict[str, Any]]:
-    """Bounded, redacted check for hardcoded secrets and dangerous container directives in packaged configs."""
+    """Redacted text-pattern candidates, not proof of active configuration or usable credentials."""
     risks: list[dict[str, Any]] = []
     for check_id, pattern, message in _PACKAGED_SECRET_RULES:
         if pattern.search(text):
             risks.append({
                 "check_id": check_id,
                 "category": "packaged_secret",
-                "severity": "critical",
+                "severity": None,
                 "subject": member_path,
                 "member_path": member_path,
-                "message": f"{message} ({member_path})",
+                "message": f"Text-pattern candidate: {message} Requires configuration review. ({member_path})",
+                "assessment_basis": "text-pattern",
                 "lead_candidate": True,
                 "attack_class": "packaged_hardcoded_secret",
-                "severity_hint": "critical",
+                "severity_hint": "unknown",
             })
-    for check_id, pattern, sev, message in _CONTAINER_RISK_RULES:
+    for check_id, pattern, message in _CONTAINER_RISK_RULES:
         m = pattern.search(text)
         if m:
             port = next((g for g in m.groups() if g), None) if m.groups() else None
-            effective_sev = "critical" if (check_id == "CONTAINER_PRIVILEGED_MODE" or port == "2375") else sev
             entry: dict[str, Any] = {
                 "check_id": check_id,
                 "category": "container_security",
-                "severity": effective_sev,
+                "severity": None,
                 "subject": member_path,
                 "member_path": member_path,
-                "message": f"{message} ({member_path})",
+                "message": f"Text-pattern candidate: {message} Requires configuration review. ({member_path})",
+                "assessment_basis": "text-pattern",
                 "lead_candidate": True,
                 "attack_class": "dangerous_container_configuration",
-                "severity_hint": effective_sev,
+                "severity_hint": "unknown",
             }
             if port:
                 entry["port"] = port
@@ -457,29 +555,89 @@ def inspect_packaged_text_risks(text: str, *, member_path: str) -> list[dict[str
     return risks
 
 
-def inspect_elf_hardening_indicators(data: bytes, *, binary_name: str) -> list[dict[str, Any]]:
-    """Bounded ELF header/program-header check for missing NX/PIE/RELRO/canary indicators."""
-    if len(data) < 64 or not data.startswith(b"\x7fELF"):
-        return []
+_CONFIG_SUFFIXES = {".yaml", ".yml", ".json", ".toml", ".ini", ".cfg", ".conf", ".properties", ".env"}
+
+
+def _packaged_archive_risks(path: Path, limits: ArchiveLimits) -> tuple[list[dict[str, Any]], list[str]]:
+    risks: list[dict[str, Any]] = []
+    gaps: list[str] = []
+    remaining = limits.expanded_bytes
+    seen: set[str] = set()
+
+    def inspect(name: str, size: int, read) -> None:
+        nonlocal remaining
+        if name in seen:
+            raise ValueError("duplicate packaged member path")
+        seen.add(name)
+        member = PurePosixPath(name)
+        if member.suffix.lower() not in _CONFIG_SUFFIXES and member.name.lower() not in {"dockerfile", ".env"}:
+            return
+        # Text matching is deliberately narrower than archive inventory; report every selected omission.
+        bound = min(limits.member_bytes, remaining, 1024 * 1024)
+        if size > bound:
+            gaps.append(f"packaged configuration byte bound exceeded: {name[:256]}")
+            return
+        data = read(bound + 1)
+        remaining -= len(data)
+        if len(data) != size:
+            raise ValueError("packaged member size differs from metadata")
+        try:
+            text = data.decode("utf-8")
+        except UnicodeError:
+            gaps.append(f"packaged configuration is not UTF-8: {name[:256]}")
+            return
+        risks.extend(inspect_packaged_text_risks(text, member_path=name))
+
+    try:
+        if zipfile.is_zipfile(path):
+            with zipfile.ZipFile(path) as archive:
+                for index, info in enumerate(archive.infolist()):
+                    if index >= limits.members:
+                        raise ValueError("packaged member count exceeded")
+                    if not info.is_dir():
+                        with archive.open(info) as member:
+                            inspect(info.filename, info.file_size, member.read)
+        else:
+            with tarfile.open(path, mode="r:*") as archive:
+                for index, info in enumerate(archive):
+                    if index >= limits.members:
+                        raise ValueError("packaged member count exceeded")
+                    if info.isfile():
+                        with archive.extractfile(info) as member:
+                            inspect(info.name, info.size, member.read)
+    except (OSError, EOFError, ValueError, RuntimeError, tarfile.TarError, zipfile.BadZipFile) as exc:
+        # Do not publish an ambiguous first/last member when a name occurs twice.
+        return [], [*gaps, f"packaged configuration inspection incomplete: {exc}"]
+    return risks, gaps
+
+
+def _elf_hardening(data: bytes, *, binary_name: str) -> tuple[list[dict[str, Any]], list[str]]:
+    if len(data) < 16 or not data.startswith(b"\x7fELF") or data[4] not in {1, 2}:
+        return [], ["ELF header is invalid or truncated"]
     is_64 = data[4] == 2
     endian = "<" if data[5] == 1 else (">" if data[5] == 2 else None)
-    if endian is None:
-        return []
+    if endian is None or len(data) < (64 if is_64 else 52):
+        return [], ["ELF header is invalid or truncated"]
+    if (data[6] != 1 or struct.unpack_from(endian + "I", data, 20)[0] != 1
+            or struct.unpack_from(endian + "H", data, 52 if is_64 else 40)[0] != (64 if is_64 else 52)):
+        return [], ["ELF header is invalid: unsupported version or header size"]
     e_type = struct.unpack_from(endian + "H", data, 16)[0]
     risks: list[dict[str, Any]] = []
+    gaps: list[str] = []
     # ET_EXEC (2) instead of ET_DYN (3) indicates a non-PIE fixed-address executable.
     if e_type == 2:
         risks.append({
             "check_id": "CHECK_PIE",
             "category": "binary_hardening",
-            "severity": "high",
+            "severity": None,
             "subject": binary_name,
             "binary": binary_name,
             "indicator": "ET_EXEC",
-            "message": f"ELF executable {binary_name} is non-PIE (ET_EXEC).",
+            "message": f"ELF header for {binary_name} declares ET_EXEC (a non-PIE indicator).",
             "lead_candidate": True,
             "attack_class": "binary_missing_hardening",
-            "severity_hint": "high",
+            "severity_hint": "unknown",
+            "assessment_basis": "ELF-header",
         })
     # Parse bounded program headers for PT_GNU_STACK (0x6474e551) and PT_GNU_RELRO (0x6474e552).
     try:
@@ -491,11 +649,15 @@ def inspect_elf_hardening_indicators(data: bytes, *, binary_name: str) -> list[d
             e_phentsize, e_phnum = struct.unpack_from(endian + "HH", data, 42)
         has_relro = False
         exec_stack = False
-        if e_phoff > 0 and e_phentsize >= (56 if is_64 else 32) and 0 < e_phnum <= 128:
+        if e_phnum == 0:
+            gaps.append("ELF has no program headers; segment hardening assessment unavailable")
+        elif e_phoff < (64 if is_64 else 52) or e_phentsize < (56 if is_64 else 32) or e_phnum > 128:
+            gaps.append("ELF program header table is invalid or exceeds bound")
+        elif e_phoff + e_phnum * e_phentsize > len(data):
+            gaps.append("ELF program header table is truncated at the input bound")
+        else:
             for idx in range(e_phnum):
                 off = e_phoff + idx * e_phentsize
-                if off + e_phentsize > len(data):
-                    break
                 p_type = struct.unpack_from(endian + "I", data, off)[0]
                 p_flags = struct.unpack_from(endian + "I", data, off + (4 if is_64 else 24))[0]
                 if p_type == 0x6474E551 and (p_flags & 0x1):  # PF_X on PT_GNU_STACK
@@ -506,41 +668,35 @@ def inspect_elf_hardening_indicators(data: bytes, *, binary_name: str) -> list[d
                 risks.append({
                     "check_id": "CHECK_NX",
                     "category": "binary_hardening",
-                    "severity": "critical",
+                    "severity": None,
                     "subject": binary_name,
                     "binary": binary_name,
-                    "indicator": "PT_GNU_STACK_RWE",
-                    "message": f"ELF binary {binary_name} has an executable stack (NX disabled).",
+                    "indicator": "PT_GNU_STACK_PF_X",
+                    "message": f"ELF program headers for {binary_name} request an executable stack.",
                     "lead_candidate": True,
                     "attack_class": "binary_missing_hardening",
-                    "severity_hint": "critical",
+                    "severity_hint": "unknown",
+                    "assessment_basis": "ELF-program-headers",
                 })
             if e_type in {2, 3} and not has_relro:
                 risks.append({
                     "check_id": "CHECK_RELRO",
                     "category": "binary_hardening",
-                    "severity": "high",
+                    "severity": None,
                     "subject": binary_name,
                     "binary": binary_name,
                     "indicator": "MISSING_PT_GNU_RELRO",
-                    "message": f"ELF binary {binary_name} lacks PT_GNU_RELRO segment protection.",
+                    "message": f"ELF program-header table for {binary_name} contains no PT_GNU_RELRO entry.",
                     "lead_candidate": True,
                     "attack_class": "binary_missing_hardening",
-                    "severity_hint": "high",
+                    "severity_hint": "unknown",
+                    "assessment_basis": "ELF-program-headers",
                 })
     except struct.error:
-        pass
-    if e_type in {2, 3} and b"__stack_chk_fail" not in data:
-        risks.append({
-            "check_id": "CHECK_CANARY",
-            "category": "binary_hardening",
-            "severity": "high",
-            "subject": binary_name,
-            "binary": binary_name,
-            "indicator": "MISSING_STACK_CHK_FAIL",
-            "message": f"ELF binary {binary_name} lacks __stack_chk_fail stack canary symbol.",
-            "lead_candidate": True,
-            "attack_class": "binary_missing_hardening",
-            "severity_hint": "high",
-        })
-    return risks
+        gaps.append("ELF program header table is malformed")
+    return risks, gaps
+
+
+def inspect_elf_hardening_indicators(data: bytes, *, binary_name: str) -> list[dict[str, Any]]:
+    """Observed ELF header/segment indicators only; absent symbol strings prove no canary property."""
+    return _elf_hardening(data, binary_name=binary_name)[0]
