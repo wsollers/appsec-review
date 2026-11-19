@@ -20054,6 +20054,7 @@
         "unit": [
           "tests/test_completion_publication.py",
           "tests/test_gate_snapshot.py",
+          "tests/unit/job_final_publication_gate/test_snapshot_custody.py",
           "tests/unit/job_final_publication_gate/test_classify_and_verify.py",
           "tests/unit/job_final_publication_gate/test_contract_and_settings.py",
           "tests/unit/job_final_publication_gate/test_job_and_attachments.py",
@@ -46350,7 +46351,7 @@
     "src/appsec_review/inference/usage.py": "7e01d460e7f613e7a468579b277731b382bf080e7404cbcd3287d422ea6d041c",
     "src/appsec_review/interchange.py": "4b2bdc80651b874ea1865a1877dcb149104fed356d5f6499339e1ce3c367acef",
     "src/appsec_review/jobs/__init__.py": "fa204c0a8c018dea722fc544c0690911aa316cb72e6b03d0189414614242cb62",
-    "src/appsec_review/jobs/accepted_review.py": "52c949e9f8b5ca9733fbfda2ac75671f35eeabd8c7b7521bbd927e529724ce56",
+    "src/appsec_review/jobs/accepted_review.py": "5d1351515dc0eee5e3a18b281d1b4082f0340476681df6232b018469ff604e0f",
     "src/appsec_review/jobs/artifact_kinds.py": "fd7d8f5d4d025e9d64d4c1632a2888f3d4c287e1b8bc309583c43a9be4aedd97",
     "src/appsec_review/jobs/bound_artifacts.py": "f3920d6064b3b7532ce03e0cf52d47fe5873b7ca103c4c08eef1ac5c109ae94f",
     "src/appsec_review/jobs/build_bookkeeping.py": "694acc4745068cba439a6d869ef639ce418b22ac616942c4d279e5707e5af18e",
@@ -46476,9 +46477,9 @@
     "src/appsec_review/jobs/job_final_publication_gate/attachments.py": "67aa4fd04f0182862ea22ea6e54da36f22ed054e719b0bd290994f01e7a97de6",
     "src/appsec_review/jobs/job_final_publication_gate/classify.py": "211b8c4232e5cff86567daec72e944710f803ea6e7e9fd0c44f6cd617dd6440a",
     "src/appsec_review/jobs/job_final_publication_gate/datasets.py": "e583359efd85414ceb7a44ae7bee9ef13fa3000a59dfdb838e5fda8099549cdf",
-    "src/appsec_review/jobs/job_final_publication_gate/job.py": "57f6e51ef926672c9ba5e6b1ab7625fe6d2d37338baf24146d7e1431c671cdf3",
+    "src/appsec_review/jobs/job_final_publication_gate/job.py": "2306849e5494e79d18668160d7854b15cb08c4d5a24844280d326e3cc71902cb",
     "src/appsec_review/jobs/job_final_publication_gate/settings.py": "81cee1cfc0057f815060b05b54bc67628d779f03725df0c517ee590be96033bf",
-    "src/appsec_review/jobs/job_final_publication_gate/verify.py": "eb7c0426a857016d2f1011e5a96f19d6919f59af272d3a9be30c09d4b50896b0",
+    "src/appsec_review/jobs/job_final_publication_gate/verify.py": "931f5fabd8f54e138af277951bd5bdcd7ca04e3e5be0468781c581eb4ec78787",
     "src/appsec_review/jobs/job_final_report_publication/__init__.py": "d7477116123b363d6b948942ce15377afd3b46b9ecd6acc4551e7e6e08278a92",
     "src/appsec_review/jobs/job_final_report_publication/datasets.py": "3bcef5fbb17fc7b63dd16df7b562dc87d3cab0ca62e76b872ea754a07de66351",
     "src/appsec_review/jobs/job_final_report_publication/job.py": "d01f54c98d56ef6d82352319c317180c39694584a8fbee3a65adfabc1dc590cd",
@@ -47001,7 +47002,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0dbd7fcf731c377d078bc076282bc9b3c72a732541e2adbbd6086ef29507e2da",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "32d785cf017d86126541bfb1eb5583356449eb28ececa876d9fcb7d50653d455"
+    "tests/job-test-map.json": "42a79424c182ff4b8e7223be67a945eb00d2fbd520918903f61a6b35286f1d68"
   },
   "tool_policy": {
     "disable_grype": true,

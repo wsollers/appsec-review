@@ -102,7 +102,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | `tests/test_final_report.py::test_gate_accounts_for_every_package_in_exactly_one_bucket` |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/test_completion_publication.py`<br>`tests/test_gate_snapshot.py`<br>`tests/unit/job_final_publication_gate/test_classify_and_verify.py`<br>`tests/unit/job_final_publication_gate/test_contract_and_settings.py`<br>`tests/unit/job_final_publication_gate/test_job_and_attachments.py`<br>`tests/unit/review_decision_audit_wiring/test_classification.py`<br>`tests/unit/review_decision_audit_wiring/test_gate_handler.py` |
+| unit | `tests/test_completion_publication.py`<br>`tests/test_gate_snapshot.py`<br>`tests/unit/job_final_publication_gate/test_snapshot_custody.py`<br>`tests/unit/job_final_publication_gate/test_classify_and_verify.py`<br>`tests/unit/job_final_publication_gate/test_contract_and_settings.py`<br>`tests/unit/job_final_publication_gate/test_job_and_attachments.py`<br>`tests/unit/review_decision_audit_wiring/test_classification.py`<br>`tests/unit/review_decision_audit_wiring/test_gate_handler.py` |
 
 ### Dagster placement
 
@@ -470,6 +470,6 @@ Snapshot consumers rehash the retained unit contexts along with the other certif
 Later removal or changed bytes invalidate the certificate without consulting current review or
 optional-producer pointers or reloading live configuration. These checks preserve declared
 unavailability and coverage limitations; they do not upgrade assurance.
-The public gate remains `/2`; the [current report `/3`](final-report.md#domain-coverage-and-unknown-measurements-t-5088)
+The public gate remains `/2`; the [current report `/4`](final-report.md#domain-coverage-and-unknown-measurements-t-5088)
 changes metric representation, not gate certification. Audit data adds certified bindings and
 sanitized limitations, not a new finding state or a public audit-record endpoint.

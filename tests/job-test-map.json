@@ -338,6 +338,7 @@
       "unit": [
         "tests/test_completion_publication.py",
         "tests/test_gate_snapshot.py",
+        "tests/unit/job_final_publication_gate/test_snapshot_custody.py",
         "tests/unit/job_final_publication_gate/test_classify_and_verify.py",
         "tests/unit/job_final_publication_gate/test_contract_and_settings.py",
         "tests/unit/job_final_publication_gate/test_job_and_attachments.py",

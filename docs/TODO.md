@@ -367,8 +367,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5133 | [Corroborate before caps with order-independent evidence clustering](#t-5133-corroborate-before-caps-with-order-independent-evidence-clustering) | scanners | done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad) |
 | T-5134 | [Keep scanner submission scope and full coverage counts truthful](#t-5134-keep-scanner-submission-scope-and-full-coverage-counts-truthful) | scanners | done (2026-11-19, 4c26abe1dc3756e51ab1d43f1517bbc54e2e0cad) |
 | T-5135 | [Read retained corroboration payloads rather than stripped control fields](#t-5135-read-retained-corroboration-payloads-rather-than-stripped-control-fields) | review | open |
-| T-5136 | [Bind every verified unit context into the durable publication snapshot](#t-5136-bind-every-verified-unit-context-into-the-durable-publication-snapshot) | evidence | open |
-| T-5137 | [Reject contradictory certified buckets and counts](#t-5137-reject-contradictory-certified-buckets-and-counts) | evidence | open |
+| T-5136 | [Bind every verified unit context into the durable publication snapshot](#t-5136-bind-every-verified-unit-context-into-the-durable-publication-snapshot) | evidence | done (2026-11-19, bca9e61c66c9a529155dc5177959d90004788bc9) |
+| T-5137 | [Reject contradictory certified buckets and counts](#t-5137-reject-contradictory-certified-buckets-and-counts) | evidence | done (2026-11-19, bca9e61c66c9a529155dc5177959d90004788bc9) |
 | T-5138 | [Export only evidence-backed SARIF flows fixes classifications and severity](#t-5138-export-only-evidence-backed-sarif-flows-fixes-classifications-and-severity) | review | done (2026-11-19, 9586762a38875517b0ab20652839d99581dee20f) |
 | T-5139 | [Carry certified reachable supply-chain facts into the report](#t-5139-carry-certified-reachable-supply-chain-facts-into-the-report) | review | done (2026-11-19, e80e099908d74e4f1fca7714c8bcd99e7dce76ce) |
 | T-5140 | [Conserve report bounds completion metrics and renderer outcomes](#t-5140-conserve-report-bounds-completion-metrics-and-renderer-outcomes) | review | done (2026-11-19, e80e099908d74e4f1fca7714c8bcd99e7dce76ce) |
@@ -4520,21 +4520,30 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5136 — Bind every verified unit context into the durable publication snapshot
 
-- **State:** open
+- **State:** done (2026-11-19, bca9e61c66c9a529155dc5177959d90004788bc9)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: FPG-F01. Verified package unit contexts are omitted from the durable gate binding closure.
 - **Scope:** `src/appsec_review/jobs/accepted_review.py` and
   `src/appsec_review/jobs/job_final_publication_gate/verify.py`, with paired gate publication tests.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 76 passed/28.4 s, two workers, seed 9136, no skips or cases over 10 s.
+  Verified package-manifest contexts remain exact deduplicated path/hash bindings, not inlined
+  protected data. Real sealed snapshots reject later context removal or changed bytes without
+  relying on current upstream pointers or live configuration. Current SARIF consumption also
+  passes. Integration, acceptance and live validation were not run.
 - **Refs:** `audit-results/job-audit-job_final_publication_gate.md`.
 
 ### T-5137 — Reject contradictory certified buckets and counts
 
-- **State:** open
+- **State:** done (2026-11-19, bca9e61c66c9a529155dc5177959d90004788bc9)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: FPG-F02. Gate sealing and the shared certificate reader accept contradictory bucket/count projections.
 - **Scope:** `src/appsec_review/jobs/job_final_publication_gate/job.py`, `src/appsec_review/jobs/job_final_publication_gate/verify.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5136's 76-case main selection. Sealing reconciles the complete classification
+  against the verified review. The certificate reader rejects duplicate package identities,
+  inconsistent state/withholding buckets and every contradictory bucket/count projection;
+  supported, withheld, empty and historical availability behavior remains explicit.
 - **Refs:** `audit-results/job-audit-job_final_publication_gate.md`.
 
 ### T-5138 — Export only evidence-backed SARIF flows fixes classifications and severity
