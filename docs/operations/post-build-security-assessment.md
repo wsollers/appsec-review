@@ -44,11 +44,13 @@ the facts they can prove and name gaps for facts that require unavailable pinned
 selected by compiler, platform, artifact kind, configuration, and observed capability. Unknown or
 irrelevant properties are respectively `UNKNOWN` or `NOT_APPLICABLE`, never `PASS`.
 Supported compiler options are evaluated in order, including disabling overrides and FORTIFY
-macro undefines; unexpanded response files leave flag posture unknown. Compiler aliases (`cc`,
+macro undefines; unexpanded response files, including linker-forwarded `-Wl,@file` and
+`-Xlinker @file` operands, leave flag posture unknown and retain a provenance gap. Compiler aliases (`cc`,
 `c++`, `cl`) and direct ccache/sccache/distcc wrappers retain compile checks. Requested-versus-actual
 link checks use only the uniquely resolved producing linker/driver, not flags from unrelated
 artifacts or compile actions. PE32 high-entropy VA is not applicable; Mach-O magic takes priority
-over an `.o` suffix; incomplete ELF tables retain partial facts and explicit unknowns.
+over an `.o` suffix; incomplete ELF tables retain partial facts and explicit unknowns. If truncated
+ELF headers prevent linked-image classification, PIE/RELRO/NOW remain `UNKNOWN`, not inapplicable.
 
 Inference is disabled by default. When a model client is centrally configured and injected, it
 receives only structured normalized flags, topology, deterministic results, and inspected facts.

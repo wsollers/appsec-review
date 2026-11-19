@@ -175,12 +175,8 @@ def _split_command(value: Mapping[str, Any]) -> list[str]:
     return shlex.split(command, posix=True)
 
 
-def _effective_options(argv: Iterable[str]) -> dict[str, bool | None]:
-    """Evaluate the supported ordered switches, not the union of every requested setting."""
+def _option_tokens(argv: Iterable[str]) -> list[str]:
     values = _driver_argv(argv)[1:]
-    state: dict[str, bool | None] = {}
-    if any(value.startswith("@") for value in values):
-        return {"uncertain": True}
     tokens = []
     index = 0
     while index < len(values):
@@ -193,6 +189,19 @@ def _effective_options(argv: Iterable[str]) -> dict[str, bool | None]:
         elif value != "-Xlinker":
             tokens.append(value)
         index += 1
+    return tokens
+
+
+def has_unexpanded_response_file(argv: Iterable[str]) -> bool:
+    return any(token.startswith("@") for token in _option_tokens(argv))
+
+
+def _effective_options(argv: Iterable[str]) -> dict[str, bool | None]:
+    """Evaluate the supported ordered switches, not the union of every requested setting."""
+    tokens = _option_tokens(argv)
+    state: dict[str, bool | None] = {}
+    if any(token.startswith("@") for token in tokens):
+        return {"uncertain": True}
     switches = {
         "-fno-stack-protector": ("stack", False),
         "-fstack-protector": ("stack", True),
@@ -851,7 +860,11 @@ def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterab
             for check_id, key in (("elf.pie", "pie"), ("elf.relro", "relro"), ("elf.now", "now"),
                                   ("elf.nx_stack", "nx_stack"), ("elf.control_flow", "control_flow"),
                                   ("elf.stack_canary", "stack_canary"), ("elf.fortify", "fortify")):
-                if ((not executable and check_id in {"elf.pie", "elf.relro", "elf.now"}) or
+                linked_protection = check_id in {"elf.pie", "elf.relro", "elf.now"}
+                if linked_protection and not executable and kind not in {"object", "core"}:
+                    checks.append(_check(check_id, "UNKNOWN", scope, evidence,
+                                         "ELF linked-image applicability is unknown because artifact classification is unavailable"))
+                elif ((not executable and linked_protection) or
                         (check_id == "elf.pie" and kind == "shared_library")):
                     checks.append(_check(check_id, "NOT_APPLICABLE", scope, evidence, "not a linked executable/shared object", applicable=False))
                 else:

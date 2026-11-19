@@ -28,7 +28,8 @@ from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, fil
 from .assessment import (
     GUIDANCE_IDENTITY, NORMALIZER_VERSION, PARSER_VERSION, PROVENANCE_SCHEMA, RULE_VERSION,
     INFERENCE_PROPOSAL_SCHEMA, INFERENCE_RESPONSE_SCHEMA, SCHEMA, command_fingerprint,
-    deterministic_checks, discover_io, inspect_binary, normalize_action, shard_fingerprint, validate_inference,
+    deterministic_checks, discover_io, has_unexpanded_response_file, inspect_binary,
+    normalize_action, shard_fingerprint, validate_inference,
 )
 from appsec_review.jobs.job_post_build_security_assessment.datasets import CONTRACT, DATASETS
 
@@ -454,7 +455,7 @@ def build_job(*, infer: Infer | None = None) -> Job:
                     gaps.append(f"per-action timing/exit status unavailable for {action_id}")
                 if normalized["classification"] == "unknown":
                     gaps.append(f"compiler/tool identity could not be classified for {action_id}")
-                if any(value.startswith("@") for value in argv):
+                if has_unexpanded_response_file(argv):
                     gaps.append(f"unexpanded response file leaves effective flags unknown for {action_id}")
                 if not row.get("directory"):
                     gaps.append(f"working directory unavailable for {action_id}; relative paths are unresolved")

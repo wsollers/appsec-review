@@ -455,3 +455,70 @@ def test_same_hash_observed_at_edges_retain_the_selected_artifact(tmp_path):
         """).fetchall()
     assert len(rows) == 2
     assert all(scope == artifact for scope, artifact in rows)
+
+
+@pytest.mark.parametrize("response", [
+    [],
+    ["@link.rsp"],
+    ["-Xlinker", "@link.rsp"],
+    ["-Wl,@link.rsp"],
+    ["-Wl,-z,relro,@link.rsp"],
+], ids=["complete", "direct", "xlinker", "wl", "wl-mixed"])
+def test_forwarded_response_file_keeps_link_posture_unknown(tmp_path, response):
+    ctx, root, state = _fixture(tmp_path, rows=[], outputs=[])
+    binary = root / "build" / "app"
+    _write_elf64_with_dep(binary)
+    state["load.accepted_cpp_build"]["cases"]["case"]["outputs"] = [
+        {"path": "build/app", "sha256": file_sha256(binary)},
+    ]
+    atomic_json(root / "build" / "compile_commands.json", [
+        {"directory": str(root / "build"),
+         "arguments": ["cc", "unit.o", "-Wl,-z,relro,-z,now", *response, "-o", "app"]},
+    ])
+    indexed = _through_index(ctx, state)
+    provenance = state["provenance.native_units"]["projects"]["case"]
+    action = provenance["actions"][0]
+    assert action["linked_artifact_ids"] == [provenance["artifacts"][0]["artifact_id"]]
+    record = state["inspection.native_units"]["projects"]["case"]["records"][0]
+    assert record["hardening"]["relro"] is False and record["hardening"]["now"] is False
+    checks = state["deterministic.native_units"]["projects"]["case"]["checks"]
+    mismatches = [check for check in checks if check["check_id"].startswith("command_binary.")]
+    if response:
+        assert mismatches == []
+        assert any("unexpanded response file" in gap for gap in provenance["gaps"])
+        assert any("unexpanded response file" in gap for gap in indexed["gaps"])
+        assert next(check for check in checks if check["check_id"] == "gnu.insecure_override")["status"] == "UNKNOWN"
+    else:
+        assert {check["check_id"] for check in mismatches} == {
+            "command_binary.relro_mismatch", "command_binary.now_mismatch",
+        }
+        assert all(check["status"] == "FAIL" for check in mismatches)
+
+
+@pytest.mark.parametrize(("kind", "statuses"), [
+    ("truncated-dyn", ["UNKNOWN", "UNKNOWN", "UNKNOWN"]),
+    ("object", ["NOT_APPLICABLE", "NOT_APPLICABLE", "NOT_APPLICABLE"]),
+    ("executable", ["FAIL", "FAIL", "FAIL"]),
+    ("shared", ["NOT_APPLICABLE", "FAIL", "FAIL"]),
+])
+def test_unknown_elf_classification_does_not_exempt_linked_protections(tmp_path, kind, statuses):
+    binary = tmp_path / "image"
+    if kind == "truncated-dyn":
+        ident = b"\x7fELF" + bytes([2, 1, 1, 0]) + bytes(8)
+        binary.write_bytes(ident + struct.pack("<HHIQQQIHHHHHH", 3, 62, 1, 0, 4096, 0,
+                                               0, 64, 56, 1, 64, 0, 0))
+    else:
+        _write_elf64_with_dep(binary, executable=kind != "object")
+        if kind == "shared":
+            data = bytearray(binary.read_bytes())
+            struct.pack_into("<H", data, 16, 3)
+            binary.write_bytes(data)
+    record = assessment.inspect_binary(binary)
+    checks = {check["check_id"]: check for check in assessment.deterministic_checks([], [record])}
+    selected = [checks["elf." + key] for key in ("pie", "relro", "now")]
+    assert [check["status"] for check in selected] == statuses
+    assert [check["applicable"] for check in selected] == [status != "NOT_APPLICABLE" for status in statuses]
+    if kind == "truncated-dyn":
+        assert record["kind"] == "unknown"
+        assert any("program header table is truncated" in gap for gap in record["gaps"])
+        assert all("applicability" in check["rationale"] for check in selected)

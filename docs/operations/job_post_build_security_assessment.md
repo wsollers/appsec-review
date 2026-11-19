@@ -365,7 +365,10 @@ The job reads binaries as bytes; it does not execute them or launch a new native
    Flag-driven native/mixed cases differ from no-compile-action family cases. Supported aliases and
    direct compiler wrappers retain classification; unresolved tool identities remain gaps.
    Evaluate options in order, including disabling overrides and macro undefines; unexpanded
-   response files leave posture unknown. Link mismatches require a unique producing linker/driver
+   response files (including linker-forwarded `-Wl,@file` and `-Xlinker @file`) leave posture
+   unknown and retain a provenance gap. Unknown ELF classification cannot establish that linked
+   protections are inapplicable: PIE/RELRO/NOW stay unknown until applicability can be resolved.
+   Link mismatches require a unique producing linker/driver
    for that artifact, and linked-output/architecture applicability (high-entropy VA is PE32+ only).
 2. Use documented family expectations where applicable. Required protections are tested against
    observed facts; not-offered or undocumented family defaults yield not-applicable with rationale,
