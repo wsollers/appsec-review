@@ -536,9 +536,10 @@ def test_validate_config_enforces_topology_summary_and_model_bounds(mutator, exp
 @pytest.fixture
 def environment_publication(tmp_path):
     root = tmp_path / "synthetic-planner-run"
+    catalog_sha = _publish_catalog(root)
     attempt = root / "data/jobs" / ENVIRONMENT / "attempts/attempt_0001"
     document = {
-        "schema": ENV_SCHEMA, "source_fingerprint": SOURCE, "catalog_handoff_sha256": CATALOG_SHA,
+        "schema": ENV_SCHEMA, "source_fingerprint": SOURCE, "catalog_handoff_sha256": catalog_sha,
         "rules": RULES, "availability": "AVAILABLE", "coverage": "not_applicable",
         "declarations": [], "gaps": [],
         "bounds": {**asdict(BuildEnvironmentSettings()), "inspected_scripts": 0,
@@ -553,7 +554,7 @@ def environment_publication(tmp_path):
     })
     handoff = write_fixture_handoff(root, attempt / "handoff.json", {
         "job_id": ENVIRONMENT, "source_fingerprint": SOURCE,
-        "schema_identity": ENV_SCHEMA, "upstream_handoff_sha256": {"job_target_catalog": CATALOG_SHA},
+        "schema_identity": ENV_SCHEMA, "upstream_handoff_sha256": {"job_target_catalog": catalog_sha},
         "outputs": {"environment_analysis.publish_handoff": {
             "schema": ENV_SCHEMA, "artifact": identity, "gaps": [], "terminal_status": "SUCCEEDED",
         }},
@@ -564,17 +565,13 @@ def environment_publication(tmp_path):
         "schema": "appsec-review/latest-handoff/1", "attempt_id": "attempt_0001",
         "handoff_path": handoff.relative_to(root).as_posix(), "handoff_sha256": digest,
     })
-    atomic_json(root / "data/jobs/job_target_catalog/latest.json", {
-        "schema": "appsec-review/latest-handoff/1", "attempt_id": "attempt_0001",
-        "handoff_path": "data/jobs/job_target_catalog/attempts/attempt_0001/handoff.json",
-        "handoff_sha256": CATALOG_SHA,
-    })
     return root, load_config(ROOT / "appsec-review.toml"), digest, identity, document
 
 
 def _handler_context(monkeypatch, root, config, source, launch, pins, *,
                      optional_prior=None, history_value=None):
-    catalog = {"source_fingerprint": source, "catalog_handoff_sha256": CATALOG_SHA}
+    catalog = {"source_fingerprint": source,
+               "catalog_handoff_sha256": pins.get("job_target_catalog", CATALOG_SHA)}
     calls = []
 
     def catalog_reader(run):
@@ -633,9 +630,11 @@ def test_load_catalog_consumes_optional_environment_selected_for_its_claim(
 def test_load_catalog_reads_supplied_environment_and_records_producer_scope(
         environment_publication, monkeypatch):
     root, config, digest, identity, document = environment_publication
+    catalog_sha = document["catalog_handoff_sha256"]
+    pins = {ENVIRONMENT: digest, "job_target_catalog": catalog_sha}
     launch, selected = planning_environment_inputs(
-        config, root, SOURCE, {"workflow": "wave1_review"}, {ENVIRONMENT: digest})
-    assert launch["mode"] == "EXPECTED_CURRENT" and selected == {ENVIRONMENT: digest}
+        config, root, SOURCE, {"workflow": "wave1_review"}, pins)
+    assert launch["mode"] == "EXPECTED_CURRENT" and selected == pins
     unit, catalog, calls, events = _handler_context(
         monkeypatch, root, config, SOURCE, launch, selected,
         history_value={"target_snapshot": "stale-snap"},
@@ -644,7 +643,7 @@ def test_load_catalog_reads_supplied_environment_and_records_producer_scope(
         loaded = _load(unit)
         observed = reads.document()
     assert loaded == {
-        "catalog": catalog, "catalog_handoff_sha256": CATALOG_SHA,
+        "catalog": catalog, "catalog_handoff_sha256": catalog_sha,
         "history": {"stale_reason": "accepted source history describes a different target snapshot"},
         "environment": {**launch, "availability": "AVAILABLE", "artifact": identity,
                         "reason": "accepted not_applicable static environment", "evidence": document},
@@ -653,9 +652,36 @@ def test_load_catalog_reads_supplied_environment_and_records_producer_scope(
     assert [(r["producer"], r["output_kind"], r["schema"]) for r in observed["reads"]] == [
         (ENVIRONMENT, "handoff", "appsec-review/job-handoff/2"),
         (ENVIRONMENT, "build_environment", ENV_SCHEMA),
+        ("job_target_catalog", "handoff", "appsec-review/job-handoff/2"),
     ]
+    assert [r["handoff_sha256"] for r in observed["reads"]] == [digest, digest, catalog_sha]
     assert calls == ["catalog", "history"]
-    assert events == [("ANALYSIS_PLAN_STARTED", {"catalog_handoff_sha256": CATALOG_SHA})]
+    assert events == [("ANALYSIS_PLAN_STARTED", {"catalog_handoff_sha256": catalog_sha})]
+
+
+@pytest.mark.parametrize("case", ["unsupplied", "tampered"])
+def test_load_catalog_rejects_unadmitted_or_changed_current_catalog(
+        environment_publication, monkeypatch, case):
+    root, config, digest, _identity, document = environment_publication
+    pins = {ENVIRONMENT: digest, "job_target_catalog": document["catalog_handoff_sha256"]}
+    launch, selected = planning_environment_inputs(
+        config, root, SOURCE, {"workflow": "wave1_review"}, pins)
+    if case == "unsupplied":
+        selected.pop("job_target_catalog")
+        message = "reads job_target_catalog, which is not supplied by the attempt claim"
+    else:
+        handoff = root / "data/jobs/job_target_catalog/attempts/attempt_0001/handoff.json"
+        handoff.write_bytes(handoff.read_bytes() + b"\n")
+        message = "accepted job_target_catalog handoff changed after it was recorded"
+    unit, _catalog, _calls, _events = _handler_context(
+        monkeypatch, root, config, SOURCE, launch, selected)
+    with pytest.raises(ValueError, match=message):
+        with input_read_scope(unit.job) as reads:
+            _load(unit)
+    assert reads.violation is not None and message in reads.violation
+    assert [(r["producer"], r["output_kind"]) for r in reads.document()["reads"]] == [
+        (ENVIRONMENT, "handoff"), (ENVIRONMENT, "build_environment"),
+    ]
 
 
 def test_load_catalog_unsupplied_environment_fails_with_exact_producer_scope(

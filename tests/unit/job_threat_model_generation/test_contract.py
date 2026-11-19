@@ -78,7 +78,14 @@ def test_job_registry_topology_and_contract_invariants(tmp_path: Path) -> None:
     assert jobs[JOB_ID]["dependencies"] == ["job_owasp_control_assessment"]
     assert JOB_ID in jobs["job_review_data_indexing"]["dependencies"]
     assert jobs[JOB_ID]["upstream_handoffs"] == sorted({producer for producer, _ in DECLARED_INPUTS})
-    assert JOB_ID not in jobs["job_review_data_indexing"]["upstream_handoffs"]
+    assert JOB_ID in jobs["job_review_data_indexing"]["upstream_handoffs"]
+    indexed_inputs = [item for item in registry.build("job_review_data_indexing").contract.inputs
+                      if item.producer == JOB_ID]
+    assert {(item.output_kind, item.schema) for item in indexed_inputs} == {
+        ("handoff", "appsec-review/job-handoff/2"),
+        *((item.output_kind, item.schema) for item in DATASETS),
+    }
+    assert all(item.authority is EvidenceAuthority.ROUTING_CONTEXT for item in indexed_inputs)
 
     configured = config.jobs[JOB_ID]
     assert configured.name == NAME == "threat_model_generation" and configured.workers == 2
@@ -175,6 +182,7 @@ def test_default_configuration_has_the_job_disabled_and_a_disabled_job_is_not_di
     jobs = {item["job_id"]: item for item in describe_wave1(config, builtin_registry())["jobs"]}
     assert JOB_ID not in jobs
     assert JOB_ID not in jobs["job_review_data_indexing"]["dependencies"]
+    assert JOB_ID not in jobs["job_review_data_indexing"]["upstream_handoffs"]
     with pytest.raises(ValueError, match=f"job is disabled by configuration: {JOB_ID}"):
         main(["--config", str(ROOT / "appsec-review.toml"), "run", JOB_ID])
 

@@ -186,10 +186,24 @@ def test_view_byte_budget_drops_least_valuable_rows_and_names_the_omission(graph
 
 def test_hunt_view_labels_the_unit_leads_sinks_and_entries(graph) -> None:
     fixture, ids, assembly, core = graph
-    [hunt] = [item.document() for item in assembly.packages
-              if item.kind == "hunt" and item.document()["scope"]["build_unit_id"] == "native-main"]
+    hunts = [item.resolved() for item in assembly.packages
+             if item.kind == "hunt" and item.document()["scope"]["build_unit_id"] == "native-main"]
+    [hunt] = [item for item in hunts if item["scope"].get("operation") is None]
+    operations = [item for item in hunts if item["scope"].get("operation") is not None]
+    assert len(operations) == 7
+    for package in operations:
+        operation = package["scope"]["operation"]
+        operation_view = build_view(package, core, LIMITS)
+        [span] = operation_view.document["source"]
+        assert span["role"] == "cited_source" and span["text"]
+        assert span["ref"] == operation["source_id"]
+        assert span["file_sha256"] == operation["file_sha256"]
+        assert operation_view.labels[span["label"]] == operation["source_id"]
+        assert set(operation_view.labels.values()) <= set(package["retrieval"]["entity_ids"])
     view = build_view(hunt, core, LIMITS)
     assert [item["label"] for item in view.document["leads"]][:2] == ["L1", "L2"]
+    assert [view.labels[item["label"]] for item in view.document["leads"]] == [
+        item["observation_id"] for item in hunt["lead_menu"]]
     assert not view.document["source"]
     refs = set(view.labels.values())
     assert {ids["sink_strcpy"], ids["entry_s"]} <= refs

@@ -59,7 +59,7 @@ def test_job_is_registered_configured_and_in_the_graph_after_owasp_and_before_in
     assert jobs[JOB_ID]["dependencies"] == ["job_owasp_control_assessment"]
     assert JOB_ID in jobs["job_review_data_indexing"]["dependencies"]
     assert jobs[JOB_ID]["upstream_handoffs"] == sorted({producer for producer, _ in DECLARED_INPUTS})
-    assert JOB_ID not in jobs["job_review_data_indexing"]["upstream_handoffs"], "scheduling only: no consumer yet"
+    assert JOB_ID in jobs["job_review_data_indexing"]["upstream_handoffs"]
 
     configured = config.jobs[JOB_ID]
     assert configured.name == "threat_model_generation" and configured.workers == 2
@@ -90,6 +90,7 @@ def test_default_configuration_has_the_job_disabled_and_a_disabled_job_is_not_di
     jobs = {item["job_id"]: item for item in describe_wave1(config, builtin_registry())["jobs"]}
     assert JOB_ID not in jobs
     assert JOB_ID not in jobs["job_review_data_indexing"]["dependencies"]
+    assert JOB_ID not in jobs["job_review_data_indexing"]["upstream_handoffs"]
     with pytest.raises(ValueError, match=f"job is disabled by configuration: {JOB_ID}"):
         main(["--config", str(ROOT / "appsec-review.toml"), "run", JOB_ID])
 

@@ -8,6 +8,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 import shutil
+import tomllib
 
 import pytest
 
@@ -71,7 +72,10 @@ def test_dev_is_the_default_and_keeps_todays_values(monkeypatch) -> None:
     assert _model(config, "job_project_build")["max_input_tokens"] == 16000
     review = _review(config)
     assert review.models["default"].model == "claude-haiku-5-5" and "strong" not in review.models
-    assert review.roles[next(iter(r for r in review.roles if r == "independent_verifier"))].model_profile == "default"
+    assert review.roles["independent_verifier"].model_profile == "verifier"
+    assert review.models["verifier"].model == "claude-sonnet-5-5"
+    assert review.models["verifier"].model != review.models["default"].model
+    assert review.models["planner"].model == "claude-sonnet-5-5"
     assert review.budgets.max_model_turns == 12000 and review.budgets.timeout_seconds == 28800
 
 
@@ -114,18 +118,20 @@ def test_prod_loads_the_exact_models_and_limits(monkeypatch) -> None:
     for job_id, (timeout, output, reasoning) in expected.items():
         model = _model(config, job_id)
         assert (model["model"], model["reasoning"], model["max_input_tokens"], model["max_output_tokens"],
-                model["timeout_seconds"]) == ("claude-sonnet-5-5", reasoning, 200000, output, timeout)
+                model["timeout_seconds"]) == ("claude-fable-5-2", reasoning, 200000, output, timeout)
         assert model["provider"] == "claude-cli"
     build = _model(config, "job_project_build")
     assert (build["model"], build["reasoning"], build["max_input_tokens"], build["max_output_tokens"],
-            build["timeout_seconds"]) == ("claude-sonnet-5-5", "medium", 128000, 16000, 600)
+            build["timeout_seconds"]) == ("claude-fable-5-2", "medium", 128000, 16000, 600)
     review = _review(config)
     default, strong = review.models["default"], review.models["strong"]
     assert (default.model, default.reasoning, default.max_input_tokens, default.max_output_tokens, default.max_queries,
-            default.max_turns, default.timeout_seconds) == ("claude-sonnet-5-5", "high", 200000, 64000, 60, 16, 1800)
+            default.max_turns, default.timeout_seconds) == ("claude-fable-5-2", "high", 200000, 64000, 60, 16, 1800)
     assert (strong.provider, strong.model, strong.reasoning, strong.max_input_tokens, strong.max_output_tokens,
             strong.max_queries, strong.max_turns, strong.timeout_seconds) == (
-        "claude-cli", "claude-opus-5-5", "high", 200000, 64000, 60, 16, 2400)
+        "claude-cli", "claude-fable-5-2", "high", 200000, 64000, 60, 16, 2400)
+    assert {model.model for model in review.models.values()} == {"claude-fable-5-2"}
+    assert review.verification.require_distinct_model_for_ship_blocking is True
     assert review.roles["independent_verifier"].model_profile == "strong"
     for role, settings in review.roles.items():
         if role != "independent_verifier" and role != "adjudication_judge":
@@ -138,13 +144,11 @@ def test_prod_loads_the_exact_models_and_limits(monkeypatch) -> None:
         assert review.roles["adjudication_judge"].model_profile == "strong"
     poc = config.job("job_poc_generation").settings["models"]["default"]
     assert (poc["model"], poc["reasoning"], poc["max_input_tokens"], poc["max_output_tokens"]) == (
-        "claude-sonnet-5-5", "high", 200000, 32000)
+        "claude-fable-5-2", "high", 200000, 32000)
     assert "claude-fable-5-1" not in (ROOT / "profiles" / "prod.toml").read_text(encoding="utf-8")
 
 
 def test_the_real_prod_file_passes_the_allowlist() -> None:
-    import tomllib
-
     keys = profile_override_keys(tomllib.loads((ROOT / "profiles" / "prod.toml").read_text(encoding="utf-8")))
     assert f"jobs.{JOB}.settings.models.strong.model" in keys
     assert f"jobs.{JOB}.settings.roles.independent_verifier.model_profile" in keys
@@ -163,8 +167,9 @@ def test_prod_is_a_hashed_layer_frozen_in_the_resolved_document(tmp_path: Path) 
                               "layer": "runtime_profile"}
     record = json.loads(prod.resolved_json)["configuration_profile"]
     assert (record["name"], record["sha256"], record["layer"]) == ("prod", expected, "runtime_profile")
-    assert record["keys"] and record["document"]["jobs"][JOB]["settings"]["models"]["strong"]["model"] == "claude-opus-5-5"
-    assert json.loads(prod.resolved_json)["jobs"][JOB]["settings"]["models"]["default"]["model"] == "claude-sonnet-5-5"
+    assert record["document"] == tomllib.loads((tmp_path / "profiles" / "prod.toml").read_text(encoding="utf-8"))
+    assert record["keys"] and record["document"]["jobs"][JOB]["settings"]["models"]["strong"]["model"] == "claude-fable-5-2"
+    assert json.loads(prod.resolved_json)["jobs"][JOB]["settings"]["models"]["default"]["model"] == "claude-fable-5-2"
     assert prod.resolved_sha256 != dev.resolved_sha256
 
 
@@ -175,7 +180,7 @@ def test_profile_and_capacity_overlay_produce_both_layers_in_order(tmp_path: Pat
     config = load_config(path, profile="prod", overlay=overlay)
     assert [layer.get("layer") for layer in config.layers] == [
         None, "runtime_profile", "capacity_overlay", "host-pins"]
-    assert config.dagster.pool_limits["inference_teams"] == 1 and _review(config).models["strong"].model == "claude-opus-5-5"
+    assert config.dagster.pool_limits["inference_teams"] == 1 and _review(config).models["strong"].model == "claude-fable-5-2"
     resolved = json.loads(config.resolved_json)
     assert resolved["configuration_profile"]["name"] == "prod" and resolved["configuration_overlay"]["keys"]
 
@@ -341,14 +346,14 @@ def _everything_available(calls: list):
 def test_model_preflight_and_connectivity_list_the_active_profiles_models(tmp_path: Path) -> None:
     path = _checkout(tmp_path)
     target = _target(tmp_path)
-    for name, expected in (("dev", ("claude-haiku-5-5",)), ("prod", ("claude-opus-5-5", "claude-sonnet-5-5"))):
+    for name, expected in (("dev", ("claude-haiku-5-5", "claude-sonnet-5-5")), ("prod", ("claude-fable-5-2",))):
         config = load_config(path, profile=name)
         calls: list = []
         check = _everything_available(calls)
         outcome = GraphRunner(config, [build_connectivity(check_models=check), build_intake(check_models=check)]).run(
             target_root=target, source_fingerprint=source_fingerprint(target))
         assert outcome["status"] == "SUCCEEDED", outcome
-        assert calls and all(models == expected for _, models in calls), (name, calls)
+        assert calls == [("claude-cli", expected), ("claude-cli", expected)], (name, calls)
         run_root = config.runtime.runs_dir / outcome["run_id"]
         document = json.loads(next(run_root.rglob("model-preflight.json")).read_text(encoding="utf-8"))
         assert sorted({item["model"] for item in document["required"]}) == list(expected)
