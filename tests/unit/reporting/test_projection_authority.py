@@ -11,13 +11,14 @@ from appsec_review.jobs.job_final_report_publication.render import render_markdo
 from appsec_review.jobs.job_final_report_publication.pdf import render_executive_latex
 from appsec_review.jobs.job_final_report_publication.report import report_schema_name
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
-from appsec_review.reporting.dossiers import _build_classification_badge
+from appsec_review.reporting.dossiers import build_dossier
 from appsec_review.reporting.executive_posture import (
     build_attack_chain_cards, build_executive_posture, build_remediation_roadmap,
 )
 from tests.unit.job_final_report_publication.test_report_and_render import (
     ROOT, SCHEMAS, _gate_and_report, _memory_axis, _serialized_review, _validator,
 )
+from tests.dossier_fixture import seed as dossier_seed
 
 
 @pytest.mark.parametrize(
@@ -296,8 +297,10 @@ def test_chain_rating_only_comes_from_the_manifest_and_proposals_are_not_verifie
     assert build_remediation_roadmap(report)[0]["validation_status"] == "static_checked"
 
 
-def test_adjudication_confirmation_does_not_imply_reachability():
-    badge = _build_classification_badge(
-        state="confirmed", title="Finding", weakness_cwe="", security_predicate="", ship_block={},
-        evidence=[], sources=[], claim={})
-    assert badge["reachability_badge"] == "unknown"
+def test_adjudication_confirmation_does_not_imply_reachability(tmp_path):
+    source = dossier_seed(tmp_path / "run")
+    assert source["finding"]["state"] == "confirmed"
+    assert "reachability" not in source["claim"]
+    dossier = build_dossier(kind="confirmed_finding", **source)
+    assert dossier["state"] == "confirmed"
+    assert dossier["classification_badge"]["reachability_badge"] == "unknown"
