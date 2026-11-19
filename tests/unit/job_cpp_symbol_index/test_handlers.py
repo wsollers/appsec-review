@@ -819,6 +819,59 @@ def test_unresolvable_symbol_coordinates_publish_gap_not_exact_location(
     assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
 
 
+@pytest.mark.parametrize("field,decimal,valid", (
+    ("Line", "9" * 5000, False),
+    ("Column", "9" * 5000, False),
+    ("Line", "0" * 5000, True),
+    ("Column", "0" * 5000 + "4", True),
+), ids=("huge-line", "huge-column", "zero-line", "padded-column"))
+def test_symbol_decimal_coordinates_are_bounded_before_integer_conversion(
+    tmp_path: Path, field: str, decimal: str, valid: bool,
+) -> None:
+    run_root, target_root, scope, unit = _make_scope_and_unit(tmp_path)
+    accepted_bytes = (target_root / "native/a.cpp").read_bytes()
+    original = 0 if field == "Line" else 4
+    text = _symbol_document("1111111111111111").replace(
+        f"    {field}: {original}\n", f"    {field}: {decimal}\n", 1,
+    )
+    result = _index_scope(unit, scope, lambda _u: FakeClangdExecutor(run_root, yaml_text=text))
+    locations = _published_rows(run_root, result, "locations")
+    if valid:
+        assert len(locations) == 1
+        assert (locations[0]["start_byte"], locations[0]["end_byte"]) == (4, 10)
+        assert result["terminal_status"] == "SUCCEEDED"
+    else:
+        assert locations == []
+        assert result["counts"]["symbols"] == result["counts"]["external_symbols"] == 0
+        assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
+        assert any("source location" in gap for gap in result["gaps"])
+    assert (target_root / "native/a.cpp").read_bytes() == accepted_bytes
+
+
+@pytest.mark.parametrize("source,end,expected_end", (
+    ("int helper\r\n", (0, 11), None),
+    ("int helper\r\n", (0, 10), 10),
+    ("int helper\r\n", (1, 0), 12),
+    ("int helper\r", (0, 11), 11),
+), ids=("inside-crlf", "before-crlf", "after-crlf-eof", "unpaired-cr-eof"))
+def test_symbol_columns_exclude_crlf_terminators_without_normalizing_bytes(
+    tmp_path: Path, source: str, end: tuple[int, int], expected_end: int | None,
+) -> None:
+    run_root, target_root, scope, unit = _make_scope_and_unit(tmp_path, sources={"native/a.cpp": source})
+    text = _symbol_document("1111111111111111", end=end)
+    result = _index_scope(unit, scope, lambda _u: FakeClangdExecutor(run_root, yaml_text=text))
+    locations = _published_rows(run_root, result, "locations")
+    if expected_end is None:
+        assert locations == []
+        assert result["terminal_status"] == "COMPLETED_WITH_GAPS"
+        assert any("source location" in gap for gap in result["gaps"])
+    else:
+        assert len(locations) == 1
+        assert (locations[0]["start_byte"], locations[0]["end_byte"]) == (4, expected_end)
+        assert result["terminal_status"] == "SUCCEEDED"
+    assert (target_root / "native/a.cpp").read_bytes() == source.encode("utf-8")
+
+
 def test_invalid_reference_location_preserves_occurrence_but_not_fabricated_position(tmp_path: Path) -> None:
     run_root, _, scope, unit = _make_scope_and_unit(tmp_path)
     a, b = "1111111111111111", "2222222222222222"

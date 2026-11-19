@@ -37,7 +37,7 @@ from appsec_review.jobs.job_cpp_symbol_index.datasets import CONTRACT, DATASETS
 JOB_ID = "job_cpp_symbol_index"
 SCHEMA = "appsec-review/cpp-symbol-index/1"
 TOOL_ID = "tool-clangd-indexer"
-NORMALIZER = "clangd-yaml-normalizer/2"
+NORMALIZER = "clangd-yaml-normalizer/3"
 CALL_BIT = 16  # clangd RefKind::Call
 # clangd's all-TUs executor writes these lines from parallel threads, so they interleave by line
 # and may carry another thread's fragment as a prefix; none requires a leading line boundary.
@@ -104,17 +104,19 @@ def _position(value: Any) -> tuple[int, int] | None:
     if not isinstance(value, Mapping):
         return None
     coordinates = []
-    for name in ("Line", "Column"):
+    # SymbolLocation::Position saturates its packed 20-bit line / 12-bit UTF-16 column.
+    for name, maximum in (("Line", (1 << 20) - 1), ("Column", (1 << 12) - 1)):
         coordinate = value.get(name)
         if isinstance(coordinate, str) and re.fullmatch(r"[0-9]+", coordinate):
+            coordinate = coordinate.lstrip("0") or "0"
+            bound = str(maximum)
+            if (len(coordinate), coordinate) >= (len(bound), bound):
+                return None
             coordinate = int(coordinate)  # the bounded YAML parser retains scalars as strings
-        if type(coordinate) is not int:
+        if type(coordinate) is not int or not 0 <= coordinate < maximum:
             return None
         coordinates.append(coordinate)
     line, column = coordinates
-    # SymbolLocation::Position saturates its packed 20-bit line / 12-bit UTF-16 column.
-    if not 0 <= line < (1 << 20) - 1 or not 0 <= column < (1 << 12) - 1:
-        return None
     return line + 1, column + 1
 
 
@@ -142,8 +144,11 @@ class _SourceBytes:
         line, column = position
         if line > len(self.lines):
             return None
+        content = self.lines[line - 1]
+        if line < len(self.lines) and content.endswith(b"\r"):
+            content = content[:-1]  # the paired LF was split off; neither terminator is a column
         try:
-            text = self.lines[line - 1].decode("utf-8")
+            text = content.decode("utf-8")
         except UnicodeDecodeError:
             return None
         units, offset = 1, self.starts[line - 1]
