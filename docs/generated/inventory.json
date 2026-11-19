@@ -46249,7 +46249,7 @@
     "src/appsec_review/container_runtime/compiler_profiles.py": "91d2b1dcbb3b0ab94783fbbcfc41c3531b6cab67cf21c56fa6396967b710e626",
     "src/appsec_review/container_runtime/engine_admission.py": "af0fe5500678b0981cd11071cbc08f58442cddf3d72942f8326f3bd389cc6a4f",
     "src/appsec_review/container_runtime/engine_broker.py": "af7c9b22940074741e69b0e1afd766597d28f8357cc1bc997fa78b85628c5341",
-    "src/appsec_review/container_runtime/executor.py": "8608d4447cc9f56ae5cb6ef17c66c03f68a3e45ca175acf95b29739339db8031",
+    "src/appsec_review/container_runtime/executor.py": "926fc001b3eaf31d08c0cbd5e282800bd30fef6d17cbadbc437b3bb1ce92a411",
     "src/appsec_review/container_runtime/identity.py": "3c5764cdeb59767785e7fa1d171cadca8e2af08ddbc7e437a408bfcd3ba05902",
     "src/appsec_review/container_runtime/image_builder.py": "dfa4aa023386a50cb541370ee6225cc14a0e35df273f54b4d309a01b6eaf746c",
     "src/appsec_review/container_runtime/image_builder_service.py": "e880d3ee38dd84f60f28ac0d7d4bc77d29f3018372da70418783fcc268007f45",
@@ -46902,13 +46902,14 @@
     "src/appsec_review/rulepacks/sei_cert/sources.py": "39f466ad320c84205e792c2a3c572d4b05070dc5ffc43cfc105d229353f8b0ed",
     "src/appsec_review/rulepacks/sei_cert/validate.py": "9288b50ca06272442ef84882672ebc71db1289310eb6649a91b214959096a22e",
     "src/appsec_review/runtime/__init__.py": "09bb73d6cbe809b2bfbafb1baef03e15fe9f6b33a209d2d2de85a11bc86f20cc",
+    "src/appsec_review/runtime/_process_capture.py": "febe28749487d061c37c5dc61e14c9b24adfb52e2715089bc12406c8f520991e",
     "src/appsec_review/runtime/checkpoints.py": "cb0eaf993330478b2868d456a122d35af59a81e00426d91cb8baef4bdf5d6cc3",
     "src/appsec_review/runtime/consume.py": "55f48d08e60bec9f0f989ba476d76cf4efba5a00c3f6552ae85ced5b3a7e7a7b",
     "src/appsec_review/runtime/contracts.py": "fdb2173e348d573927196f41c10651e9b01444b91d03b333e72417707cbc4f96",
     "src/appsec_review/runtime/datasets.py": "6f3efe022abf0c7ce296ce9aabc3f6ffaf2563b02e6fa52c72833a707fae5577",
     "src/appsec_review/runtime/dependencies.py": "2852af0451a214447b1f7511292ccea899dbea5046807e174b402233a1529c36",
     "src/appsec_review/runtime/equivalence.py": "1aa82566f02e6a90f8b895ec94567bcedc463d13379e51d1cd7e96e7cbcd9f25",
-    "src/appsec_review/runtime/execution_safety.py": "a03311ede7a74768e35d0d7d7464f2935bd3bbb287003ead1c93522995d6c5e9",
+    "src/appsec_review/runtime/execution_safety.py": "844966be3c8c0a970696910d9709cac25c3e25f3662f6c8ab6eddf7806ab781a",
     "src/appsec_review/runtime/failure_replay.py": "19d41f5718a9724f85b306529c8654142bf181220ac9b248e486b2f30be3c1fa",
     "src/appsec_review/runtime/graph.py": "0d5fff5a1b4ee353404d7f808eb851549d98858822a608157b4bb4b44e0caba9",
     "src/appsec_review/runtime/handoff.py": "16968ef27f8f15aca4f66d672ecf8cbd240099d28c5a41bd3f3c4a1ff1096f21",
@@ -46975,7 +46976,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "7d2d1e2c134649a1775c94b45f27f527b266f95e87b2dcd95e621e6dbe144adf",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "2493fc678d8f63818993526fcc47ddecdd1e74cc1f04a0a50ce2240173421465"
+    "tests/job-test-map.json": "27dba42ba3bf98028cff1c8b399b69cd4683a4785da49483c56ed5356fd3dc3d"
   },
   "tool_policy": {
     "disable_grype": true,

@@ -337,8 +337,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5103 | [Recognize imported Wasm features and universal Mach-O format correctly](#t-5103-recognize-imported-wasm-features-and-universal-mach-o-format-correctly) | binary | in-progress |
 | T-5104 | [Deliver artifact risks without losing identity or inventing severity](#t-5104-deliver-artifact-risks-without-losing-identity-or-inventing-severity) | review | in-progress |
 | T-5105 | [Bind artifact scan indexes to immutable result content](#t-5105-bind-artifact-scan-indexes-to-immutable-result-content) | evidence | in-progress |
-| T-5106 | [Resolve binary external references and real pseudo-C call sites](#t-5106-resolve-binary-external-references-and-real-pseudo-c-call-sites) | binary | open |
-| T-5107 | [Report stored binary relationships and truncated evidence accurately](#t-5107-report-stored-binary-relationships-and-truncated-evidence-accurately) | binary | open |
+| T-5106 | [Resolve binary external references and real pseudo-C call sites](#t-5106-resolve-binary-external-references-and-real-pseudo-c-call-sites) | binary | in-progress |
+| T-5107 | [Report stored binary relationships and truncated evidence accurately](#t-5107-report-stored-binary-relationships-and-truncated-evidence-accurately) | binary | in-progress |
 | T-5108 | [Preserve shell dialect and uncertainty under environment bounds](#t-5108-preserve-shell-dialect-and-uncertainty-under-environment-bounds) | build | open |
 | T-5109 | [Reconstruct build iterations and preserve current failure context](#t-5109-reconstruct-build-iterations-and-preserve-current-failure-context) | build | open |
 | T-5110 | [Read manual build transaction requests before unrelated checkout requirements](#t-5110-read-manual-build-transaction-requests-before-unrelated-checkout-requirements) | build | open |
@@ -482,7 +482,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5248 | [Resolve tree sitter ast conditional audit boundaries](#t-5248-resolve-tree-sitter-ast-conditional-audit-boundaries) | pipeline | open |
 | T-5249 | [Reproduce and repair recurrent Grype database listing selection](#t-5249-reproduce-and-repair-recurrent-grype-database-listing-selection) | data | open |
 | T-5250 | [Repair the three stateful guidance prompt-size test failures](#t-5250-repair-the-three-stateful-guidance-prompt-size-test-failures) | testing | done (2026-11-19, 86d81cae0680fd8fa97ffe6c7fd773fdc55e3a8e) |
-| T-5251 | [Bound shared subprocess stream capture before materialization](#t-5251-bound-shared-subprocess-stream-capture-before-materialization) | pipeline | in-progress |
+| T-5251 | [Bound shared subprocess stream capture before materialization](#t-5251-bound-shared-subprocess-stream-capture-before-materialization) | pipeline | done (2026-11-19, 6fba1536b9c228fcf973af4b68b6940d360e2c98) |
 | T-5252 | [Reconcile inherited documentation contract failures](#t-5252-reconcile-inherited-documentation-contract-failures) | testing | done (2026-11-19, f131b7c48ac4623e71cbe1b93cbc6ec393d6ca95) |
 | T-5253 | [Keep documentation fixtures stable across exact file selections](#t-5253-keep-documentation-fixtures-stable-across-exact-file-selections) | testing | done (2026-11-19, 358c93d7a49003342e2f81159a58762a8f954e4e) |
 | T-5254 | [Keep recovery-map selection checks independently bounded](#t-5254-keep-recovery-map-selection-checks-independently-bounded) | testing | done (2026-11-19, d3603a204ab144bc04ec61da441a82c65d6e60dc) |
@@ -4155,7 +4155,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5106 — Resolve binary external references and real pseudo-C call sites
 
-- **State:** open
+- **State:** in-progress
 - **Area:** binary
 - **Why:** Archived audit/feedback cases: BE-01, BE-02. Direct external references cannot resolve to their exported imports; Pseudo-C call-location matching accepts declarations and string literals.
 - **Scope:** `src/appsec_review/jobs/job_binary_evidence_indexing/job.py`
@@ -4164,7 +4164,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5107 — Report stored binary relationships and truncated evidence accurately
 
-- **State:** open
+- **State:** in-progress
 - **Area:** binary
 - **Why:** Archived audit/feedback cases: BE-03, BE-04. Published relation counts exceed the relations actually stored; Truncated string evidence still publishes clean coverage.
 - **Scope:** `src/appsec_review/jobs/job_binary_evidence_indexing/job.py`
@@ -5524,7 +5524,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5251 — Bound shared subprocess stream capture before materialization
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 6fba1536b9c228fcf973af4b68b6940d360e2c98)
 - **Area:** pipeline
 - **Why:** `ContainerExecutor` applies `tool.output_bytes` after its runner returns.
   `_default_runner` uses `subprocess.run(capture_output=True)` and the active-safety path
@@ -5539,6 +5539,12 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Refs:** `src/appsec_review/container_runtime/executor.py`,
   `src/appsec_review/runtime/execution_safety.py`; coordinator source review, 2026-11-19;
   T-5102.
+  Local scanner execution now drains both pipes while retaining only the configured prefix
+  and one overflow byte. Receipts retain exact truncation and byte hashes, including failures.
+  Real-child regressions preserve timeout/cancellation cleanup and the process-exit race;
+  other signaling errors remain errors. Main: 50 passed/7.81 s, two workers, seed 5251,
+  no skips or slow cases. Unbudgeted callers, file sinks and the separately bounded native
+  broker retain their contracts; native/live/Windows validation was not performed.
 
 ### T-5252 — Reconcile inherited documentation contract failures
 
