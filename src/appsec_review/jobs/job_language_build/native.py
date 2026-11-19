@@ -102,6 +102,7 @@ def _row(name: str, kind: str, argv: Sequence[str], workspace: Path, directory: 
     inputs, outputs = _paths(kind, values)
     return {"tool": name, "tool_kind": kind, "argv": values,
             "argv_sha256": hashlib.sha256(canonical_json(values)).hexdigest(),
+            "working_directory": directory,
             "inputs": [item for item in (_mapped(workspace, directory, value) for value in inputs) if item],
             "outputs": [item for item in (_mapped(workspace, directory, value) for value in outputs) if item],
             "origin": origin, "mapping_confidence": 1.0}

@@ -279,13 +279,15 @@ class AcceptedBuilds:
                 continue
             return Located(self._unit(receipt, files, manifest_path, command), "")
         if contained:
-            return Located(None, f"no captured compiler invocation covers {wanted}", "no_compile_command")
+            return Located(None, f"no captured compiler invocation with a recorded workspace working directory "
+                           f"covers {wanted}", "no_compile_command")
         return Located(None, f"no accepted native build contains {wanted}", "no_native_build")
 
     def _command(self, receipt: Mapping[str, Any], wanted: str, language: str) -> CompileCommand | None:
         rows = [row for row in self._compile_rows(receipt) if row.get("tool_kind") == "compiler"
                 and isinstance(row.get("argv"), list) and "-c" in row["argv"]
-                and not str(row["argv"][0]).startswith("/capture/")]
+                and not str(row["argv"][0]).startswith("/capture/")
+                and _working_directory(row.get("working_directory")) is not None]
 
         def source_of(row: Mapping[str, Any]) -> str | None:
             for item in row.get("inputs", ()):
@@ -305,9 +307,8 @@ class AcceptedBuilds:
         row = chosen[0]
         source = str(source_of(row))
         argv = tuple(str(item) for item in row["argv"])
-        recipe = receipt.get("recipe") if isinstance(receipt.get("recipe"), Mapping) else {}
         return CompileCommand(argv, source, SOURCE_SUFFIXES[PurePosixPath(source).suffix.lower()],
-                              _working_directory(argv, str(recipe.get("build_dir") or ".")), basis)
+                              _working_directory(row["working_directory"]), basis)
 
     def _unit(self, receipt: Mapping[str, Any], files: Mapping[str, str], manifest_path: Path,
               command: CompileCommand) -> BuildUnit:
@@ -360,27 +361,21 @@ class AcceptedBuilds:
         return len(unit.workspace_manifest)
 
 
-_RELATIVE_PATHS = re.compile(r"^(?:-I|-isystem|-iquote|-idirafter|-include|-L)(?!/)(.+)$")
-
-
-def _working_directory(argv: Sequence[str], build_dir: str) -> str:
-    """Where derived commands run: the build directory when the captured command uses relative paths."""
-    relative = False
-    pending = False
-    for item in argv[1:]:
-        if pending:
-            relative = relative or not item.startswith("/")
-            pending = False
-        elif item in {"-I", "-isystem", "-iquote", "-idirafter", "-include"}:
-            pending = True
-        elif _RELATIVE_PATHS.match(item):
-            relative = True
-        elif item.startswith("@") and not item.startswith("@/"):
-            relative = True
-    parts = PurePosixPath(build_dir)
-    if not relative or build_dir in {"", "."} or parts.is_absolute() or ".." in parts.parts:
+def _working_directory(recorded: Any) -> str | None:
+    """Map only a captured cwd; argv, build roots and recipe directories cannot supply one."""
+    if (not isinstance(recorded, str) or not recorded or "\\" in recorded or ":" in recorded
+            or any(ord(char) < 32 or ord(char) == 127 for char in recorded)):
+        return None
+    if recorded == CONTAINER_ROOT:
         return "."
-    return parts.as_posix()
+    value = recorded.removeprefix(CONTAINER_ROOT + "/")
+    if value == ".":
+        return value
+    parts = PurePosixPath(value)
+    if (parts.is_absolute() or value != parts.as_posix()
+            or any(part in {"", ".", ".."} for part in value.split("/"))):
+        return None
+    return value
 
 
 class Headers:
@@ -431,7 +426,7 @@ def _include_directories(command: CompileCommand) -> list[str]:
             pending = True
         elif item.startswith(("-I", "-isystem", "-iquote", "-idirafter")):
             add(re.sub(r"^-(?:I|isystem|iquote|idirafter)", "", item))
-    add(str(PurePosixPath(command.source).parent))
+    add(str(PurePosixPath(CONTAINER_ROOT) / PurePosixPath(command.source).parent))
     return found
 
 

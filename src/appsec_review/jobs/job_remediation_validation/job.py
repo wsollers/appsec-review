@@ -1,7 +1,7 @@
 """Exact scratch application, independent semantic assessment, and selected pinned build comparison."""
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import time
 from typing import Any, Callable, Mapping
 
@@ -15,7 +15,7 @@ from appsec_review.jobs.completion_contracts import (
     RemediationValidationStatus as Status, nonexecution_assurance,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
-from appsec_review.jobs.job_poc_generation.buildctx import AcceptedBuilds, BuildUnit
+from appsec_review.jobs.job_poc_generation.buildctx import AcceptedBuilds
 from appsec_review.jobs.job_remediation_planning.contracts import texts, text, verify_patch_scope, verify_plan
 from appsec_review.jobs.job_remediation_planning.inputs import binding, confirmed_findings, evidence_relations, load_review
 from appsec_review.jobs.job_remediation_planning.job import SCHEMA_ROOT, write_json
@@ -29,7 +29,7 @@ from .compiler import compare_build
 from .datasets import CONTRACT, DATASETS
 from .inputs import load_planning
 from .static_validator import validate_remediation_patch_set
-from .workspace import WorkspaceLimit, cleanup, manifest, materialize
+from .workspace import WorkspaceLimit, admit_source_context, cleanup, manifest, materialize
 
 JOB_ID = REMEDIATION_VALIDATION_JOB
 TOPOLOGY = {"load": ("verify_inputs",), "assess": ("validate",), "acceptance": ("publish_handoff",)}
@@ -150,6 +150,7 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
         if (context.get("finding") != result["finding"] or context.get("relations") != relations
                 or context.get("adjudication_id") != finding["adjudication_id"]):
             raise IntegrityError("proposal source context disagrees with accepted evidence")
+        source_builds = admit_source_context(context["files"], builds, configured.bounds, run_root=root)
         source_files = {item["path"]: item for item in context["files"]}
         if not source_files:
             result["reason"] = "run_owned_source_unavailable"
@@ -161,16 +162,19 @@ def build_job(*, infer: Infer | None = None, executor_factory: ExecutorFactory |
             result.update(status=Status.MANUAL_VALIDATION_REQUIRED.value,
                           reason="unsafe_build_configuration_mutation")
             return
-        # A first slice validates one accepted compile unit, never invents a cross-build adapter.
-        units: list[BuildUnit] = []
-        for source in source_files.values():
-            located = builds.locate(source["path"])
-            if located.unit is not None and located.unit.identity() not in [value.identity() for value in units]:
-                units.append(located.unit)
-        if len(units) != 1:
+        # Select the affected compile context, not an unmodified supporting translation unit.
+        first_path = patch.paths[0]
+        build = source_builds.get(first_path)
+        if build is None:
+            build = next(value for name, value in source_builds.items()
+                         if PurePosixPath(name).parent == PurePosixPath(first_path).parent)
+        build_identity = {key: value for key, value in build.identity().items()
+                          if key not in {"command_sha256", "source"}}
+        if any({key: value for key, value in unit.identity().items()
+                if key not in {"command_sha256", "source"}} != build_identity
+               for unit in source_builds.values()):
             result["reason"] = "multi_build_proposal_requires_manual_validation"
             return
-        build = units[0]
         checks["policy"] = _check("passed", "bounded source edits; no executable build/tool configuration changes")
         materialize(build, scratch / "baseline", configured.bounds, run_root=root)
         materialize(build, scratch / "patched", configured.bounds, run_root=root)

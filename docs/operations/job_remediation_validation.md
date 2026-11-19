@@ -220,8 +220,15 @@ See the [handler](../../src/appsec_review/jobs/job_remediation_validation/job.py
    proposals remain `manual_validation_required` with explicit reasons.
 2. Verify each plan, adjudication, evidence relations and source context against the accepted
    finding. Parse the exact patch; reject changed baseline hashes, fuzzy edits or invalid scope.
-3. Require a single accepted build unit. Send executable build/tool configuration mutations and
-   multi-build proposals to manual validation, not an invented adapter.
+3. Re-admit the complete source context against validation's own `max_source_files`,
+   `max_source_bytes` and `max_file_bytes`, even if planning used larger limits. Compare exact
+   UTF-8 bytes, source hashes and build identities with the run-owned accepted workspace.
+   Refuse an over-budget context before source copying or model dispatch, with a named
+   manual-validation reason; never truncate, normalize line endings or silently drop evidence.
+   Require a single accepted build identity, distinct from an individual translation-unit
+   command identity. Select the affected compile context from patch paths; unmodified related
+   files in that same build do not make a proposal multi-build. Foreign-build contexts and
+   executable build/tool configuration mutations still require manual validation.
 4. Materialize bounded baseline and patched scratch workspaces. Apply exact declared edits only;
    verify untouched files and absence proofs. Check UTF-8 source policy, NUL bytes, new conflict
    markers and the declared edit set.
@@ -231,6 +238,13 @@ See the [handler](../../src/appsec_review/jobs/job_remediation_validation/job.py
 6. Only if `native_syntax` is commissioned and every changed file is the accepted exact
    translation unit, compare identical pinned before/after syntax checks. Baseline failure is
    inconclusive; patched failure is rejected; unsafe replay needs manual validation.
+   The command's cwd comes from the hash-bound protected compile row's recorded
+   `working_directory`, mapped from `/workspace` or a canonical workspace-relative directory.
+   Recipe build directories, relative include flags and source roots are not substitutes.
+   Relative include options use that cwd; the source's own header directory is already
+   workspace-relative and is not prefixed with the cwd a second time.
+   Historical rows without a resolvable recorded cwd have no usable compile command; they
+   retain an explicit source/command gap rather than an invented exact context.
    Both passing gives `build_checked`, with no linking or runtime regression.
    The adapter admits compiler exit `1` as a negative comparison result under first-error
    safety, not a review-wide stop or compile success. Abnormal exits, timeouts, transport and
@@ -283,6 +297,7 @@ See [canonical outcome semantics](../architecture/job-interchange.md#the-control
 | `remediation_validation:<claim>:candidate_bound_reached`, `proposal_unavailable` | Candidate never reached substantive validation. |
 | `remediation_validation:<claim>:<status>` for non-`build_checked` status | Named candidate lacks the strongest commissioned compile-only result. |
 | `run_owned_source_unavailable`, `multi_build_proposal_requires_manual_validation`, workspace-limit reason | Source or adapter scope unavailable. |
+| `source_file_bound_reached`, `source_byte_bound_reached` | Complete accepted context exceeds validation's own source/file budget; no reviewer or compiler was dispatched. |
 | `unsafe_build_configuration_mutation`, `patch_scope_not_covered_by_native_adapter`, `accepted_build_profile_uncommissioned`, `accepted_build_replay_unsafe` | Manual validation boundary, not a successful bypass. |
 | `patch_rejected`, `static_patch_policy_failed`, `analyst_assessed_contradicted`, `patched_build_failed` | Proposal rejected; the original vulnerability claim is not refuted by this. |
 | `independent_semantic_review_unavailable`, `analyst_assessed_unresolved`, `baseline_build_failed` | Inconclusive evidence, not proof the patch fails or succeeds. |
@@ -317,6 +332,30 @@ baseline, reviewer guidance or adapter policy invalidates its validation, not th
 finding. The job reloads accepted inputs at publication and refuses to overwrite attempt-owned
 artifacts. Scratch workspaces must be recreated and cleaned; artifact/check receipts are not
 portable failed-attempt checkpoints.
+
+The capture serializer `src/appsec_review/jobs/job_language_build/native.py` is application
+source: the production [Dagster Dockerfile](../../deploy/dagster/Dockerfile) uses
+`PYTHONPATH=/opt/app/src`, supplied by the read-only source mounts in
+[`compose.yaml`](../../deploy/dagster/compose.yaml). Its cwd-retention change therefore requires
+the authorized source-signing/reload lifecycle, not an application-image rebuild. Existing
+accepted compile rows are immutable and are not rewritten to add a missing cwd.
+This module is distinct from `containers/tools/native-cpp/native.py`, copied into
+`tool-native-cpp` by its [Dockerfile](../../containers/tools/native-cpp/Dockerfile).
+Changes to that separate baked tool require the corresponding tooling-image rollout; offline
+validation of this application change neither performs nor clears any pending native-tool rollout.
+
+## In-memory patch checks
+
+C++ numeric digit separators are recognized as numeric tokens rather than character quotes;
+character/string closure, comment stripping and prohibited-call checks remain separate lexical
+checks, not a C++ parser or compiler verdict. The production job still uses `apply_exact` and
+passes `after_text` to its static validator.
+
+The exported `apply_unified_diff_in_memory` helper is a separate, nonexecuting API, not the
+production job's application path. It anchors zero-context insertions after the named old
+line, checks both old/new ranges and counts, preserves line endings and explicit no-final-newline
+markers, and refuses overlapping or mismatched context. Passing its unit tests does not establish
+that a live validation job used unified diffs.
 
 ## Model usage
 

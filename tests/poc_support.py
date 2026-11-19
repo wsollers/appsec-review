@@ -15,6 +15,7 @@ import tomllib
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Sequence
 
+from appsec_review.jobs.job_language_build.native import _row
 from appsec_review.jobs.job_poc_generation.buildctx import AcceptedBuilds, BuildUnit, CompileCommand
 from appsec_review.jobs.job_poc_generation.settings import PocGenerationSettings
 from tests.fixtures.poc_generation import relay
@@ -185,8 +186,8 @@ def accepted_run(root: Path, *, objects: bool = True, compile_rows: bool = True,
                 "-MD", "-MT", f"CMakeFiles/relay.dir/src/{name}.cpp.o", "-MF", f"CMakeFiles/relay.dir/src/{name}.cpp.o.d",
                 "-o", f"CMakeFiles/relay.dir/src/{name}.cpp.o", "-c", f"/workspace/src/{name}.cpp"]
         for compiler in ("/capture/wrappers/clang++", "/usr/bin/clang++"):
-            rows.append({"argv": [compiler, *argv[1:]], "tool": "clang++", "tool_kind": "compiler",
-                         "inputs": [{"workspace_path": f"src/{name}.cpp"}], "outputs": []})
+            rows.append(_row("clang++", "compiler", [compiler, *argv[1:]], workspace,
+                             build_dir, "inert-fixture-capture"))
     rows.append({"argv": ["/usr/bin/cmake", "--build", "build"], "tool": "cmake", "tool_kind": "build-driver",
                  "inputs": [], "outputs": []})
     database = base / "protected-commands" / "compile-database-attempt_0001.json"

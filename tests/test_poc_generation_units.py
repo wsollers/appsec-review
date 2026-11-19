@@ -365,7 +365,7 @@ def test_the_sinks_translation_unit_is_found_from_the_protected_compile_database
     assert builds.handoff_sha256 == "9" * 64
     assert unit.command.argv[0] == "/usr/bin/clang++"                      # the real compiler, not the wrapper
     assert unit.command.source == "src/packet.cpp" and unit.command.basis == "exact"
-    assert unit.command.language == "cxx" and unit.command.working_directory == "."
+    assert unit.command.language == "cxx" and unit.command.working_directory == "build"
     assert (unit.image_tag, unit.image_user) == ("audit-buildenv-cpp:local", "10001:10001")
     assert unit.objects == tuple(sorted(poc_support.OBJECTS)) and unit.shared_libraries == ()
     facts = unit.command.facts()
@@ -450,14 +450,15 @@ def test_declarations_find_prototypes_and_type_layouts_with_their_lines(tmp_path
     assert declarations(unit, Headers(unit), [], source_bytes=65536, max_files=10, max_lines=30) == []
 
 
-def test_relative_include_paths_run_the_derived_commands_in_the_build_directory() -> None:
+def test_only_recorded_workspace_directories_can_supply_compile_context() -> None:
     from appsec_review.jobs.job_poc_generation.buildctx import _working_directory
 
-    assert _working_directory(["c", "-I/workspace/include", "-c"], "build") == "."
-    assert _working_directory(["c", "-I../include", "-c"], "build") == "build"
-    assert _working_directory(["c", "-isystem", "inc", "-c"], "build") == "build"
-    assert _working_directory(["c", "-I../include", "-c"], ".") == "."
-    assert _working_directory(["c", "-I../include", "-c"], "../escape") == "."
+    assert _working_directory("build") == "build"
+    assert _working_directory("/workspace/build") == "build"
+    assert _working_directory(".") == _working_directory("/workspace") == "."
+    assert _working_directory(None) is None
+    assert _working_directory("../escape") is None
+    assert _working_directory("/foreign/build") is None
 
 
 def test_a_run_without_an_accepted_language_build_is_a_named_gap_but_a_broken_one_is_an_integrity_failure(tmp_path) -> None:

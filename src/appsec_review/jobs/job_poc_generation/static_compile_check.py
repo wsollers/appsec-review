@@ -46,6 +46,15 @@ _EXTENSION_TO_LANGUAGE: dict[str, str] = {
 _CLOSING_TO_OPENING = {")": "(", "]": "[", "}": "{"}
 _OPENING_DELIMITERS = frozenset(_CLOSING_TO_OPENING.values())
 
+_CPP_DIGITS = r"[0-9](?:'?[0-9])*"
+_CPP_HEX_DIGITS = r"[0-9a-fA-F](?:'?[0-9a-fA-F])*"
+_CPP_NUMBER = re.compile(
+    rf"0[xX](?:{_CPP_HEX_DIGITS}(?:\.(?:{_CPP_HEX_DIGITS})?)?|\.(?:{_CPP_HEX_DIGITS}))"
+    rf"[pP][+-]?{_CPP_DIGITS}"
+    rf"|0[xX]{_CPP_HEX_DIGITS}|0[bB][01](?:'?[01])*"
+    rf"|(?:{_CPP_DIGITS}(?:\.(?:{_CPP_DIGITS})?)?|\.(?:{_CPP_DIGITS}))(?:[eE][+-]?{_CPP_DIGITS})?"
+)
+
 _STUB_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("todo_marker", re.compile(r"\b(?:TODO|FIXME|XXX|TBD)\b")),  # T-175
     ("not_implemented", re.compile(r"\b(?:NotImplementedError|UnsupportedOperationException|NotImplementedException)\b")),
@@ -283,6 +292,15 @@ def scan_lexical_structure(source_text: str, language: str) -> tuple[bool, str |
             no_comment_chars.append(ch)
             i += 1
             continue
+        if language == "cpp" and (ch.isdecimal() or ch == ".") and (
+                i == 0 or not (source_text[i - 1].isalnum() or source_text[i - 1] == "_")):
+            number = _CPP_NUMBER.match(source_text, i)
+            if number is not None:
+                # Numeric separators are not character quotes; do not skip adjacent source.
+                stripped_chars.append(number.group())
+                no_comment_chars.append(number.group())
+                i = number.end()
+                continue
         if ch in ('"', "'") or (backtick_strings and ch == "`"):
             quote = ch
             start_line = line

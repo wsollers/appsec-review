@@ -409,8 +409,10 @@ def test_buildcheck_and_buildctx_error_and_edge_branches(tmp_path: Path) -> None
     unit = relay_unit(workspace, manifest)
     cfg = settings()
 
-    assert buildctx._working_directory(["clang++", "-I", "include", "-Isrc", "@args.rsp", "-c", "src/packet.cpp"], "build/sub") == "build/sub"
-    assert buildctx._working_directory(["clang++", "-I/workspace/include", "-c", "/workspace/src/packet.cpp"], "build/sub") == "."
+    assert buildctx._working_directory("/workspace/build/sub") == "build/sub"
+    assert buildctx._working_directory(".") == "."
+    assert buildctx._working_directory(None) is None
+    assert buildctx._working_directory("/foreign/build") is None
     rel_cmd = buildctx.CompileCommand(
         ("clang++", "-I", "include", "-Isrc", "-I/outside", "-c", "src/packet.cpp"),
         "src/packet.cpp",
@@ -419,6 +421,7 @@ def test_buildcheck_and_buildctx_error_and_edge_branches(tmp_path: Path) -> None
         "exact",
     )
     inc_headers = buildctx.Headers(relay_unit(workspace, manifest, compile_command=rel_cmd))
+    assert inc_headers.search_directories() == ("build/sub/include", "build/sub/src", "src")
     assert inc_headers.resolve("../escape.hpp") is None
     assert inc_headers.resolve("/abs/path.hpp") is None
     assert buildctx.declarations(unit, inc_headers, [], source_bytes=4096, max_files=4, max_lines=20) == []

@@ -136,11 +136,10 @@ def apply_unified_diff_in_memory(original_text: str, unified_diff: str) -> str:
     """Apply a unified diff strictly against ``original_text`` in memory without fuzz."""
     if not isinstance(unified_diff, str) or not unified_diff.strip():
         raise UnifiedDiffApplyError("unified diff is empty")
-    had_trailing_newline = original_text.endswith("\n") or original_text == ""
-    orig_lines = original_text.splitlines()
-    diff_lines = unified_diff.splitlines()
+    orig_lines = original_text.splitlines(keepends=True)
+    diff_lines = unified_diff.splitlines(keepends=True)
 
-    hunks: list[tuple[int, int, list[str]]] = []
+    hunks: list[tuple[int, int, int, int, list[str]]] = []
     idx = 0
     while idx < len(diff_lines):
         line = diff_lines[idx]
@@ -155,33 +154,50 @@ def apply_unified_diff_in_memory(original_text: str, unified_diff: str) -> str:
             raise UnifiedDiffApplyError(f"unexpected line outside hunk on line {idx + 1}: {line[:80]}")
         old_start = int(match.group(1))
         old_count = int(match.group(2)) if match.group(2) is not None else 1
+        new_start = int(match.group(3))
+        new_count = int(match.group(4)) if match.group(4) is not None else 1
+        if (old_count and not old_start) or (new_count and not new_start):
+            raise UnifiedDiffApplyError("nonempty hunk ranges must start at line one or later")
         idx += 1
         body: list[str] = []
+        consumed = produced = 0
         while idx < len(diff_lines):
             cur = diff_lines[idx]
-            if cur.startswith("@@ ") or cur.startswith("diff --git") or cur.startswith("--- "):
-                break
-            if cur.startswith("\\ No newline at end of file"):
+            if cur.rstrip("\r\n") == "\\ No newline at end of file":
+                if not body or not body[-1].endswith("\n"):
+                    raise UnifiedDiffApplyError("orphaned or repeated no-newline marker")
+                body[-1] = body[-1].removesuffix("\n").removesuffix("\r")
                 idx += 1
                 continue
+            if consumed == old_count and produced == new_count:
+                break
             if not cur or cur[0] not in (" ", "+", "-"):
                 raise UnifiedDiffApplyError(f"malformed hunk prefix on line {idx + 1}")
             body.append(cur)
+            consumed += cur[0] in (" ", "-")
+            produced += cur[0] in (" ", "+")
+            if consumed > old_count or produced > new_count:
+                raise UnifiedDiffApplyError("hunk line count exceeds its declared range")
             idx += 1
-        hunks.append((old_start, old_count, body))
+        if consumed != old_count or produced != new_count:
+            raise UnifiedDiffApplyError("hunk line count differs from its declared old/new range")
+        hunks.append((old_start, old_count, new_start, new_count, body))
 
     if not hunks:
         raise UnifiedDiffApplyError("unified diff contains no hunks")
 
     out_lines: list[str] = []
     cursor = 0
-    for old_start, old_count, body in hunks:
-        start_idx = 0 if old_start == 0 else old_start - 1
+    for old_start, old_count, new_start, new_count, body in hunks:
+        # An empty range is anchored *after* its line; a nonempty one begins on it.
+        start_idx = old_start if old_count == 0 else old_start - 1
         if start_idx < cursor or start_idx > len(orig_lines):
             raise UnifiedDiffApplyError(f"hunk start {old_start} out of bounds or overlapping")
         out_lines.extend(orig_lines[cursor:start_idx])
+        new_idx = new_start if new_count == 0 else new_start - 1
+        if new_idx != len(out_lines):
+            raise UnifiedDiffApplyError("hunk new range does not match the output position")
         src_pos = start_idx
-        consumed = 0
         for raw in body:
             op, content = raw[0], raw[1:]
             if op in (" ", "-"):
@@ -190,18 +206,14 @@ def apply_unified_diff_in_memory(original_text: str, unified_diff: str) -> str:
                 if op == " ":
                     out_lines.append(content)
                 src_pos += 1
-                consumed += 1
             elif op == "+":
                 out_lines.append(content)
-        if consumed != old_count:
-            raise UnifiedDiffApplyError(f"hunk line count mismatch: expected {old_count}, consumed {consumed}")
         cursor = src_pos
 
     out_lines.extend(orig_lines[cursor:])
-    joined = "\n".join(out_lines)
-    if had_trailing_newline and (out_lines or original_text.endswith("\n")):
-        joined += "\n"
-    return joined
+    if any(not line.endswith("\n") for line in out_lines[:-1]):
+        raise UnifiedDiffApplyError("no-newline line is not the final output line")
+    return "".join(out_lines)
 
 
 def extract_declared_functions(source_text: str, language: str) -> set[str]:
