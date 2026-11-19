@@ -260,7 +260,9 @@ def _alternate_cpg_inputs(tmp_path: Path, consumer_id: str):
         publish_alternate_cpg, synthesize_alternate_cpg,
     )
     from appsec_review.jobs.job_tree_sitter_ast.cfg import synthesize_file_cfg
-    from appsec_review.retrieval import IndexBuilder, IndexIdentity, RetrievalCore, write_manifest
+    from appsec_review.retrieval import (
+        EntityKind, IndexBuilder, IndexIdentity, LogicalIdentity, RetrievalCore, write_manifest,
+    )
     from appsec_review.runtime import Job, JobRunner, Unit, UnitExecutor
     from appsec_review.runtime.contracts import JobContract
     from tests.downstream_contract_fixture import configuration
@@ -273,14 +275,26 @@ def _alternate_cpg_inputs(tmp_path: Path, consumer_id: str):
     target = tmp_path / "source"
     target.mkdir()
     source = target / "app.py"
-    source.write_text("# inert source fixture\n" * 20, encoding="utf-8")
-    snapshot = "target-sha256:" + file_sha256(source)
+    source.write_text(
+        "# inert parser input; never executed\n"
+        "def handle(input_val):\n"
+        "    if input_val is not None:\n"
+        "        return\n\n\n"
+        "    return parse(input_val)\n\n\n"
+        "def parse(payload):\n\n"
+        "    eval(payload)\n" + "\n" * 8,
+        encoding="utf-8",
+    )
+    source_sha = file_sha256(source)
+    snapshot = "target-sha256:" + source_sha
+    source_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, snapshot, {"path": "app.py", "sha256": source_sha})
     ast = _make_two_fn_ast(
         fn_type="function_definition", body_type="block", if_type="if_statement",
         ret_type="return_statement", call_type="call", entry_name="handle",
         helper_name="parse", guard_expr="input_val is not None", sink_call="eval",
     )
-    cfg = synthesize_file_cfg(ast, language="python", path="app.py")
+    cfg = synthesize_file_cfg(ast, source.read_bytes(), language="python", path="app.py",
+                              file_sha256=source_sha, source_identity=source_id.value)
     published = {}
 
     def graph_output(unit):
@@ -372,6 +386,9 @@ def test_alternate_cpg_is_admitted_and_read_without_sticky_violation(tmp_path, c
         accepted = accepted_upstream(context.run_root, "job_code_graph_index")
         result = core.query_call_paths()
         assert result["results"], "the admitted graph must be usable, not just declared"
+        located = core.find(path="app.py", indexes=(shard["name"],))["results"]
+        assert located and all(row["location"]["file_sha256"] == file_sha256(core.target_root / "app.py")
+                               for row in located)
         assert reads.violation is None
     [receipt] = [row for row in reads.document()["reads"] if row["output_kind"] == "alternate_cpg_index"]
     assert receipt["sha256"] == shard["sha256"]
