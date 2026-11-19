@@ -3,7 +3,9 @@ from contextlib import nullcontext
 from dataclasses import replace
 import hashlib
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import threading
@@ -115,6 +117,57 @@ def test_bounded_timeout_kills_process_group_and_keeps_stream_prefixes(tmp_path,
     assert outcome.exit_code is None and outcome.timed_out and not outcome.oom_killed
     assert outcome.stdout == b"o" * 9 and outcome.stderr == b"e" * 9
     assert time.monotonic() - started < 5
+
+
+@pytest.mark.parametrize("signal_error", ["disappeared", "denied"])
+def test_timeout_signal_race_preserves_capture_and_other_errors(tmp_path, monkeypatch, signal_error):
+    release = tmp_path / "release"
+    script = (
+        "import os,time; from pathlib import Path\n"
+        "os.write(1,b'out'); os.write(2,b'err')\n"
+        f"while not Path({str(release)!r}).exists(): time.sleep(0.005)\n"
+        "os.write(1,b'after-timeout'); os.write(2,b'after-timeout')\n"
+    )
+    popen, killpg = subprocess.Popen, os.killpg
+    children, signals = [], []
+
+    def launch(*args, **kwargs):
+        child = popen(*args, **kwargs)
+        children.append(child)
+        return child
+
+    def signal_boundary(pid, number):
+        assert pid == children[0].pid and number == signal.SIGKILL
+        signals.append((pid, number))
+        if len(signals) == 1:
+            if signal_error == "disappeared":
+                release.touch()
+                assert children[0].wait(timeout=2) == 0
+                assert not Path(f"/proc/{pid}").exists()
+            else:
+                raise PermissionError("fixture signal permission denied")
+        # In the disappearance case this is the real kernel ESRCH, after a confirmed exit.
+        return killpg(pid, number)
+
+    monkeypatch.setattr(subprocess, "Popen", launch)
+    monkeypatch.setattr(os, "killpg", signal_boundary)
+    try:
+        if signal_error == "disappeared":
+            result = _default_runner([sys.executable, "-c", script], 1, output_bytes=8)
+            assert result.exit_code is None and result.timed_out
+            assert result.stdout == b"outafter-" and result.stderr == b"errafter-"
+            assert len(signals) == 1
+        else:
+            with pytest.raises(PermissionError, match="fixture signal permission denied"):
+                _default_runner([sys.executable, "-c", script], 1, output_bytes=8)
+            assert len(signals) == 2 and children[0].returncode == -signal.SIGKILL
+        assert children[0].poll() is not None
+        assert children[0].stdout.closed and children[0].stderr.closed
+    finally:
+        for child in children:
+            if child.poll() is None:
+                killpg(child.pid, signal.SIGKILL)
+                child.wait(timeout=2)
 
 
 def test_safety_cancellation_still_registers_and_reaps_bounded_process(tmp_path):

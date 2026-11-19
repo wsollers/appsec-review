@@ -138,7 +138,10 @@ def _default_runner(argv: Sequence[str], timeout: int, *, output_bytes: int | No
         try:
             capture.wait(timeout)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             capture.wait(5)
             return CommandOutcome(None, *capture.output(), timed_out=True)
         return CommandOutcome(process.returncode, *capture.output(),
