@@ -6,6 +6,7 @@ import pytest
 
 from appsec_review.inference import ModelResult
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound_json
+from appsec_review.jobs.job_language_build.native import _row
 from appsec_review.jobs.job_poc_generation.buildctx import AcceptedBuilds, COMPILE_DATABASE_SCHEMA
 from appsec_review.jobs.job_poc_generation.datasets import CONTRACT as POC_CONTRACT
 from appsec_review.jobs.job_remediation_planning import build_job
@@ -25,8 +26,8 @@ def _publish_build(env):
     manifest = _write(env.root, "workspace-manifest.json", {"files": env.manifest})
     commands = _write(env.root, "compile-commands.json", {
         "schema": COMPILE_DATABASE_SCHEMA,
-        "rows": [{"tool_kind": "compiler", "argv": ["/usr/bin/clang", "-c", f"/workspace/{SOURCE}"],
-                  "inputs": [{"workspace_path": SOURCE}]}],
+        "rows": [_row("clang", "compiler", ["/usr/bin/clang", "-c", f"/workspace/{SOURCE}"],
+                      env.workspace, ".", "inert-planning-fixture")],
     })
     receipt_set = _write(env.root, "language-build.json", {
         "schema": "appsec-review/language-build-handoff/2",
