@@ -1753,6 +1753,9 @@ class RetrievalCore:
         *, subject: str | None = None, path: str | None = None,
         limit: int = 20, cursor: str | None = None,
     ) -> dict[str, Any]:
+        from contextlib import ExitStack, closing
+        import heapq
+
         if subject is not None:
             LogicalIdentity.parse(subject)
         if path is not None:
@@ -1761,47 +1764,91 @@ class RetrievalCore:
             raise ValueError("result limit exceeds bound")
         full_params = {**parameters, "limit": limit, "cursor": cursor}
         request_hash = self._request_hash(tool_name, full_params)
-        offset = self._offset(cursor, request_hash)
+        state = self._cursor_state(cursor, request_hash)
+        offset = state["offset"]
+        position = state.get("position", ["", ""])
+        if (not isinstance(position, list) or len(position) != 2
+                or any(not isinstance(part, str) for part in position)
+                or (offset and "position" not in state)):
+            raise ValueError("invalid filtered-query cursor; restart pagination")
 
         def operation(deadline: float):
             found: list[dict[str, Any]] = []
             gaps: list[str] = []
+            page_cursors = [self._cursor(offset, request_hash, position=position)]
             shards = [
                 shard for shard in self.indexes.get("precomputed", ())
                 if shard.get("producer", {}).get("query_set") == query_set
             ]
             if not shards:
                 gaps.append(f"precomputed query set {query_set} is unavailable")
-            for shard in shards:
-                self._check_deadline(deadline)
-                shard_id = str(shard.get("shard_id", "default"))
-                with self._database(shard, deadline) as database:
-                    rows = database.execute(
-                        "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
-                        "WHERE e.kind='precomputed_fact' ORDER BY e.identity"
-                    )
-                    for row in rows:
-                        payload = json.loads(row["payload_json"])
-                        if subject is not None and payload.get("subject_identity") != subject and row["identity"] != subject:
-                            continue
-                        row_path = row["path"] or payload.get("subject_path")
-                        if path is not None and row_path != path:
-                            continue
-                        result_obj = payload.get("result") if isinstance(payload.get("result"), Mapping) else {}
-                        if not predicate(payload, result_obj):
-                            continue
-                        item = self._entity(row, "precomputed")
-                        item["shard_id"] = shard_id
-                        found.append(item)
+            # Merge ordered shard cursors, retaining one lookahead per shard. The existing
+            # configured result ceiling also bounds Python predicate work in each scan page.
+            pending = []
+            scanned = 0
+            with ExitStack() as stack:
+                for shard in shards:
+                    self._check_deadline(deadline)
+                    shard_id = str(shard.get("shard_id", "default"))
+                    database = stack.enter_context(closing(self._database(shard, deadline)))
+                    clauses = ["e.kind='precomputed_fact'",
+                               "(e.identity > ? OR (e.identity = ? AND ? > ?))"]
+                    values: list[Any] = [position[0], position[0], shard_id, position[1]]
+                    if subject is not None:
+                        clauses.append("(json_extract(e.payload_json, '$.subject_identity') = ? OR e.identity = ?)")
+                        values.extend((subject, subject))
+                    if path is not None:
+                        clauses.append("COALESCE(l.path, json_extract(e.payload_json, '$.subject_path')) = ?")
+                        values.append(path)
+                    if tool_name == "query_threat_boundaries":
+                        for key in ("boundary_id", "trust_level"):
+                            if parameters.get(key) is not None:
+                                clauses.append(f"json_extract(e.payload_json, '$.result.{key}') = ?")
+                                values.append(parameters[key])
+                        if parameters.get("path") is not None:
+                            clauses.append(
+                                "(json_extract(e.payload_json, '$.subject_path') = ? OR EXISTS "
+                                "(SELECT 1 FROM json_each(e.payload_json, '$.result.source_paths') WHERE value = ?))")
+                            values.extend((parameters["path"], parameters["path"]))
+                    rows = iter(database.execute(
+                        "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE "
+                        + " AND ".join(clauses) + " ORDER BY e.identity LIMIT ?",
+                        [*values, self.limits.max_results + 1]))
+                    row = next(rows, None)
+                    if row is not None:
+                        heapq.heappush(pending, (row["identity"], shard_id, row, rows))
                     gaps.extend(
                         f"precomputed/{shard_id}: {r['area']}: {r['status']}: {r['gap']}"
                         for r in database.execute(
                             "SELECT area, status, gap FROM coverage WHERE status != 'complete' ORDER BY area"
                         )
                     )
-                gaps.extend(f"precomputed/{shard_id}: {g}" for g in shard.get("gaps", ()))
-            found.sort(key=lambda item: item["identity"])
-            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+                    gaps.extend(f"precomputed/{shard_id}: {g}" for g in shard.get("gaps", ()))
+                while pending and scanned < self.limits.max_results and len(found) < limit:
+                    self._check_deadline(deadline)
+                    identity, shard_id, row, rows = heapq.heappop(pending)
+                    scanned += 1
+                    payload = json.loads(row["payload_json"])
+                    result_obj = payload.get("result") if isinstance(payload.get("result"), Mapping) else {}
+                    matches = predicate(payload, result_obj)
+                    self._check_deadline(deadline)
+                    if matches:
+                        item = self._entity(row, "precomputed")
+                        item["shard_id"] = shard_id
+                        found.append(item)
+                        page_cursors.append(self._cursor(offset + len(found), request_hash,
+                                                         position=[identity, shard_id]))
+                    else:
+                        page_cursors[-1] = self._cursor(offset + len(found), request_hash,
+                                                       position=[identity, shard_id])
+                    following = next(rows, None)
+                    if following is not None:
+                        heapq.heappush(pending, (following["identity"], shard_id, following, rows))
+            scan_truncated = bool(pending) and scanned == self.limits.max_results and len(found) < limit
+            if scan_truncated:
+                gaps.append(f"precomputed candidate scan bound of {self.limits.max_results} reached; "
+                            "more candidates remain, continue with the cursor")
+            return found, gaps, bool(pending), offset, scan_truncated, page_cursors
 
         return self._execute(tool_name, full_params, operation)
 

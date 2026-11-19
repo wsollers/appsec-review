@@ -1508,6 +1508,7 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
                 "source_paths": set(),
                 "evidence_refs": set(),
                 "doc_identities": set(),
+                "seen_details": defaultdict(set),
             }
             boundaries[bid] = entry
         return entry
@@ -1515,7 +1516,7 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
     def _collect_evidence(items: Any, bucket: dict[str, Any]) -> None:
         if not isinstance(items, (list, tuple)):
             return
-        for item in items[:32]:
+        for item in items:
             if isinstance(item, Mapping):
                 ref = item.get("ref") or item.get("source_identity")
                 if isinstance(ref, str) and ref:
@@ -1523,6 +1524,15 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
                 path = item.get("path")
                 if isinstance(path, str) and path:
                     bucket["source_paths"].add(path)
+
+    def _retain(bucket: dict[str, Any], field: str, key: str, item: dict[str, Any]) -> None:
+        seen = bucket["seen_details"][field]
+        if item[key] in seen:
+            return
+        seen.add(item[key])
+        bucket[field].append(item)
+        bucket[field].sort(key=lambda value: value[key])
+        del bucket[field][16:]
 
     element_to_boundary: dict[str, str] = {}
     for raw_b in (dfd_doc.get("boundaries") or dfd_doc.get("trust_boundaries") or ()):
@@ -1560,13 +1570,12 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
             if not isinstance(bid, str) or not bid:
                 continue
             b_entry = _ensure_boundary(bid)
-            if len(b_entry["cross_boundary_flows"]) < 32:
-                b_entry["cross_boundary_flows"].append({
+            _retain(b_entry, "cross_boundary_flows", "flow_id", {
                     "flow_id": flow["id"],
                     "source": src_el,
                     "target": dst_el,
                     "protocol": str(flow.get("protocol") or flow.get("channel") or "unspecified")[:64],
-                })
+            })
             _collect_evidence(flow.get("evidence"), b_entry)
 
     for ep in (list(tm_doc.get("entry_points") or ()) + list(dfd_doc.get("entry_points") or ())):
@@ -1575,13 +1584,12 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
         target_bid = str(ep.get("boundary_id") or element_to_boundary.get(str(ep.get("element_id") or ep.get("node_id") or "")) or "boundary:entry_surface")
         b_entry = _ensure_boundary(target_bid, label="Entry Surface" if target_bid == "boundary:entry_surface" else None,
                                    trust_level=str(ep.get("trust_level") or "untrusted_entry"))
-        if len(b_entry["entry_points"]) < 32:
-            b_entry["entry_points"].append({
+        _retain(b_entry, "entry_points", "entry_point_id", {
                 "entry_point_id": ep["id"],
                 "name": str(ep.get("name") or ep["id"])[:200],
                 "kind": str(ep.get("kind") or "entry_point")[:64],
                 "element_id": ep.get("element_id") or ep.get("node_id"),
-            })
+        })
         _collect_evidence(ep.get("evidence"), b_entry)
 
     for threat in tm_doc.get("threats") or ():
@@ -1601,13 +1609,12 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
             if not isinstance(bid, str) or not bid:
                 continue
             b_entry = _ensure_boundary(bid)
-            if len(b_entry["threats"]) < 32:
-                b_entry["threats"].append({
+            _retain(b_entry, "threats", "threat_id", {
                     "threat_id": threat["id"],
                     "category": str(threat.get("category") or threat.get("stride") or "unspecified")[:64],
                     "title": str(threat.get("title") or threat.get("statement") or threat["id"])[:240],
                     "severity": str(threat.get("severity") or "medium")[:32],
-                })
+            })
             _collect_evidence(threat.get("evidence"), b_entry)
 
     for row in doc_rows:
@@ -1628,13 +1635,12 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
                 if isinstance(bid, str) and bid:
                     b_entry = _ensure_boundary(bid, origin="target_document" if not tm_accepted else "generated_and_documented")
                     b_entry["doc_identities"].add(row["identity"])
-                    if len(b_entry["threats"]) < 32:
-                        b_entry["threats"].append({
+                    _retain(b_entry, "threats", "threat_id", {
                             "threat_id": str(fields.get("threat_id") or row["name"])[:120],
                             "category": str(fields.get("category") or "documented")[:64],
                             "title": str(row["name"])[:240],
                             "severity": str(fields.get("severity") or "medium")[:32],
-                        })
+                    })
                     if isinstance(loc_path, str):
                         b_entry["source_paths"].add(loc_path)
 
@@ -1657,6 +1663,16 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
             subj_id = doc_ids[0]
         subj_path = src_paths[0] if src_paths else None
         row_gaps: list[str] = []
+        for field, bound in (("element_ids", 32), ("component_ids", 16), ("source_paths", 16),
+                             ("evidence_refs", 24), ("doc_identities", 16), ("entry_points", 16),
+                             ("cross_boundary_flows", 16), ("threats", 16)):
+            total = len(b_entry["seen_details"].get(field, b_entry[field]))
+            omitted = max(0, total - bound)
+            if omitted:
+                gap = f"truncated: {bid}: {omitted} of {total} {field} omitted from boundary detail"
+                row_gaps.append(gap)
+                derived.gap(gap)
+                derived.count(f"omitted_{field}", omitted)
         if not b_entry["threats"]:
             row_gaps.append("no candidate threats enumerated for this trust boundary")
         if tm_gaps:
@@ -1687,9 +1703,9 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
                 "entry_points": b_entry["entry_points"][:16],
                 "cross_boundary_flows": b_entry["cross_boundary_flows"][:16],
                 "threats": b_entry["threats"][:16],
-                "threat_count": len(b_entry["threats"]),
-                "flow_count": len(b_entry["cross_boundary_flows"]),
-                "entry_point_count": len(b_entry["entry_points"]),
+                "threat_count": len(b_entry["seen_details"]["threats"]),
+                "flow_count": len(b_entry["seen_details"]["cross_boundary_flows"]),
+                "entry_point_count": len(b_entry["seen_details"]["entry_points"]),
                 "evidence_refs": ev_refs,
                 "authority": "routing_context",
             },
@@ -1706,7 +1722,14 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
         for ref in ev_refs:
             if ref.startswith("asr:"):
                 linked_targets.append(ref)
-        for target_id in list(dict.fromkeys(linked_targets))[:16]:
+        linked_targets = list(dict.fromkeys(linked_targets))
+        if len(linked_targets) > 16:
+            gap = f"truncated: {bid}: {len(linked_targets) - 16} boundary provenance links omitted"
+            derived.gap(gap)
+            record_fact.payload["gaps"] = bounded_gaps([*record_fact.payload["gaps"], gap])
+            record_fact.payload["coverage_status"] = "partial"
+            derived.count("omitted_provenance_links", len(linked_targets) - 16)
+        for target_id in linked_targets[:16]:
             derived.relations.append(
                 RelationRecord(RelationKind.DERIVED_FROM, record_fact.identity.value, target_id,
                                True, 1.0, None, {"query_set": name})

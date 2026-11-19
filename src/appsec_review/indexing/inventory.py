@@ -23,7 +23,7 @@ from appsec_review.indexing.store import AcceptedHandoff, digest, shard_key, sha
 from appsec_review.runtime.datasets import (
     METADATA_ROUTE, RUNTIME_SHARED_NAMESPACES, DatasetDeclaration, read_dataset_contract,
 )
-from appsec_review.storage import file_sha256
+from appsec_review.storage import canonical_json, file_sha256
 from appsec_review.storage.shared import audit_file
 from appsec_review.storage.validation import validation_scope, verified_digest
 
@@ -440,18 +440,85 @@ def admitted_run_tree(inputs: InventoryInputs, claims: FileClaims) -> RunTree:
                    ownership, attempts, [])
 
 
-def _owasp_shards(run_root: Path) -> tuple[list[Mapping[str, Any]], str | None]:
-    pointer_path = run_root / "data" / "indexes" / "owasp" / "accepted.json"
-    if not pointer_path.is_file():
+def _owasp_read(run_root: Path, reference: Mapping[str, Any]) -> Mapping[str, Any]:
+    from appsec_review.runtime.inputs import observe_output
+    from appsec_review.storage.shared import consume_named, safe_path
+    path = safe_path(run_root, reference["path"])
+    if file_sha256(path) != reference["sha256"]:
+        raise ValueError("accepted OWASP publication bytes changed")
+    observe_output(run_root, "job_owasp_control_assessment", "owasp_workbench", reference)
+    consume_named(run_root, path, namespace="owasp-shard", expected_sha256=reference["sha256"])
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, Mapping):
+        raise ValueError("accepted OWASP publication must be an object")
+    return document
+
+
+def accepted_owasp_publication(run_root: Path, accepted: AcceptedHandoff | None) -> dict[str, Any]:
+    """Select the exact admitted manifest, never the workbench's mutable pointer."""
+    if accepted is None:
+        return {"status": "unavailable", "reason": "the OWASP workbench has no accepted index from an admitted "
+                                                 "producer handoff in this run"}
+    if (accepted.job_id != "job_owasp_control_assessment"
+            or accepted.handoff.get("job_id") != accepted.job_id
+            or accepted.handoff.get("run_id") != run_root.name):
+        raise ValueError("accepted OWASP handoff belongs to another run or producer")
+    manifests = {ref["path"]: ref for ref in accepted.handoff["artifacts"]
+                 if str(ref.get("path", "")).startswith("data/indexes/owasp/manifests/")
+                 and str(ref["path"]).endswith(".json")}
+    if not manifests:
+        return {"status": "unavailable", "reason": "the accepted OWASP handoff carries no workbench manifest"}
+    if len(manifests) != 1:
+        raise ValueError("accepted OWASP handoff carries ambiguous workbench manifests")
+    reference = next(iter(manifests.values()))
+    manifest = _owasp_read(run_root, reference)
+    if (manifest.get("schema") != "appsec-review/owasp-index-manifest/1"
+            or manifest.get("run_id") != run_root.name):
+        raise ValueError("accepted OWASP publication belongs to another run")
+    if manifest.get("assessment_mode", "qualification") not in {"assessment", "qualification"}:
+        raise ValueError("accepted OWASP publication has an invalid assessment mode")
+    return {"status": "accepted", "manifest_sha256": reference["sha256"], "manifest_path": reference["path"],
+            "assessment_mode": manifest.get("assessment_mode", "qualification"),
+            "assessment_bounds": manifest.get("assessment_bounds", {}),
+            "accepted_upstream_manifest": manifest.get("accepted_upstream_manifest"),
+            "shards": list(manifest.get("shards", ()))}
+
+
+def _owasp_shards(inputs: InventoryInputs) -> tuple[list[Mapping[str, Any]], str | None]:
+    accepted = inputs.handoffs.get("job_owasp_control_assessment")
+    publication = accepted_owasp_publication(inputs.run_root, accepted)
+    if publication["status"] != "accepted":
         return [], None
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    manifest_path = (run_root / str(pointer.get("manifest_path", ""))).resolve()
-    if run_root.resolve() not in manifest_path.parents or not manifest_path.is_file():
-        raise ValueError("accepted OWASP workbench manifest is unavailable")
-    if file_sha256(manifest_path) != pointer.get("manifest_sha256"):
-        raise ValueError("accepted OWASP workbench manifest identity changed")
-    return list(json.loads(manifest_path.read_text(encoding="utf-8")).get("shards", ())), \
-        str(pointer.get("manifest_sha256"))
+    assert accepted is not None
+    if inputs.run_id != inputs.run_root.name:
+        raise ValueError("OWASP inventory belongs to another run")
+    snapshot = accepted.handoff.get("target_snapshot") or accepted.handoff.get("source_fingerprint")
+    if snapshot != inputs.target_snapshot:
+        raise ValueError("accepted OWASP publication target snapshot differs from inventory")
+    admitted = {(ref["path"], ref["sha256"]) for ref in accepted.handoff["artifacts"]}
+    seen, shards = set(), []
+    for member in publication["shards"]:
+        if not isinstance(member, Mapping) or (member.get("path"), member.get("sha256")) not in admitted:
+            raise ValueError("OWASP member is not bound to the admitted handoff")
+        document = _owasp_read(inputs.run_root, member)
+        identity = (member.get("family"), member.get("shard_id"))
+        if identity in seen:
+            raise ValueError("OWASP publication contains duplicate members")
+        seen.add(identity)
+        if (document.get("schema") != "appsec-review/owasp-index-shard/1"
+                or any(document.get(key) != member.get(key) for key in ("schema", "family", "shard_id", "fingerprint"))):
+            raise ValueError("OWASP member identity differs from its manifest")
+        records, gaps = document.get("records"), document.get("gaps")
+        if (not isinstance(records, list) or any(not isinstance(record, Mapping) for record in records)
+                or type(member.get("record_count")) is not int or member["record_count"] != len(records)
+                or document.get("records_sha256") != hashlib.sha256(canonical_json(records)).hexdigest()
+                or not isinstance(gaps, list) or any(not isinstance(gap, str) for gap in gaps)
+                or gaps != member.get("gaps")):
+            raise ValueError("OWASP member records, counts or gaps differ from the publication")
+        if accepted.handoff.get("completion_status") != "SUCCEEDED":
+            gaps = [*gaps, "OWASP producer completed with incomplete coverage"]
+        shards.append({**member, "record_count": len(records), "gaps": gaps})
+    return shards, publication["manifest_sha256"]
 
 
 def build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
@@ -558,7 +625,12 @@ def _build_inventory(inputs: InventoryInputs) -> dict[str, Any]:
                 query_set=producer.get("query_set"), coverage=coverage)
         emitted[(job_id, declaration.output_kind)] = emitted.get((job_id, declaration.output_kind), 0) + 1
 
-    owasp_shards, owasp_manifest = _owasp_shards(run_root)
+    try:
+        owasp_shards, owasp_manifest = _owasp_shards(inputs)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        violate("invalid_owasp_publication", "job_owasp_control_assessment", "owasp",
+                f"admitted workbench could not be verified: {exc}")
+        owasp_shards, owasp_manifest = [], None
     for job_id, declarations in sorted(inputs.declarations.items()):
         for declaration in (item for item in declarations if item.store == "owasp"):
             by_family: dict[str, list[Mapping[str, Any]]] = {}

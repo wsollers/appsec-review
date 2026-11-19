@@ -15,6 +15,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from appsec_review.graph.contract import GRAPH_INDEX, Coverage, Family
+from appsec_review.indexing.derive import bounded_gaps
 from appsec_review.indexing.store import ShardSet
 from appsec_review.swift_policy import SWIFT_KNOWN_GAP
 
@@ -96,6 +97,25 @@ def graph_cell(shards: ShardSet, selected: Sequence[Mapping[str, Any]], unavaila
                  unrecognised_shards=unknown[:20])
 
 
+def _codeql_cell(shards: ShardSet, selected: Sequence[Mapping[str, Any]], missing: str) -> dict[str, Any]:
+    states, gaps = [], []
+    for shard in sorted(selected, key=lambda item: str(item["shard_id"])):
+        shard_id = str(shard["shard_id"])
+        coverage = shards.coverage((shard,))
+        states.extend(row["status"] for row in coverage)
+        if not coverage:
+            states.append("partial")
+            gaps.append(f"{shard_id}: scope coverage was not published")
+        gaps.extend(f"{shard_id}: {row['area']}: {row['status']}: {row['gap'] or 'no reason published'}"
+                    for row in coverage if row["status"] != "complete")
+        gaps.extend(f"{shard_id}: {gap}" for gap in shard.get("gaps", ()))
+    state = ("unavailable" if not states or all(value == "unavailable" for value in states) else
+             "complete" if all(value == "complete" for value in states) and not gaps else "partial")
+    return _cell(state, missing if not selected else f"accepted CodeQL scope coverage is {state}",
+                 shards=sorted(str(item["shard_id"]) for item in selected)[:20], count=len(selected),
+                 gaps=bounded_gaps(gaps), gap_count=len(gaps))
+
+
 def language_matrix(shards: ShardSet, lead_languages: Mapping[str, int], *,
                     enable_swift: bool = False) -> list[dict[str, Any]]:
     """One row per catalogued language with a cell per lane."""
@@ -120,9 +140,9 @@ def language_matrix(shards: ShardSet, lead_languages: Mapping[str, int], *,
     compiled = [str(item.get("shard_id")) for item in shards.select(job="job_cpp_compiled_analysis")]
     symbols = [str(item.get("shard_id")) for item in shards.select(index="analysis", job="job_cpp_symbol_index")]
     cpg = [str(item.get("shard_id")) for item in shards.select(job="job_cpg_analysis")]
-    codeql: dict[str, list[str]] = defaultdict(list)
+    codeql: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for shard in shards.select(index="observations", job="job_codeql_analysis"):
-        codeql[canonical_language(shard.get("producer", {}).get("language"))].append(str(shard.get("shard_id")))
+        codeql[canonical_language(shard.get("producer", {}).get("language"))].append(shard)
     graph: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for shard in graph_shards(shards):
         graph[canonical_language(shard.get("producer", {}).get("language"))].append(shard)
@@ -152,10 +172,10 @@ def language_matrix(shards: ShardSet, lead_languages: Mapping[str, int], *,
                                    "graph producer (code-graph-precomputation.md)" if native and cpg else
                                    "no Joern CPG for this language",
                                    artifact_shards=sorted(cpg)[:20] if native else []),
-                "codeql": _cell("complete" if codeql.get(language) else "unavailable",
-                                "accepted CodeQL observation shards" if codeql.get(language) else
-                                "no CodeQL extractor configured for this language" if language not in CODEQL_EXTRACTORS
-                                else "no accepted CodeQL shard for this language", shards=sorted(codeql.get(language, ()))[:20]),
+                "codeql": _codeql_cell(
+                    shards, codeql.get(language, ()),
+                    "no CodeQL extractor configured for this language" if language not in CODEQL_EXTRACTORS
+                    else "no accepted CodeQL shard for this language"),
                 "code_graph": graph_cell(
                     shards, graph.get(language, ()),
                     "no CodeQL extractor configured for this language, so no graph export exists"
@@ -198,10 +218,12 @@ def build_unit_matrix(shards: ShardSet) -> list[dict[str, Any]]:
     for shard in shards.select(job="job_cpp_compiled_analysis"):
         scope = shard.get("producer", {}).get("scope_id") or shard.get("shard_id")
         units[str(scope)]["compiled"].append(str(shard.get("shard_id")))
+    codeql: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for shard in shards.select(index="observations", job="job_codeql_analysis"):
         unit = shard.get("producer", {}).get("build_unit_id") or shard.get("producer", {}).get("scope_id")
         if unit:
             units[str(unit)]["codeql"].append(str(shard.get("shard_id")))
+            codeql[str(unit)].append(shard)
     graph: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for shard in graph_shards(shards):
         producer = shard.get("producer", {})
@@ -217,6 +239,7 @@ def build_unit_matrix(shards: ShardSet) -> list[dict[str, Any]]:
                  for name in ("catalog", "build_actions", "artifacts", "compiled", "codeql")}
         cells["code_graph"] = graph_cell(shards, graph.get(unit, ()),
                                          "no accepted graph shard for this unit; " + GRAPH_UNAVAILABLE.split("; ", 1)[1])
+        cells["codeql"] = _codeql_cell(shards, codeql.get(unit, ()), "no accepted CodeQL shard for this unit")
         rows.append({"cell_type": "build_unit", "build_unit_id": unit, "lanes": cells})
     return rows
 

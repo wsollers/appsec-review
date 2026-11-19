@@ -44,6 +44,44 @@ job merely because that job exists. File-ownership accounting has a broader scop
 
 All bounds are in `[jobs.job_review_data_indexing.settings]` in `appsec-review.toml`.
 
+### Coverage and bounded projections
+
+The CodeQL language and build-unit lanes reduce the accepted **scope coverage rows**, not shard
+presence or observation counts. All-unavailable scopes stay unavailable; mixed, missing or
+incomplete coverage stays partial, with scoped reasons. An empty observation shard with complete
+scope coverage is distinct from an empty shard published after a failed scan.
+
+`max_links_per_rule` limits emitted relationships across all candidates, including ambiguous
+fan-out. An advisory match reserves its `AFFECTED_BY` edge and both provenance edges together;
+insufficient space omits the entire bundle and its new entities. Receipts conserve candidate
+edge attempts as emitted edges plus duplicate and omitted attempts, and retain exact/ambiguous
+emitted counts. Exhausting the bound produces a counted truncation gap, not complete coverage.
+
+`max_facts_per_product` also applies **after** history metric vectors or build-command facts are
+appended. Deterministically ordered base facts precede supplemental facts. Final counts describe
+the retained unique facts; omitted composed facts and their removed relationships are counted.
+Earlier base-product omissions remain separate gaps. Scanner lead menus retain their existing
+complete-or-fail behavior and are never truncated by this composition policy.
+
+Threat-boundary summaries retain the first 16 flow, entry-point and threat details by identity,
+but their totals describe all distinct input identities assigned to the boundary. Every bounded
+detail dimension reports its omitted count through the fact's gaps and the product's partial
+coverage; the published threat-boundary result schema is unchanged. These are routing summaries,
+not enforcement evidence.
+
+Specialized threat/OWASP fact queries use signed keyset cursors over immutable shards. Scalar
+threat filters and source-path membership are applied in SQL; Python predicate processing checks
+the deadline and inspects at most the configured retrieval `max_results` candidates per call.
+An incomplete scan can therefore return an empty page **with a continuation cursor and a gap**.
+Continue until the cursor is absent; an empty intermediate page is not a clean result. Response
+byte limits retain cursors at each result boundary, so withheld rows are not skipped. Old
+offset-only continuations must be restarted. These changes do not widen input permissions or
+change profile-data path filtering.
+
+The link emission, threat-detail and composed-fact policies enter derived reuse identities.
+Unchanged new computations reuse their immutable publications; old unbounded publications do
+not satisfy the new policy identity.
+
 ### OWASP projection and custody
 
 The shared enabled direct/Dagster order is tagging/tag cloud → OWASP → this job → package assembly →
@@ -59,6 +97,14 @@ obligations, independent counterevidence, dissent and custody remain lossless in
 workbench authority; index summaries carry hash-pinned authority links instead of depth-truncated
 copies. Later lead/hunt assembly expands and verifies that authority with operation-local reuse,
 not a persistent verification bypass. Duplicate-row ambiguity still fails expansion.
+
+The dataset inventory selects the same admitted OWASP handoff manifest, never the floating
+`data/indexes/owasp/accepted.json` pointer. It verifies the run and target snapshot, exact
+handoff membership and hashes of every specialized shard, schema/family/shard/fingerprint
+agreement, records hash, actual record count and gaps. Manifest and member reads retain
+`owasp_workbench` input receipts. Invalid members produce a retained inventory violation with
+no positive indexed row. Residual unadmitted pointers cannot authorize consumption; incomplete
+producer coverage stays partial. These specialized checks also apply in managed-publication mode.
 
 Only eligible, source-anchored adverse assessment hypotheses become provisional `owasp_control`
 leads. `not_satisfied` does not mean exploitable; `satisfied` does not mean component safety.

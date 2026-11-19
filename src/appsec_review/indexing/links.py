@@ -59,11 +59,50 @@ def catalog_sources(context: LinkContext) -> tuple[dict[tuple[str, str], str], d
     return exact, by_path
 
 
-def _bounded(derived: Derived, context: LinkContext) -> bool:
-    if len(derived.relations) >= context.max_links:
-        derived.gap(f"link bound of {context.max_links} relations reached; remaining candidates were not linked")
-        return False
-    return True
+class _Links(Derived):
+    """Budget actual edges; an advisory and its provenance are admitted atomically."""
+
+    def __init__(self, maximum: int):
+        super().__init__()
+        self.maximum = maximum
+        self.retained: set[str] = set()
+        self.entity_ids: set[str] = set()
+
+    def emit(self, candidate: Derived) -> bool:
+        unique = {edge.relation_id: edge for edge in candidate.relations
+                  if edge.relation_id not in self.retained}
+        self.count("candidate_relations", len(candidate.relations))
+        self.count("duplicate_relations", len(candidate.relations) - len(unique))
+        if len(self.relations) + len(unique) > self.maximum:
+            self.count("omitted_relations", len(unique))
+            self.count("omitted_candidates")
+            self.gap(f"truncated: link bound of {self.maximum} relations reached")
+            return False
+        for entity in candidate.entities:
+            if entity.identity.value not in self.entity_ids:
+                self.entity_ids.add(entity.identity.value)
+                self.entities.append(entity)
+        for identity, edge in unique.items():
+            self.retained.add(identity)
+            self.relations.append(edge)
+            self.count("exact_links" if edge.exact else "ambiguous_links")
+        return True
+
+    def relate(self, *args: Any, **kwargs: Any) -> None:
+        candidate = Derived()
+        candidate.relate(*args, **kwargs)
+        self.emit(candidate)
+
+    def finish(self) -> Derived:
+        omitted = self.counts.get("omitted_relations", 0)
+        if omitted:
+            marker = f"truncated: link bound of {self.maximum} relations reached"
+            detail = f"{marker}; {omitted} candidate relation(s) omitted"
+            self.gaps[self.gaps.index(marker)] = detail
+            self.coverage = [(area, "partial" if status == "complete" else status,
+                              (gap or "").replace(marker, detail) or detail)
+                             for area, status, gap in self.coverage]
+        return self
 
 
 # --- source, build and artifact representations ------------------------------------------------------
@@ -79,7 +118,7 @@ def _case_of(shard_id: str, prefix: str, suffix: str = "") -> str:
 
 
 def _build_representation(context: LinkContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
-    derived = Derived()
+    derived = _Links(context.max_links)
     shards = ShardSet(context.shards.run_root, selected)
     sources, source_paths = catalog_sources(context)
     canonical: dict[tuple[str, str, str], str] = {}
@@ -96,8 +135,6 @@ def _build_representation(context: LinkContext, selected: tuple[Mapping[str, Any
         derived.gap("artifact catalog shards are unavailable; no artifact representation was linked")
     stale = unmapped_sources = ambiguous_artifacts = unmatched_artifacts = 0
     for row in shards.entities(shards.select(index="build")):
-        if not _bounded(derived, context):
-            break
         payload, shard_id, kind = row["payload"], row["shard_id"], row["kind"]
         if row["job"] == "job_cpp_compiled_analysis" and kind == "source_file":
             path, sha = row["native_id"], _text(payload.get("sha256"))
@@ -136,8 +173,6 @@ def _build_representation(context: LinkContext, selected: tuple[Mapping[str, Any
             else:
                 unmatched_artifacts += 1
     for row in shards.entities(shards.select(index="build_security"), kinds=ARTIFACT_KINDS):
-        if not _bounded(derived, context):
-            break
         case, sha = _case_of(row["shard_id"], "build-security-"), _text(row["payload"].get("sha256"))
         candidates = sorted(set(by_content.get((case, sha or ""), ())))
         if len(candidates) == 1:
@@ -162,7 +197,7 @@ def _build_representation(context: LinkContext, selected: tuple[Mapping[str, Any
                 "file-access inventories are protected and not normalized")
     derived.coverage.append(("representation-links", "partial",
                              "; ".join(derived.gaps[:5])))
-    return derived
+    return derived.finish()
 
 
 # --- finding to source ---------------------------------------------------------------------------------
@@ -173,7 +208,7 @@ def _select_findings(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
 
 
 def _build_findings(context: LinkContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
-    derived = Derived()
+    derived = _Links(context.max_links)
     shards = ShardSet(context.shards.run_root, selected)
     sources, source_paths = catalog_sources(context)
     observation_shards = (*shards.select(index="observations"), *shards.select(index="evidence"))
@@ -189,7 +224,7 @@ def _build_findings(context: LinkContext, selected: tuple[Mapping[str, Any], ...
             else:
                 findings.append(row)
         location = row["location"]
-        if location is None or not _bounded(derived, context):
+        if location is None:
             continue
         target = sources.get((location["path"], location["file_sha256"]))
         if target is None:
@@ -209,7 +244,7 @@ def _build_findings(context: LinkContext, selected: tuple[Mapping[str, Any], ...
     for row in findings:
         for native in row["payload"].get("observation_ids") or ():
             observation = ci_observations.get(str(native))
-            if observation is not None and _bounded(derived, context):
+            if observation is not None:
                 derived.relate(RelationKind.SUPPORTS, observation, row["identity"], exact=True, confidence=1.0,
                                method="producer-observation-id")
     if stale:
@@ -222,7 +257,7 @@ def _build_findings(context: LinkContext, selected: tuple[Mapping[str, Any], ...
     else:
         derived.coverage.append(("finding-source-links", "partial" if derived.gaps else "complete",
                                  "; ".join(derived.gaps[:5]) or None))
-    return derived
+    return derived.finish()
 
 
 # --- package to advisory -------------------------------------------------------------------------------
@@ -268,31 +303,32 @@ def _select_advisories(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
 
 
 def _build_advisories(context: LinkContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
-    derived = Derived()
+    derived = _Links(context.max_links)
     shards = ShardSet(context.shards.run_root, selected)
     for row in shards.entities(selected, kinds=("tool_observation",)):
         for pair in advisory_pairs(row):
-            if not _bounded(derived, context):
-                break
+            candidate = Derived()
             versioned = bool(pair["version"] or pair["purl"])
             package = package_identity(context.snapshot, pair["package"], pair["version"], pair["purl"])
             advisory = advisory_identity(context.snapshot, pair["advisory"])
-            derived.entities.append(EntityRecord(
+            candidate.entities.append(EntityRecord(
                 package, pair["purl"] or pair["package"], pair["package"],
                 f"dependency package {pair['package']} {pair['version'] or 'version unknown'}",
                 {"package_name": pair["package"], "version": pair["version"], "purl": pair["purl"],
                  "identity_basis": "purl-or-version" if versioned else "name-only"}))
-            derived.entities.append(EntityRecord(
+            candidate.entities.append(EntityRecord(
                 advisory, pair["advisory"], pair["advisory"], f"advisory {pair['advisory']}",
                 {"advisory_id": pair["advisory"]}))
-            derived.relate(RelationKind.AFFECTED_BY, package.value, advisory.value, exact=versioned,
+            candidate.relate(RelationKind.AFFECTED_BY, package.value, advisory.value, exact=versioned,
                            confidence=1.0 if versioned else 0.6, method="scanner-reported-match",
                            ambiguity="scanner reported a package name without a version, ecosystem or purl",
                            severity=pair["severity"], scanner=pair["scanner"])
-            derived.relate(RelationKind.DERIVED_FROM, package.value, row["identity"], exact=True, confidence=1.0,
+            candidate.relate(RelationKind.DERIVED_FROM, package.value, row["identity"], exact=True, confidence=1.0,
                            method="scanner-observation")
-            derived.relate(RelationKind.DERIVED_FROM, advisory.value, row["identity"], exact=True, confidence=1.0,
+            candidate.relate(RelationKind.DERIVED_FROM, advisory.value, row["identity"], exact=True, confidence=1.0,
                            method="scanner-observation")
+            if not derived.emit(candidate):
+                continue
             derived.count("package_advisory_pairs")
             if not versioned:
                 derived.count("name_only_pairs")
@@ -311,7 +347,7 @@ def _build_advisories(context: LinkContext, selected: tuple[Mapping[str, Any], .
             derived.gap(f"scanner coverage: {text[:240]}")
         derived.coverage.append(("package-advisory-links", "partial" if derived.gaps else "complete",
                                  "; ".join(derived.gaps[:5]) or None))
-    return derived
+    return derived.finish()
 
 
 # --- symbols and history to syntax ---------------------------------------------------------------------
@@ -350,15 +386,12 @@ def _select_symbols(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
 
 
 def _build_symbols(context: LinkContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
-    derived = Derived()
+    derived = _Links(context.max_links)
     shards = ShardSet(context.shards.run_root, selected)
     symbol_shards = (*shards.select(index="analysis", job=CATALOG),
                      *shards.select(index="analysis", job="job_cpp_symbol_index", prefix="clangd-"))
-    symbols = [row for row in shards.entities(symbol_shards, kinds=("symbol",), limit=context.max_links + 1)
+    symbols = [row for row in shards.entities(symbol_shards, kinds=("symbol",))
                if row["location"] is not None]
-    if len(symbols) > context.max_links:
-        symbols = symbols[:context.max_links]
-        derived.gap(f"truncated: symbol link bound of {context.max_links} reached")
     by_line, _ = syntax_nodes(shards, {(row["location"]["path"], int(row["location"]["start_line"]))
                                        for row in symbols}, set())
     unresolved: dict[str, int] = defaultdict(int)
@@ -384,7 +417,7 @@ def _build_symbols(context: LinkContext, selected: tuple[Mapping[str, Any], ...]
             continue
         widest = max(node["end_byte"] - node["start_byte"] for node in same_file)
         candidates = sorted((node for node in same_file if node["end_byte"] - node["start_byte"] == widest),
-                            key=lambda node: node["identity"])[:4]
+                            key=lambda node: node["identity"])
         for node in candidates:
             derived.relate(RelationKind.DEFINES, node["identity"], row["identity"], exact=False,
                            confidence=0.6 if len(candidates) == 1 else 0.4, method="start-line-only",
@@ -405,7 +438,7 @@ def _build_symbols(context: LinkContext, selected: tuple[Mapping[str, Any], ...]
     else:
         derived.coverage.append(("symbol-syntax-links", "partial" if derived.gaps else "complete",
                                  "; ".join(derived.gaps[:5]) or None))
-    return derived
+    return derived.finish()
 
 
 def _select_history(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
@@ -420,15 +453,12 @@ _SYMBOL_SCOPED = {"history_signal": "symbol:", "hotspot": "hotspot:symbol:", "ch
 
 
 def _build_history(context: LinkContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
-    derived = Derived()
+    derived = _Links(context.max_links)
     shards = ShardSet(context.shards.run_root, selected)
     sources, source_paths = catalog_sources(context)
     signal_shards = (*shards.select(index="history"), *shards.select(index="priority"))
-    rows = [row for row in shards.entities(signal_shards, kinds=tuple(_FILE_SCOPED), limit=context.max_links + 1)
+    rows = [row for row in shards.entities(signal_shards, kinds=tuple(_FILE_SCOPED))
             if row["location"] is not None]
-    if len(rows) > context.max_links:
-        rows = rows[:context.max_links]
-        derived.gap(f"truncated: history and priority link bound of {context.max_links} reached")
     spans = {(row["location"]["path"], int(row["location"]["start_byte"]), int(row["location"]["end_byte"]))
              for row in rows if row["native_id"].startswith(_SYMBOL_SCOPED[row["kind"]])}
     _, by_span = syntax_nodes(shards, set(), spans)
@@ -452,7 +482,7 @@ def _build_history(context: LinkContext, selected: tuple[Mapping[str, Any], ...]
             if not nodes:
                 missing_syntax += 1
                 continue
-            for node in sorted(nodes, key=lambda item: item["identity"])[:4]:
+            for node in sorted(nodes, key=lambda item: item["identity"]):
                 derived.relate(RelationKind.OBSERVED_AT, row["identity"], node["identity"], exact=len(nodes) == 1,
                                confidence=1.0 if len(nodes) == 1 else 0.8, method="byte-span-exact",
                                ambiguity=f"{len(nodes)} syntax nodes share the identical byte span",
@@ -470,7 +500,7 @@ def _build_history(context: LinkContext, selected: tuple[Mapping[str, Any], ...]
     else:
         derived.coverage.append(("history-code-links", "partial" if derived.gaps else "complete",
                                  "; ".join(derived.gaps[:5]) or None))
-    return derived
+    return derived.finish()
 
 
 LINK_RULES: tuple[LinkRule, ...] = (

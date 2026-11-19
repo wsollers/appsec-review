@@ -24,7 +24,7 @@ from appsec_review.indexing import input_matrix, matrix, products
 from appsec_review.indexing import fts_worker
 from appsec_review.indexing.derive import Derived, publish_derived
 from appsec_review.storage.shared import SharedArtifacts
-from appsec_review.indexing.inventory import InventoryInputs, build_inventory, dataset_id
+from appsec_review.indexing.inventory import InventoryInputs, accepted_owasp_publication, build_inventory, dataset_id
 from appsec_review.indexing.links import LINK_RULES, LinkContext, rule_versions
 from appsec_review.indexing.build_facts import build_command_facts, capture_events
 from appsec_review.indexing.metrics import build_metric_vectors
@@ -85,6 +85,28 @@ def _read(run_root: Path, reference: Mapping[str, Any]) -> Any:
     if run_root.resolve() not in path.parents or file_sha256(path) != reference["sha256"]:
         raise ValueError(f"run-owned artifact changed after acceptance: {reference['path']}")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _bound_composed_product(derived: Derived, query_set: str, maximum: int) -> Derived:
+    # Base facts retain their deterministic priority; supplemental facts use merge_product's order.
+    unique = {}
+    for record in derived.entities:
+        unique.setdefault(record.identity.value, record)
+    derived.entities = list(unique.values())[:maximum]
+    kept = {record.identity.value for record in derived.entities}
+    omitted = set(unique) - kept
+    derived.counts["facts"] = len(kept)
+    derived.counts["composed_candidate_facts"] = len(unique)
+    derived.counts["omitted_facts"] = len(omitted)
+    if omitted:
+        before = len(derived.relations)
+        derived.relations = [edge for edge in derived.relations
+                             if edge.source_id not in omitted and edge.target_id not in omitted]
+        derived.counts["omitted_relations"] = before - len(derived.relations)
+        reason = f"truncated: {len(omitted)} composed {query_set} fact(s) exceeded the final bound of {maximum}"
+        derived.gap(reason)
+        derived.coverage.append((f"{query_set}:composition", "partial", reason))
+    return derived
 
 
 def _resolved_document(run_root: Path) -> dict[str, Any]:
@@ -162,37 +184,7 @@ def feed_pins(repository_root: Path, resolved: Mapping[str, Any], max_age_days: 
 
 
 def owasp_status(run_root: Path) -> dict[str, Any]:
-    accepted = accepted_handoff(run_root, "job_owasp_control_assessment")
-    if accepted is None:
-        return {"status": "unavailable", "reason": "the OWASP workbench has no accepted index from an admitted "
-                                                 "producer handoff in this run"}
-    manifests = {ref["path"]: ref for ref in accepted.handoff["artifacts"]
-                 if str(ref.get("path", "")).startswith("data/indexes/owasp/manifests/")
-                 and str(ref["path"]).endswith(".json")}
-    if not manifests:
-        return {"status": "unavailable", "reason": "the accepted OWASP handoff carries no workbench manifest"}
-    if len(manifests) != 1:
-        raise ValueError("accepted OWASP handoff carries ambiguous workbench manifests")
-    reference = next(iter(manifests.values()))
-    relative = reference["path"]
-    from appsec_review.runtime.inputs import observe_output
-    observe_output(run_root, "job_owasp_control_assessment", "owasp_workbench",
-                   {"path": relative, "sha256": reference["sha256"]})
-    from appsec_review.storage.shared import consume_named, safe_path
-    manifest_path = safe_path(run_root, relative)
-    consume_named(run_root, manifest_path, namespace="owasp-shard", expected_sha256=reference["sha256"])
-    manifest = _read(run_root, reference)
-    if (manifest.get("schema") != "appsec-review/owasp-index-manifest/1"
-            or manifest.get("run_id") != run_root.name):
-        raise ValueError("accepted OWASP publication belongs to another run")
-    if manifest.get("assessment_mode", "qualification") not in {"assessment", "qualification"}:
-        raise ValueError("accepted OWASP publication has an invalid assessment mode")
-    return {"status": "accepted", "manifest_sha256": reference["sha256"],
-            "manifest_path": relative,
-            "assessment_mode": manifest.get("assessment_mode", "qualification"),
-            "assessment_bounds": manifest.get("assessment_bounds", {}),
-            "accepted_upstream_manifest": manifest.get("accepted_upstream_manifest"),
-            "shards": list(manifest.get("shards", ()))}
+    return accepted_owasp_publication(run_root, accepted_handoff(run_root, "job_owasp_control_assessment"))
 
 
 def threat_model_status(run_root: Path) -> dict[str, Any]:
@@ -373,7 +365,8 @@ def build_job(*, providers: Providers = registry_providers,
                 unit.job.run_root, index="links", shard_id="links-" + rule.family.replace("_", "-"), job_id=JOB_ID,
                 unit_id=unit.unit_id, rule=rule.family, rule_version=versions[rule.family],
                 snapshot=document["target_snapshot"],
-                inputs={"shards": ShardSet.identities(selected), "max_links": context.max_links},
+                inputs={"shards": ShardSet.identities(selected), "max_links": context.max_links,
+                        "link_budget_rule": "emitted-relations/2"},
                 build=lambda rule=rule, selected=selected: rule.build(context, selected),
                 producer={"link_family": rule.family}, shared=SharedArtifacts.for_job(unit.job)))
         gaps = [f"links/{item['rule']}: {gap}" for item in published for gap in item["gaps"]]
@@ -410,6 +403,7 @@ def build_job(*, providers: Providers = registry_providers,
                 "owasp": document["owasp"].get("manifest_sha256") if rule.owasp else None}
             if rule.threat_model:
                 inputs["threat_model"] = tm_doc.get("handoff_sha256")
+                inputs["projection_rule"] = "counted-boundary-detail/2"
             if query_set == "dependency_advisories" and osv_version_matching != "disabled":
                 # Only a non-default mode enters the reuse identity, so default checkpoints keep theirs.
                 inputs["osv_version_matching"] = {"mode": osv_version_matching, "matcher": osv_matching.SCHEMA}
@@ -436,11 +430,14 @@ def build_job(*, providers: Providers = registry_providers,
                     view, syntax, dispositions, settings, version, scanner_gaps=scanner_gaps), snapshot, max_facts)
             elif query_set == "history_context":
                 inputs["metric_shards"] = ShardSet.identities([*view.select("history"), *view.select("priority")])
+                inputs["composition_rule"] = "final-fact-budget/1"
 
                 def build() -> Derived:
-                    return merge_product(rule.build(context, selected), build_metric_vectors(view), snapshot,
-                                         area="history_context:metric_vectors")
+                    return _bound_composed_product(merge_product(
+                        rule.build(context, selected), build_metric_vectors(view), snapshot,
+                        area="history_context:metric_vectors"), query_set, max_facts)
             elif query_set == "build_provenance":
+                inputs["composition_rule"] = "final-fact-budget/1"
                 handoffs = {job_id: accepted_handoff(run_root, job_id) for job_id in ("job_language_build", "job_project_build")}
                 inputs.update(command_shards=ShardSet.identities([*view.select("build", job="job_language_build"),
                                                                   *view.select("artifacts")]),
@@ -449,10 +446,10 @@ def build_job(*, providers: Providers = registry_providers,
                               max_commands_per_action=int(settings["max_commands_per_action"]))
 
                 def build() -> Derived:
-                    return merge_product(rule.build(context, selected), build_command_facts(
+                    return _bound_composed_product(merge_product(rule.build(context, selected), build_command_facts(
                         view, run_root, handoffs, max_events=int(settings["max_build_exec_events"]),
                         max_commands=int(settings["max_commands_per_action"])), snapshot,
-                        area="build_provenance:command_facts")
+                        area="build_provenance:command_facts"), query_set, max_facts)
             else:
                 build = lambda: rule.build(context, selected)
             published = publish_derived(run_root, index="precomputed", shard_id=f"qs-{query_set}", job_id=JOB_ID,
