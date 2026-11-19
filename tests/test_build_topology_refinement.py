@@ -142,6 +142,8 @@ def test_task_checkpoint_requires_the_same_recipe_refinement_before_reuse(tmp_pa
     assert runner.execute_or_reuse_unit(job, claim, "build.native") == first
     assert calls == ["executed"]
     task_path = root / claim["attempt_path"] / "steps/build/tasks/native/result.json"
+    checkpoint_path = task_path.with_name("checkpoint.json")
+    original_checkpoint = checkpoint_path.read_bytes()
     result = json.loads(task_path.read_bytes())
     result["dispatches"][0]["recipe"]["build_commands"][0].append("-m32")
     atomic_json(task_path, result)
@@ -149,8 +151,10 @@ def test_task_checkpoint_requires_the_same_recipe_refinement_before_reuse(tmp_pa
     status = json.loads(status_path.read_bytes())
     status["result_sha256"] = reference(root, task_path)["sha256"]
     atomic_json(status_path, status)
-    assert runner.execute_or_reuse_unit(job, claim, "build.native") == first
+    with pytest.raises(ValueError, match="immutable shared artifact conflicts"):
+        runner.execute_or_reuse_unit(job, claim, "build.native")
     assert calls == ["executed", "executed"]
+    assert checkpoint_path.read_bytes() == original_checkpoint
 
 
 def test_whole_attempt_publication_retry_refuses_lost_native_acceptance(tmp_path):

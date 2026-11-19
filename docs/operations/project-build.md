@@ -38,6 +38,22 @@ scope does not supply an ISA, SDK, deployment target, device kind or hardware ge
 native stages still need explicit supported target proof, and 32-bit proof remains incompatible
 unless the ISA is listed in the selection policy's `allowed_32bit_isas` (default `["wasm32"]`).
 
+The marker-derived CMake recipe is a fallback only when no recipe was selected. An existing
+recipe keeps its build directory, required output paths, configure options, target selection,
+working directories, environment and dependency files together; planning does not silently
+move its outputs to `build/` or replace specific artifacts with a generic directory requirement.
+The existing default-image/package-hint policy and recipe/refinement admission still apply.
+
+Checkpoint and whole-job reuse distinguish `plan.load_recipes.actions` and the accepted
+dispatch document's `execution_actions` from image preparations and execution dispatches.
+Planning records revalidate the immutable graph, recipe-bound refinement, source, selection
+policy, releases and any selected recipe revision without inventing an image identity.
+Only those structural planning locations accept the closed planning-action field set;
+an execution receipt or a caller-supplied “planning” flag cannot waive image admission.
+Prepared/executed records still require their immutable image binding. Planning reuse is
+neither evidence of a build nor execution assurance; missing, altered or rejected refinement
+receipts remain inadmissible.
+
 ## Steps
 
 The configured topology must be exactly `plan`, `image`, `static_dispatch`, `probe`,

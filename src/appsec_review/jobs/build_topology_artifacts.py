@@ -174,8 +174,8 @@ def load_refinement(run_root: Path, receipt: Mapping[str, Any], *, graph=None, p
     return refinement
 
 
-def guard_action(run_root: Path, action: Mapping[str, Any], *, graph=None,
-                 configuration=None, releases=None, image_identity=None) -> Mapping[str, Any]:
+def _guard_recipe(run_root: Path, action: Mapping[str, Any], *, graph=None,
+                  configuration=None, releases=None):
     from appsec_review.jobs.job_target_analysis_plan.job import load_accepted_plan
     plan = load_accepted_plan(Path(run_root))
     accepted_graph = plan["build_topology"]["executable_graph"]
@@ -209,6 +209,17 @@ def guard_action(run_root: Path, action: Mapping[str, Any], *, graph=None,
         raise ValueError("dispatch source identity differs from the accepted plan")
     if bound["recipe_digest"] is None or bound["blockers"]:
         raise ValueError("build execution blocked: " + "; ".join(bound["blockers"]))
+    metadata = refinement["profiles"]
+    if (isinstance(metadata, Mapping) and metadata.get("image_recipe_digest") is not None
+            and metadata["image_recipe_digest"] != _digest(action["recipe"])):
+        raise ValueError("native image derivation has different compiler/recipe metadata")
+    return bound, refinement
+
+
+def guard_action(run_root: Path, action: Mapping[str, Any], *, graph=None,
+                 configuration=None, releases=None, image_identity=None) -> Mapping[str, Any]:
+    bound, refinement = _guard_recipe(run_root, action, graph=graph,
+                                     configuration=configuration, releases=releases)
     image_value = action.get("image")
     if image_value is not None and not isinstance(image_value, Mapping):
         raise ValueError("dispatch image must be an immutable image record")
@@ -226,14 +237,25 @@ def guard_action(run_root: Path, action: Mapping[str, Any], *, graph=None,
     if (isinstance(metadata, Mapping) and metadata.get("image_digest") is not None
             and image is not None and metadata["image_digest"] != image):
         raise ValueError("native compiler metadata is bound to a different immutable image")
-    if (isinstance(metadata, Mapping) and metadata.get("image_recipe_digest") is not None
-            and metadata["image_recipe_digest"] != _digest(action["recipe"])):
-        raise ValueError("native image derivation has different compiler/recipe metadata")
     if (image_identity is not None and isinstance(metadata, Mapping) and metadata.get("image_digest")
             and any(action["recipe"].get(field) for field in ("system_packages", "image_repairs", "environment"))
             and metadata.get("image_recipe_digest") != _digest(action["recipe"])):
         raise ValueError("native image derivation has no prebound compiler/recipe metadata")
     return bound
+
+
+def _guard_planning_action(run_root: Path, action: Mapping[str, Any], *,
+                           configuration=None, releases=None) -> None:
+    allowed = {*_SOURCE_KEYS, "action", "descriptor_package", "required_image_profile",
+               "recipe", "requires_inference", "executable", "package_hints",
+               "recipe_provenance", "build_dependencies", "topology_refinement",
+               "processing_facts", "build_capture_decision"}
+    if set(action) - allowed:
+        raise ValueError("planning action contains execution or unsupported fields")
+    _guard_recipe(run_root, action, configuration=configuration, releases=releases)
+    selected = selected_cache_actions(run_root).get(action["build_unit_id"])
+    if selected is not None and action["recipe"] != selected["recipe"]:
+        raise ValueError("cached planning differs from the selected immutable recipe revision")
 
 
 def bind_actions(run_root: Path, actions: Sequence[Mapping[str, Any]], *, policy=None,
@@ -364,19 +386,40 @@ def guard_build_cache(run_root: Path, job_id: str, output: Mapping[str, Any], *,
     if (source_fingerprint is not None and load_accepted_plan(Path(run_root))[
             "build_topology"]["executable_graph"]["source_fingerprint"] != source_fingerprint):
         raise ValueError("build cache has no accepted plan for the current source snapshot")
-    pending = [output]
+    from appsec_review.runtime.units import UNIT_EXECUTION_SCHEMA
+    from appsec_review.jobs.job_project_build.job import SCHEMA as PROJECT_BUILD_SCHEMA
+    # Only the runner's task identity, its typed aggregate, or the hash-verified
+    # acceptance payload establishes planning context. Nested labels grant nothing.
+    context = ""
+    if job_id == "job_project_build":
+        if unit_id in {"plan.load_recipes", "acceptance.publish_handoff"}:
+            context = unit_id
+        elif unit_id is None and output.get("schema") == UNIT_EXECUTION_SCHEMA:
+            context = "result"
+    pending = [(output, context)]
     admitted, count = 0, 0
     while pending:
-        value = pending.pop()
+        value, context = pending.pop()
         count += 1
         if count > 100000:
             raise ValueError("build cache output exceeds its structural bound")
         if isinstance(value, Mapping):
+            planning_key = ("actions" if context == "plan.load_recipes" else
+                            "execution_actions" if context == "project-document" else None)
+            if planning_key is not None:
+                graph = load_accepted_plan(Path(run_root))["build_topology"]["executable_graph"]
+                if value.get("execution_graph") != graph:
+                    raise ValueError("cached planning graph differs from the immutable accepted graph")
+                if not isinstance(value.get(planning_key), list):
+                    raise ValueError("cached planning actions must be a list")
             action = value.get("action")
             if isinstance(action, Mapping):
                 action = {**action, **({"image": value["image"]} if value.get("image") is not None else {})}
-                pending.append(action)
-            if "build_unit_id" in value and (
+                pending.append((action, ""))
+            if context == "planning-action":
+                _guard_planning_action(run_root, value, configuration=configuration, releases=releases)
+                admitted += 1
+            elif "build_unit_id" in value and (
                     isinstance(value.get("recipe"), Mapping) or value.get("terminal_status") == "SUCCEEDED"):
                 if source_fingerprint is not None and value.get(
                         "source_fingerprint", source_fingerprint) != source_fingerprint:
@@ -400,13 +443,28 @@ def guard_build_cache(run_root: Path, job_id: str, output: Mapping[str, Any], *,
                         Path(run_root), completed["generation"], completed["workspace_product"],
                         BuildIterations._decode_binding(completed["binding"]))
                     verify_product_contract(execution, product["products"])
-                    pending.extend([request["dispatch"], _read(Path(run_root), completed["receipt"])])
+                    pending.extend([(request["dispatch"], ""), (_read(Path(run_root), completed["receipt"]), "")])
                 elif key in {"artifact", "iteration"} and isinstance(nested, Mapping) and {
                         "path", "sha256", "size_bytes"} <= nested.keys():
-                    pending.append(_read(Path(run_root), nested))
+                    document = _read(Path(run_root), nested)
+                    document_context = ""
+                    if context == "acceptance.publish_handoff" and key == "artifact":
+                        if document.get("schema") != PROJECT_BUILD_SCHEMA:
+                            raise ValueError("cached project-build dispatch schema is unsupported")
+                        document_context = "project-document"
+                    pending.append((document, document_context))
                 elif isinstance(nested, (Mapping, list, tuple)):
-                    pending.append(nested)
+                    nested_context = ""
+                    if key == planning_key:
+                        nested_context = "planning-actions"
+                    elif context == "result" and key == "outputs":
+                        nested_context = "outputs"
+                    elif context == "outputs" and key in {"plan.load_recipes", "acceptance.publish_handoff"}:
+                        nested_context = key
+                    pending.append((nested, nested_context))
         elif isinstance(value, (list, tuple)):
-            pending.extend(value)
+            if context == "planning-actions" and any(not isinstance(item, Mapping) for item in value):
+                raise ValueError("cached planning action must be an object")
+            pending.extend((item, "planning-action" if context == "planning-actions" else "") for item in value)
     if not admitted:
         raise ValueError("build cache has no positively admitted execution inputs")

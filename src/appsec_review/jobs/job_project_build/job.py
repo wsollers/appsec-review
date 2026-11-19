@@ -1036,14 +1036,10 @@ def _reuse_accepted_repair(unit: UnitContext, action: Mapping[str, Any], base_id
 def _deterministic_native_recipe(unit: UnitContext, action: Mapping[str, Any]) -> Mapping[str, Any] | None:
     if action.get("family") != "native" or action.get("build_system") != "cmake":
         return None
-    selected = action.get("recipe")
-    if isinstance(selected, Mapping):
-        from appsec_review.jobs.build_topology import capture_trust_blockers
-        commands = [*selected.get("configure_commands", ()), *selected.get("build_commands", ())]
-        if (validate_build_recipe(selected, action) or capture_trust_blockers(selected)
-                or selected.get("image_repairs") or not commands
-                or any(not argv or argv[0] != "cmake" for argv in commands)):
-            return None
+    # A selected recipe's directory, target/options and output requirements are one
+    # contract. The marker-derived default is only a fallback, not a rewrite.
+    if action.get("recipe") is not None:
+        return None
     root = str(action["root"])
     source = _safe_root(unit.job.target_root or Path(), root)
     marker = source / "CMakeLists.txt"
@@ -1058,7 +1054,7 @@ def _deterministic_native_recipe(unit: UnitContext, action: Mapping[str, Any]) -
                                         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
                                         "-DCMAKE_BUILD_TYPE=RelWithDebInfo"]],
               "build_commands": [["cmake", "--build", build_dir, "--parallel", "2"]],
-              "expected_outputs": list(selected["expected_outputs"]) if isinstance(selected, Mapping) else [build_dir],
+              "expected_outputs": [build_dir],
               "network_required": False,
               "reason": "Deterministic offline CMake recipe derived from the accepted CMake build marker."}
     pseudo_unit = {"build_unit_id": action["build_unit_id"], "family": "native", "root": root,
