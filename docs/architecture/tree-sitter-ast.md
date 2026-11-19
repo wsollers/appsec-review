@@ -100,17 +100,59 @@ Syntax nodes retain their existing evidence-admission rules: direct evidence for
 construct, never direct dataflow, input control or guard sufficiency. A successful syntax fallback
 does not repair missing CodeQL coverage. Projection version changes invalidate scope reuse.
 
-## Universal intra-procedural CFG and guard polarity (T-169)
+## Intra-procedural CFG and guard polarity (T-169, T-5211)
 
-In addition to structural AST projection, `job_tree_sitter_ast` deterministically builds an
-intra-procedural control-flow graph (`cfg.jsonl`, schema `appsec-review/tree-sitter-cfg/1`) across
-all nine target languages (`cpp`, `java`, `javascript`, `python`, `ruby`, `go`, `csharp`, `rust`,
-`php`):
+In addition to structural AST projection, `job_tree_sitter_ast` builds deterministic syntactic
+CFGs for supported function/control shapes in C/C++, Java, JavaScript/TypeScript, Python, Ruby,
+Go, C#, Rust and PHP (with Kotlin function recognition). These are not exhaustive language
+semantics or guard-sufficiency proofs. Per-scope `cfg-nodes.jsonl`, `cfg-edges.jsonl` and
+`cfg-manifest.json` use `appsec-review/tree-sitter-cfg/1`; function entities in the accepted
+`analysis` index retain the same CFG payload.
 
-- Basic blocks and typed edges (`fallthrough`, `true_branch`, `false_branch`, `loop_back`,
-  `loop_exit`, `return`, `throw`, `switch_case`, `try_edge`, `catch_edge`, `finally_edge`).
-- Guard polarity extraction (`null_check`, `bounds_check`, `auth_check`, `type_check`,
-  `error_return`, `sanitizer_call`) with explicit protected vs. unprotected branch targets, Rust `?`
-  and Go `if err != nil` early-exit lowering, and explicit `unmodeled_constructs` accounting.
-- `job_code_graph_index` fuses `cfg.jsonl` with CodeQL graph exports and optional Clang/LLVM
-  compiled analysis into `appsec-review/alternate-cpg/1` without depending on Joern or SVF.
+- Edges use `entry`, `true_branch`, `false_branch`, `unconditional`, `loop_back`, `break_edge`,
+  `continue_edge`, `return_exit`, `exception_edge` and `fallthrough`.
+- Guard classifications are `null_check`, `bounds_check`, `auth_or_role_check`,
+  `error_return_guard`, `sanitization_guard` and `general_condition`. They describe the
+  written predicate, not a resolved safety property.
+- Rust executable `expression_statement` wrappers are lowered to their control expressions,
+  including nested returns, loop breaks/continues and match-arm **values** (patterns are not
+  executable bodies). Unconditional `loop` has no invented false exit. Control embedded in
+  otherwise opaque value expressions, labeled jumps and match guards remain named partial
+  coverage rather than guessed semantics.
+- A post-test `do` loop enters the body before testing its condition; `continue` reaches the
+  condition, while `break` bypasses it. Missing/parser-missing conditions are gaps, never
+  guards reconstructed from body text.
+- Return, throw, break and continue pass through every applicable `finally`. A local loop
+  transfer staying inside a protected body does not run cleanup early. Cleanup completion
+  resumes the saved destination; an abrupt completion in cleanup replaces it. Separate CFG
+  copies of cleanup retain separate pending continuations, preventing a return from acquiring
+  a path to the normal successor.
+
+```mermaid
+flowchart LR
+  normal["normal try/catch tail"] --> normal_finally["finally: normal context"]
+  normal_finally --> next["normal successor"]
+  abrupt["return / throw / outward break / continue"] --> abrupt_finally["finally: pending context"]
+  abrupt_finally --> resume["saved destination or outer finally"]
+  abrupt_finally --> override["cleanup abrupt completion replaces pending transfer"]
+```
+
+Function summaries expose `coverage_status`, `truncated`, `unmodeled_constructs` and `gaps`.
+The 2,048-node cap includes entry/exit, branch/handler nodes and duplicated cleanup contexts;
+exhaustion stops lowering without inventing a normal exit. Unknown modeled-region control
+(including `goto`/labels) and missing conditions make that function partial. Partial CFGs
+publish no guard-dominator claims. Scope/accepted counts include `cfg_partial_functions`,
+`cfg_truncated_functions` and `cfg_unmodeled_constructs` (distinct construct kinds summed
+per function); CFG gaps propagate through the
+scope index identity to the accepted job result. Raw AST coverage remains independent:
+`cfg:<source_identity>` may be partial while the source-file parse row is complete.
+
+A source AST ordinal can correspond to several cleanup execution contexts. Its AST projection
+must not select one copy's guard facts or merge their flow edges into cross-continuation paths.
+Ambiguous AST-level flow edges/block IDs are omitted with a `cfg_ast_context_projection` gap
+and partial `cfg-ast-projection:<function_id>` coverage; the context-specific CFG remains
+available. Common source-occurrence guards are intersected across the copies.
+
+`job_code_graph_index` consumes these indexed CFGs alongside other admitted graph evidence.
+CFG queries must retain the function's completeness information; successful parsing or a
+nonempty graph does not establish complete control flow.

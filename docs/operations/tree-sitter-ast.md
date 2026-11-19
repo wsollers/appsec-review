@@ -33,6 +33,16 @@ log. Rerunning a partial attempt reuses hash-verified successful scope shards an
 invalidated scopes. Do not delete locks, edit accepted pointers, or remove successful shards to
 force recovery. An unsupported grammar or bounded parse is a named gap, not clean coverage.
 
+CFG completeness is separate from parsing. Inspect each `cfg-manifest.json` function's
+`coverage_status`, `gaps`, `truncated` and `unmodeled_constructs`, together with the scope and
+accepted `cfg_partial_functions`, `cfg_truncated_functions` and `cfg_unmodeled_constructs`
+counts. The accepted analysis coverage area `cfg:<source_identity>` names partial CFG work
+even when the raw file's AST coverage is complete. Node-limit and unsupported-flow gaps make
+the scope partial and suppress CFG guard-dominator claims; a bounded prefix is not a clean
+function. A `cfg_ast_context_projection` gap instead means context-specific cleanup CFG nodes
+cannot be collapsed into unique AST flow edges: use the per-function CFG, not an invented
+AST-level path. See the [control-flow semantics](../architecture/tree-sitter-ast.md#intra-procedural-cfg-and-guard-polarity-t-169-t-5211).
+
 For source-only navigation, call `query_syntax` with an accepted `source_file` identity and mode
 `definitions`, `calls`, `imports` or `references`; optionally filter an exact written `name`.
 Pass a returned AST identity to `read_excerpt`, or as a syntax subject to narrow to that node's

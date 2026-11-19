@@ -91,6 +91,18 @@
               "items": {
                 "type": "string"
               }
+            },
+            "cfg_partial_functions": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cfg_truncated_functions": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "cfg_unmodeled_constructs": {
+              "type": "integer",
+              "minimum": 0
             }
           }
         },
@@ -549,6 +561,22 @@
             "string",
             "null"
           ]
+        },
+        "coverage_status": {
+          "enum": ["complete", "partial"]
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "unmodeled_constructs": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "gaps": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
         }
       }
     }

@@ -255,6 +255,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
             for key in (
                 "files_parsed", "bytes_parsed", "nodes_parsed", "diagnostic_count",
                 "cfg_functions_built", "cfg_nodes_emitted", "cfg_edges_emitted", "cfg_guards_classified",
+                "cfg_partial_functions", "cfg_truncated_functions", "cfg_unmodeled_constructs",
             )
         }
         counts["cfg_languages"] = sorted({

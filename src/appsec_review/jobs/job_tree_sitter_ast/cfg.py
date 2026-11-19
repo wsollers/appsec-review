@@ -174,6 +174,19 @@ MAX_STATEMENT_TEXT_CHARS = 240
 MAX_GUARD_EXPR_CHARS = 240
 MAX_CFG_NODES_PER_FUNCTION = 2048
 
+
+class _CfgLimitReached(Exception):
+    pass
+
+
+@dataclass
+class _Transfer:
+    source: str
+    kind: str
+    target: str | list[str]
+    finally_depth: int
+
+
 _AUTH_RE = re.compile(
     r"\b("
     r"is_authenticated|isauthenticated|authenticated|is_authorized|isauthorized|"
@@ -313,6 +326,7 @@ def flatten_syntax_tree(
                     "field": item.get("field"),
                     "type": str(item["type"]),
                     "named": bool(item.get("named", True)),
+                    "missing": bool(item.get("missing", False)),
                     "start_byte": int(item.get("start_byte", 0)),
                     "end_byte": int(item.get("end_byte", 0)),
                     "start_point": start_pt,
@@ -333,6 +347,7 @@ def flatten_syntax_tree(
             ntype = str(node.get("type", "unknown"))
             field_val = node.get("field", field_name)
             named = bool(node.get("named", True))
+            missing = bool(node.get("missing", False))
             children = list(node.get("children") or ())
             node_text = node.get("text")
             sb = node.get("start_byte")
@@ -343,6 +358,7 @@ def flatten_syntax_tree(
             ntype = str(getattr(node, "type", "unknown"))
             field_val = field_name
             named = bool(getattr(node, "is_named", True))
+            missing = bool(getattr(node, "is_missing", False))
             raw_children = list(getattr(node, "children", ()) or ())
             children = []
             for idx, ch in enumerate(raw_children):
@@ -396,6 +412,7 @@ def flatten_syntax_tree(
             "field": field_val,
             "type": ntype,
             "named": named,
+            "missing": missing,
             "start_byte": start_b,
             "end_byte": end_b,
             "start_point": [max(0, sl - 1), 0],
@@ -549,6 +566,9 @@ class FunctionCfg:
     decorators: tuple[str, ...] = ()
     is_entrypoint_candidate: bool = False
     entrypoint_route: str | None = None
+    truncated: bool = False
+    unmodeled_constructs: tuple[str, ...] = ()
+    gaps: tuple[str, ...] = ()
 
     @property
     def guard_count(self) -> int:
@@ -577,6 +597,10 @@ class FunctionCfg:
             "decorators": list(self.decorators),
             "is_entrypoint_candidate": self.is_entrypoint_candidate,
             "entrypoint_route": self.entrypoint_route,
+            "coverage_status": "partial" if self.gaps else "complete",
+            "truncated": self.truncated,
+            "unmodeled_constructs": list(self.unmodeled_constructs),
+            "gaps": list(self.gaps),
         }
 
     def to_entity_payload(self) -> dict[str, Any]:
@@ -951,6 +975,19 @@ def synthesize_file_cfg(
         edges_acc: list[CfgEdge] = []
         seen_edges: set[tuple[str, str, str]] = set()
         ord_to_block: dict[tuple[int, ...], str] = {}
+        cfg_gaps: set[str] = set()
+        unmodeled: set[str] = set()
+        truncated = False
+
+        def note_unmodeled(root: tuple[int, ...], stop: set[tuple[int, ...]] | None = None) -> None:
+            control_types = IF_TYPES | LOOP_TYPES | SWITCH_TYPES | TRY_TYPES | RETURN_TYPES | BREAK_TYPES | CONTINUE_TYPES | THROW_TYPES
+            for sub in subtree_ordinals(root, fn_ordinal_set | (stop or set())):
+                if not by_ordinal[sub].get("named", True):
+                    continue
+                typ = str(by_ordinal[sub]["type"])
+                if typ in {"goto_statement", "labeled_statement"} or (sub != root and typ in control_types):
+                    unmodeled.add(typ)
+                    cfg_gaps.add(f"cfg_unmodeled_construct:{typ}")
 
         def make_node(
             kind: str,
@@ -967,6 +1004,8 @@ def synthesize_file_cfg(
             suffix: str = "",
         ) -> CfgNode:
             idx = len(nodes_acc)
+            if idx >= MAX_CFG_NODES_PER_FUNCTION:
+                raise _CfgLimitReached
             ord_t = tuple(int(v) for v in ast_node["ordinal_path"])
             nid = f"{fn_id}:n{idx}{suffix}"
             sl = int(ast_node["start_point"][0]) + 1
@@ -1041,11 +1080,39 @@ def synthesize_file_cfg(
         if body_child is None and fn_children:
             body_child = fn_children[-1]
 
-        break_fixups: list[list[str]] = []
-        loop_headers: list[str] = []
-        catch_targets: list[list[str]] = []
+        break_fixups: list[tuple[list[str], int]] = []
+        loop_headers: list[tuple[str, int]] = []
+        catch_targets: list[tuple[list[str], int]] = []
+        finalizers: list[list[_Transfer]] = []
+
+        def transfer(source: str, kind: str, target: str | list[str], depth: int) -> None:
+            if len(finalizers) > depth:
+                finalizers[-1].append(_Transfer(source, kind, target, depth))
+            elif isinstance(target, list):
+                target.append(source)
+            else:
+                add_edge(source, target, kind)
+
+        def exceptional(source: str) -> None:
+            targets, depth = catch_targets[-1] if catch_targets else ([exit_node.node_id], 0)
+            for target in targets:
+                transfer(source, "exception_edge", target, depth)
+
+        def executable_wrapper(ord_path: tuple[int, ...]) -> tuple[int, ...] | None:
+            if grammar != "rust" or by_ordinal[ord_path]["type"] != "expression_statement":
+                return None
+            named = [c for c in children.get(ord_path, ())
+                     if c.get("named", True) and str(c["type"]) not in STATEMENT_IGNORE_TYPES]
+            if len(named) == 1 and str(named[0]["type"]) in (
+                IF_TYPES | LOOP_TYPES | SWITCH_TYPES | RETURN_TYPES | BREAK_TYPES | CONTINUE_TYPES | BLOCK_WRAPPER_TYPES
+            ):
+                return tuple(int(v) for v in named[0]["ordinal_path"])
+            return None
 
         def subtree_has_always_exit(target_ord: tuple[int, ...]) -> bool:
+            wrapped = executable_wrapper(target_ord)
+            if wrapped is not None:
+                return subtree_has_always_exit(wrapped)
             node = by_ordinal[target_ord]
             ntype = str(node["type"])
             if ntype in RETURN_TYPES | THROW_TYPES | BREAK_TYPES | CONTINUE_TYPES:
@@ -1066,7 +1133,7 @@ def synthesize_file_cfg(
         ) -> list[tuple[str, str, str | None, str | None]]:
             cur = list(incoming)
             for stmt in stmts:
-                if not cur or len(nodes_acc) >= MAX_CFG_NODES_PER_FUNCTION:
+                if not cur:
                     break
                 cur = build_stmt(tuple(int(v) for v in stmt["ordinal_path"]), cur)
             return cur
@@ -1085,13 +1152,15 @@ def synthesize_file_cfg(
                 None,
             )
             if cond is not None:
-                return cond
+                return None if cond.get("missing") else cond
             for c in ch_list:
                 ctype = str(c["type"])
                 if (
                     c.get("named", True)
+                    and not c.get("missing")
                     and ctype not in BLOCK_WRAPPER_TYPES | CASE_CLAUSE_TYPES | CATCH_TYPES | FINALLY_TYPES | STATEMENT_IGNORE_TYPES
                     and ctype not in IF_TYPES
+                    and c.get("field") not in {"body", "consequence", "alternative", "label"}
                 ):
                     return c
             return None
@@ -1106,6 +1175,9 @@ def synthesize_file_cfg(
             ntype = str(node["type"])
             if not node.get("named", True) or ntype in STATEMENT_IGNORE_TYPES:
                 return incoming
+            wrapped = executable_wrapper(stmt_ord)
+            if wrapped is not None:
+                return build_stmt(wrapped, incoming)
 
             if ntype in BLOCK_WRAPPER_TYPES:
                 inner = [
@@ -1117,7 +1189,7 @@ def synthesize_file_cfg(
             if ntype in IF_TYPES:
                 ch_list = children.get(stmt_ord, ())
                 cond_node = condition_child_of(stmt_ord)
-                cond_text = slice_text(cond_node, MAX_GUARD_EXPR_CHARS) if cond_node is not None else slice_text(node, MAX_GUARD_EXPR_CHARS)
+                cond_text = slice_text(cond_node, MAX_GUARD_EXPR_CHARS) if cond_node is not None else None
                 cons = next((c for f in ("consequence", "body", "then") for c in ch_list if c.get("field") == f), None)
                 alt = next((c for f in ("alternative", "else") for c in ch_list if c.get("field") == f), None)
                 if cons is None:
@@ -1132,15 +1204,20 @@ def synthesize_file_cfg(
 
                 cons_ord = tuple(int(v) for v in cons["ordinal_path"]) if cons is not None else None
                 early_exit = subtree_has_always_exit(cons_ord) if cons_ord is not None else False
-                polarity, norm_expr, guarded_ids = classify_guard_polarity(
-                    cond_text, early_exit=early_exit, language=canonical_lang
-                )
+                if cond_text is None:
+                    cfg_gaps.add(f"cfg_missing_condition:{ntype}")
+                    polarity, norm_expr, guarded_ids = None, None, []
+                else:
+                    polarity, norm_expr, guarded_ids = classify_guard_polarity(
+                        cond_text, early_exit=early_exit, language=canonical_lang
+                    )
                 stop_sub: set[tuple[int, ...]] = set()
                 if cons_ord is not None:
                     stop_sub.add(cons_ord)
                 if alt is not None:
                     stop_sub.add(tuple(int(v) for v in alt["ordinal_path"]))
                 b_calls, b_defs, b_uses = extract_calls_defs_uses(stmt_ord, stop_sub)
+                note_unmodeled(stmt_ord, stop_sub)
                 b_node = make_node(
                     "branch",
                     node,
@@ -1154,9 +1231,8 @@ def synthesize_file_cfg(
                     uses=b_uses,
                 )
                 connect_incoming(incoming, b_node.node_id)
-                if catch_targets and b_calls:
-                    for handler_id in catch_targets[-1]:
-                        add_edge(b_node.node_id, handler_id, "exception_edge")
+                if (catch_targets or finalizers) and b_calls:
+                    exceptional(b_node.node_id)
 
                 is_unless = ntype == "unless"
                 cons_edge = "false_branch" if is_unless else "true_branch"
@@ -1179,8 +1255,12 @@ def synthesize_file_cfg(
 
             if ntype in SWITCH_TYPES:
                 cond_node = condition_child_of(stmt_ord)
-                cond_text = slice_text(cond_node, MAX_GUARD_EXPR_CHARS) if cond_node is not None else slice_text(node, 120)
-                polarity, norm_expr, guarded_ids = classify_guard_polarity(cond_text, language=canonical_lang)
+                if cond_node is None:
+                    cfg_gaps.add(f"cfg_missing_condition:{ntype}")
+                    polarity, norm_expr, guarded_ids = None, None, []
+                else:
+                    cond_text = slice_text(cond_node, MAX_GUARD_EXPR_CHARS)
+                    polarity, norm_expr, guarded_ids = classify_guard_polarity(cond_text, language=canonical_lang)
                 sw_node = make_node(
                     "switch",
                     node,
@@ -1202,7 +1282,10 @@ def synthesize_file_cfg(
                                 case_nodes.append(gch)
 
                 break_fixups_here: list[str] = []
-                break_fixups.append(break_fixups_here)
+                # Rust match does not bind break; it targets an enclosing loop.
+                binds_break = grammar != "rust"
+                if binds_break:
+                    break_fixups.append((break_fixups_here, len(finalizers)))
                 out_tails = []
                 allows_implicit_fallthrough = canonical_lang in {"cpp", "java", "javascript", "typescript", "php"}
                 prev_fallthrough_sources: list[str] = []
@@ -1229,8 +1312,14 @@ def synthesize_file_cfg(
                         c for c in children.get(c_ord, ())
                         if c.get("named", True)
                         and str(c["type"]) not in STATEMENT_IGNORE_TYPES
-                        and c.get("field") not in {"value", "pattern"}
+                        and (c.get("field") == "value" if grammar == "rust"
+                             else c.get("field") not in {"value", "pattern"})
                     ]
+                    if grammar == "rust":
+                        for sub in subtree_ordinals(c_ord, fn_ordinal_set):
+                            if by_ordinal[sub].get("field") == "condition":
+                                unmodeled.add("match_guard")
+                                cfg_gaps.add("cfg_unmodeled_construct:match_guard")
                     if not case_stmts:
                         c_hdr = make_node("statement", case_item, stmt_text=c_txt[:120])
                         connect_incoming(case_in, c_hdr.node_id)
@@ -1247,7 +1336,8 @@ def synthesize_file_cfg(
                     else:
                         out_tails.extend(case_tails)
 
-                break_fixups.pop()
+                if binds_break:
+                    break_fixups.pop()
                 for src_id in prev_fallthrough_sources:
                     out_tails.append((src_id, "unconditional", None, None))
                 for brk_src in break_fixups_here:
@@ -1259,12 +1349,15 @@ def synthesize_file_cfg(
             if ntype in LOOP_TYPES:
                 cond_node = condition_child_of(stmt_ord)
                 is_unconditional_loop = ntype == "loop_expression"
+                is_post_test = ntype == "do_statement"
                 cond_text = "" if is_unconditional_loop else (
-                    slice_text(cond_node, MAX_GUARD_EXPR_CHARS) if cond_node is not None else slice_text(node, 120)
+                    slice_text(cond_node, MAX_GUARD_EXPR_CHARS) if cond_node is not None else None
                 )
+                if cond_text is None:
+                    cfg_gaps.add(f"cfg_missing_condition:{ntype}")
                 polarity, norm_expr, guarded_ids = (
                     (None, None, [])
-                    if is_unconditional_loop
+                    if is_unconditional_loop or cond_text is None
                     else classify_guard_polarity(cond_text, language=canonical_lang)
                 )
                 body_child_loop = next(
@@ -1277,6 +1370,7 @@ def synthesize_file_cfg(
                         body_child_loop = ch_blocks[-1]
                 stop_loop = {tuple(int(v) for v in body_child_loop["ordinal_path"])} if body_child_loop is not None else set()
                 l_calls, l_defs, l_uses = extract_calls_defs_uses(stmt_ord, stop_loop)
+                note_unmodeled(stmt_ord, stop_loop)
                 loop_node = make_node(
                     "loop_header",
                     node,
@@ -1288,20 +1382,39 @@ def synthesize_file_cfg(
                     defs=l_defs,
                     uses=l_uses,
                 )
-                connect_incoming(incoming, loop_node.node_id)
+                if not is_post_test:
+                    connect_incoming(incoming, loop_node.node_id)
+                if (catch_targets or finalizers) and l_calls:
+                    exceptional(loop_node.node_id)
 
                 loop_breaks: list[str] = []
-                break_fixups.append(loop_breaks)
-                loop_headers.append(loop_node.node_id)
+                break_fixups.append((loop_breaks, len(finalizers)))
+                loop_headers.append((loop_node.node_id, len(finalizers)))
 
                 enter_edge = "unconditional" if is_unconditional_loop else ("false_branch" if ntype == "until" else "true_branch")
                 exit_edge = "true_branch" if ntype == "until" else "false_branch"
                 if body_child_loop is not None:
                     b_ord = tuple(int(v) for v in body_child_loop["ordinal_path"])
-                    body_tails = build_stmt(b_ord, [(loop_node.node_id, enter_edge, norm_expr, polarity)])
-                    for tail_src, _, _, _ in body_tails:
-                        add_edge(tail_src, loop_node.node_id, "loop_back")
+                    body_in = [(loop_node.node_id, enter_edge, norm_expr, polarity)]
+                    if is_post_test:
+                        body_entry = make_node("statement", body_child_loop, stmt_text="do body")
+                        connect_incoming(incoming, body_entry.node_id)
+                        connect_incoming(body_in, body_entry.node_id)
+                        body_in = [(body_entry.node_id, "unconditional", None, None)]
+                    body_tails = build_stmt(b_ord, body_in)
+                    if not is_post_test and any(tail[1] in {"true_branch", "false_branch"} for tail in body_tails):
+                        latch = make_node("statement", body_child_loop, stmt_text="loop latch")
+                        connect_incoming(body_tails, latch.node_id)
+                        add_edge(latch.node_id, loop_node.node_id, "loop_back")
+                    else:
+                        connect_incoming(
+                            [(src, ekind if is_post_test else "loop_back", expr, pol)
+                             for src, ekind, expr, pol in body_tails],
+                            loop_node.node_id,
+                        )
                 else:
+                    if is_post_test:
+                        connect_incoming(incoming, loop_node.node_id)
                     add_edge(loop_node.node_id, loop_node.node_id, "loop_back")
 
                 loop_headers.pop()
@@ -1335,10 +1448,12 @@ def synthesize_file_cfg(
                     chdr = make_node("catch_handler", c_item, stmt_text=slice_text(c_item, 100))
                     catch_hdr_nodes.append((chdr, c_item))
 
-                handler_ids = [chdr.node_id for chdr, _ in catch_hdr_nodes] or [exit_node.node_id]
-                catch_targets.append(handler_ids)
-                for hid in handler_ids:
-                    add_edge(try_hdr.node_id, hid, "exception_edge")
+                pending: list[_Transfer] = []
+                if finallies:
+                    finalizers.append(pending)
+                handler_ids = [chdr.node_id for chdr, _ in catch_hdr_nodes]
+                if handler_ids:
+                    catch_targets.append((handler_ids, len(finalizers)))
 
                 normal_tails: list[tuple[str, str, str | None, str | None]] = []
                 if try_body is not None:
@@ -1358,7 +1473,8 @@ def synthesize_file_cfg(
                         normal_tails.extend(build_seq(try_stmts, [(try_hdr.node_id, "unconditional", None, None)]))
                 else:
                     normal_tails.append((try_hdr.node_id, "unconditional", None, None))
-                catch_targets.pop()
+                if handler_ids:
+                    catch_targets.pop()
 
                 for chdr, c_item in catch_hdr_nodes:
                     c_ord = tuple(int(v) for v in c_item["ordinal_path"])
@@ -1377,42 +1493,79 @@ def synthesize_file_cfg(
                         normal_tails.append((chdr.node_id, "unconditional", None, None))
 
                 if finallies:
+                    finalizers.pop()
                     fin_item = finallies[0]
-                    fin_hdr = make_node("finally_block", fin_item, stmt_text="finally")
-                    connect_incoming(normal_tails, fin_hdr.node_id)
                     fin_ord = tuple(int(v) for v in fin_item["ordinal_path"])
                     fin_body = next((c for c in children.get(fin_ord, ()) if str(c["type"]) in BLOCK_WRAPPER_TYPES), None)
-                    if fin_body is not None:
-                        return build_stmt(
-                            tuple(int(v) for v in fin_body["ordinal_path"]),
-                            [(fin_hdr.node_id, "unconditional", None, None)],
-                        )
-                    return [(fin_hdr.node_id, "unconditional", None, None)]
+
+                    def cleanup(tails: list[tuple[str, str, str | None, str | None]]) -> list[tuple[str, str, str | None, str | None]]:
+                        if not tails:
+                            return []
+                        fin_hdr = make_node("finally_block", fin_item, stmt_text="finally")
+                        connect_incoming(tails, fin_hdr.node_id)
+                        fin_in = [(fin_hdr.node_id, "unconditional", None, None)]
+                        if fin_body is not None:
+                            return build_stmt(tuple(int(v) for v in fin_body["ordinal_path"]), fin_in)
+                        cfg_gaps.add("cfg_missing_finally_body")
+                        return fin_in
+
+                    # A separate cleanup copy preserves each continuation's destination.
+                    # Sharing one exit would allow return -> normal continuation cross-edges.
+                    resumed_normal = cleanup(normal_tails)
+                    for completion in pending:
+                        incoming_kind = "exception_edge" if completion.kind == "exception_edge" else "unconditional"
+                        resumed = cleanup([(completion.source, incoming_kind, None, None)])
+                        for src, ekind, expr, pol in resumed:
+                            if ekind in {"true_branch", "false_branch"}:
+                                resume_node = make_node("statement", fin_item, stmt_text="resume completion")
+                                connect_incoming([(src, ekind, expr, pol)], resume_node.node_id)
+                                src = resume_node.node_id
+                            transfer(src, completion.kind, completion.target, completion.finally_depth)
+                    return resumed_normal
                 return normal_tails
 
             if ntype in RETURN_TYPES:
+                note_unmodeled(stmt_ord)
                 rcalls, rdefs, ruses = extract_calls_defs_uses(stmt_ord, set())
                 rnode = make_node("return", node, stmt_text=slice_text(node), calls=rcalls, defs=rdefs, uses=ruses)
                 connect_incoming(incoming, rnode.node_id)
-                add_edge(rnode.node_id, exit_node.node_id, "return_exit")
+                if (catch_targets or finalizers) and rcalls:
+                    exceptional(rnode.node_id)
+                transfer(rnode.node_id, "return_exit", exit_node.node_id, 0)
                 return []
 
             if ntype in BREAK_TYPES:
+                note_unmodeled(stmt_ord)
+                labeled = any(c.get("field") == "label" or c["type"] == "label"
+                              for c in children.get(stmt_ord, ()))
+                if labeled:
+                    unmodeled.add("labeled_break")
+                    cfg_gaps.add("cfg_unmodeled_construct:labeled_break")
                 bnode = make_node("jump", node, stmt_text=slice_text(node))
                 connect_incoming(incoming, bnode.node_id)
+                if labeled:
+                    return []
                 if break_fixups:
-                    break_fixups[-1].append(bnode.node_id)
+                    targets, depth = break_fixups[-1]
+                    transfer(bnode.node_id, "break_edge", targets, depth)
                 else:
-                    add_edge(bnode.node_id, exit_node.node_id, "break_edge")
+                    transfer(bnode.node_id, "break_edge", exit_node.node_id, 0)
                 return []
 
             if ntype in CONTINUE_TYPES:
+                if any(c.get("field") == "label" or c["type"] == "label" for c in children.get(stmt_ord, ())):
+                    unmodeled.add("labeled_continue")
+                    cfg_gaps.add("cfg_unmodeled_construct:labeled_continue")
+                    cnode = make_node("jump", node, stmt_text=slice_text(node))
+                    connect_incoming(incoming, cnode.node_id)
+                    return []
                 cnode = make_node("jump", node, stmt_text=slice_text(node))
                 connect_incoming(incoming, cnode.node_id)
                 if loop_headers:
-                    add_edge(cnode.node_id, loop_headers[-1], "continue_edge")
+                    target, depth = loop_headers[-1]
+                    transfer(cnode.node_id, "continue_edge", target, depth)
                 else:
-                    add_edge(cnode.node_id, exit_node.node_id, "continue_edge")
+                    transfer(cnode.node_id, "continue_edge", exit_node.node_id, 0)
                 return []
 
             if ntype in FALLTHROUGH_STMT_TYPES:
@@ -1420,21 +1573,19 @@ def synthesize_file_cfg(
                 connect_incoming(incoming, fnode.node_id)
                 return [(fnode.node_id, "fallthrough", None, None)]
 
+            note_unmodeled(stmt_ord)
             scalls, sdefs, suses = extract_calls_defs_uses(stmt_ord, set())
             is_throw_call = any(c in {"raise", "panic", "panic!", "abort", "throw"} for c in scalls)
             if ntype in THROW_TYPES or is_throw_call:
                 tnode = make_node("throw", node, stmt_text=slice_text(node), calls=scalls, defs=sdefs, uses=suses)
                 connect_incoming(incoming, tnode.node_id)
-                targets = catch_targets[-1] if catch_targets else [exit_node.node_id]
-                for tid in targets:
-                    add_edge(tnode.node_id, tid, "exception_edge")
+                exceptional(tnode.node_id)
                 return []
 
             snode = make_node("statement", node, stmt_text=slice_text(node), calls=scalls, defs=sdefs, uses=suses)
             connect_incoming(incoming, snode.node_id)
-            if catch_targets and scalls:
-                for tid in catch_targets[-1]:
-                    add_edge(snode.node_id, tid, "exception_edge")
+            if (catch_targets or finalizers) and scalls:
+                exceptional(snode.node_id)
             has_rust_try = grammar == "rust" and any(
                 str(by_ordinal[sub]["type"]) == "try_expression"
                 for sub in subtree_ordinals(stmt_ord, fn_ordinal_set)
@@ -1443,24 +1594,41 @@ def synthesize_file_cfg(
                 add_edge(snode.node_id, exit_node.node_id, "exception_edge")
             return [(snode.node_id, "unconditional", None, None)]
 
-        if body_child is not None:
-            body_ord = tuple(int(v) for v in body_child["ordinal_path"])
-            tails = build_stmt(body_ord, [(entry_node.node_id, "entry", None, None)])
-            for tail_src, ekind, gexpr, gpol in tails:
-                final_kind = "unconditional" if ekind == "entry" else ekind
-                add_edge(tail_src, exit_node.node_id, final_kind, guard_expr=gexpr, guard_pol=gpol)
-        else:
-            add_edge(entry_node.node_id, exit_node.node_id, "entry")
+        try:
+            if body_child is not None:
+                body_ord = tuple(int(v) for v in body_child["ordinal_path"])
+                tails = build_stmt(body_ord, [(entry_node.node_id, "entry", None, None)])
+                for tail_src, ekind, gexpr, gpol in tails:
+                    final_kind = "unconditional" if ekind == "entry" else ekind
+                    add_edge(tail_src, exit_node.node_id, final_kind, guard_expr=gexpr, guard_pol=gpol)
+            else:
+                cfg_gaps.add("cfg_missing_function_body")
+                add_edge(entry_node.node_id, exit_node.node_id, "entry")
+        except _CfgLimitReached:
+            truncated = True
+            cfg_gaps.add("cfg_node_limit_reached")
 
         dom_map = compute_dominators(
             entry_node.node_id, [n.node_id for n in nodes_acc], edges_acc
         )
-        guard_dom_map = compute_guard_dominators(
+        guard_dom_map = {} if cfg_gaps else compute_guard_dominators(
             entry_node.node_id, exit_node.node_id, nodes_acc, edges_acc, dom_map
         )
         for n in nodes_acc:
             n.guard_dominators = guard_dom_map.get(n.node_id, ())
 
+        # A repeated finally ordinal has several execution contexts. Only common
+        # guards may be attributed to the source occurrence, never one copy's arm.
+        ordinal_guards: dict[tuple[int, ...], set[GuardDominator]] = {}
+        contextual_ordinals: set[tuple[int, ...]] = set()
+        for n in nodes_acc:
+            if n.kind in {"entry", "exit"}:
+                continue
+            if n.ordinal_path in ordinal_guards:
+                contextual_ordinals.add(n.ordinal_path)
+                ordinal_guards[n.ordinal_path].intersection_update(n.guard_dominators)
+            else:
+                ordinal_guards[n.ordinal_path] = set(n.guard_dominators)
         fn_sub_ords = subtree_ordinals(fn_ord, fn_ordinal_set)
         ord_guards: dict[tuple[int, ...], tuple[GuardDominator, ...]] = {}
         ord_blocks_full: dict[tuple[int, ...], str] = {}
@@ -1475,8 +1643,10 @@ def synthesize_file_cfg(
                     break
                 probe = probe[:-1]
             if matched_block is not None:
-                ord_blocks_full[sub_ord] = matched_block
-                ord_guards[sub_ord] = guard_dom_map.get(matched_block, ())
+                if probe not in contextual_ordinals:
+                    ord_blocks_full[sub_ord] = matched_block
+                ord_guards[sub_ord] = tuple(g for g in guard_dom_map.get(matched_block, ())
+                                            if g in ordinal_guards.get(probe, set()))
 
         functions_out.append(
             FunctionCfg(
@@ -1505,6 +1675,9 @@ def synthesize_file_cfg(
                 decorators=decorators,
                 is_entrypoint_candidate=is_entry,
                 entrypoint_route=route_str,
+                truncated=truncated,
+                unmodeled_constructs=tuple(sorted(unmodeled)),
+                gaps=tuple(sorted(cfg_gaps)),
             )
         )
 
@@ -1574,6 +1747,9 @@ def write_scope_cfg_artifacts(
         "cfg_edges_emitted": len(edge_lines),
         "cfg_guards_classified": guards_count,
         "cfg_languages": sorted(langs),
+        "cfg_partial_functions": sum(bool(item["gaps"]) for item in fn_summaries),
+        "cfg_truncated_functions": sum(item["truncated"] for item in fn_summaries),
+        "cfg_unmodeled_constructs": sum(len(item["unmodeled_constructs"]) for item in fn_summaries),
     }
     manifest_doc = {
         "schema": CFG_SCHEMA,

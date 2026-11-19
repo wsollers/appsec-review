@@ -73,6 +73,21 @@ class _FakeTreeSitterExecutor:
                     "end_point": [max(0, len(lines) - 1), end_col],
                 },
             ]
+            body_start, body_end = source.index(b"{"), source.rindex(b"}") + 1
+            return_start = source.index(b"return")
+            return_end = source.index(b";", return_start) + 1
+            for ordinal, kind, field, start, end in (
+                ([0, 1], "identifier", "name", source.index(b"check"), source.index(b"check") + 5),
+                ([0, 3], "statement_block", "body", body_start, body_end),
+                ([0, 3, 1], "return_statement", None, return_start, return_end),
+            ):
+                nodes.append({
+                    "ordinal_path": ordinal, "field": field, "type": kind, "named": True,
+                    "error": False, "missing": False, "extra": False, "has_error": False,
+                    "start_byte": start, "end_byte": end,
+                    "start_point": [source[:start].count(b"\n"), start - source.rfind(b"\n", 0, start) - 1],
+                    "end_point": [source[:end].count(b"\n"), end - source.rfind(b"\n", 0, end) - 1],
+                })
             records.append({
                 "kind": "file", "path": item["path"], "status": "SUCCEEDED", "sha256": item["sha256"],
                 "bytes": len(source), "grammar": grammar_by_lang[payload["language"]],
@@ -505,6 +520,8 @@ def test_dagster_job_ops_drive_dynamic_scope_fanout_and_finalize_metrics(
     parse_ctx = _ctx("standalone__tree_sitter_ast__parse__scope")
     scope_res = parse_ctx.op.compute_fn.decorated_fn(parse_ctx, dyn_scopes[0].value, claim)
     assert scope_res["terminal_status"] == "SUCCEEDED"
+    assert scope_res["counts"]["cfg_functions_built"] == 1
+    assert scope_res["counts"]["cfg_partial_functions"] == 0
     assert fake_exec.calls == 1
 
     # Collect hits the pre-populated dynamic/*.json fast-path without re-running the container!

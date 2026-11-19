@@ -315,6 +315,9 @@ def test_emitted_node_shard_matches_its_declared_artifact_schema(tmp_path: Path)
         "cfg_nodes_emitted": 0,
         "cfg_edges_emitted": 0,
         "cfg_guards_classified": 0,
+        "cfg_partial_functions": 0,
+        "cfg_truncated_functions": 0,
+        "cfg_unmodeled_constructs": 0,
         "cfg_languages": [],
         "dispositions": {
             "files": {"first_party": 1},

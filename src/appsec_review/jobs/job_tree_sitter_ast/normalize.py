@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import asdict
 import hashlib
 import json
@@ -174,12 +175,19 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
             ast_identities={key: value.value for key, value in ids.items()},
         )
         cfg_file_results.append(file_cfg)
+        file_cfg_gaps = [
+            f"{path}: {fn.function_id}: {gap}" for fn in file_cfg.functions for gap in fn.gaps
+        ]
+        gaps.extend(file_cfg_gaps)
+        if file_cfg.functions:
+            builder.add_coverage("cfg:" + source_id.value, "partial" if file_cfg_gaps else "complete",
+                                 "; ".join(file_cfg_gaps) or None)
         fn_by_ord = {fn.ordinal_path: fn for fn in file_cfg.functions}
         branch_by_ord = {
             cnode.ordinal_path: cnode
             for fn in file_cfg.functions
             for cnode in fn.nodes
-            if cnode.guard_polarity is not None and cnode.ordinal_path
+            if cnode.guard_polarity is not None and cnode.ordinal_path in fn.ordinal_to_node_id
         }
         ord_to_block: dict[tuple[int, ...], str] = {}
         ord_to_guards: dict[tuple[int, ...], tuple[GuardDominator, ...]] = {}
@@ -266,10 +274,17 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
                                                      payload={"syntax_relation": True}))
         for fn_cfg in file_cfg.functions:
             node_ast_by_id = {n.node_id: n.ast_identity for n in fn_cfg.nodes if n.ast_identity}
+            ast_counts = Counter(n.ast_identity for n in fn_cfg.nodes
+                                 if n.ast_identity and n.kind not in {"entry", "exit"})
+            contextual = {identity for identity, count in ast_counts.items() if count > 1}
+            if contextual:
+                detail = f"{path}: {fn_cfg.function_id}: cfg_ast_context_projection; use context-specific CFG edges"
+                gaps.append(detail)
+                builder.add_coverage("cfg-ast-projection:" + fn_cfg.function_id, "partial", detail)
             for cedge in fn_cfg.edges:
                 s_ast = node_ast_by_id.get(cedge.source_node_id)
                 t_ast = node_ast_by_id.get(cedge.target_node_id)
-                if s_ast and t_ast and s_ast != t_ast:
+                if s_ast and t_ast and s_ast != t_ast and not ({s_ast, t_ast} & contextual):
                     builder.add_relation(RelationRecord(
                         RelationKind.FLOWS_TO, s_ast, t_ast, True, 1.0,
                         payload={"edge_kind": cedge.edge_kind, "guard_polarity": cedge.guard_polarity, "syntax_relation": True},
@@ -277,7 +292,7 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
             for cnode in fn_cfg.nodes:
                 if not cnode.ast_identity:
                     continue
-                for gdom in cnode.guard_dominators:
+                for gdom in fn_cfg.ordinal_guard_dominators.get(cnode.ordinal_path, ()):
                     if gdom.branch_ast_identity and gdom.branch_ast_identity != cnode.ast_identity:
                         builder.add_relation(RelationRecord(
                             RelationKind.GUARDS, gdom.branch_ast_identity, cnode.ast_identity, True, 1.0,
@@ -318,6 +333,7 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
     cfg_edges_emitted = sum(r.total_edges for r in cfg_file_results)
     cfg_guards_classified = sum(r.total_guards for r in cfg_file_results)
     cfg_languages = sorted({r.language for r in cfg_file_results if r.functions})
+    cfg_functions = [fn for result in cfg_file_results for fn in result.functions]
     cfg_artifacts: dict[str, Any] | None = None
     if cfg_dir is not None:
         cfg_artifacts, _ = write_scope_cfg_artifacts(
@@ -337,6 +353,9 @@ def normalize_scope(*, run_root: Path, target_snapshot: str, scope: Scope, gramm
         "cfg_nodes_emitted": cfg_nodes_emitted,
         "cfg_edges_emitted": cfg_edges_emitted,
         "cfg_guards_classified": cfg_guards_classified,
+        "cfg_partial_functions": sum(bool(fn.gaps) for fn in cfg_functions),
+        "cfg_truncated_functions": sum(fn.truncated for fn in cfg_functions),
+        "cfg_unmodeled_constructs": sum(len(fn.unmodeled_constructs) for fn in cfg_functions),
         "cfg_languages": cfg_languages,
         "dispositions": {"files": dict(sorted(files_by_disposition.items())),
                          "nodes": dict(sorted(nodes_by_disposition.items())),

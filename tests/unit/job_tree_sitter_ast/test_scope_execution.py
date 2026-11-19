@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
+import gzip
 import hashlib
 import json
 import os
@@ -327,6 +328,47 @@ def test_parse_scope_executes_reuses_records_metrics_and_stages_generated_inputs
     assert staged.read_bytes() == gen_data
     if os.name != "nt":
         assert (staged.stat().st_mode & 0o777) == 0o444
+
+
+def test_recorded_unsupported_cfg_makes_successful_parser_scope_partial(tmp_path: Path) -> None:
+    fixture = ROOT / "tests/fixtures/review_prioritization"
+    path = "native/src/codec.c"
+    record = json.loads(gzip.decompress((fixture / "ast-golden.json.gz").read_bytes()))["files"][path]
+    source = (fixture / "target" / path).read_bytes()
+    assert hashlib.sha256(source).hexdigest() == record["sha256"]
+    assert not record["root_has_error"]
+    target = tmp_path / "target"
+    (target / path).parent.mkdir(parents=True)
+    (target / path).write_bytes(source)
+    unit, owner, asset_lock, image_id = _make_unit(tmp_path, target)
+    language = next(lang for lang, lock in unit.outputs["load.accepted_inputs"]["grammar_locks"].items()
+                    if lock["grammar"] == record["grammar"])
+    scope = Scope("scope-cfg", "component", ".", "source:component", ".", language, ({
+        "path": path, "sha256": record["sha256"], "size_bytes": len(source), "language": language,
+    },))
+
+    class RecordedExecutor(_FakeScopeExecutor):
+        def execute(self, request: Any) -> ExecutionResult:
+            result = super().execute(request)
+            output_path = request.scratch_root / "output.json"
+            output = json.loads(output_path.read_text())
+            output["records"][0].update(
+                nodes=record["nodes"], node_count=len(record["nodes"]), root_has_error=False,
+            )
+            output_path.write_text(json.dumps(output))
+            return result
+
+    fake = RecordedExecutor(image_id=image_id, asset_lock=asset_lock)
+    with publication_scope_for_owner(owner):
+        result = parse_scope(unit, asdict(scope), lambda _: fake)
+    assert fake.calls == 1
+    assert result["terminal_status"] == "PARTIAL"
+    assert any("cfg_unmodeled_construct:goto_statement" in gap for gap in result["gaps"])
+    assert result["gaps"] == list(result["index_identity"]["gaps"])
+    assert result["counts"]["files_parsed"] == 1
+    assert result["counts"]["cfg_partial_functions"] >= 1
+    manifest = json.loads((unit.job.run_root / result["cfg_artifacts"]["manifest"]["path"]).read_text())
+    assert manifest["counts"]["cfg_partial_functions"] == result["counts"]["cfg_partial_functions"]
 
 
 def test_parse_scope_handles_container_failures_missing_output_and_guard_errors(tmp_path: Path) -> None:
