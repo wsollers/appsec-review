@@ -137,6 +137,11 @@ and sum them with the base maximum of one. Disabled sources contribute zero; ena
 sources retain their configured maximum. With all default boosts enabled the divisor is `1.87`,
 even when an upstream artifact is unavailable. Invalid/nonfinite weights or an overflowing
 configured total are rejected. There is no new arbitrary weight ceiling.
+
+`sast_silence_min_complexity` must be a non-negative integer. Zero retains the existing
+no-complexity-floor behavior, and an omitted value uses the typed default of five. Explicit
+negative, boolean, string, fractional, null or nonfinite values fail validation instead of
+silently changing the hunt policy or falling back to five. No upper ceiling is added.
 Within that fixed configuration, increasing a contribution cannot reduce the score. Scores from
 different configurations have different divisors and are not absolute cross-run comparisons.
 

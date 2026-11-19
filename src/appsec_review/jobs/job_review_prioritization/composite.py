@@ -64,6 +64,8 @@ class CompositePrioritizationSettings:
     enable_sast_silence_hunt: bool = True
 
     def __post_init__(self) -> None:
+        if type(self.sast_silence_min_complexity) is not int or self.sast_silence_min_complexity < 0:
+            raise ValueError("review prioritization sast_silence_min_complexity must be a non-negative integer")
         if any(not math.isfinite(getattr(self, name)) or getattr(self, name) < 0
                for name in self.weights_dict()):
             raise ValueError("review prioritization composite weights must be finite and non-negative")
@@ -84,7 +86,7 @@ class CompositePrioritizationSettings:
             profile_hotpath_boost=float(w_map.get("profile_hotpath_boost", 0.12)),
             sca_reachability_boost=float(w_map.get("sca_reachability_boost", 0.22)),
             sast_silence_hunt_boost=float(w_map.get("sast_silence_hunt_boost", 0.20)),
-            sast_silence_min_complexity=int(min_comp) if isinstance(min_comp, int) and not isinstance(min_comp, bool) else 5,
+            sast_silence_min_complexity=min_comp,
             enable_change_context=bool(s_map.get("change_context", True)),
             enable_test_coverage=bool(s_map.get("test_coverage", True)),
             enable_profile_data=bool(s_map.get("profile_data", True)),

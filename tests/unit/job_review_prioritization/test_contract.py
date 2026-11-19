@@ -18,6 +18,7 @@ from appsec_review.jobs.job_review_prioritization import (
     build_job,
     load_accepted_prioritization,
 )
+from appsec_review.jobs.job_review_prioritization.composite import CompositePrioritizationSettings
 from appsec_review.jobs.job_review_prioritization.datasets import (
     CONSUMES,
     CONTRACT,
@@ -366,6 +367,25 @@ def test_validate_and_settings_fail_closed_on_invalid_configuration() -> None:
         mutated = SimpleNamespace(config=replace(base_cfg, settings={**base_cfg.settings, **patch}))
         with pytest.raises(ValueError, match=pattern):
             _settings(mutated)
+
+
+@pytest.mark.parametrize("threshold", [-1, True, "5", 1.5, None, float("inf"), float("nan")],
+                         ids=["negative", "boolean", "string", "fractional", "null", "infinity", "nan"])
+def test_sast_silence_threshold_rejects_invalid_explicit_values(threshold) -> None:
+    config = BASE_CONFIG.job(JOB_ID)
+    settings = {**config.settings, "sast_silence_min_complexity": threshold}
+    with pytest.raises(ValueError, match="sast_silence_min_complexity"):
+        _settings(SimpleNamespace(config=replace(config, settings=settings)))
+    with pytest.raises(ValueError, match="sast_silence_min_complexity"):
+        CompositePrioritizationSettings.from_settings(settings)
+
+
+@pytest.mark.parametrize("threshold", [0, 5, 1_000_000])
+def test_sast_silence_threshold_preserves_valid_integer_policy(threshold: int) -> None:
+    config = BASE_CONFIG.job(JOB_ID)
+    settings = {**config.settings, "sast_silence_min_complexity": threshold}
+    validated = _settings(SimpleNamespace(config=replace(config, settings=settings)))
+    assert CompositePrioritizationSettings.from_settings(validated).sast_silence_min_complexity == threshold
 
 
 def test_syntax_tree_guards_and_inputs_helpers(tmp_path: Path) -> None:
