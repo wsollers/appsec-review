@@ -82,8 +82,18 @@ After output reproof, `OPENVEX_EXPORT_COMPLETED` exposes separate
 `openvex.cve_coverage_gap_statements` counters derived from the verified dependency accounting.
 No companion means no dependency measurement; an admitted empty companion measures zero.
 These are domain-completion observations, not proof of runtime acceptance. The accepted
-metrics aggregator currently remains primary-only; accepted dependency aggregation and
-deduplication are still tracked by [T-5151](../TODO.md#t-5151-preserve-dependency-openvex-identity-gaps-nullable-coordinates-and-telemetry).
+metrics aggregator independently verifies the historical export handoff, dependency result,
+document and admitted source pins before exposing these same counters. It checks status
+counts against actual statements, canonical bytes, content identities and output/source
+bindings; it does not trust event counters or replace an admitted source with a newer pointer.
+Primary finding counters stay separate. Cumulative dependency counters count each fresh
+accepted handoff once; replayed events cannot double-count it. Reuse exposes verified
+`latest_accepted` counters without adding fresh work. Missing/unadmitted companions, including
+primary-only historical handoffs, expose `null`, not a measured zero. Invalid companions
+produce a named accounting gap rather than a successful zero. The coverage-gap-statement
+counter counts `under_investigation` statements, not all upstream gaps or omitted coordinates.
+Historical companion schemas are verified as published; counting an older acceptance does
+not regenerate its statements or certify them against a newer projection policy.
 
 The pinned OpenVEX specification requires an individual/organization author; the automatic
 local policy instead truthfully names the tool, without inventing human/vendor authority.

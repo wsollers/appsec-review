@@ -134,6 +134,46 @@ def admitted(disk, accepted):
     }, contract=CONTRACT)
 
 
+def publish_export(disk, units, accepted=None):
+    """Serialize real export-unit outputs through the common handoff fixture publisher."""
+    handoff = disk.handoff(c.JOB_ID, deepcopy(units.outputs))
+    handoff.update({
+        "attempt_id": units.context.attempt_id,
+        "completion_status": units.outputs["acceptance.publish_handoff"]["terminal_status"],
+        "schema_identity": c.OPENVEX_EXPORT_HANDOFF_SCHEMA,
+        "implementation_identity": units.implementation_identity,
+        "upstream_handoff_sha256": {
+            inputs.GATE_JOB: disk.gate_job_ref["sha256"],
+            inputs.REVIEW_JOB: disk.review_job_ref["sha256"],
+            **({DEPENDENCY_JOB: accepted["sha256"]} if accepted else {}),
+        },
+    })
+    return c.ArtifactRef.from_mapping(disk.publish(c.JOB_ID, handoff))
+
+
+def accepted_dependency_export(tmp_path, monkeypatch, *, scenario="reachable", publish=True, settings=None):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, buckets=(), settings=settings)
+    accepted = None
+    if scenario not in {"absent", "legacy"}:
+        _, accepted = dependency(disk, document=produced_reachability(disk, scenario=scenario))
+    if scenario == "unadmitted":
+        accepted = None
+    units = ExportUnits(disk)
+    pins = {
+        inputs.GATE_JOB: disk.gate_job_ref["sha256"], inputs.REVIEW_JOB: disk.review_job_ref["sha256"],
+        **({DEPENDENCY_JOB: accepted["sha256"]} if accepted else {}),
+    }
+    with upstream_scope(disk.root, c.JOB_ID, pins, contract=CONTRACT):
+        units.assemble()
+        units.execute("acceptance.publish_handoff")
+    if scenario == "legacy":
+        for output in units.outputs.values():
+            output.pop("dependencies", None)
+            output.pop("dependency_source", None)
+    reference = publish_export(disk, units, accepted) if publish else None
+    return disk, units, accepted, reference
+
+
 def test_real_openvex_units_publish_conservative_dependency_companion_and_reject_tampering(tmp_path, monkeypatch):
     disk = AcceptedInputDisk(tmp_path, monkeypatch)
     reference, accepted = dependency(disk)

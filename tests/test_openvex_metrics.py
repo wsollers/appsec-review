@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from copy import copy, deepcopy
+from dataclasses import replace
 import json
 from pathlib import Path
 import sys
@@ -13,6 +15,9 @@ from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
 from appsec_review.observability import PipelineLog, aggregate_run_metrics
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 from tests.openvex_support import RELEASE, enabled_settings, example_bundle, make_verified_inputs
+from tests.unit.job_openvex_export.test_dependency_publication import (
+    accepted_dependency_export, publish_export,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +53,7 @@ class AcceptedBoundary:
         self.repository_root = ROOT
         configuration(root, self.settings)
         monkeypatch.setattr(metrics, "_read_accepted_export", self.read)
+        monkeypatch.setattr(metrics, "_read_accepted_dependency_export", lambda *args: None)
         monkeypatch.setattr(metrics, "_load_export", self.load)
 
     def publish(self, attempt="attempt", *, buckets=("publishable",), review_gap=False):
@@ -136,6 +142,150 @@ def gap_reasons(report):
 
 def duration_series(report, outcome="exported"):
     return next(row for row in report["openvex_export_duration_seconds"]["series"] if row["outcome"] == outcome)
+
+
+def real_export_records(disk, units, handoff, *, mode="fresh"):
+    records = [json.loads(line) for line in PipelineLog(disk.root).path.read_text().splitlines()]
+    pipeline = PipelineLog(disk.root)
+
+    def runtime(name, **details):
+        return pipeline.write(name, run_id=disk.root.name, job_id=c.JOB_ID,
+                              attempt_id=units.context.attempt_id, details=details)
+
+    if mode == "reuse":
+        return [runtime("JOB_REUSED", handoff_sha256=handoff.sha256, invocation_id="reuse-1")]
+    records.append(runtime("JOB_STARTED"))
+    records.append(runtime("JOB_FAILED" if mode == "failed" else "JOB_COMPLETED_WITH_GAPS", duration_ms=1))
+    if handoff:
+        records.append(runtime("HANDOFF_ACCEPTED", handoff_path=handoff.path, handoff_sha256=handoff.sha256))
+    if mode == "duplicate":
+        records += deepcopy(records)
+    if mode == "replay":
+        replay = deepcopy(records)
+        for record in replay:
+            record["attempt_id"] = "replayed"
+            if "invocation_id" in record["details"]:
+                record["details"]["invocation_id"] = "replayed"
+        records += replay
+    return records
+
+
+@pytest.mark.parametrize(("scenario", "expected"), [
+    ("reachable", 1), ("ambiguous", 1), ("empty", 0), ("absent", None), ("legacy", None), ("unadmitted", None),
+])
+def test_real_accepted_dependency_metrics_distinguish_measured_zero_from_absence(
+        tmp_path, monkeypatch, scenario, expected):
+    disk, units, _, handoff = accepted_dependency_export(
+        tmp_path, monkeypatch, scenario=scenario,
+        settings=enabled_settings(max_document_bytes=1) if scenario == "empty" else None)
+    records = real_export_records(disk, units, handoff)
+    for record in records:
+        if record["event_type"] == "OPENVEX_EXPORT_COMPLETED":
+            record["details"]["openvex.cve_total_statements"] = 999
+    report = metrics.aggregate_openvex_metrics(disk.root, records, repository_root=ROOT)
+    assert report["openvex.cve_total_statements"] == expected
+    unresolved = int(scenario == "ambiguous")
+    assert report["openvex.cve_statements_by_status"] == {
+        "affected": None if expected is None else expected - unresolved,
+        "not_affected": None if expected is None else 0,
+        "under_investigation": None if expected is None else unresolved,
+    }
+    assert report["openvex.cve_coverage_gap_statements"] == (None if expected is None else unresolved)
+    assert report["openvex_export_statements_total"] == {"affected": 0}
+    assert report["latest_accepted"]["openvex.cve_total_statements"] == expected
+    assert not any("dependency" in reason for reason in gap_reasons(report))
+
+
+def test_distinct_real_accepted_dependency_exports_accumulate_but_latest_does_not(tmp_path, monkeypatch):
+    disk, units, accepted, first = accepted_dependency_export(tmp_path, monkeypatch)
+    real_export_records(disk, units, first)
+    second = copy(units)
+    attempt = units.context.attempt_root.with_name("second")
+    second.context = replace(units.context, attempt_id="second", attempt_root=attempt)
+    # Distinct accepted envelopes may bind the same immutable producer bytes.
+    # Fresh counters deduplicate accepted handoffs, not semantic document content.
+    second.outputs = deepcopy(units.outputs)
+    handoff = publish_export(disk, second, accepted)
+    report = metrics.aggregate_openvex_metrics(
+        disk.root, real_export_records(disk, second, handoff), repository_root=ROOT)
+    assert first.sha256 != handoff.sha256
+    assert report["openvex.cve_total_statements"] == 2
+    assert report["latest_accepted"]["openvex.cve_total_statements"] == 1
+    assert report["openvex_export_statements_total"] == {"affected": 0}
+
+
+@pytest.mark.parametrize("mode", ["duplicate", "replay", "reuse", "failed", "unaccepted"])
+def test_real_dependency_metrics_follow_accepted_deduplication_and_reuse(tmp_path, monkeypatch, mode):
+    disk, units, _, handoff = accepted_dependency_export(tmp_path, monkeypatch, publish=mode != "unaccepted")
+    report = metrics.aggregate_openvex_metrics(
+        disk.root, real_export_records(disk, units, handoff, mode=mode), repository_root=ROOT)
+    assert report["openvex.cve_total_statements"] == (1 if mode in {"duplicate", "replay"} else None)
+    assert report["openvex_export_statements_total"]["affected"] == (
+        0 if mode in {"duplicate", "replay"} else None)
+    if mode == "unaccepted":
+        assert report["latest_accepted"] is None
+    else:
+        assert report["latest_accepted"]["openvex.cve_total_statements"] == 1
+    assert report["openvex_export_reuses_total"] == int(mode == "reuse")
+
+
+def test_dependency_metrics_reprove_historical_pins_not_newer_dependency_pointer(tmp_path, monkeypatch):
+    from appsec_review.jobs.job_openvex_export import reporting
+    from appsec_review.jobs.job_openvex_export.dependencies import DEPENDENCY_JOB
+
+    disk, units, accepted, handoff = accepted_dependency_export(tmp_path, monkeypatch)
+    newer = json.loads((disk.root / accepted["path"]).read_bytes())
+    newer["attempt_id"] = "attempt_0002"
+    disk.publish(DEPENDENCY_JOB, newer)
+    result = reporting.read_accepted_dependency_export(disk.root, handoff, disk.settings, ROOT)
+    assert result["source"]["handoff"] == accepted
+    report = metrics.aggregate_openvex_metrics(
+        disk.root, real_export_records(disk, units, handoff), repository_root=ROOT)
+    assert report["openvex.cve_total_statements"] == 1
+
+
+@pytest.mark.parametrize("mutation", ["counts", "schema", "source", "document", "missing", "unadmitted"])
+def test_dependency_metrics_refuse_invalid_companion_accounting_without_inventing_zero(
+        tmp_path, monkeypatch, mutation):
+    from appsec_review.jobs.job_openvex_export import reporting
+
+    disk, units, accepted, _ = accepted_dependency_export(tmp_path, monkeypatch)
+    companion = units.outputs["acceptance.publish_handoff"]["dependencies"]
+    path = disk.root / companion["artifact"]["path"]
+    result = json.loads(path.read_bytes())
+    if mutation == "counts":
+        result["statements_by_status"]["affected"] = 7
+    elif mutation == "schema":
+        result["schema"] = "unknown"
+    elif mutation == "source":
+        result["source"]["artifact"]["sha256"] = "f" * 64
+    elif mutation == "document":
+        result["document"] = None
+    if mutation in {"counts", "schema", "source", "document"}:
+        updated = disk.put(companion["artifact"]["path"], result)
+        for unit_id in ("acceptance.publish_handoff", "export.assemble"):
+            units.outputs[unit_id]["dependencies"].update(
+                artifact=updated, document=result["document"],
+                statements_by_status=deepcopy(result["statements_by_status"]))
+    handoff = publish_export(disk, units, accepted if mutation != "unadmitted" else None)
+    if mutation == "missing":
+        path.unlink()
+    with pytest.raises(c.ExportError) as error:
+        reporting.read_accepted_dependency_export(disk.root, handoff, disk.settings, ROOT)
+    assert error.value.reason in {
+        c.ExportFailureReason.SEMANTIC_INVALID, c.ExportFailureReason.SCHEMA_INVALID,
+        c.ExportFailureReason.IDENTITY_CONFLICT, c.ExportFailureReason.INPUT_MISSING,
+    }
+    if mutation == "schema":
+        from jsonschema import ValidationError
+        assert isinstance(error.value.__cause__, ValidationError)
+    report = metrics.aggregate_openvex_metrics(
+        disk.root, real_export_records(disk, units, handoff), repository_root=ROOT)
+    assert report["openvex.cve_total_statements"] is None
+    assert report["openvex.cve_statements_by_status"]["affected"] is None
+    assert any("unavailable" in reason for reason in gap_reasons(report))
+    if mutation != "missing":
+        assert report["openvex_export_statements_total"]["affected"] == 0
 
 
 def test_fresh_mixed_accepted_counts_come_from_verified_bytes_not_accounting_events(tmp_path, monkeypatch):

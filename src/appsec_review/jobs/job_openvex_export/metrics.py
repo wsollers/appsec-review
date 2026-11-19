@@ -18,6 +18,7 @@ from .contracts import (
     parse_json_bytes,
 )
 from .settings import OpenVexExportSettings
+from .dependencies import telemetry as dependency_telemetry
 
 _OUTCOMES = (*tuple(item.value for item in ExportOutcome), "failed")
 _EXCLUSIONS = ("gate_verification_backlog", "gate_withheld")
@@ -36,6 +37,12 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
                           repository_root: Path) -> ExportBundle:
     from .reporting import read_accepted_export
     return read_accepted_export(run_root, handoff, settings, repository_root)
+
+
+def _read_accepted_dependency_export(run_root: Path, handoff: ArtifactRef, settings: OpenVexExportSettings,
+                                     repository_root: Path) -> dict[str, Any] | None:
+    from .reporting import read_accepted_dependency_export
+    return read_accepted_dependency_export(run_root, handoff, settings, repository_root)
 
 
 def _load_export(run_root: Path, settings: OpenVexExportSettings, repository_root: Path, *,
@@ -208,6 +215,9 @@ def aggregate_openvex_metrics(run_root: Path, records: Sequence[Mapping[str, Any
     exclusion_totals = Counter({reason: 0 for reason in _EXCLUSIONS})
     accepted_digests: set[str] = set()
     verified: dict[ArtifactRef, ExportBundle] = {}
+    verified_dependencies: dict[ArtifactRef, dict[str, Any] | None] = {}
+    dependency_totals = Counter({"affected": 0, "not_affected": 0, "under_investigation": 0})
+    dependency_measured = False
     attempt_rows: list[dict[str, Any]] = []
 
     def accepted(reference: ArtifactRef) -> ExportBundle:
@@ -216,6 +226,25 @@ def aggregate_openvex_metrics(run_root: Path, records: Sequence[Mapping[str, Any
         if reference not in verified:
             verified[reference] = _read_accepted_export(run_root, reference, settings, repository_root)
         return verified[reference]
+
+    def dependency_counts(reference: ArtifactRef) -> dict[str, Any] | None:
+        if reference not in verified_dependencies:
+            try:
+                verified_dependencies[reference] = _read_accepted_dependency_export(
+                    run_root, reference, settings, repository_root)
+            except _READ_ERRORS:
+                verified_dependencies[reference] = None
+                gap("accepted_dependency_output_unavailable", {"handoff": reference.to_json()})
+        return verified_dependencies[reference]
+
+    def dependency_counters(counts: Mapping[str, int] | None) -> dict[str, Any]:
+        if counts is None:
+            return {
+                "openvex.cve_statements_by_status": dict.fromkeys(dependency_totals),
+                "openvex.cve_total_statements": None,
+                "openvex.cve_coverage_gap_statements": None,
+            }
+        return dependency_telemetry({"statements_by_status": counts})
 
     for (run_id, attempt_id), events in attempts.items():
         correlation: dict[str, Any] = {"run_id": run_id, "job_id": JOB_ID, "attempt_id": attempt_id}
@@ -339,6 +368,10 @@ def aggregate_openvex_metrics(run_root: Path, records: Sequence[Mapping[str, Any
                     bytes_total += counts["document_bytes"]
                     if bundle.document_ref:
                         document_sizes.append(bundle.document_ref.size_bytes)
+                    companion = dependency_counts(handoff)
+                    if companion is not None:
+                        dependency_measured = True
+                        dependency_totals.update(companion["statements_by_status"])
             except _READ_ERRORS:
                 bundle = None
                 gap("accepted_output_unavailable", correlation)
@@ -402,6 +435,9 @@ def aggregate_openvex_metrics(run_root: Path, records: Sequence[Mapping[str, Any
             if view.handoff is not None:
                 latest = _counts(accepted(view.handoff))
                 latest["handoff"] = view.handoff.to_json()
+                companion = dependency_counts(view.handoff)
+                latest.update(dependency_counters(
+                    companion["statements_by_status"] if companion is not None else None))
             for reason in view.gaps:
                 # Consumer gap text is data, never a metric label or diagnostic message.
                 gap("latest_export_gap", {"gap_id": reason})
@@ -421,6 +457,7 @@ def aggregate_openvex_metrics(run_root: Path, records: Sequence[Mapping[str, Any
             {"phase": phase, "reason": reason, "value": count}
             for (phase, reason), count in sorted(failures.items())],
         "openvex_export_statements_total": {"affected": statement_total if measured else None},
+        **dependency_counters(dependency_totals if dependency_measured else None),
         "openvex_export_findings_total": [
             {"disposition": "included", "reason": "included", "value": included_total if measured else None},
             *({"disposition": "excluded", "reason": reason,

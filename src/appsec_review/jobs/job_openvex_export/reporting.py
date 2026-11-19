@@ -2,25 +2,32 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from collections import Counter
 import hashlib
 import os
 from pathlib import Path
 import stat
 from typing import Any, Mapping
 
+from jsonschema import ValidationError
+
 from appsec_review.indexing.store import accepted_handoff
 from appsec_review.interchange import HANDOFF_SCHEMA
 from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
 from appsec_review.runtime.handoff import verify_handoff_integrity
+from appsec_review.runtime.consume import upstream_scope
 
 from .contracts import (
     ArtifactRef, ExportBundle, ExportError, ExportFailureReason as Reason, ExportOutcome,
     ExportPhase, ExportReportState as State, ExportReportView, JOB_ID, MAX_RESULT_BYTES,
-    OPENVEX_EXPORT_HANDOFF_SCHEMA, SizedArtifactRef, VerifiedInputs, parse_json_bytes,
+    OPENVEX_EXPORT_HANDOFF_SCHEMA, SizedArtifactRef, VerifiedInputs, canonical_bytes, document_id,
+    parse_json_bytes, statement_id,
 )
-from .inputs import BoundedInputReader, reprove_inputs
+from . import dependencies
+from .datasets import CONTRACT
+from .inputs import BoundedInputReader, _require, reprove_inputs
 from .settings import OpenVexExportSettings
-from .validation import schema_registry, validate_export
+from .validation import schema_registry, schema_validator, validate_export
 
 
 def read_output(run_root: Path, reference: ArtifactRef, settings: OpenVexExportSettings, *,
@@ -148,6 +155,11 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
         bundle.result_ref.path: MAX_RESULT_BYTES, bundle.manifest_ref.path: settings.max_manifest_bytes,
         **({bundle.document_ref.path: settings.max_document_bytes} if bundle.document_ref else {}),
     }
+    companion = published.get("dependencies")
+    if isinstance(companion, Mapping):
+        bounds[ArtifactRef.from_mapping(companion["artifact"]).path] = MAX_RESULT_BYTES
+        if companion.get("document") is not None:
+            bounds[ArtifactRef.from_mapping(companion["document"]).path] = settings.max_document_bytes
     admitted = {reference.path: reference for reference in verified.input_inventory}
     for item in accepted["artifacts"]:
         reference = SizedArtifactRef.from_mapping(item)
@@ -179,6 +191,108 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
         raise ExportError("export result belongs to another reviewed gate", reason=Reason.IDENTITY_CONFLICT,
                           phase=ExportPhase.ACCEPT)
     return bundle
+
+
+def read_accepted_dependency_export(
+    run_root: Path, handoff: ArtifactRef, settings: OpenVexExportSettings, repository_root: Path,
+) -> dict[str, Any] | None:
+    """Verify historical companion accounting without consulting a newer producer pointer.
+
+    Absent companion fields remain valid for primary-only historical handoffs. Existing
+    companion schemas are verified as published, not regenerated with today's projection.
+    """
+    read_accepted_export(run_root, handoff, settings, repository_root)
+    try:
+        return _read_accepted_dependency_export(run_root, handoff, settings, repository_root)
+    except ExportError:
+        raise
+    except ValidationError as exc:
+        raise ExportError("accepted dependency export schema is invalid", reason=Reason.SCHEMA_INVALID,
+                          phase=ExportPhase.ACCEPT) from exc
+    except (ValueError, KeyError, TypeError) as exc:
+        raise ExportError("accepted dependency export structure is invalid", reason=Reason.SEMANTIC_INVALID,
+                          phase=ExportPhase.ACCEPT) from exc
+
+
+def _read_accepted_dependency_export(
+    run_root: Path, handoff: ArtifactRef, settings: OpenVexExportSettings, repository_root: Path,
+) -> dict[str, Any] | None:
+    reader = BoundedInputReader(run_root, settings, phase=ExportPhase.ACCEPT)
+    accepted = reader.json(handoff)
+    outputs = accepted["outputs"]
+    companion = outputs["acceptance.publish_handoff"].get("dependencies")
+    if companion is None:
+        return None
+
+    def require(condition: bool, message: str, reason: Reason = Reason.IDENTITY_CONFLICT) -> None:
+        _require(condition, message, reason, phase=ExportPhase.ACCEPT)
+
+    require(isinstance(companion, dict), "accepted dependency publication is not an object")
+    artifacts = {item["path"]: SizedArtifactRef.from_mapping(item) for item in accepted["artifacts"]}
+
+    def bound_output(reference: ArtifactRef, limit: int) -> tuple[dict[str, Any], bytes]:
+        require(reference.path in artifacts and artifacts[reference.path].sha256 == reference.sha256,
+                "dependency export artifact is not bound by its accepted handoff")
+        return _json_output(run_root, artifacts[reference.path], settings, max_bytes=limit)
+
+    reference = ArtifactRef.from_mapping(companion["artifact"])
+    result, payload = bound_output(reference, MAX_RESULT_BYTES)
+    schema_validator("openvex-dependencies.schema.json", repository_root=repository_root).validate(result)
+    require(canonical_bytes(result) == payload, "dependency accounting is not canonical", Reason.SEMANTIC_INVALID)
+    require(companion == {
+        "artifact": reference.to_json(), "document": result["document"],
+        "gaps": result["gaps"], "statements_by_status": result["statements_by_status"],
+    } and outputs["export.assemble"].get("dependencies") == companion,
+        "dependency publication and accounting disagree")
+    require(result["terminal_status"] == ("COMPLETED_WITH_GAPS" if result["gaps"] else "SUCCEEDED"),
+            "dependency completion disagrees with its gaps", Reason.SEMANTIC_INVALID)
+    verified_ref = ArtifactRef.from_mapping(outputs["load.verify_inputs"]["artifact"])
+    verified_document, _ = bound_output(verified_ref, settings.max_manifest_bytes)
+    verified = VerifiedInputs.from_mapping(verified_document)
+    require(result["run_id"] == verified.run_id == run_root.name,
+            "dependency accounting belongs to another run")
+    pins = accepted["upstream_handoff_sha256"]
+    require(pins.get(dependencies.DEPENDENCY_JOB) == result["source"]["handoff"]["sha256"],
+            "dependency companion source was not admitted by the accepted export")
+    with upstream_scope(run_root, JOB_ID, pins, contract=CONTRACT):
+        for item in verified.input_inventory:
+            reader.read(item)
+        loaded = dependencies.read_dependency_inputs(
+            reader, repository_root, resolved_config_sha256=verified.provenance.resolved_config_sha256,
+            target_snapshot=verified.source.target_snapshot)
+        require(loaded is not None, "accepted dependency source is missing", Reason.INPUT_MISSING)
+        assert loaded is not None
+        source, source_ref, _ = loaded
+        require(result["source"] == {
+            "handoff": {"path": source.path, "sha256": source.sha256},
+            "artifact": source_ref.to_json(), "gate": verified.provenance.gate.to_json(),
+        } == outputs["load.verify_inputs"].get("dependency_source"),
+            "dependency accounting source identities disagree")
+        reader.reprove()
+    inventory = dict(artifacts)
+    for item in reader.inventory:
+        require(item.path not in inventory or inventory[item.path] == item,
+                "historical dependency inventories disagree")
+        inventory[item.path] = item
+    require(len(inventory) <= settings.max_bindings
+            and sum(item.size_bytes for item in inventory.values()) <= settings.max_total_input_bytes,
+            "historical dependency inventory exceeds its bounds", Reason.BOUND_EXCEEDED)
+    counts = dict.fromkeys(result["statements_by_status"], 0)
+    if result["document"] is not None:
+        document, document_bytes = bound_output(
+            ArtifactRef.from_mapping(result["document"]), settings.max_document_bytes)
+        schema_validator("upstream/openvex-v0.2.0.schema.json", repository_root=repository_root).validate(document)
+        require(canonical_bytes(document) == document_bytes
+                and document["@id"] == document_id({key: value for key, value in document.items() if key != "@id"}),
+                "dependency document identity disagrees with its bytes", Reason.SEMANTIC_INVALID)
+        for statement in document["statements"]:
+            require(statement["status"] in counts and statement["@id"] == statement_id(
+                document["author"], {key: value for key, value in statement.items() if key != "@id"}),
+                "dependency statement identity or status is invalid", Reason.SEMANTIC_INVALID)
+        counts.update(Counter(statement["status"] for statement in document["statements"]))
+    require(counts == result["statements_by_status"],
+            "dependency statement counts disagree with the document", Reason.SEMANTIC_INVALID)
+    return result
 
 
 def _unavailable(state: State, *gaps: str) -> ExportReportView:
@@ -232,7 +346,8 @@ def load_export(run_root: Path, settings: OpenVexExportSettings, repository_root
     verified_ref = ArtifactRef.from_mapping(accepted.handoff["outputs"]["load.verify_inputs"]["artifact"])
     verified_document, _ = _json_output(run_root, verified_ref, settings, max_bytes=settings.max_manifest_bytes)
     verified = VerifiedInputs.from_mapping(verified_document)
-    reprove_inputs(run_root, upstream_inputs(verified), settings, repository_root)
+    with upstream_scope(run_root, JOB_ID, accepted.handoff["upstream_handoff_sha256"], contract=CONTRACT):
+        reprove_inputs(run_root, upstream_inputs(verified), settings, repository_root)
     reader.read(reader.pin(pointer).reference)
     latest = accepted_handoff(run_root, JOB_ID)
     if latest is None or latest.sha256 != reference.sha256 or latest.path != reference.path:
