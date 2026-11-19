@@ -23,7 +23,7 @@ from tests.unit.job_dependency_intelligence.test_publication_contract import (
     _context, _publish, _snapshot, _unit,
 )
 from tests.unit.job_dependency_intelligence.test_sca_reachability import (
-    ROOT, SNAPSHOT, _build_osv_sqlite, _files,
+    ROOT, SNAPSHOT, _build_osv_sqlite, _files, _pin,
 )
 
 
@@ -163,6 +163,87 @@ def _published(tmp_path):
             outputs[unit.unit_id] = unit.handler(_unit(ctx, unit.unit_id, outputs))
     result, doc = _publish(ctx, outputs, _snapshot(tmp_path / "snapshot"))
     return ctx, result, doc
+
+
+def _coordinate_publication(tmp_path, packages):
+    ctx = _context(tmp_path)
+    outputs = {}
+    with _owner_scope(ctx):
+        for unit in build_job().units:
+            if unit.unit_id == "publication.publish_context":
+                break
+            outputs[unit.unit_id] = unit.handler(_unit(ctx, unit.unit_id, outputs))
+    dependencies, _ = _normalize(packages=packages)
+    outputs["resolution.infer_repositories"] = {
+        **outputs["resolution.infer_repositories"], "dependencies": dependencies,
+    }
+    database = tmp_path / "coordinates.sqlite"
+    _build_osv_sqlite(database, [{"id": "ADV-coordinates", "affected": [
+        {"package": {"ecosystem": ecosystem, "name": "demo"}, "versions": ["1.0.0"]}
+        for ecosystem in sorted({row["ecosystem"] for row in packages})
+    ]}])
+    snapshot = _pin(tmp_path / "feed", database)
+    result, doc = _publish(ctx, outputs, snapshot)
+    return ctx, outputs, snapshot, result, doc
+
+
+def _published_sca_rows(ctx, result):
+    manifest = result["index_manifest"]
+    core = RetrievalCore(
+        ctx.run_root.parent, ctx.run_id, manifest_path=ctx.run_root / manifest["path"],
+        manifest_sha256=manifest["sha256"])
+    return core.query_sca_reachability(package="demo", advisory_id="ADV-coordinates")["results"]
+
+
+@pytest.mark.parametrize("distinction", ["ecosystems", "qualifiers", "subpaths"])
+def test_publication_keeps_distinct_package_coordinates(tmp_path, distinction):
+    packages = [{"name": "demo", "version": "1.0.0", "ecosystem": ecosystem}
+                for ecosystem in (("PyPI", "npm") if distinction == "ecosystems" else ("npm", "npm"))]
+    if distinction != "ecosystems":
+        suffixes = (
+            ["?repository_url=https%3A%2F%2Fregistry.first.test",
+             "?repository_url=https%3A%2F%2Fregistry.second.test"]
+            if distinction == "qualifiers" else ["#packages/first", "#packages/second"]
+        )
+        for package, suffix in zip(packages, suffixes):
+            package["purl"] = "pkg:npm/demo@1.0.0" + suffix
+    ctx, outputs, snapshot, result, doc = _coordinate_publication(tmp_path, packages)
+    rows = _published_sca_rows(ctx, result)
+    assert len(rows) == len({row["identity"] for row in rows}) == 2
+    assert {(row["payload"]["ecosystem"], row["payload"]["purl"]) for row in rows} == {
+        (package["ecosystem"], package.get("purl")) for package in packages}
+    assert {tuple(row["payload"]["dependency_ids"]) for row in rows} == {
+        (dependency["dependency_id"],) for dependency in outputs["resolution.infer_repositories"]["dependencies"]}
+    reversed_dependencies, _ = _normalize(packages=list(reversed(packages)))
+    outputs["resolution.infer_repositories"]["dependencies"] = reversed_dependencies
+    repeated, repeated_doc = _publish(ctx, outputs, snapshot)
+    assert repeated["index_identity"] == result["index_identity"]
+    assert repeated_doc == doc
+
+
+def test_publication_signal_identity_binds_sorted_root_instances(tmp_path):
+    first = {"name": "demo", "version": "1.0.0", "ecosystem": "PyPI",
+             "purl": "pkg:pypi/demo@1.0.0", "root_id": "first", "package_root": "lib/demo"}
+    ctx, outputs, snapshot, result, doc = _coordinate_publication(tmp_path, [first])
+    original_rows = _published_sca_rows(ctx, result)
+    assert len(original_rows) == 1
+    second = {**first, "root_id": "second"}
+    dependencies, _ = _normalize(packages=[second, first])
+    outputs["resolution.infer_repositories"]["dependencies"] = dependencies
+    expanded, expanded_doc = _publish(ctx, outputs, snapshot)
+    expanded_rows = _published_sca_rows(ctx, expanded)
+    assert len(expanded_rows) == 1
+    assert expanded_rows[0]["identity"] != original_rows[0]["identity"]
+    assert expanded_doc["advisories"][0]["dependency_ids"] == sorted(
+        row["dependency_id"] for row in dependencies)
+    assert len(expanded_doc["advisories"][0]["dependency_ids"]) == 2
+    assert doc["advisories"][0]["dependency_ids"] != expanded_doc["advisories"][0]["dependency_ids"]
+    assert doc["advisories"][0]["reachability"] == expanded_doc["advisories"][0]["reachability"]
+    dependencies, _ = _normalize(packages=[first, second])
+    outputs["resolution.infer_repositories"]["dependencies"] = dependencies
+    repeated, repeated_doc = _publish(ctx, outputs, snapshot)
+    assert repeated["index_identity"] == expanded["index_identity"]
+    assert repeated_doc == expanded_doc
 
 
 def test_real_publication_supports_exact_reachability_filters_and_read_receipts(tmp_path):

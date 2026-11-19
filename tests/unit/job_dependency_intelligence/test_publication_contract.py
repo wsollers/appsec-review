@@ -12,7 +12,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import UnitContext
 from appsec_review.runtime.consume import accepted_upstream
 from appsec_review.runtime.inputs import admit_inputs, input_read_scope
-from appsec_review.storage import atomic_bytes, file_sha256
+from appsec_review.storage import atomic_bytes, canonical_json, file_sha256
 from appsec_review.storage.shared import reference
 from tests.unit.job_dependency_intelligence.test_job_graph import (
     _framework, _make_job_context, _owner_scope, _seed_upstreams,
@@ -172,7 +172,9 @@ def _publish(ctx, outputs, snapshot):
     with sqlite3.connect(f"file:{index.as_posix()}?mode=ro&immutable=1", uri=True) as db:
         signals = [json.loads(row[0]) for row in db.execute(
             "SELECT payload_json FROM entities WHERE kind = 'review_signal'")]
-    assert signals == [{"signal_kind": "sca_reachability", **row} for row in document["advisories"]]
+    assert sorted(signals, key=canonical_json) == sorted(
+        [{"signal_kind": "sca_reachability", **row} for row in document["advisories"]],
+        key=canonical_json)
     return result, document
 
 

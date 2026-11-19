@@ -120,6 +120,10 @@ Conflicting versions, missing coordinates or missing/unmatched instance IDs reta
 with empty `dependency_ids`, `unknown` reachability and a `sca_dependency_binding_unresolved`
 gap. An advisory for one version or ecosystem does not attach to fixed releases or same-named
 foreign packages. OSV symbols come only from the affected entry selected by the version matcher.
+Published SCA signal identities bind the advisory, package name/version, ecosystem, exact PURL
+(including qualifiers/subpath), and sorted dependency IDs. Same-named foreign coordinates cannot
+collide in the immutable inventory shard, and changing the bound root instances changes signal
+identity without treating a different observation order as a different package.
 
 The bounded `query_sca_reachability` API keeps the argument name `reachability_class`, but filters
 the producer's `reachability` field exactly. Prioritization reads `package_name` and uses only that
@@ -214,7 +218,7 @@ as alternate-vendor leads, four `davegamble/cjson` ranges.
 Focused verification:
 
 ```text
-scripts/run-tests.sh --expect-tests 16 --parallel --test-workers 2 --shuffle-seed 5126 -- tests/unit/job_dependency_intelligence/test_coordinate_consumers.py
+scripts/run-tests.sh --expect-tests 20 --parallel --test-workers 2 --shuffle-seed 5126 -- tests/unit/job_dependency_intelligence/test_coordinate_consumers.py
 ```
 
 Mocked tests verify parser, inference, HTTP, gap, and publication contracts. They do not prove live

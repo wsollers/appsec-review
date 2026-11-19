@@ -644,6 +644,9 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                     "advisory_id": adv_rec["advisory_id"],
                     "package_name": adv_rec["package_name"],
                     "package_version": adv_rec["package_version"],
+                    "ecosystem": adv_rec["ecosystem"],
+                    "purl": adv_rec["purl"],
+                    "dependency_ids": sorted(adv_rec["dependency_ids"]),
                 },
             )
             builder.add_entity(
