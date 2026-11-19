@@ -417,8 +417,11 @@ class RetrievalCore:
         if self.clock() > deadline:
             raise sqlite3.OperationalError("interrupted")
 
-    def _cursor(self, offset: int, request_hash: str) -> str:
-        payload = canonical_json({"offset": offset, "request": request_hash})
+    def _cursor(self, offset: int, request_hash: str, *, position: Any = None) -> str:
+        value = {"offset": offset, "request": request_hash}
+        if position is not None:
+            value["position"] = position
+        payload = canonical_json(value)
         signature = hmac.new(self._cursor_key, payload, hashlib.sha256).digest()
         return base64.urlsafe_b64encode(payload + signature).decode().rstrip("=")
 
@@ -428,8 +431,11 @@ class RetrievalCore:
         return hashlib.sha256(canonical_json({"tool": tool, **stable})).hexdigest()
 
     def _offset(self, cursor: str | None, request_hash: str) -> int:
+        return self._cursor_state(cursor, request_hash)["offset"]
+
+    def _cursor_state(self, cursor: str | None, request_hash: str) -> dict[str, Any]:
         if cursor is None:
-            return 0
+            return {"offset": 0}
         try:
             raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
             payload, signature = raw[:-32], raw[-32:]
@@ -438,7 +444,7 @@ class RetrievalCore:
             value = json.loads(payload)
             if value.get("request") != request_hash or not isinstance(value.get("offset"), int) or value["offset"] < 0:
                 raise ValueError
-            return value["offset"]
+            return value
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             raise ValueError("invalid or tampered cursor") from exc
 
@@ -531,7 +537,7 @@ class RetrievalCore:
 
     def _envelope(self, *, tool: str, results: list[dict[str, Any]], gaps: Iterable[str],
                   started: float, request_hash: str, offset: int = 0, has_more: bool = False,
-                  truncated: bool = False) -> dict[str, Any]:
+                  truncated: bool = False, page_cursors: list[str] | None = None) -> dict[str, Any]:
         unique_gaps = list(dict.fromkeys(str(item) for item in gaps))
         if len(unique_gaps) > 200:
             unique_gaps = [*unique_gaps[:199],
@@ -546,15 +552,20 @@ class RetrievalCore:
             "results": results, "pagination": {"next_cursor": None}, "coverage_gaps": unique_gaps,
             "truncated": truncated, "duration_ms": max(0, int((self.clock() - started) * 1000)),
         }
+
+        def continuation() -> str:
+            return (page_cursors[len(response["results"])] if page_cursors is not None
+                    else self._cursor(offset + len(response["results"]), request_hash))
+
         if has_more:
-            response["pagination"]["next_cursor"] = self._cursor(offset + len(results), request_hash)
+            response["pagination"]["next_cursor"] = continuation()
         byte_gap = "response byte budget reached; trailing results were withheld (continue with the cursor)"
         while len(canonical_json(response)) > self.limits.max_response_bytes and response["results"]:
             response["results"].pop()
             response["truncated"] = True
             if byte_gap not in response["coverage_gaps"]:
                 response["coverage_gaps"].append(byte_gap)
-            response["pagination"]["next_cursor"] = self._cursor(offset + len(response["results"]), request_hash)
+            response["pagination"]["next_cursor"] = continuation()
         if len(canonical_json(response)) > self.limits.max_response_bytes:
             response["coverage_gaps"] = ["response metadata exceeded byte budget"]
             response["indexes"] = []
@@ -586,10 +597,15 @@ class RetrievalCore:
         started = self.clock()
         request_hash = self._request_hash(tool, parameters)
         deadline = started + self.limits.timeout_ms / 1000
+        page_cursors = None
         try:
             with validation_scope(self.run_root):
                 outcome = operation(deadline)
-            if len(outcome) == 5:
+            if len(outcome) == 6:
+                # Keyset pages supply a cursor at each result boundary, including the empty
+                # prefix, so byte-budget withholding cannot skip unreturned results.
+                results, gaps, has_more, offset, operation_truncated, page_cursors = outcome
+            elif len(outcome) == 5:
                 results, gaps, has_more, offset, operation_truncated = outcome
             else:
                 results, gaps, has_more, offset = outcome
@@ -602,7 +618,7 @@ class RetrievalCore:
                 [], ["query execution-time budget exceeded"], False, 0, True, False)
         response = self._envelope(tool=tool, results=results, gaps=gaps, started=started,
                                   request_hash=request_hash, offset=offset, has_more=has_more,
-                                  truncated=timed_out or operation_truncated)
+                                  truncated=timed_out or operation_truncated, page_cursors=page_cursors)
         filters = {key: value for key, value in parameters.items() if key not in {"query", "cursor"}}
         self._audit(tool, request_hash, filters, response)
         return response

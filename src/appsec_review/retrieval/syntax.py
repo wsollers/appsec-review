@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from typing import TYPE_CHECKING, Any, Mapping
 
 from .model import EntityKind, LogicalIdentity, normalize_relative_path
@@ -222,6 +223,75 @@ def _sanitize_cfg_function_record(
     }
 
 
+_CFG_ORDER = (
+    "l.path", "json_extract(e.payload_json, '$.cfg.start_line')",
+    "json_extract(e.payload_json, '$.cfg.end_line')",
+    "json_extract(e.payload_json, '$.cfg.function_id')",
+)
+
+
+def _cfg_page_state(core: "RetrievalCore", cursor: str | None, request_hash: str):
+    state = core._cursor_state(cursor, request_hash)
+    position = state.get("position", {"function": None, "block": None})
+    if not isinstance(position, dict) or set(position) != {"function", "block"}:
+        raise ValueError("invalid CFG cursor position")
+    for field, types in (("function", (str, int, int, str)), ("block", (int, int, str))):
+        key = position[field]
+        if key is not None and (not isinstance(key, list) or len(key) != len(types)
+                                or any(type(value) is not kind for value, kind in zip(key, types))):
+            raise ValueError("invalid CFG cursor position")
+    if (state["offset"] and position["function"] is None
+            or position["block"] is not None and position["function"] is None):
+        raise ValueError("invalid CFG cursor position")
+    return state["offset"], position
+
+
+def _cfg_candidates(core: "RetrievalCore", deadline: float, filters, position, bound: int):
+    """Merge a bounded metadata page; do not bring CFG payloads across the SQLite boundary."""
+    found = {}
+    for shard in core.indexes.get("analysis", ()):
+        if shard.get("producer", {}).get("job") != "job_tree_sitter_ast":
+            continue
+        core._check_deadline(deadline)
+        with closing(core._database(shard, deadline)) as database:
+            selected = filters(database)
+            if selected is None:
+                continue
+            clauses, values, context = selected
+            clauses = ["e.kind='ast_node'", "json_extract(e.payload_json, '$.cfg.schema')=?", *clauses]
+            values = [CFG_SCHEMA, *values]
+            if position["function"] is not None:
+                comparison = ">=" if position["block"] is not None else ">"
+                clauses.append(f"({','.join(_CFG_ORDER)}) {comparison} (?,?,?,?)")
+                values.extend(position["function"])
+            sql = ("SELECT e.identity, " + ", ".join(
+                f"{expression} AS k{index}" for index, expression in enumerate(_CFG_ORDER)
+            ) + " FROM entities e JOIN locations l ON l.entity_id=e.identity WHERE " +
+                " AND ".join(clauses) + " ORDER BY " + ",".join(_CFG_ORDER) + ",e.identity LIMIT ?")
+            for row in database.execute(sql, [*values, bound + 1]):
+                core._check_deadline(deadline)
+                key = tuple(row[f"k{index}"] for index in range(4))
+                found.setdefault(key, (shard, row["identity"], context))
+            found = {key: found[key] for key in sorted(found)[:bound + 1]}
+    return [(key, *found[key]) for key in sorted(found)]
+
+
+def _load_cfg(core: "RetrievalCore", deadline: float, shard, identity):
+    core._check_deadline(deadline)
+    with closing(core._database(shard, deadline)) as database:
+        row = database.execute(
+            "SELECT e.identity,e.payload_json,l.path,l.file_sha256 FROM entities e "
+            "JOIN locations l ON l.entity_id=e.identity WHERE e.identity=?", (identity,),
+        ).fetchone()
+        rel_path = normalize_relative_path(row["path"])
+        payload = json.loads(row["payload_json"])
+        gaps, complete = _cfg_coverage(database, payload, rel_path)
+        record = _sanitize_cfg_function_record(
+            payload, ast_identity=identity, rel_path=rel_path, file_sha256=row["file_sha256"],
+            shard_id=str(shard.get("shard_id", "default")), guards_complete=complete)
+        return record, gaps
+
+
 def query_cfg_function(
     core: "RetrievalCore",
     *,
@@ -261,65 +331,49 @@ def query_cfg_function(
         "limit": limit,
         "cursor": cursor,
     }
-    offset = core._offset(cursor, core._request_hash(QUERY_CFG_FUNCTION, parameters))
+    request_hash = core._request_hash(QUERY_CFG_FUNCTION, parameters)
+    offset, position = _cfg_page_state(core, cursor, request_hash)
 
     def operation(deadline: float):
-        found: dict[str, dict[str, Any]] = {}
         gaps: list[str] = []
-        any_ts_shard = False
-        for shard in core.indexes.get("analysis", ()):
-            if shard.get("producer", {}).get("job") != "job_tree_sitter_ast":
-                continue
-            any_ts_shard = True
-            with core._database(shard, deadline) as database:
-                clauses = ["e.kind='ast_node'", "json_extract(e.payload_json, '$.cfg.schema')=?"]
-                values: list[Any] = [CFG_SCHEMA]
-                if subject_kind == "source_file":
-                    clauses.append("json_extract(e.payload_json, '$.cfg.source_identity')=?")
-                    values.append(subject)
-                elif subject_kind == "ast_node":
-                    clauses.append("e.identity=?")
-                    values.append(subject)
-                elif subject_kind == "cfgfn":
-                    clauses.append("json_extract(e.payload_json, '$.cfg.function_id')=?")
-                    values.append(subject)
-                if norm_path is not None:
-                    clauses.append("l.path=?")
-                    values.append(norm_path)
-                if function_name is not None:
-                    clauses.append(
-                        "(json_extract(e.payload_json, '$.cfg.function_name')=? "
-                        "OR json_extract(e.payload_json, '$.cfg.qualified_name')=?)"
-                    )
-                    values.extend([function_name, function_name])
-                sql = (
-                    "SELECT e.identity, e.payload_json, l.path, l.file_sha256 "
-                    "FROM entities e JOIN locations l ON l.entity_id=e.identity "
-                    "WHERE " + " AND ".join(clauses) + " ORDER BY l.path, l.start_byte, e.identity"
-                )
-                for row in database.execute(sql, values):
-                    rel_p = normalize_relative_path(str(row["path"]))
-                    raw_payload = json.loads(row["payload_json"])
-                    coverage_gaps, guards_complete = _cfg_coverage(database, raw_payload, rel_p)
-                    gaps.extend(coverage_gaps)
-                    rec = _sanitize_cfg_function_record(
-                        raw_payload,
-                        ast_identity=str(row["identity"]),
-                        rel_path=rel_p,
-                        file_sha256=str(row["file_sha256"]),
-                        shard_id=str(shard.get("shard_id", "default")),
-                        guards_complete=guards_complete,
-                    )
-                    found.setdefault(rec["function_id"], rec)
-        if not any_ts_shard:
+        def filters(_database):
+            clauses, values = [], []
+            if subject_kind == "source_file":
+                clauses.append("json_extract(e.payload_json, '$.cfg.source_identity')=?")
+                values.append(subject)
+            elif subject_kind == "ast_node":
+                clauses.append("e.identity=?")
+                values.append(subject)
+            elif subject_kind == "cfgfn":
+                clauses.append("json_extract(e.payload_json, '$.cfg.function_id')=?")
+                values.append(subject)
+            if norm_path is not None:
+                clauses.append("l.path=?")
+                values.append(norm_path)
+            if function_name is not None:
+                clauses.append("(json_extract(e.payload_json, '$.cfg.function_name')=? "
+                               "OR json_extract(e.payload_json, '$.cfg.qualified_name')=?)")
+                values.extend([function_name, function_name])
+            return clauses, values, None
+
+        candidates = _cfg_candidates(core, deadline, filters, position, limit)
+        results = []
+        cursors = [core._cursor(offset, request_hash, position=position)]
+        for key, shard, identity, _ in candidates[:limit]:
+            record, coverage_gaps = _load_cfg(core, deadline, shard, identity)
+            results.append(record)
+            gaps.extend(coverage_gaps)
+            cursors.append(core._cursor(offset + len(results), request_hash,
+                                        position={"function": key, "block": None}))
+        more = len(candidates) > limit
+        if more:
+            gaps.append("CFG coverage is page-local; continue with the cursor for remaining functions")
+        if not any(s.get("producer", {}).get("job") == "job_tree_sitter_ast"
+                   for s in core.indexes.get("analysis", ())):
             gaps.append("no accepted job_tree_sitter_ast analysis shards available")
-        elif not found:
+        elif not candidates:
             gaps.append("no matching intra-procedural CFG function in accepted analysis shards; absence is not evidence")
-        ordered = sorted(
-            found.values(),
-            key=lambda r: (r["path"], r["start_line"], r["end_line"], r["function_id"]),
-        )
-        return ordered[offset:offset + limit], gaps, len(ordered) > offset + limit, offset
+        return results, gaps, more, offset, False, cursors
 
     return core._execute(QUERY_CFG_FUNCTION, parameters, operation)
 
@@ -362,148 +416,151 @@ def query_guard_dominators(
         "limit": limit,
         "cursor": cursor,
     }
-    offset = core._offset(cursor, core._request_hash(QUERY_GUARD_DOMINATORS, parameters))
+    request_hash = core._request_hash(QUERY_GUARD_DOMINATORS, parameters)
+    offset, position = _cfg_page_state(core, cursor, request_hash)
 
     def operation(deadline: float):
-        matches: dict[str, dict[str, Any]] = {}
+        results = []
         gaps: list[str] = []
-        any_ts_shard = False
-        for shard in core.indexes.get("analysis", ()):
-            if shard.get("producer", {}).get("job") != "job_tree_sitter_ast":
-                continue
-            any_ts_shard = True
-            with core._database(shard, deadline) as database:
-                occurrence_block_id = None
-                target_span = None
-                target_source_id = subject if subject_kind == "source_file" else None
-                target_line = line
-                if subject_kind == "ast_node":
-                    ast_row = database.execute(
-                        "SELECT e.payload_json, l.path, l.file_sha256, l.start_line, l.start_byte, l.end_byte "
-                        "FROM entities e JOIN locations l ON l.entity_id=e.identity WHERE e.identity=?",
-                        (subject,),
-                    ).fetchone()
-                    if ast_row is None:
-                        continue
-                    ast_payload = json.loads(ast_row["payload_json"])
-                    occurrence_block_id = ast_payload.get("cfg_block_id")
-                    target_span = (int(ast_row["start_byte"]), int(ast_row["end_byte"]))
-                    if target_line is None:
-                        target_line = int(ast_row["start_line"])
-                    target_source_id = LogicalIdentity.derive(
-                        EntityKind.SOURCE_FILE,
-                        core.manifest["target_snapshot"],
-                        {"path": normalize_relative_path(str(ast_row["path"])), "sha256": str(ast_row["file_sha256"])},
-                    ).value
+        cursors = [core._cursor(offset, request_hash, position=position)]
 
-                clauses = ["e.kind='ast_node'", "json_extract(e.payload_json, '$.cfg.schema')=?"]
-                values: list[Any] = [CFG_SCHEMA]
-                if target_source_id is not None:
-                    clauses.append("json_extract(e.payload_json, '$.cfg.source_identity')=?")
-                    values.append(target_source_id)
-                if norm_path is not None:
-                    clauses.append("l.path=?")
-                    values.append(norm_path)
-                if target_line is not None:
-                    clauses.append("l.start_line<=? AND l.end_line>=?")
-                    values.extend([target_line, target_line])
+        def filters(database):
+            occurrence_block_id = None
+            target_span = None
+            target_source_id = subject if subject_kind == "source_file" else None
+            target_line = line
+            if subject_kind == "ast_node":
+                ast_row = database.execute(
+                    "SELECT json_extract(e.payload_json, '$.cfg_block_id') AS block_id, "
+                    "l.path,l.file_sha256,l.start_line,l.start_byte,l.end_byte "
+                    "FROM entities e JOIN locations l ON l.entity_id=e.identity WHERE e.identity=?",
+                    (subject,),
+                ).fetchone()
+                if ast_row is None:
+                    return None
+                occurrence_block_id = ast_row["block_id"]
+                target_span = (int(ast_row["start_byte"]), int(ast_row["end_byte"]))
+                if target_line is None:
+                    target_line = int(ast_row["start_line"])
+                target_source_id = LogicalIdentity.derive(
+                    EntityKind.SOURCE_FILE, core.manifest["target_snapshot"],
+                    {"path": normalize_relative_path(str(ast_row["path"])), "sha256": str(ast_row["file_sha256"])},
+                ).value
 
-                sql = (
-                    "SELECT e.identity, e.payload_json, l.path, l.file_sha256 "
-                    "FROM entities e JOIN locations l ON l.entity_id=e.identity "
-                    "WHERE " + " AND ".join(clauses) + " ORDER BY l.path, l.start_byte, e.identity"
-                )
-                for row in database.execute(sql, values):
-                    rel_p = normalize_relative_path(str(row["path"]))
-                    raw_payload = json.loads(row["payload_json"])
-                    coverage_gaps, guards_complete = _cfg_coverage(database, raw_payload, rel_p)
-                    rec = _sanitize_cfg_function_record(
-                        raw_payload,
-                        ast_identity=str(row["identity"]),
-                        rel_path=rel_p,
-                        file_sha256=str(row["file_sha256"]),
-                        shard_id=str(shard.get("shard_id", "default")),
-                        guards_complete=guards_complete,
-                    )
-                    candidates = rec["nodes"]
-                    if node_id is not None:
-                        candidates = [n for n in candidates if n.get("node_id") == node_id]
-                        if target_span is not None:
-                            candidates = [n for n in candidates
-                                          if (n["start_byte"] <= target_span[0] and n["end_byte"] >= target_span[1])
-                                          or (target_span[0] <= n["start_byte"] and target_span[1] >= n["end_byte"])]
-                        if not candidates:
-                            continue
-                        groups = [[n] for n in candidates]
-                    elif target_span is not None:
-                        anchors = [n for n in candidates if n["node_id"] == occurrence_block_id]
-                        if not anchors:
-                            anchors = [n for n in candidates if n["kind"] not in {"entry", "exit"}
-                                       and n["start_byte"] <= target_span[0] and n["end_byte"] >= target_span[1]]
-                        anchors.sort(key=lambda n: (n["end_byte"] - n["start_byte"], n["node_id"]))
-                        groups = (
-                            [[n for n in candidates if _cfg_occurrence(n) == _cfg_occurrence(anchors[0])]]
-                            if anchors else []
-                        )
-                    elif target_line is not None:
-                        spanning = [
-                            n for n in candidates
-                            if n.get("kind") not in {"entry", "exit"}
-                            and int(n.get("start_line", 0)) <= target_line <= int(n.get("end_line", 0))
-                        ]
-                        if spanning:
-                            spanning.sort(key=lambda n: (
-                                int(n["end_line"]) - int(n["start_line"]),
-                                int(n["end_byte"]) - int(n["start_byte"]), str(n["node_id"]),
-                            ))
-                            groups = [[n for n in candidates if _cfg_occurrence(n) == _cfg_occurrence(spanning[0])]]
-                        else:
-                            groups = []
-                    else:
-                        by_occurrence: dict[tuple, list[dict[str, Any]]] = {}
-                        for n in candidates:
-                            by_occurrence.setdefault(_cfg_occurrence(n), []).append(n)
-                        groups = list(by_occurrence.values())
+            clauses, values = [], []
+            if target_source_id is not None:
+                clauses.append("json_extract(e.payload_json, '$.cfg.source_identity')=?")
+                values.append(target_source_id)
+            if norm_path is not None:
+                clauses.append("l.path=?")
+                values.append(norm_path)
+            if target_line is not None:
+                clauses.append("l.start_line<=? AND l.end_line>=?")
+                values.extend([target_line, target_line])
+            if node_id is not None:
+                clauses.append("EXISTS (SELECT 1 FROM json_each(e.payload_json, '$.cfg_nodes') n "
+                               "WHERE json_extract(n.value, '$.node_id')=?)")
+                values.append(node_id)
+            return clauses, values, (occurrence_block_id, target_span, target_line)
 
-                    gaps.extend(coverage_gaps)
-                    for contexts in groups:
-                        cnode = contexts[0]
-                        gdoms = _common_occurrence_guards(contexts)
-                        if node_id is None and target_span is None and target_line is None and not gdoms:
-                            continue
-                        if polarity is not None:
-                            gdoms = [g for g in gdoms if g.get("guard_polarity") == polarity]
-                            if not gdoms:
-                                continue
-                        nid = str(cnode["node_id"])
-                        matches.setdefault(
-                            nid,
-                            {
-                                "schema": CFG_SCHEMA,
-                                "function_id": rec["function_id"],
-                                "function_name": rec["function_name"],
-                                "node_id": nid,
-                                "ast_identity": cnode.get("ast_identity"),
-                                "kind": cnode.get("kind"),
-                                "language": rec["language"],
-                                "source_identity": rec["source_identity"],
-                                "path": rel_p,
-                                "file_sha256": rec["file_sha256"],
-                                "start_line": int(cnode.get("start_line", 1)),
-                                "end_line": int(cnode.get("end_line", 1)),
-                                "statement_text": str(cnode.get("statement_text", "")),
-                                "guard_dominators": gdoms,
-                            },
-                        )
+        bound = core.limits.max_results
+        candidates = _cfg_candidates(core, deadline, filters, position, bound)
+        more = len(candidates) > bound
+        for index, (key, shard, identity, context) in enumerate(candidates[:bound]):
+            rec, coverage_gaps = _load_cfg(core, deadline, shard, identity)
+            gaps.extend(coverage_gaps)
+            rows = _guard_rows(rec, *context, node_id=node_id, polarity=polarity)
+            if position["block"] is not None and tuple(position["function"]) == key:
+                rows = [row for row in rows if _guard_key(row) > tuple(position["block"])]
+            for row_index, row in enumerate(rows):
+                core._check_deadline(deadline)
+                results.append(row)
+                cursors.append(core._cursor(offset + len(results), request_hash,
+                                            position={"function": key, "block": _guard_key(row)}))
+                if len(results) == limit:
+                    more = row_index + 1 < len(rows) or index + 1 < len(candidates)
+                    break
+            if len(results) == limit:
+                # When this function is exhausted, the next page must not reload it.
+                if row_index + 1 == len(rows):
+                    cursors[-1] = core._cursor(offset + len(results), request_hash,
+                                               position={"function": key, "block": None})
+                break
+            cursors[-1] = core._cursor(offset + len(results), request_hash,
+                                       position={"function": key, "block": None})
 
-        if not any_ts_shard:
+        if more:
+            gaps.append("CFG coverage is page-local; candidate/result bound reached, continue with the cursor "
+                        "(an empty page is not evidence of absence)")
+        if not any(s.get("producer", {}).get("job") == "job_tree_sitter_ast"
+                   for s in core.indexes.get("analysis", ())):
             gaps.append("no accepted job_tree_sitter_ast analysis shards available")
-        elif not matches:
+        elif not results and not more:
             gaps.append("no matching CFG guard-dominated block found; consult coverage gaps before interpreting absence")
-        ordered = sorted(
-            matches.values(),
-            key=lambda m: (m["path"], m["start_line"], m["end_line"], m["node_id"]),
-        )
-        return ordered[offset:offset + limit], gaps, len(ordered) > offset + limit, offset
+        return results, gaps, more, offset, more and len(results) < limit, cursors
 
     return core._execute(QUERY_GUARD_DOMINATORS, parameters, operation)
+
+
+def _guard_key(row):
+    return row["start_line"], row["end_line"], row["node_id"]
+
+
+def _guard_rows(rec, occurrence_block_id, target_span, target_line, *, node_id, polarity):
+    candidates = rec["nodes"]
+    if node_id is not None:
+        candidates = [n for n in candidates if n.get("node_id") == node_id]
+        if target_span is not None:
+            candidates = [n for n in candidates
+                          if (n["start_byte"] <= target_span[0] and n["end_byte"] >= target_span[1])
+                          or (target_span[0] <= n["start_byte"] and target_span[1] >= n["end_byte"])]
+        groups = [[n] for n in candidates]
+    elif target_span is not None:
+        anchors = [n for n in candidates if n["node_id"] == occurrence_block_id]
+        if not anchors:
+            anchors = [n for n in candidates if n["kind"] not in {"entry", "exit"}
+                       and n["start_byte"] <= target_span[0] and n["end_byte"] >= target_span[1]]
+        anchors.sort(key=lambda n: (n["end_byte"] - n["start_byte"], n["node_id"]))
+        groups = ([[n for n in candidates if _cfg_occurrence(n) == _cfg_occurrence(anchors[0])]]
+                  if anchors else [])
+    elif target_line is not None:
+        spanning = [n for n in candidates if n.get("kind") not in {"entry", "exit"}
+                    and int(n.get("start_line", 0)) <= target_line <= int(n.get("end_line", 0))]
+        spanning.sort(key=lambda n: (int(n["end_line"]) - int(n["start_line"]),
+                                    int(n["end_byte"]) - int(n["start_byte"]), str(n["node_id"])))
+        groups = ([[n for n in candidates if _cfg_occurrence(n) == _cfg_occurrence(spanning[0])]]
+                  if spanning else [])
+    else:
+        by_occurrence: dict[tuple, list[dict[str, Any]]] = {}
+        for node in candidates:
+            by_occurrence.setdefault(_cfg_occurrence(node), []).append(node)
+        groups = list(by_occurrence.values())
+
+    matches = {}
+    for contexts in groups:
+        cnode = contexts[0]
+        gdoms = _common_occurrence_guards(contexts)
+        if node_id is None and target_span is None and target_line is None and not gdoms:
+            continue
+        if polarity is not None:
+            gdoms = [g for g in gdoms if g.get("guard_polarity") == polarity]
+            if not gdoms:
+                continue
+        nid = str(cnode["node_id"])
+        matches.setdefault(nid, {
+            "schema": CFG_SCHEMA,
+            "function_id": rec["function_id"],
+            "function_name": rec["function_name"],
+            "node_id": nid,
+            "ast_identity": cnode.get("ast_identity"),
+            "kind": cnode.get("kind"),
+            "language": rec["language"],
+            "source_identity": rec["source_identity"],
+            "path": rec["path"],
+            "file_sha256": rec["file_sha256"],
+            "start_line": int(cnode.get("start_line", 1)),
+            "end_line": int(cnode.get("end_line", 1)),
+            "statement_text": str(cnode.get("statement_text", "")),
+            "guard_dominators": gdoms,
+        })
+    return sorted(matches.values(), key=_guard_key)

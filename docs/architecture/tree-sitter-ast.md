@@ -173,6 +173,20 @@ fields. An explicitly requested CFG `node_id` retains that execution context's g
 queries retain the separate nodes and edges. An unresolved AST subject never falls back to
 unrelated functions.
 
+CFG retrieval selects a bounded metadata page in SQLite before decoding function payloads.
+Function pages materialize at most the requested `limit`; guard pages examine at most the
+configured retrieval `max_results` candidate functions. An explicit block ID is filtered in
+SQLite before loading its function. Across shards, metadata pages are merged and duplicate
+function keys removed before payload access. SQLite execution deadlines still bound selector
+work; these queries do not scan source trees.
+
+Signed, request/manifest-bound keyset cursors order functions by path, start/end line and function
+ID, then guard occurrences within each function by start/end line and node ID. Continuations
+retain the last returned occurrence when the response byte budget withholds trailing results.
+Guard pages can be empty when their candidate budget is exhausted: the advancing cursor and
+explicit gap require continuation, not a conclusion of absence. Coverage gaps are page-local;
+they describe examined functions, not unvisited functions on later pages.
+
 Scope checkpoints bind `cfg_builder.algorithm` (`appsec-review/tree-sitter-cfg-builder/1`) and
 the builder's actual `max_nodes_per_function` in their fingerprint and metadata. Builder semantics
 have their own identity, separate from the unchanged CFG and normalizer domain schemas. A changed
