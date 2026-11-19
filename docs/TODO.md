@@ -325,9 +325,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5091 | [Bind advisory reachability to exact package symbols and bounded call sites](#t-5091-bind-advisory-reachability-to-exact-package-symbols-and-bounded-call-sites) | evidence | done (2026-11-19, 874b13235ffcc340072489cda97da1840d372e2a) |
 | T-5092 | [Preserve clangd call occurrences locations and coverage](#t-5092-preserve-clangd-call-occurrences-locations-and-coverage) | graph | done (2026-11-19, 0c37a8bb505c4f9b6049350002368f86f8d18261) |
 | T-5093 | [Preserve overload linkage and exact AST source identities](#t-5093-preserve-overload-linkage-and-exact-ast-source-identities) | graph | done (2026-11-19, 081722277a076f38db3b95082611c343ee430bc9) |
-| T-5094 | [Preserve failed and partial compiled-analysis outcomes through reuse](#t-5094-preserve-failed-and-partial-compiled-analysis-outcomes-through-reuse) | graph | in-progress |
-| T-5095 | [Preserve full-mode control flow under presentation and AST filtering bounds](#t-5095-preserve-full-mode-control-flow-under-presentation-and-ast-filtering-bounds) | graph | in-progress |
-| T-5096 | [Retain accepted native link source and compile-directory context](#t-5096-retain-accepted-native-link-source-and-compile-directory-context) | build | in-progress |
+| T-5094 | [Preserve failed and partial compiled-analysis outcomes through reuse](#t-5094-preserve-failed-and-partial-compiled-analysis-outcomes-through-reuse) | graph | done (2026-11-19, b098c02682352a487da5265ab1426c5b5d66bab0) |
+| T-5095 | [Preserve full-mode control flow under presentation and AST filtering bounds](#t-5095-preserve-full-mode-control-flow-under-presentation-and-ast-filtering-bounds) | graph | done (2026-11-19, b098c02682352a487da5265ab1426c5b5d66bab0) |
+| T-5096 | [Retain accepted native link source and compile-directory context](#t-5096-retain-accepted-native-link-source-and-compile-directory-context) | build | done (2026-11-19, b098c02682352a487da5265ab1426c5b5d66bab0) |
 | T-5097 | [Select header seeds and enforce actual include-read budgets](#t-5097-select-header-seeds-and-enforce-actual-include-read-budgets) | graph | in-progress |
 | T-5098 | [Preserve alternate graph symbol kinds identities and disputed evidence](#t-5098-preserve-alternate-graph-symbol-kinds-identities-and-disputed-evidence) | graph | done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7) |
 | T-5099 | [Keep alternate graph storage immutable and traversal honestly bounded](#t-5099-keep-alternate-graph-storage-immutable-and-traversal-honestly-bounded) | graph | done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7) |
@@ -4009,30 +4009,41 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5094 — Preserve failed and partial compiled-analysis outcomes through reuse
 
-- **State:** in-progress
+- **State:** done (2026-11-19, b098c02682352a487da5265ab1426c5b5d66bab0)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CPP-F03, CPP-F06, CPP-F07, CPP-F08. Seeded parse failures are marked resolved and cached; CFG failures are cached too; Whole-program AST/IR accepts an unusable replay receipt as clean.
 - **Scope:** `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/seeded.py`
 - **Done when:** Seeded AST/CFG parse failure is not reusable success; full-mode unusable receipts and binary-tool failure emit accurate canonical gaps. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+  Integrated `677e7a7c`, priority hook `294a31c9`, review corrections `d523517e` and the State
+  commit. Main compiled/shared-scope selection: 175 passed/8.80 s, two workers, seed 5094,
+  no skips or slow cases. Reusable bounded omissions remain distinct from true producer
+  failures; a later bound cannot overwrite failure precedence for the same seed.
 
 ### T-5095 — Preserve full-mode control flow under presentation and AST filtering bounds
 
-- **State:** in-progress
+- **State:** done (2026-11-19, b098c02682352a487da5265ab1426c5b5d66bab0)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CPP-F05, K04, K05. IR block detail limit also erases CFG edges; K04 — High, full-mode IR drops flow.
 - **Scope:** `containers/tools/native-cpp/native.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`; paired callers/tests identified by those cases.
 - **Done when:** Full-mode IR retains flow and actual source locations; detail limits cannot erase CFG edges and function filtering reports coverage limits. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+  Shares the 175-case main verification with T-5094. The native helper is image-baked
+  (`containers/tools/native-cpp/Dockerfile` copies `native.py`): operator rebuild and verified
+  image identity/pin/release rollout remain required and were not performed. Source repair
+  and offline units are not a claim that the deployed image or live review is corrected.
 
 ### T-5096 — Retain accepted native link source and compile-directory context
 
-- **State:** in-progress
+- **State:** done (2026-11-19, b098c02682352a487da5265ab1426c5b5d66bab0)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: K01, K02, K03. K01 — High, links lost; K02 — High, valid sources removed.
 - **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`
 - **Done when:** Accepted link receipts resolve, legitimate nested build/target source paths survive, and generated includes and working directories rebase correctly. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_cpp_compiled_analysis.md`.
+  Shares the 175-case main verification with T-5094. Replay staging is restored only from
+  accepted immutable command bytes, and dropped individual link inputs retain explicit gaps.
+  Exact callable linkage and both accepted source/build working directories remain supported.
 
 ### T-5097 — Select header seeds and enforce actual include-read budgets
 
