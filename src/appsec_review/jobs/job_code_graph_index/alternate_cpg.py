@@ -26,6 +26,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 import hashlib
+import heapq
 import json
 from pathlib import Path
 import re
@@ -1716,6 +1717,17 @@ def synthesize_alternate_cpg(
                 if cid not in symref_targets[(cpath, cline, cname)]:
                     symref_targets[(cpath, cline, cname)].append(cid)
 
+    def source_guards(dominators: Sequence[Mapping[str, Any]]) -> dict[bytes, dict[str, Any]]:
+        result = {}
+        for dominator in dominators:
+            guard = dict(dominator)
+            block = nodes_by_id.get(str(guard["node_id"]), {})
+            native = (block.get("location") or {}).get("producer_location") or {}
+            if native.get("ast_identity"):
+                guard["node_id"] = native["ast_identity"]
+            result[canonical_json(guard)] = guard
+        return result
+
     for call_item in pending_ts_calls:
         caller_fn = call_item["caller_fn_id"]
         blk_id = call_item["block_id"]
@@ -1819,8 +1831,10 @@ def synthesize_alternate_cpg(
         sink_class = classify_syntactic_sink(raw_callee, clang)
         if sink_class and (cpath, cline, simple_callee) not in semantic_sink_locs:
             sink_id = _cpg_digest(
-                "cpg:sink", {"path": cpath, "line": cline, "class": sink_class, "name": raw_callee}
+                "cpg:sink", {"path": cpath, "line": cline, "class": sink_class, "name": raw_callee,
+                             "location": call_item.get("location")}
             )
+            common_guards = source_guards(doms)
             if sink_id not in nodes_by_id:
                 nodes_by_id[sink_id] = {
                     "schema": ALTERNATE_CPG_SCHEMA,
@@ -1837,7 +1851,7 @@ def synthesize_alternate_cpg(
                     "block_kind": None,
                     "guard_expression": None,
                     "guard_polarity": None,
-                    "guard_dominators": list(doms),
+                    "guard_dominators": [common_guards[key] for key in sorted(common_guards)],
                     "parameters": [],
                     "calls": [],
                     "defs": [],
@@ -1847,7 +1861,14 @@ def synthesize_alternate_cpg(
                     "sink_class": sink_class,
                     "resolution_tier": "syntactic_fallback",
                     "producers": ["tree_sitter"],
+                    "location": call_item.get("location"),
                 }
+            else:
+                # One source occurrence can execute in several finally contexts. Its
+                # aggregate guards must hold in every context, not merely one of them.
+                prior = {canonical_json(guard): guard for guard in nodes_by_id[sink_id]["guard_dominators"]}
+                nodes_by_id[sink_id]["guard_dominators"] = [
+                    prior[key] for key in sorted(prior.keys() & common_guards.keys())]
             _add_edge(
                 edge_kind="FN_TO_SINK",
                 source_id=caller_fn,
@@ -1858,6 +1879,8 @@ def synthesize_alternate_cpg(
                 line=cline,
                 callee_name=raw_callee,
                 guard_dominators=doms,
+                occurrence=call_item.get("occurrence") or blk_id,
+                location=call_item.get("location"),
             )
             if blk_id:
                 _add_edge(
@@ -1870,6 +1893,8 @@ def synthesize_alternate_cpg(
                     path=cpath,
                     line=cline,
                     guard_dominators=doms,
+                    occurrence=call_item.get("occurrence") or blk_id,
+                    location=call_item.get("location"),
                 )
 
     sorted_nodes = [nodes_by_id[nid] for nid in sorted(nodes_by_id)]
@@ -2173,9 +2198,12 @@ def compute_cpg_slice(
 
     nodes = {str(n["node_id"]): n for n in cpg.get("nodes", ()) if isinstance(n, Mapping)}
     norm_p = _safe_rel_path(path) if path else None
+    node_order = sorted(nodes, key=lambda nid: (
+        str(nodes[nid].get("path") or ""), int(nodes[nid].get("start_line") or 0), nid))
+    node_rank = {nid: rank for rank, nid in enumerate(node_order)}
 
     seeds: list[str] = []
-    for nid in sorted(nodes):
+    for nid in node_order:
         n = nodes[nid]
         if criterion_node_id is not None:
             if _match_node_query(n, criterion_node_id):
@@ -2249,51 +2277,67 @@ def compute_cpg_slice(
     distances: dict[str, int] = {}
     via_edge_kind: dict[str, str] = {}
     via_tier: dict[str, str] = {}
-    slice_edges: list[dict[str, Any]] = []
-    seen_edge_ids: set[str] = set()
-    queue: deque[tuple[str, int]] = deque()
+    observed_edges: dict[str, Mapping[str, Any]] = {}
     cuts: dict[str, int] = defaultdict(int)
     if len(seeds) > max_nodes:
         cuts["seed_limit"] = len(seeds) - max_nodes
-    seeds = sorted(seeds)[:max_nodes]
+    seeds = sorted(seeds, key=node_rank.__getitem__)[:max_nodes]
     for sid in seeds:
         distances[sid] = 0
         via_edge_kind[sid] = "criterion"
         via_tier[sid] = str(nodes[sid].get("resolution_tier") or "syntactic_fallback")
-        queue.append((sid, 0))
 
     inspected_edges = 0
-    while queue:
-        if check_deadline:
-            check_deadline()
-        curr, dist = queue.popleft()
-        if dist >= max_depth:
-            cuts["depth_limit"] += sum(
-                str(e["target_id"] if direction == "forward" else e["source_id"]) not in distances
-                for e in adj.get(curr, ()))
-            continue
-        for edge in adj.get(curr, ()):
+    frontier = list(seeds)
+    dist = 0
+    while frontier:
+        remaining = max_nodes - len(distances)
+        candidates: dict[str, Mapping[str, Any]] = {}
+        candidate_heap: list[tuple[int, str]] = []
+        # Complete a breadth layer before admitting its location-ordered prefix.
+        # The bounded heap keeps later pages from inserting earlier results.
+        for curr in frontier:
             if check_deadline:
                 check_deadline()
-            if inspected_edges >= MAX_TRAVERSAL_EDGES:
-                cuts["edge_work_limit"] += 1
-                break
-            inspected_edges += 1
-            neighbor = str(edge["target_id"] if direction == "forward" else edge["source_id"])
-            eid = str(edge.get("edge_id") or "")
-            if neighbor not in distances:
-                if len(distances) >= max_nodes:
-                    cuts["node_limit"] += 1
+            for edge in adj.get(curr, ()):
+                if check_deadline:
+                    check_deadline()
+                if inspected_edges >= MAX_TRAVERSAL_EDGES:
+                    cuts["edge_work_limit"] += 1
+                    break
+                inspected_edges += 1
+                neighbor = str(edge["target_id"] if direction == "forward" else edge["source_id"])
+                if dist >= max_depth:
+                    if neighbor not in distances:
+                        cuts["depth_limit"] += 1
                     continue
-                distances[neighbor] = dist + 1
-                via_edge_kind[neighbor] = str(edge.get("edge_kind") or "FLOWS_TO")
-                via_tier[neighbor] = str(edge.get("resolution_tier") or "syntactic_fallback")
-                queue.append((neighbor, dist + 1))
-            if not eid.startswith("bridge:") and eid not in seen_edge_ids:
-                seen_edge_ids.add(eid)
-                slice_edges.append(dict(edge))
+                eid = str(edge.get("edge_id") or "")
+                if not eid.startswith("bridge:"):
+                    observed_edges.setdefault(eid, edge)
+                if neighbor in distances or neighbor in candidates:
+                    continue
+                if not remaining:
+                    cuts["node_limit"] += 1
+                elif len(candidates) < remaining:
+                    candidates[neighbor] = edge
+                    heapq.heappush(candidate_heap, (-node_rank[neighbor], neighbor))
+                else:
+                    if node_rank[neighbor] < -candidate_heap[0][0]:
+                        _, omitted = heapq.heapreplace(candidate_heap, (-node_rank[neighbor], neighbor))
+                        del candidates[omitted]
+                        candidates[neighbor] = edge
+                    cuts["node_limit"] += 1
+            if cuts.get("edge_work_limit"):
+                break
+        frontier = sorted(candidates, key=node_rank.__getitem__)
+        for nid in frontier:
+            edge = candidates[nid]
+            distances[nid] = dist + 1
+            via_edge_kind[nid] = str(edge.get("edge_kind") or "FLOWS_TO")
+            via_tier[nid] = str(edge.get("resolution_tier") or "syntactic_fallback")
         if cuts.get("edge_work_limit"):
             break
+        dist += 1
 
     ordered_ids = sorted(
         distances,
@@ -2329,9 +2373,10 @@ def compute_cpg_slice(
 
     return {
         "direction": direction,
-        "criterion_ids": sorted(seeds),
+        "criterion_ids": seeds,
         "nodes": slice_nodes,
-        "edges": slice_edges,
+        "edges": [dict(edge) for edge in observed_edges.values()
+                  if str(edge["source_id"]) in distances and str(edge["target_id"]) in distances],
         "guard_dominators": doms_out,
         "resolution_tiers": sorted(tiers_seen),
         "truncated": any(cuts.values()),

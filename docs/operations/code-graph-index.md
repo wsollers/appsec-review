@@ -96,6 +96,11 @@ primary graph's admissibility rules (T-5098/T-5099).
   keeps its own location and guards; a caller/callee pair alone never merges two branch conditions.
   Original producer, coverage, cross-check and admissibility qualifiers survive projection and
   SQLite round-tripping. A resolution tier alone never makes a disputed edge exact.
+- A syntactic sink in `finally` can execute in several CFG contexts at one source occurrence.
+  Each `FN_TO_SINK` edge retains its context identity and guards, so guarded and unguarded paths
+  remain distinct. The shared sink exposes only guards common to every context, joined by their
+  original guard AST identity when available; these source-level guard anchors are not an
+  arbitrary context's CFG node.
 - Flat SARIF steps are grouped by flow/thread and ordered by ordinal. Unmapped steps break the
   projected chain rather than introducing a flow across missing evidence.
 - Source hashes come only from accepted source locations/catalog rows. Original bytes, coordinates
@@ -114,6 +119,11 @@ primary graph's admissibility rules (T-5098/T-5099).
   independent of configured path/hop limits. Slice seeds obey the node bound; reaching depth,
   node, path or work bounds records cut metadata and named gaps. Counts describe unexamined
   branches, not a claimed count of all omitted complete paths.
+- Slice admission follows breadth distance, path, source line and node identity before applying
+  the node cap. A bounded candidate heap completes each breadth layer before admitting its
+  ordered prefix. Growing a cursor's budget therefore extends the same result order, including
+  traversal-discovered nodes, without duplicating or losing earlier rows. Existing node, frontier,
+  edge-work and response caps remain unchanged.
 
 The summary records synthesis cuts and publication gaps. Query adapters retain the most restrictive
 saved `max_slice_depth` when composing accepted shards, check the query deadline during loading and

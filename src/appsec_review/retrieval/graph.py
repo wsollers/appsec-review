@@ -577,6 +577,7 @@ def query_cpg_slice(
             direction=direction,
             max_depth=max_depth,
             edge_kinds=kinds_tuple,
+            # Admission remains a stable breadth/location prefix as cursor budgets grow.
             max_nodes=min(max(offset + limit + 1, 100), MAX_PATH_STATES),
             check_deadline=lambda: core._check_deadline(deadline),
         )

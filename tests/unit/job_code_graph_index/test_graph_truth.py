@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections import Counter
 from dataclasses import asdict, replace
 import hashlib
 import json
@@ -540,3 +541,100 @@ def test_legacy_alternate_shard_reads_do_not_infer_exactness(tmp_path):
     assert all(not hop["exact"] and not hop["evidence"] for hop in paths["results"][0]["hops"])
     sliced = core.query_cpg_slice(function_name="a", direction="forward", max_depth=2)
     assert {node["name"] for node in sliced["results"]} == {"a", "b", "c"}
+
+
+@pytest.mark.parametrize("outer_guard", [False, True], ids=["cleanup-guard", "outer-and-cleanup-guard"])
+def test_finally_sink_contexts_survive_normalization_publication_and_paths(tmp_path, outer_guard):
+    from tests.unit.job_tree_sitter_ast.test_cfg_control import (
+        block, branch, call, function, node, normalize_tree, try_finally,
+    )
+
+    cleanup = node("if_statement", node("identifier", text="valid", field="condition"),
+                   block(call("eval"), field="consequence"))
+    protected = try_finally(branch(node("return_statement", text="return 1"), call("normal")), cleanup)
+    if outer_guard:
+        protected = node("if_statement", node("identifier", text="enabled", field="condition"),
+                         block(protected, field="consequence"))
+    _, identity, _ = normalize_tree(tmp_path, function(protected, call("after")))
+    with sqlite3.connect(tmp_path / "index.sqlite") as db:
+        raw = next(json.loads(row[0]) for row in db.execute("SELECT payload_json FROM entities")
+                   if "cfg_nodes" in json.loads(row[0]))
+    summary = raw["cfg"]
+    contexts = [record for record in raw["cfg_nodes"] if "eval" in record["calls"]]
+    assert len(contexts) > 1 and len({record["ast_identity"] for record in contexts}) == 1
+    assert any("cfg_ast_context_projection" in gap for gap in identity.gaps)
+
+    def profile(guards):
+        return frozenset((guard["guard_expression"], guard.get("branch_arm", guard.get("branch")),
+                          guard["guard_polarity"]) for guard in guards)
+
+    expected = Counter(profile(record["guard_dominators"]) for record in contexts)
+    assert any(any(expression == "flag" for expression, _, _ in guards) for guards in expected)
+    assert any(all(expression != "flag" for expression, _, _ in guards) for guards in expected)
+    common = set.intersection(*(set(guards) for guards in expected))
+    assert any(expression == "valid" for expression, _, _ in common)
+    if outer_guard:
+        assert any(expression == "enabled" for expression, _, _ in common)
+    cpg = alt.synthesize_alternate_cpg(
+        tree_sitter_files=[{
+            "path": summary["path"], "language": summary["language"],
+            "functions": [{"function_id": summary["function_id"], "name": summary["function_name"],
+                           "qualified_name": summary["qualified_name"],
+                           "start_line": summary["start_line"], "end_line": summary["end_line"],
+                           "parameters": summary["parameters"], "location": alt._cfg_location(summary, "snap")}],
+            "cfg_nodes": raw["cfg_nodes"], "cfg_edges": raw["cfg_edges"],
+        }], target_snapshot="snap",
+    )
+    _, published = _publish(tmp_path, cpg, file_shas={summary["path"]: summary["file_sha256"]})
+    with sqlite3.connect(tmp_path / published.relative_path) as db:
+        db.row_factory = sqlite3.Row
+        loaded = alt.load_cpg_from_sqlite(db)
+    for graph in (cpg, loaded):
+        [sink] = [record for record in graph["nodes"] if record["node_kind"] == "sink" and record["name"] == "eval"]
+        invocations = [edge for edge in graph["edges"] if edge["edge_kind"] == "FN_TO_SINK"
+                       and edge["target_id"] == sink["node_id"]]
+        assert len(invocations) == len(contexts)
+        assert len({edge["occurrence"] for edge in invocations}) == len(contexts)
+        assert Counter(profile(edge["guard_dominators"]) for edge in invocations) == expected
+        assert profile(sink["guard_dominators"]) == common
+        paths = alt.find_interprocedural_paths(graph, source="f", sink="eval")
+        assert Counter(profile(path["guard_dominators"]) for path in paths) == expected
+
+
+@pytest.mark.parametrize("expanded", [False, True], ids=["101-seeds", "expanded-frontier"])
+@pytest.mark.parametrize("direction", ["forward", "backward"])
+def test_public_slice_cursors_preserve_the_entire_admitted_order(tmp_path, expanded, direction):
+    count = 132 if expanded else 101
+    cpg = alt.synthesize_alternate_cpg(symbol_declarations=_functions(*(f"f{i}" for i in range(count))))
+    nodes = sorted(cpg["nodes"], key=lambda record: record["start_line"])
+    for index, record in enumerate(nodes):
+        record.update(node_id=f"node-{index:03}", path="children.py" if expanded and index >= 2 else "seeds.py",
+                      start_line=count - index, end_line=count - index)
+        record["function_id"] = record["node_id"]
+    if expanded:
+        cpg["edges"] = [
+            {"edge_id": f"edge-{index}", "edge_kind": "CALLS", "source_id": nodes[0 if index < 67 else 1]["node_id"],
+             "target_id": nodes[index]["node_id"], "resolution_tier": "syntactic_fallback"}
+            for index in range(2, count)
+        ]
+        if direction == "backward":
+            for edge in cpg["edges"]:
+                edge["source_id"], edge["target_id"] = edge["target_id"], edge["source_id"]
+    core = _query_core(tmp_path, cpg)
+    ordered = sorted(nodes, key=lambda record: (
+        int(expanded and record["path"] == "children.py"), record["path"], record["start_line"], record["node_id"]))
+    expected = [record["node_id"] for record in ordered]
+    cursor = None
+    seen = []
+    for _ in range(count + 1):
+        response = core.query_cpg_slice(path="seeds.py", direction=direction, limit=50, cursor=cursor)
+        page = [record["node_id"] for record in response["results"]]
+        assert page
+        seen.extend(page)
+        assert seen == expected[:len(seen)]
+        cursor = response["pagination"]["next_cursor"]
+        if cursor is None:
+            break
+    assert cursor is None
+    assert len(seen) == len(set(seen)) == count
+    assert seen == expected
