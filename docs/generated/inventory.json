@@ -20327,6 +20327,8 @@
         "integration": [],
         "live": [],
         "unit": [
+          "tests/unit/reporting/test_sarif_projection.py",
+          "tests/unit/reporting/test_sarif_export.py",
           "tests/unit/job_final_report_publication/test_report_outcomes.py",
           "tests/test_final_report.py::test_schemas_are_valid_draft_2020_12_with_the_final_report_id",
           "tests/unit/job_final_report_publication/test_contract_and_settings.py",
@@ -46483,7 +46485,7 @@
     "src/appsec_review/jobs/job_final_report_publication/pdf.py": "12d40a8107696b8d0ade2a0c93bf4f250e4134bbba39c873ef3fbe7e6432fd42",
     "src/appsec_review/jobs/job_final_report_publication/render.py": "bce05f30d22653df5ffffba7106484d9785aafb5af414d1990087b4d2fb06ef8",
     "src/appsec_review/jobs/job_final_report_publication/report.py": "81eae8ad02b0f15d2c4f2b1119c57c57a01e1c3fa97c95065b988158c4f8b173",
-    "src/appsec_review/jobs/job_final_report_publication/sarif.py": "dfe4d2f222c8becc147913667f6beaf316d656d49257e071945d8b5acddeaef3",
+    "src/appsec_review/jobs/job_final_report_publication/sarif.py": "bf06688eae093681116fd765e425e5c2877a7a042d1bd4c949c75716420c00c1",
     "src/appsec_review/jobs/job_final_report_publication/settings.py": "fa8675f291bcc0232607accfa5ad9fe27c9b9ef32b7e82cc208fa6f9e74eec33",
     "src/appsec_review/jobs/job_image_pin_verification/__init__.py": "e3bc474a66954c0e9699a7accf8e02c1ac505c2caecd7bf92781c7929831a1cf",
     "src/appsec_review/jobs/job_image_pin_verification/datasets.py": "961604188bfbf94bf7993fa596dd6e8fcb52af76fb39fd78943d449f4d989fe8",
@@ -46796,9 +46798,9 @@
     "src/appsec_review/reporting/latex.py": "5eaeac27796393866bfbd6bbafd9da16506506df62bb822b0eeb7c3cca1a2e7d",
     "src/appsec_review/reporting/loader.py": "a4f9657785d10538a173caa5b4ffa5520dab66a21eaddc60cae6958108a3b0e6",
     "src/appsec_review/reporting/model.py": "3cb96caf0ad11118ba621ed538222ef525bd69ec81e7d06e8d3eb4f6d79f824b",
-    "src/appsec_review/reporting/sarif.py": "0f77f3c1c558eaa07eadbf3c4c4481eead506878052fdc981a2b717e9e7d0e4a",
+    "src/appsec_review/reporting/sarif.py": "a18bce8b77fd132926ba4c0b19dcb63d7c3b784124937af0750196516269dabf",
     "src/appsec_review/reporting/sarif_contracts.py": "11dc15c92dad1d1e1720ef76e020e4f1ec6a8bf9da8e8083c078525bc229f60b",
-    "src/appsec_review/reporting/sarif_export.py": "36d2c585ca9cfc62b31cb88e6bb4c19b8baf838363da4280f26d4612a078f00a",
+    "src/appsec_review/reporting/sarif_export.py": "68715862b8d4d88330bd7e33d9d81b5b0edd5b89609a7c7afd026d4762af8b78",
     "src/appsec_review/reporting/smoke_score.py": "afa9a9391f9baee175e3406c84b58d1dedcd18d9c276b5ea88db0232e04f8949",
     "src/appsec_review/reporting/smoke_scorecard.py": "d5a970f0b99b69163d6b4678ead2aa543e3c60676835fec58f5b39e6df2c72f8",
     "src/appsec_review/reporting/sources.py": "2d638068708635b928748766f1c2adea0c058d683f7a8f88f9ed9694378d9bce",
@@ -46999,7 +47001,7 @@
     "src/appsec_review/threat_model/view.py": "e9d3366c2ef2fe6d4fe03d25485fe4461b6f2fa9be6145d1113efb728b234368",
     "src/appsec_review/tool_inputs.py": "0dbd7fcf731c377d078bc076282bc9b3c72a732541e2adbbd6086ef29507e2da",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "570a2255b7508152d491eda6ece45a53b3928c86b96cae12ff5084b1def32068"
+    "tests/job-test-map.json": "32d785cf017d86126541bfb1eb5583356449eb28ececa876d9fcb7d50653d455"
   },
   "tool_policy": {
     "disable_grype": true,

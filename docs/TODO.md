@@ -369,7 +369,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5135 | [Read retained corroboration payloads rather than stripped control fields](#t-5135-read-retained-corroboration-payloads-rather-than-stripped-control-fields) | review | open |
 | T-5136 | [Bind every verified unit context into the durable publication snapshot](#t-5136-bind-every-verified-unit-context-into-the-durable-publication-snapshot) | evidence | open |
 | T-5137 | [Reject contradictory certified buckets and counts](#t-5137-reject-contradictory-certified-buckets-and-counts) | evidence | open |
-| T-5138 | [Export only evidence-backed SARIF flows fixes classifications and severity](#t-5138-export-only-evidence-backed-sarif-flows-fixes-classifications-and-severity) | review | open |
+| T-5138 | [Export only evidence-backed SARIF flows fixes classifications and severity](#t-5138-export-only-evidence-backed-sarif-flows-fixes-classifications-and-severity) | review | done (2026-11-19, 9586762a38875517b0ab20652839d99581dee20f) |
 | T-5139 | [Carry certified reachable supply-chain facts into the report](#t-5139-carry-certified-reachable-supply-chain-facts-into-the-report) | review | done (2026-11-19, e80e099908d74e4f1fca7714c8bcd99e7dce76ce) |
 | T-5140 | [Conserve report bounds completion metrics and renderer outcomes](#t-5140-conserve-report-bounds-completion-metrics-and-renderer-outcomes) | review | done (2026-11-19, e80e099908d74e4f1fca7714c8bcd99e7dce76ce) |
 | T-5141 | [Update only active required image pins by default](#t-5141-update-only-active-required-image-pins-by-default) | images | open |
@@ -4539,11 +4539,19 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5138 — Export only evidence-backed SARIF flows fixes classifications and severity
 
-- **State:** open
+- **State:** done (2026-11-19, 9586762a38875517b0ab20652839d99581dee20f)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: FR-F05, FR-F06, FR-F07. The wired SARIF exporter silently drops every trace and validated fix; Unclassified SARIF findings are invented as authentication/OWASP A07 findings.
-- **Scope:** `src/appsec_review/jobs/job_final_report_publication/sarif.py`
+- **Scope:** `src/appsec_review/jobs/job_final_report_publication/sarif.py`,
+  `src/appsec_review/reporting/sarif.py`, `src/appsec_review/reporting/sarif_export.py`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 60 passed/5.04 s, two workers, seed 9138, no skips or cases over 10 s; independent
+  review found no significant issue. Bound qualified exact edits retain byte offsets and
+  assurance, including multibyte and new-file changes; redacted or altered edits are omitted.
+  Unknown taxonomy stays unclassified, and rule severity cannot depend on the first finding.
+  Current producers provide no admitted ordered trace, so export names that omission rather
+  than synthesizing one. This does not claim live PoC verification or resolved findings.
+  Integration, acceptance, live validation and external SARIF upload were not run.
 - **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
 
 ### T-5139 — Carry certified reachable supply-chain facts into the report

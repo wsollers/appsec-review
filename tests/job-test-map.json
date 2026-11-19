@@ -350,6 +350,8 @@
     },
     "job_final_report_publication": {
       "unit": [
+        "tests/unit/reporting/test_sarif_projection.py",
+        "tests/unit/reporting/test_sarif_export.py",
         "tests/unit/job_final_report_publication/test_report_outcomes.py",
         "tests/test_final_report.py::test_schemas_are_valid_draft_2020_12_with_the_final_report_id",
         "tests/unit/job_final_report_publication/test_contract_and_settings.py",

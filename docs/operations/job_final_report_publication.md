@@ -63,7 +63,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | `tests/test_final_report.py::test_report_json_is_schema_valid_and_contains_the_required_sections` |
 | integration | None declared |
 | live | None declared |
-| unit | `tests/unit/job_final_report_publication/test_report_outcomes.py`<br>`tests/test_final_report.py::test_schemas_are_valid_draft_2020_12_with_the_final_report_id`<br>`tests/unit/job_final_report_publication/test_contract_and_settings.py`<br>`tests/unit/job_final_report_publication/test_job_units.py`<br>`tests/unit/job_final_report_publication/test_report_and_render.py`<br>`tests/unit/job_final_report_publication/test_report_custody.py` |
+| unit | `tests/unit/reporting/test_sarif_projection.py`<br>`tests/unit/reporting/test_sarif_export.py`<br>`tests/unit/job_final_report_publication/test_report_outcomes.py`<br>`tests/test_final_report.py::test_schemas_are_valid_draft_2020_12_with_the_final_report_id`<br>`tests/unit/job_final_report_publication/test_contract_and_settings.py`<br>`tests/unit/job_final_report_publication/test_job_units.py`<br>`tests/unit/job_final_report_publication/test_report_and_render.py`<br>`tests/unit/job_final_report_publication/test_report_custody.py` |
 
 ### Dagster placement
 
