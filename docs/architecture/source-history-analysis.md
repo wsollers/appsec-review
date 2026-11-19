@@ -224,6 +224,11 @@ stored. Rate limiting is a retriable
 permission errors are named gaps. Enrichment runs in the application process over HTTPS, like NVD
 sync, not in the network-disabled Git container. Redirects are refused.
 
+Failure to fetch an optional PR-head timestamp is contained as a retriable
+`github_head_commit_unavailable` gap. That PR remains indeterminate (never a clean review/bypass
+claim); the known PR identity and labels survive, other commits continue, and local Git signals
+remain publishable with partial coverage.
+
 ## Change-log history
 
 A target is not always delivered with version-control history: a source drop, a tarball, a shallow
@@ -319,7 +324,8 @@ Change-log numbers are never commit-derived and are never added to a Git count:
   `history_window_truncated` or `history_not_of_snapshot`, the change log is a `supplement`: Git is
   authoritative. Without a Git ranking, or with one of those gaps, the change log is `primary`:
   the Git signals that exist are still published and the change-log list is the one to order
-  review by.
+  review by. An explicitly empty Git file ranking (for example, all changes were formatting-only)
+  is not a ranking merely because its signals artifact exists.
 - The signals are weaker and say so (`authority`, `semantics`): dates are author-stated, file
   lists may be partial, an entry is not bound to content by any hash, and there is no line count,
   author count or SII.
@@ -370,6 +376,14 @@ clamped to the child's time, and the count is recorded as a `timestamp_anomaly` 
 Commits are walked newest first. Renames are followed backward, so churn on `app/util.py` before a
 rename counts toward the current `app/helpers.py`. A shallow boundary inside the window is
 `shallow_history`. Reaching `max_changes` before the window start is `history_window_truncated`.
+The extra acquired commit detects that bound and delimits the last retained message; it is not
+classified or counted as retained history. `changes.json` carries its identity separately as
+`message_boundary_commit`, while `walked_commits` stays capped. A missing expected delimiter is
+`message_stream_misaligned`, not permission to append another commit's message.
+
+Rename aliases are rewound together at each commit, removing the destination alias before following
+the old path. An earlier, unrelated occupant of a reused destination name cannot contribute churn
+to the current file, and same-commit rename chains do not depend on numstat ordering.
 
 ### Revision semantics
 
@@ -696,12 +710,34 @@ Outputs keep identity exposure low:
 
 ### Hotspot index
 
-`hotspots.json` (`appsec-review/history-hotspots/1`) is immutable and run-owned. It is hash-pinned
-by the accepted document. Each source contributes the top `hotspot_count` (N, default 10) ranked
-files and the top N ranked symbols of its M-month window. Multi-source output aggregates these
-source-local entries, not a single globally normalized ranking; the selected window, revision,
-and ranking population remain in each referenced source artifact. Its JSON schema is
-[`../schemas/history-hotspots.schema.json`](../schemas/history-hotspots.schema.json). Each entry
+`hotspots.json` (`appsec-review/history-hotspots/2`) is immutable and run-owned. It is hash-pinned
+by the accepted document. Fixed mode preserves the top `hotspot_count` (N, default 10, maximum 100)
+ranked files and top N ranked symbols per source. Opt-in proportional mode computes independent
+file and symbol caps as `min(max(min_hotspots, ceil(proportional_ratio * population)), max_hotspots)`,
+using defaults 50 and 2000 for omitted bounds. Explicit bounds may be at most 10000.
+File selection in proportional mode preserves component representation before filling the cap in
+global SII order; symbol selection uses SII order. Neither mode changes the underlying rankings.
+
+The closed `selection` object separates:
+
+- `mode` and `configured`: the configured fixed cap, ratio, and optional bounds (omitted bounds
+  remain `null`, not invented configuration);
+- `effective_caps`: the actual cap for each source-local `file` and `symbol` population; and
+- `selected_counts`: the actual number selected from each population. An empty population has
+  zero selections even when its effective cap is positive.
+
+Single-source artifacts have `scope: source`. Multi-source artifacts have `scope: per-source`;
+their selection records aggregate actual counts, not a fictitious shared effective cap.
+`sources[]` retains each source's selection metadata and pinned artifact. The final history
+document projects these exact selections; when no ranking artifact exists, its hotspot selection
+is `null`, distinct from a measured empty selection. The selected window, revision and ranking
+population remain source-local.
+
+The schema is [`../schemas/history-hotspots-v2.schema.json`](../schemas/history-hotspots-v2.schema.json).
+Legacy `/1` indexes remain readable, and
+[`../schemas/history-hotspots.schema.json`](../schemas/history-hotspots.schema.json) retains its
+original fixed bounds; proportional outputs are not relabelled `/1` or silently clipped.
+Each entry
 (`appsec-review/history-hotspot/1`) has:
 
 | Field | Content |
@@ -762,7 +798,7 @@ Coverage rows are:
 
 The shard is composed into the accepted manifest and is queryable through `find`, `search`, `trace`,
 and `coverage`. For example, `find(kind="hotspot", indexes=["history"])` queries the source-local
-hotspots; each source contributes at most 2N entries.
+hotspots; each source contributes at most its file cap plus its symbol cap.
 
 ## Consumers
 
@@ -794,6 +830,10 @@ All values below are the defaults in `appsec-review.toml`. `settings.py` parses 
 [jobs.job_source_history_analysis.settings]
 history_window_months = 6        # M, 1-120
 hotspot_count = 10               # N, 1-100
+# Optional proportional mode; omitted by default:
+# proportional_ratio = 0.10      # 0 < ratio <= 1
+# min_hotspots = 50              # 1-10000; default 50 in proportional mode
+# max_hotspots = 2000            # 1-10000; default 2000 in proportional mode
 max_changes = 20000
 bulk_change_file_threshold = 500
 recency_half_life_days = 90

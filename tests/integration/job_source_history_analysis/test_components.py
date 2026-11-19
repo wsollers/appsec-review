@@ -154,7 +154,7 @@ def test_composed_acquisition_history_and_change_context_keep_sources_separate(t
     hotspots = load_accepted_hotspots(run_root)
     assert {item["source"]["source_path"] for item in hotspots["entries"]} >= {"src/shared.py"}
     from jsonschema import validate
-    schema = json.loads((ROOT / "docs" / "schemas" / "history-hotspots.schema.json").read_text())
+    schema = json.loads((ROOT / "docs" / "schemas" / "history-hotspots-v2.schema.json").read_text())
     validate({key: value for key, value in hotspots.items() if key != "handoff_sha256"}, schema)
     manifest = read(run_root, context["publish.index_change_context"]["manifest"])
     assert len([item for item in manifest["indexes"] if item["name"] == "history"]) == 8

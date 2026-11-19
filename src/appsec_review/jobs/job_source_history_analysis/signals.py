@@ -22,7 +22,7 @@ from .window import window_start as calendar_window_start
 
 
 RULES_IDENTITY = "appsec-review/history-change-rules/2"
-NORMALIZER_IDENTITY = "appsec-review/history-normalizer/2"
+NORMALIZER_IDENTITY = "appsec-review/history-normalizer/3"
 DAY = 86_400
 MAX_MESSAGE_BYTES = 65_536
 _REVERT_TRAILER = re.compile(r"This reverts commit ([0-9a-f]{40}|[0-9a-f]{64})")
@@ -70,12 +70,17 @@ def normalize(commits: list[Mapping[str, Any]], *, current_paths: Iterable[str],
         author = str(commit["author_key"])
         ordinal = authors.setdefault(author, len(authors) + 1)
         files = []
+        renames = {}
         for entry in commit["files"]:
             current = alias.get(entry["path"])
-            if entry.get("renamed_from"):
-                if current is not None:
-                    alias[entry["renamed_from"]] = current
+            if entry.get("renamed_from") and current is not None:
+                renames[entry["renamed_from"]] = current
             files.append({**entry, "current_path": current})
+        # All entries describe one post-commit tree; rewind aliases together, not in numstat order.
+        for entry in commit["files"]:
+            if entry.get("renamed_from"):
+                alias.pop(entry["path"], None)
+        alias.update(renames)
         in_window = effective >= window_start
         if not in_window:
             reached_window_start = True

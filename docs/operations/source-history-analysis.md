@@ -393,9 +393,12 @@ visible through incomplete-accounting fields.
 - For composed/multi-source output, `sources.repositories[]` lists source descriptors, decisions,
   and hash-pinned source-document references; `ranking.scope = "per-source"`. Read those referenced
   documents for each source's binding, window, revision semantics, and detailed ranking rather than
-  assuming one global window or snapshot commit. The aggregate `hotspots.json` retains schema
-  `appsec-review/history-hotspots/1`, with `selection = "top entries per source"` and
-  `sources[].artifact` references to the source-local hotspot indexes.
+  assuming one global window or snapshot commit. Newly produced aggregate `hotspots.json` uses
+  `appsec-review/history-hotspots/2`, with `scope = "per-source"`, configured selection policy and
+  aggregate actual `selection.selected_counts`. Read `sources[].selection.effective_caps` and
+  `sources[].selection.selected_counts` for each source's file/symbol caps and actual counts;
+  `sources[].artifact` pins the source-local index. Empty populations select zero, not their cap.
+  Legacy `/1` indexes remain readable under their unchanged fixed-count schema.
 - Source-scoped `history` retrieval shards hold file, component, and symbol `history_signal`
   entities, `change` entities, `hotspot` entities, and their coverage rows. All accepted source
   shards are composed into the run's manifest.

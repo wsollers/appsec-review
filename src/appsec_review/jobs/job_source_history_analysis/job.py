@@ -52,7 +52,8 @@ from appsec_review.jobs.job_source_history_analysis.datasets import CONTRACT, DA
 
 
 SCHEMA = "appsec-review/source-history-analysis/2"
-HOTSPOT_SCHEMA = "appsec-review/history-hotspots/1"
+HOTSPOT_SCHEMA = "appsec-review/history-hotspots/2"
+LEGACY_HOTSPOT_SCHEMA = "appsec-review/history-hotspots/1"
 HOTSPOT_ENTRY_SCHEMA = "appsec-review/history-hotspot/1"
 TREE_SITTER_TOOL = "tool-tree-sitter"
 AUTHORITY = "history signals and hotspot scores prioritize review; they are never vulnerability evidence"
@@ -247,13 +248,29 @@ def load_accepted_hotspots(run_root: Path) -> Mapping[str, Any] | None:
                 "reason": history["sources"].get("git", {}).get("reason", "no_bound_history"),
                 "entries": [], "handoff_sha256": history["handoff_sha256"]}
     document = _read(Path(run_root), identity)
-    if document.get("schema") != HOTSPOT_SCHEMA or document.get("target_snapshot") != history["target_snapshot"]:
+    if (document.get("schema") not in {LEGACY_HOTSPOT_SCHEMA, HOTSPOT_SCHEMA}
+            or document.get("target_snapshot") != history["target_snapshot"]):
         raise ValueError("accepted hotspot index identity is unsupported or stale")
     return {**document, "handoff_sha256": history["handoff_sha256"]}
 
 
 def _settings(context) -> HistorySettings:
     return parse_settings(context.config.settings)
+
+
+def _hotspot_policy(settings: HistorySettings) -> dict[str, Any]:
+    return {
+        "mode": "fixed" if settings.proportional_ratio is None else "proportional",
+        "configured": {key: getattr(settings, key) for key in (
+            "hotspot_count", "proportional_ratio", "min_hotspots", "max_hotspots")},
+    }
+
+
+def _hotspot_counts(entries: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    counts = {"file": 0, "symbol": 0}
+    for entry in entries:
+        counts[entry["scope"]] += 1
+    return counts
 
 
 def _run_history_identity(target_root: Path | None, run_root: Path) -> str:
@@ -680,6 +697,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                     "source": lane_source(unit),
                     "window": WINDOW_IDENTITY, "anchor_time": normalized["anchor_time"],
                     "window_start": normalized.get("window_start"), "walked_commits": walked,
+                    "message_boundary_commit": (str(commits[settings.max_changes]["commit"])
+                                                if len(commits) > settings.max_changes else None),
                     "changes": normalized["changes"]}
         return {"artifact": _write(unit, "changes.json", document), "change_count": len(normalized["changes"]),
                 "walked_change_count": normalized["walked_change_count"], "anchor_time": normalized["anchor_time"],
@@ -731,7 +750,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         changes = _read(unit.job.run_root, normalized["artifact"])
         with _verified_stream(unit.job.run_root, unit.output("acquire.git_history")["raw_messages"]) as stream:
             messages, gaps, oversized = parse_messages_stream(
-                stream, changes["walked_commits"], max_message_bytes=_limits(unit).max_message_bytes)
+                stream, changes["walked_commits"], max_message_bytes=_limits(unit).max_message_bytes,
+                boundary_commit=changes.get("message_boundary_commit"))
         classes = history_signals.classify(
             changes["changes"], messages, github_facts(unit), known_commits=changes["walked_commits"],
             fix_labels=settings.fix_labels, security_labels=settings.security_labels,
@@ -1388,8 +1408,10 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         entries += [entry("symbol", item["key"], symbols[item["key"]], symbol_scores)
                     for item in symbol_scores["ranked"][:symbol_top_n]]
         hotspots = {"schema": HOTSPOT_SCHEMA, "target_snapshot": unit.job.source_fingerprint, "snapshot": snapshot,
-                    "sii": sii_metadata, "window": window, "hotspot_count": top_n,
-                    "selection": "top hotspot_count ranked files and top hotspot_count ranked symbols",
+                    "scope": "source", "sii": sii_metadata, "window": window,
+                    "selection": {**_hotspot_policy(settings),
+                                  "effective_caps": {"file": top_n, "symbol": symbol_top_n},
+                                  "selected_counts": _hotspot_counts(entries)},
                     "revision_semantics": REVISION_SEMANTICS, "authority": AUTHORITY,
                     "populations": {"file": metadata(file_scores), "symbol": metadata(symbol_scores)},
                     "exclusions": computed.get("rank_exclusions", {}), "unavailable_signals": unavailable,
@@ -1583,7 +1605,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         normalized = unit.output("acquire.normalize_changes")
         decision = git["decision"] if git["decision"] != "SUCCEEDED" or not gaps else "SUCCEEDED"
         changelog = changelog_section(
-            unit.job.run_root, unit.outputs.get(CHANGELOG_UNIT), git_ranked="artifact" in ranked, git_gaps=gaps,
+            unit.job.run_root, unit.outputs.get(CHANGELOG_UNIT),
+            git_ranked=bool(signals_doc.get("file_ranking")), git_gaps=gaps,
             source_id=lane_source(unit).get("source_id", "."), top_n=settings.ranking_top_n)
         document = {
             "schema": SCHEMA, "target_snapshot": unit.job.source_fingerprint, "history_identity": resolved["identity"],
@@ -1600,7 +1623,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
             "ranking": {"identity": SII_IDENTITY, "weights": dict(settings.sii.weights),
                         "complexity_metric": settings.sii.complexity_metric,
                         "files": file_ranking, "components": component_ranking, "signals": ranked.get("artifact")},
-            "hotspots": {"schema": HOTSPOT_SCHEMA, "hotspot_count": settings.hotspot_count,
+            "hotspots": {"schema": hotspots_doc["schema"] if hotspots_doc else HOTSPOT_SCHEMA,
+                         "selection": hotspots_doc["selection"] if hotspots_doc else None,
                          "artifact": ranked.get("hotspots"),
                          "entries": [{key: item[key] for key in ("scope", "rank", "tier", "score")} |
                                      {"path": item["identity"]["path"], "symbol_id": item["identity"]["symbol_id"]}
@@ -1633,9 +1657,11 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         entries = [entry for value in documents.values() if value["hotspots"]["artifact"]
                    for entry in _read(unit.job.run_root, value["hotspots"]["artifact"])["entries"]]
         hotspots = {"schema": HOTSPOT_SCHEMA, "target_snapshot": unit.job.source_fingerprint,
-                    "hotspot_count": settings.hotspot_count, "selection": "top entries per source",
+                    "scope": "per-source",
+                    "selection": {**_hotspot_policy(settings), "selected_counts": _hotspot_counts(entries)},
                     "entries": entries, "authority": AUTHORITY,
-                    "sources": [{"source_id": key, "artifact": value["hotspots"]["artifact"]}
+                    "sources": [{"source_id": key, "artifact": value["hotspots"]["artifact"],
+                                 "selection": value["hotspots"]["selection"]}
                                 for key, value in documents.items() if value["hotspots"]["artifact"]]}
         manifest = unit.output("publish.index_history")["manifest"]
         document = {
@@ -1651,7 +1677,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
                                   for item in value["ranking"]["files"]],
                         "components": [{**item, "source_id": key} for key, value in documents.items()
                                        for item in value["ranking"]["components"]]},
-            "hotspots": {"schema": HOTSPOT_SCHEMA, "artifact": _write(unit, "hotspots.json", hotspots)},
+            "hotspots": {"schema": HOTSPOT_SCHEMA, "artifact": _write(unit, "hotspots.json", hotspots),
+                         "selection": hotspots["selection"], "sources": hotspots["sources"]},
             "changelog": {"source": history_changelog.SOURCE, "identity": history_changelog.IDENTITY,
                           "scope": "per-source", "role": None, "reason": None,
                           "authority": history_changelog.AUTHORITY, "semantics": history_changelog.SEMANTICS,

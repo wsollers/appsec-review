@@ -66,6 +66,17 @@ def test_messages_reject_misalignment(raw):
         {}, ["message_stream_misaligned"], [])
 
 
+@pytest.mark.parametrize("boundary_present", [False, True], ids=["missing", "present"])
+def test_messages_require_known_boundary_without_consuming_its_body(boundary_present):
+    raw = HEAD.encode() + b"\0refactor\0"
+    if boundary_present:
+        raw += PARENT.encode() + b"\0" + b"fix security " * 100
+    result = git.parse_messages_stream(
+        io.BytesIO(raw), [HEAD], max_message_bytes=8, boundary_commit=PARENT)
+    assert result == (({HEAD: b"refactor"}, [], []) if boundary_present else
+                      ({}, ["message_stream_misaligned"], []))
+
+
 def test_tree_and_blame_parsers():
     assert git.parse_tree(f"100644 blob {HEAD}\tx.py\0".encode()) == {
         "x.py": {"mode": "100644", "type": "blob", "oid": HEAD}}

@@ -253,6 +253,69 @@ def test_normalize_handler_names_record_bound(tmp_path):
     assert result["resource_limit"]["partial_output"] == "rejected"
 
 
+def test_classification_stops_at_acquired_history_boundary(tmp_path):
+    unit = baseline(context(tmp_path, "acquire.normalize_changes", overrides={"max_changes": 1}))
+    acquired = unit.outputs["acquire.git_history"]
+    acquired["raw_log"] = artifact(
+        unit, "bounded-log.bin", header() + b"1\t0\ta.py\0" + header(PARENT, STAMP - 1) + b"2\t0\ta.py\0")
+    acquired["raw_messages"] = artifact(
+        unit, "bounded-messages.bin",
+        HEAD.encode() + b"\0refactor only\0" + PARENT.encode() + b"\0fix security CVE-2024-12345\0")
+    normalized = invoke(unit)
+    unit.outputs["acquire.normalize_changes"] = normalized
+    assert normalized["gaps"] == ["history_window_truncated"]
+    assert normalized["change_count"] == normalized["walked_change_count"] == 1
+    assert document(unit, normalized)["walked_commits"] == [HEAD]
+    classified = invoke(replace(unit, unit_id="analyze.classify_changes"))
+    assert classified["gaps"] == []
+    assert document(unit, classified)["classes"] == {
+        HEAD: {"fix": None, "security_fix": None, "revert": None, "reverts": None,
+               "formatting": None, "security_references": [], "message_complete": True}}
+
+
+def test_optional_head_transport_failure_preserves_local_history_publication(tmp_path, monkeypatch):
+    unit = baseline(context(tmp_path, "acquire.github_enrichment"))
+    unit.outputs["resolve_sources.resolve_history_source"]["github"] = {"decision": "PENDING"}
+    monkeypatch.setenv("GITHUB_TOKEN", "offline-fixture")
+    monkeypatch.setattr(job, "_run_history_identity", lambda *args: "identity")
+    requests = []
+
+    def transport(url, headers, timeout):
+        from urllib.parse import urlsplit
+        path = urlsplit(url).path
+        requests.append(path)
+        if path == f"/repos/acme/repo/commits/{PARENT}":
+            raise OSError("private transport detail")
+        responses = {
+            f"/repos/acme/repo/commits/{HEAD}": {"sha": HEAD},
+            f"/repos/acme/repo/commits/{HEAD}/pulls": [
+                {"number": 7, "merged_at": "2023-11-14T00:00:00Z", "head": {"sha": PARENT}}],
+            "/repos/acme/repo/pulls/7": {"head": {"sha": PARENT}},
+            "/repos/acme/repo/pulls/7/reviews": [],
+            f"/repos/acme/repo/commits/{PARENT}/pulls": [],
+        }
+        return 200, {}, json.dumps(responses[path]).encode()
+
+    enriched = handler(unit, github_transport=transport)(unit)
+    assert enriched["terminal_status"] == "PARTIAL"
+    assert "github_head_commit_unavailable" in enriched["gaps"]
+    assert enriched["dispositions"] == [{"disposition": "GAP", "reason": "github_enrichment_retriable"}]
+    facts = document(unit, enriched)["facts"]
+    assert facts[HEAD]["review_bypass"] is None
+    assert facts[PARENT]["direct_push"] is True
+    assert requests[-1] == f"/repos/acme/repo/commits/{PARENT}/pulls"
+    unit.outputs["acquire.github_enrichment"] = enriched
+    for unit_id in ("analyze.classify_changes", "analyze.compute_signals", "analyze.rank"):
+        unit.outputs[unit_id] = invoke(replace(unit, unit_id=unit_id))
+    published = invoke(replace(unit, unit_id="publish.publish_handoff"))
+    assert published["terminal_status"] == "PARTIAL"
+    assert published["dispositions"] == enriched["dispositions"]
+    doc = document(unit, published)
+    assert [item["path"] for item in doc["ranking"]["files"]] == ["a.py"]
+    assert "github_head_commit_unavailable" in doc["gaps"]
+    assert "private transport detail" not in json.dumps(doc)
+
+
 @pytest.mark.parametrize("kind", ["success", "missing-token", "policy", "no-history"])
 def test_github_handler_wires_bounded_client_and_preserves_gap_scope(tmp_path, monkeypatch, kind):
     unit = baseline(context(tmp_path, "acquire.github_enrichment"))
@@ -406,7 +469,7 @@ def test_rank_handler_scores_files_and_publishes_exact_hotspot_schema(tmp_path):
     assert doc["file_ranking"] == ["a.py"] and doc["component_ranking"] == ["component"]
     assert doc["files"]["a.py"]["sii"]["rank"] == 1
     assert doc["schema"] == "appsec-review/source-history-signals/2"
-    assert hotspots["schema"] == "appsec-review/history-hotspots/1"
+    assert hotspots["schema"] == "appsec-review/history-hotspots/2"
     first = hotspots["entries"][0]
     assert first["schema"] == "appsec-review/history-hotspot/1"
     assert first["identity"] == {"path": "a.py", "symbol_id": None, "component_id": "component"}
@@ -414,7 +477,7 @@ def test_rank_handler_scores_files_and_publishes_exact_hotspot_schema(tmp_path):
     assert first["snapshot"]["snapshot_commit"] == HEAD
     assert "signal_unavailable:pull_request_timing:pr_timing_not_acquired" in first["coverage_gaps"]
     from jsonschema import validate
-    schema = json.loads((unit.job.repository_root / "docs/schemas/history-hotspots.schema.json").read_text())
+    schema = json.loads((unit.job.repository_root / "docs/schemas/history-hotspots-v2.schema.json").read_text())
     validate(hotspots, schema)
 
 
@@ -425,6 +488,7 @@ def test_publish_handler_integrity_and_projection(tmp_path, monkeypatch):
     doc = document(unit, result)
     assert result["schema"] == doc["schema"] == "appsec-review/source-history-analysis/2"
     assert doc["ranking"]["files"] == [] and doc["ranking"]["components"] == []
+    assert doc["hotspots"]["selection"] is None
     assert doc["binding"] == "exact" and doc["index_manifest"] == unit.outputs["publish.index_history"]["manifest"]
     assert doc["changelog"]["reason"] == "no_changelog_files"
     assert doc["sources"]["git"]["snapshot_commit"] == HEAD

@@ -100,11 +100,12 @@ def test_accepted_upstream_helpers_and_input_identity(tmp_path, monkeypatch):
     assert job._run_history_identity(tmp_path, unit.job.run_root) == ("identity", (tmp_path, ("nested",)))
 
 
-@pytest.mark.parametrize("kind", ["absent", "valid", "wrong-history", "missing-hotspots", "wrong-hotspots", "stale"])
+@pytest.mark.parametrize("kind", ["absent", "valid", "legacy", "wrong-history", "missing-hotspots", "wrong-hotspots", "stale"])
 def test_load_accepted_history_and_hotspots_verify_schema_and_snapshot(tmp_path, monkeypatch, kind):
     unit = context(tmp_path, "publish.publish_handoff")
     hotspots = artifact(unit, "hotspots.json", {
-        "schema": "wrong" if kind == "wrong-hotspots" else job.HOTSPOT_SCHEMA,
+        "schema": ("wrong" if kind == "wrong-hotspots" else
+                   job.LEGACY_HOTSPOT_SCHEMA if kind == "legacy" else job.HOTSPOT_SCHEMA),
         "target_snapshot": "other" if kind == "stale" else "snapshot", "entries": []})
     history = artifact(unit, "history.json", {
         "schema": "wrong" if kind == "wrong-history" else job.SCHEMA, "target_snapshot": "snapshot",
@@ -125,7 +126,8 @@ def test_load_accepted_history_and_hotspots_verify_schema_and_snapshot(tmp_path,
             assert value == {"schema": job.HOTSPOT_SCHEMA, "status": "unavailable", "reason": "no_bound_history",
                              "entries": [], "handoff_sha256": "pin"}
         else:
-            assert value == {"schema": job.HOTSPOT_SCHEMA, "target_snapshot": "snapshot", "entries": [],
+            assert value == {"schema": job.LEGACY_HOTSPOT_SCHEMA if kind == "legacy" else job.HOTSPOT_SCHEMA,
+                             "target_snapshot": "snapshot", "entries": [],
                              "handoff_sha256": "pin"}
 
 

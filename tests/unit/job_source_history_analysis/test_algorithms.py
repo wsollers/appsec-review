@@ -5,9 +5,9 @@ from fractions import Fraction
 
 import pytest
 
-from appsec_review.jobs.job_source_history_analysis import filters, hotspots, lines, signals, symbols, window
+from appsec_review.jobs.job_source_history_analysis import filters, git, hotspots, lines, signals, symbols, window
 from appsec_review.jobs.job_source_history_analysis.settings import FilterRules
-from .support import HEAD, PARENT, SOURCE, STAMP, change, node, nodes
+from .support import HEAD, PARENT, SOURCE, STAMP, change, header, node, nodes
 
 
 RULES = FilterRules(("*.generated.*",), ("*.lock",), ("fixtures/**",), ("docs/**",), ("vendor/**",),
@@ -65,6 +65,39 @@ def test_classification_bases_exact_reverts_and_incomplete_messages():
     assert labels["d" * 40]["fix"] is None and labels["d" * 40]["message_complete"] is False
     assert signals.classify_text("neutral", "security CWE-79") == {
         "fix": "heuristic", "security_fix": "heuristic", "security_references": ["CWE-79"]}
+
+
+def test_rename_reused_destination_does_not_inherit_previous_occupant():
+    raw = (header() + b"0\t0\t\0a.py\0b.py\0"
+           + header(PARENT, STAMP - 1) + b"0\t9\tb.py\0"
+           + header("c" * 40, STAMP - 2) + b"2\t0\ta.py\0" + b"9\t0\tb.py\0")
+    normalized = signals.normalize(
+        git.parse_log(raw), current_paths=["b.py"], shallow=[], window_months=6, max_changes=10, bulk_threshold=10)
+    changes = normalized["changes"]
+    assert [[item["current_path"] for item in change["files"]] for change in changes] == [
+        ["b.py"], [None], ["b.py", None]]
+    metrics = signals.compute_signals(
+        changes, {}, {}, eligible={"b.py": {"line_count": 2}}, roots=[(".", "component")],
+        anchor_time=STAMP, window_months=6, half_life_days=90, minor_author_share=0.05,
+        fix_interval_days=30, filters=RULES)
+    assert metrics["files"]["b.py"]["churn_lines"] == 2
+    assert metrics["files"]["b.py"]["change_count"] == 2
+    assert metrics["components"]["component"]["churn_lines"] == 2
+
+
+@pytest.mark.parametrize("reverse", [False, True], ids=["forward", "reverse"])
+def test_rename_alias_transitions_use_one_commit_snapshot(reverse):
+    renames = [b"0\t0\t\0a.py\0b.py\0", b"0\t0\t\0b.py\0c.py\0"]
+    if reverse:
+        renames.reverse()
+    raw = header() + b"".join(renames) + header(PARENT, STAMP - 1) + b"2\t0\ta.py\0" + b"9\t0\tb.py\0"
+    normalized = signals.normalize(
+        git.parse_log(raw), current_paths=["b.py", "c.py"], shallow=[], window_months=6,
+        max_changes=10, bulk_threshold=10)
+    assert {item["path"]: item["current_path"] for item in normalized["changes"][0]["files"]} == {
+        "b.py": "b.py", "c.py": "c.py"}
+    assert {item["path"]: item["current_path"] for item in normalized["changes"][1]["files"]} == {
+        "a.py": "b.py", "b.py": "c.py"}
 
 
 @pytest.mark.parametrize("path,pattern,expected", [

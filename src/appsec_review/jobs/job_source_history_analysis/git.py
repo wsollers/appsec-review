@@ -28,7 +28,7 @@ from .sources import GitSource
 
 TOOL_ID = "tool-git"
 ARGV_VERSION = "appsec-review/git-argv/2"
-PARSER_IDENTITY = "appsec-review/git-history-stream-parser/2"
+PARSER_IDENTITY = "appsec-review/git-history-stream-parser/3"
 CHUNK_BYTES = 64 * 1024
 LIMIT_RANGES: Mapping[str, tuple[int, int]] = {
     "max_output_bytes": (1, 64 * 1024 * 1024 * 1024),
@@ -295,13 +295,15 @@ class _Buffer:
         return len(self.data) >= size
 
 
-def parse_messages_stream(stream: BinaryIO, ordered_commits: list[str], *, max_message_bytes: int
+def parse_messages_stream(stream: BinaryIO, ordered_commits: list[str], *, max_message_bytes: int,
+                          boundary_commit: str | None = None
                           ) -> tuple[dict[str, bytes], list[str], list[str]]:
     """Split ``%H\\0%B\\0`` records by the known commit order so NUL bytes in bodies cannot misalign.
 
     At most ``max_message_bytes`` of each body is retained; longer bodies are streamed past and
     reported, so their classification is explicitly incomplete. Returns messages, gaps, and the
-    commits whose bodies exceeded the bound.
+    commits whose bodies exceeded the bound. An acquired but unretained ``boundary_commit`` ends
+    the last admitted message without importing or classifying the boundary record.
     """
     messages: dict[str, bytes] = {}
     gaps: list[str] = []
@@ -323,8 +325,9 @@ def parse_messages_stream(stream: BinaryIO, ordered_commits: list[str], *, max_m
                 retained.extend(part[:room])
             total += len(part)
 
-        if offset + 1 < len(ordered_commits):
-            separator = b"\0" + ordered_commits[offset + 1].encode() + b"\0"
+        following = ordered_commits[offset + 1] if offset + 1 < len(ordered_commits) else boundary_commit
+        if following is not None:
+            separator = b"\0" + following.encode() + b"\0"
             found = False
             while True:
                 index = buffer.data.find(separator)

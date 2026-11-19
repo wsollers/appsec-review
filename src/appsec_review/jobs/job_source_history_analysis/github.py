@@ -192,7 +192,7 @@ def _record_key(record: Mapping[str, Any], key: str) -> str:
 
 
 STOP_GAPS = frozenset({"github_rate_limited", "github_request_budget_exhausted"})
-RETRIABLE_GAPS = frozenset({"github_rate_limited", "github_page_unavailable"})
+RETRIABLE_GAPS = frozenset({"github_rate_limited", "github_page_unavailable", "github_head_commit_unavailable"})
 
 
 def paginate(client: GitHubClient, path: str, *, key: str) -> Collection:
@@ -379,6 +379,11 @@ def _pull_facts(client: GitHubClient, repository: str, number: int, summary: Map
             gap = "github_rate_limited" if str(exc) == "github_rate_limited" else "github_request_budget_exhausted"
             return _indeterminate(gap, {**evidence, "head_commit": {"status": None}}, labels=labels,
                                   approved_by_other=None, approval_stale=None, self_merged=self_merged)
+        except ValueError:
+            return _indeterminate(
+                "github_head_commit_unavailable", {**evidence, "head_commit": {"status": None}},
+                labels=labels, approved_by_other=None, approval_stale=None, self_merged=self_merged,
+                head_sha=head, head_committed_at=None)
         evidence["head_commit"] = {"status": status}
         if status == 200 and isinstance(commit, Mapping) and isinstance(commit.get("commit"), Mapping):
             committer = commit["commit"].get("committer")

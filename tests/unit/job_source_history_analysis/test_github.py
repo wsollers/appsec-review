@@ -247,6 +247,31 @@ def test_review_failure_can_continue_to_next_commit_and_invalid_head_has_no_time
     assert result["facts"][HEAD]["evidence"]["head_commit"] == {"status": 404}
 
 
+@pytest.mark.parametrize("failure", [OSError("private"), TimeoutError("private")], ids=["connection", "timeout"])
+def test_head_transport_failure_is_a_retryable_scoped_gap(failure):
+    responses = {
+        f"/repos/acme/repo/commits/{HEAD}": (200, {}, {"sha": HEAD}),
+        PATH + "?per_page=2&page=1": (200, {}, [
+            {"number": 7, "merged_at": "2023-11-14T00:00:00Z", "head": {"sha": PARENT},
+             "user": {"login": "author"}, "labels": [{"name": "bug"}]}]),
+        "/repos/acme/repo/pulls/7": (200, {}, {"head": {"sha": PARENT}, "merged_by": {"login": "author"}}),
+        "/repos/acme/repo/pulls/7/reviews?per_page=2&page=1": (200, {}, []),
+        f"/repos/acme/repo/commits/{PARENT}": failure,
+        f"/repos/acme/repo/commits/{PARENT}/pulls?per_page=2&page=1": (200, {}, []),
+    }
+    result = github.enrich(client(responses)[0], HEAD, [HEAD, PARENT])
+    assert result["gaps"] == ["github_head_commit_unavailable", "github_review_history_incomplete"]
+    assert result["retriable"] is True and result["indeterminate_count"] == 1
+    fact = result["facts"][HEAD]
+    assert fact["status"] == "indeterminate" and fact["pull_request"] == 7 and fact["direct_push"] is False
+    assert fact["labels"] == ["bug"] and fact["self_merged"] is True
+    assert fact["head_sha"] == PARENT and fact["head_committed_at"] is None
+    assert fact["review_bypass"] is fact["approved_by_other"] is fact["approval_stale"] is None
+    assert fact["evidence"]["head_commit"]["status"] is None
+    assert result["facts"][PARENT]["status"] == "complete"
+    assert "private" not in json.dumps(result)
+
+
 def test_enrichment_follows_late_pull_and_approval_pages_and_deduplicates():
     pulls = PATH
     reviews = "/repos/acme/repo/pulls/7/reviews"

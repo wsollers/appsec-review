@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
+import hashlib
 import json
 
 import pytest
@@ -32,7 +33,14 @@ def ranked_fixture(unit):
         for scope, symbol_id, score in (("file", None, 50), ("symbol", "a.py::f", 30))]
     unit.outputs["analyze.rank"] = {
         "artifact": artifact(unit, "ranked.json", metrics),
-        "hotspots": artifact(unit, "hotspots.json", {"entries": entries}), "gaps": []}
+        "hotspots": artifact(unit, "hotspots.json", {
+            "schema": job.HOTSPOT_SCHEMA, "selection": {
+                "mode": "fixed",
+                "configured": {"hotspot_count": 10, "proportional_ratio": None,
+                               "min_hotspots": None, "max_hotspots": None},
+                "effective_caps": {"file": 10, "symbol": 10},
+                "selected_counts": {"file": 1, "symbol": 1}},
+            "entries": entries}), "gaps": []}
     return unit
 
 
@@ -227,6 +235,28 @@ def test_publish_wires_changelog_section_without_combining_git_counts(tmp_path, 
     assert doc["ranking"]["files"] == [] and doc["window"]["change_count"] == 2
 
 
+@pytest.mark.parametrize("git_population", ["formatting", "ranked", "absent"])
+def test_changelog_precedence_uses_ranked_population_not_artifact_presence(tmp_path, monkeypatch, git_population):
+    files = {"a.py": SOURCE, "ChangeLog": b"2023-11-14  Fixture\n\n\t* a.py: Update behavior.\n"}
+    unit = baseline(context(tmp_path, "analyze.compute_signals", files=files))
+    monkeypatch.setattr(job, "_run_history_identity", lambda *args: "identity")
+    if git_population == "formatting":
+        unit.outputs["analyze.classify_changes"]["artifact"] = artifact(
+            unit, "formatting.json", {"classes": {HEAD: {"formatting": True}, PARENT: {"formatting": True}}})
+    if git_population != "absent":
+        unit.outputs["analyze.compute_signals"] = invoke(unit)
+        unit.outputs["analyze.rank"] = invoke(replace(unit, unit_id="analyze.rank"))
+    unit.outputs["resolve_sources.resolve_history_source"]["inputs"]["files"] = [
+        {"path": path, "sha256": hashlib.sha256(data).hexdigest()} for path, data in files.items()]
+    unit.outputs["acquire.changelog_history"] = invoke(replace(unit, unit_id="acquire.changelog_history"))
+    assert unit.outputs["acquire.changelog_history"]["ranked_file_count"] == 1
+    published = invoke(replace(unit, unit_id="publish.publish_handoff"))
+    doc = document(unit, published)
+    assert doc["changelog"]["role"] == ("supplement" if git_population == "ranked" else "primary")
+    assert bool(doc["ranking"]["files"]) is (git_population == "ranked")
+    assert doc["changelog"]["files"][0]["path"] == "a.py"
+
+
 def test_rank_component_order_does_not_duplicate_a_shared_component(tmp_path):
     unit = baseline(context(tmp_path, "analyze.rank"))
     metrics = document(unit, unit.outputs["analyze.compute_signals"])
@@ -237,3 +267,108 @@ def test_rank_component_order_does_not_duplicate_a_shared_component(tmp_path):
     result = invoke(unit)
     assert result["ranked_file_count"] == 2 and result["ranked_component_count"] == 1
     assert document(unit, result)["component_ranking"] == ["component"]
+
+
+def rank_population(unit, file_count, symbol_count, *, name="population"):
+    metrics = document(unit, unit.outputs["analyze.compute_signals"])
+    original = metrics["files"]["a.py"]
+    facts = unit.outputs["resolve_sources.bind_snapshot"]["eligible"]["a.py"]
+    paths = [f"{name}-{index:03d}.py" for index in range(file_count)]
+    metrics["files"] = {path: {**deepcopy(original), "path": path} for path in paths}
+    unit.outputs["resolve_sources.bind_snapshot"]["eligible"] = {
+        path: {**facts, "source_path": path} for path in paths}
+    unit.outputs["analyze.compute_signals"]["artifact"] = artifact(unit, f"{name}-signals.json", metrics)
+    symbol_values = {}
+    for path in paths[:symbol_count]:
+        symbol = symbols.extract({"nodes": nodes()}, SOURCE, "Python", path)["symbols"][0]
+        symbol.update({"path": path, "component_id": "component", "churn_lines": 2, "change_count": 1,
+                       "relative_churn": 1, "revision_frequency": 0.5, "author_entropy": 0,
+                       "attribution_gaps": [], "changes": [{"change_id": HEAD, "added": 1, "deleted": 1}]})
+        symbol_values[symbol["symbol_id"]] = symbol
+    unit.outputs["analyze.symbol_signals"]["artifact"] = artifact(
+        unit, f"{name}-symbol-signals.json", {"symbols": symbol_values})
+    unit.outputs["analyze.rank"] = invoke(replace(unit, unit_root=unit.unit_root / name))
+    return unit.outputs["analyze.rank"]
+
+
+@pytest.mark.parametrize("overrides,file_count,symbol_count,caps,counts", [
+    ({"hotspot_count": 100}, 201, 2, (100, 100), (100, 2)),
+    ({"proportional_ratio": 1.0, "min_hotspots": 50, "max_hotspots": 2000}, 201, 2, (201, 50), (201, 2)),
+    ({"proportional_ratio": 1.0}, 0, 0, (50, 50), (0, 0)),
+    ({}, 0, 0, (10, 10), (0, 0)),
+    ({"proportional_ratio": 1.0, "min_hotspots": 10000, "max_hotspots": 10000}, 2, 0, (10000, 10000), (2, 0)),
+], ids=["fixed", "proportional", "proportional-empty", "fixed-empty", "upper-cap"])
+def test_proportional_hotspots_publish_schema_valid_effective_counts(
+        tmp_path, monkeypatch, overrides, file_count, symbol_count, caps, counts):
+    from jsonschema import Draft202012Validator
+
+    unit = baseline(context(tmp_path, "analyze.rank", overrides=overrides))
+    ranked = rank_population(unit, file_count, symbol_count)
+    hotspots = document(unit, ranked, "hotspots")
+    assert len(hotspots["entries"]) == sum(counts)
+    expected = {"mode": "proportional" if overrides.get("proportional_ratio") else "fixed",
+                "configured": {"hotspot_count": overrides.get("hotspot_count", 10),
+                               **{key: overrides.get(key) for key in (
+                                   "proportional_ratio", "min_hotspots", "max_hotspots")}},
+                "effective_caps": dict(zip(("file", "symbol"), caps)),
+                "selected_counts": dict(zip(("file", "symbol"), counts))}
+    assert hotspots["selection"] == expected
+    schema_root = unit.job.repository_root / "docs/schemas"
+    schema = json.loads((schema_root / "history-hotspots-v2.schema.json").read_text())
+    Draft202012Validator.check_schema(schema)
+    validator = Draft202012Validator(schema)
+    validator.validate(hotspots)
+    monkeypatch.setattr(job, "_run_history_identity", lambda *args: "identity")
+    published = document(unit, invoke(replace(unit, unit_id="publish.publish_handoff")))
+    assert published["hotspots"]["selection"] == expected
+    assert "hotspot_count" not in published["hotspots"]
+    validator.validate(document(unit, published["hotspots"]))
+    assert len(published["hotspots"]["entries"]) == sum(counts)
+
+    legacy = {key: value for key, value in hotspots.items() if key not in {"scope", "selection"}}
+    legacy.update({"schema": job.LEGACY_HOTSPOT_SCHEMA, "hotspot_count": caps[0],
+                   "selection": "top hotspot_count ranked files and top hotspot_count ranked symbols"})
+    legacy_validator = Draft202012Validator(json.loads((schema_root / "history-hotspots.schema.json").read_text()))
+    assert legacy_validator.is_valid(legacy) is (caps[0] <= 100 and sum(counts) <= 200)
+    assert not validator.is_valid({**hotspots, "unexpected": True})
+    invalid = deepcopy(hotspots)
+    invalid["selection"]["effective_caps"]["file"] = 10001 if expected["mode"] == "proportional" else 101
+    assert not validator.is_valid(invalid)
+    invalid = deepcopy(hotspots)
+    invalid["selection"]["selected_counts"]["file"] = -1
+    assert not validator.is_valid(invalid)
+
+
+def test_multi_source_publication_preserves_distinct_caps_and_actual_counts(tmp_path, monkeypatch):
+    from jsonschema import validate
+
+    base = baseline(context(tmp_path, "analyze.rank", overrides={"proportional_ratio": 1.0}))
+    lanes = {}
+    for name, file_count, symbol_count in (("left", 201, 2), ("right", 0, 0)):
+        lane = replace(base, outputs=deepcopy(base.outputs))
+        lane.outputs["resolve_sources.resolve_history_source"]["source"]["source_id"] = name
+        rank_population(lane, file_count, symbol_count, name=name)
+        lanes[name] = lane.outputs
+    combined_outputs = {
+        key: {"by_source": {name: outputs[key] for name, outputs in lanes.items()}}
+        for key in base.outputs if key != "publish.index_history"}
+    combined_outputs["publish.index_history"] = base.outputs["publish.index_history"]
+    combined_outputs["resolve_sources.resolve_history_source"]["identity"] = "identity"
+    monkeypatch.setattr(job, "_run_history_identity", lambda *args: "identity")
+    combined = replace(base, unit_id="publish.publish_handoff", outputs=combined_outputs)
+    published = document(combined, invoke(combined))
+    hotspots = document(combined, published["hotspots"])
+    schema = json.loads((base.job.repository_root / "docs/schemas/history-hotspots-v2.schema.json").read_text())
+    validate(hotspots, schema)
+    assert hotspots["selection"]["selected_counts"] == {"file": 201, "symbol": 2}
+    assert "effective_caps" not in hotspots["selection"]
+    sources = {item["source_id"]: item for item in hotspots["sources"]}
+    assert sources["left"]["selection"]["effective_caps"] == {"file": 201, "symbol": 50}
+    assert sources["right"]["selection"]["effective_caps"] == {"file": 50, "symbol": 50}
+    assert sources["right"]["selection"]["selected_counts"] == {"file": 0, "symbol": 0}
+    for source in sources.values():
+        payload = document(combined, source)
+        validate(payload, schema)
+        assert payload["selection"] == source["selection"]
+    assert published["hotspots"]["selection"] == hotspots["selection"]
+    assert published["hotspots"]["sources"] == hotspots["sources"]

@@ -2,13 +2,13 @@
 from pathlib import Path
 import json
 import pytest
+from jsonschema import validate
 
 from appsec_review.jobs.job_source_history_analysis import load_accepted_history, load_accepted_hotspots
 from appsec_review.retrieval import RetrievalCore
 from tests.integration.job_source_history_analysis.test_analysis import (
     DAY, GIT, T0, LocalDocker, build_repository, commit, configured, outputs, run_graph, write,
 )
-from tests.unit.job_source_history_analysis.test_legacy_hotspots import conforms
 
 ROOT = Path(__file__).parents[3]
 pytestmark = pytest.mark.skipif(GIT is None, reason="host git is required to emulate the tool-git image")
@@ -31,8 +31,8 @@ def test_hotspot_index_is_bounded_queryable_and_excludes_non_code(tmp_path: Path
     assert history["window"]["months"] == 6 and "first-parent" in history["window"]["revision_semantics"]
     hotspots = load_accepted_hotspots(run_root)
     assert [(item["scope"], item["rank"]) for item in hotspots["entries"]] == [("file", 1), ("symbol", 1)]
-    schema = json.loads((ROOT / "docs" / "schemas" / "history-hotspots.schema.json").read_text(encoding="utf-8"))
-    conforms({key: value for key, value in hotspots.items() if key != "handoff_sha256"}, schema, schema)
+    schema = json.loads((ROOT / "docs" / "schemas" / "history-hotspots-v2.schema.json").read_text(encoding="utf-8"))
+    validate({key: value for key, value in hotspots.items() if key != "handoff_sha256"}, schema)
     file_entry, symbol_entry = hotspots["entries"]
     assert file_entry["identity"]["path"] == "app/auth.py" and file_entry["tier"] == 1
     assert symbol_entry["identity"]["symbol_id"] == "app/auth.py::check"

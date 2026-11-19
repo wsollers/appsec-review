@@ -231,7 +231,7 @@ def test_accepted_inputs_read_exact_pinned_payloads(tmp_path, monkeypatch, damag
     ("symbol-signals.json", "appsec-review/source-history-symbol-signals/1"),
     ("changelog.json", "appsec-review/source-history-changelog/1"),
     ("signals.json", "appsec-review/source-history-signals/2"),
-    ("hotspots.json", "appsec-review/history-hotspots/1"),
+    ("hotspots.json", "appsec-review/history-hotspots/2"),
     ("source-history.json", "appsec-review/source-history-analysis/2"),
 ], ids=lambda value: value.split("/")[-1])
 def test_artifact_writer_preserves_schema_and_declared_glob(tmp_path, name, schema):
