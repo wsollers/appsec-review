@@ -375,7 +375,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5141 | [Update only active required image pins by default](#t-5141-update-only-active-required-image-pins-by-default) | images | open |
 | T-5142 | [Verify declared preinstalled CodeQL runtime identities at readiness](#t-5142-verify-declared-preinstalled-codeql-runtime-identities-at-readiness) | images | open |
 | T-5143 | [Honor evidence request wire shapes and zero retrieval budgets](#t-5143-honor-evidence-request-wire-shapes-and-zero-retrieval-budgets) | review | open |
-| T-5144 | [Require verifier blindness evidence for independent confirmation](#t-5144-require-verifier-blindness-evidence-for-independent-confirmation) | review | in-progress |
+| T-5144 | [Require verifier blindness evidence for independent confirmation](#t-5144-require-verifier-blindness-evidence-for-independent-confirmation) | review | done (2026-11-19, c1343965c1af975f7cb786e2657c852b099c9823) |
 | T-5145 | [Keep failed judges distinct from intentionally not-convened judges](#t-5145-keep-failed-judges-distinct-from-intentionally-not-convened-judges) | review | open |
 | T-5146 | [Honor disabled model profiles throughout inference dispatch](#t-5146-honor-disabled-model-profiles-throughout-inference-dispatch) | review | open |
 | T-5147 | [Publish JVM provenance and invalidate changed command indexes](#t-5147-publish-jvm-provenance-and-invalidate-changed-command-indexes) | build | open |
@@ -442,8 +442,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5208 | [Return snapshot identities from the publisher transaction actually completed](#t-5208-return-snapshot-identities-from-the-publisher-transaction-actually-completed) | data | open |
 | T-5209 | [Index the real threat-model schema without dropping owners and threats](#t-5209-index-the-real-threat-model-schema-without-dropping-owners-and-threats) | evidence | open |
 | T-5210 | [Retain graph eligibility language restrictions and distinct threat sites](#t-5210-retain-graph-eligibility-language-restrictions-and-distinct-threat-sites) | evidence | open |
-| T-5211 | [Preserve language control flow and explicit CFG incompleteness](#t-5211-preserve-language-control-flow-and-explicit-cfg-incompleteness) | graph | in-progress |
-| T-5212 | [Bind CFG cache semantics and apply bounds before materialization](#t-5212-bind-cfg-cache-semantics-and-apply-bounds-before-materialization) | graph | open |
+| T-5211 | [Preserve language control flow and explicit CFG incompleteness](#t-5211-preserve-language-control-flow-and-explicit-cfg-incompleteness) | graph | done (2026-11-19, 6e91ad8a10f208d3b1f7b0de347147d01240dbab) |
+| T-5212 | [Bind CFG cache semantics and apply bounds before materialization](#t-5212-bind-cfg-cache-semantics-and-apply-bounds-before-materialization) | graph | in-progress |
 | T-5213 | [Align optional intake declarations and Tree-sitter loader behavior](#t-5213-align-optional-intake-declarations-and-tree-sitter-loader-behavior) | pipeline | open |
 | T-5214 | [Verify every native scope checkpoint evidence artifact](#t-5214-verify-every-native-scope-checkpoint-evidence-artifact) | graph | open |
 | T-5215 | [Bind seed omission and provenance accounting into native checkpoint reuse](#t-5215-bind-seed-omission-and-provenance-accounting-into-native-checkpoint-reuse) | graph | open |
@@ -4460,12 +4460,18 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5144 — Require verifier blindness evidence for independent confirmation
 
-- **State:** in-progress
+- **State:** done (2026-11-19, c1343965c1af975f7cb786e2657c852b099c9823)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: ISR-F02. Missing verifier blindness receipt can still yield independent confirmation.
-- **Scope:** `src/appsec_review/jobs/job_inference_security_review/teams.py`, `src/appsec_review/review/adjudication.py`; paired callers/tests identified by those cases.
+- **Scope:** `src/appsec_review/jobs/job_inference_security_review/teams.py`,
+  `src/appsec_review/review/independence.py`; real cell receipt/replay and unchanged R5 consumer
+  regressions. Missing, invalid and nonblind request checks cannot certify independence.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_inference_security_review.md`.
+  Main independence/adjudication/audit selection: 55 passed/10.45 s, two workers, seed 5144,
+  no skips or cases over ten seconds, including the nullable-request audit guard. Owner's
+  earlier unchanged property-test timing outlier (11.52 s) remains recorded; standalone and
+  subsequent parallel runs passed without weakening examples or assertions.
 
 ### T-5145 — Keep failed judges distinct from intentionally not-convened judges
 
@@ -5067,19 +5073,28 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5211 — Preserve language control flow and explicit CFG incompleteness
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 6e91ad8a10f208d3b1f7b0de347147d01240dbab)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: TS-F01, TS-F02, TS-F03, TS-F04. Real Rust CST statement wrappers erase branches, loops and early returns; `finally` is bypassed by terminating paths.
-- **Scope:** `src/appsec_review/jobs/job_tree_sitter_ast/cfg.py`
+- **Scope:** Tree-sitter lowering, normalized publication and the coupled
+  `src/appsec_review/retrieval/syntax.py` CFG/guard queries. Preserve context-distinct finally
+  nodes, common source-occurrence guards, conservative exception paths and explicit partial gaps.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_tree_sitter_ast.md`; follow-up to closed T-168, T-169 (not reopened).
+  Producer integration `655b1d20f404db3297139540a2b55cb584ba3029` plus the State commit.
+  Main seven-file selection: 109 passed/9.27 s, two workers, seed 5211, no skips or slow cases.
+  The directly required TS-F05 checkpoint fix is recorded under T-5212.
 
 ### T-5212 — Bind CFG cache semantics and apply bounds before materialization
 
-- **State:** open
+- **State:** in-progress
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: TS-F05, TS-F06, TS-F08. CFG generation is absent from the scope cache validity contract; New CFG retrieval paginates only after processing every matching function.
 - **Scope:** `src/appsec_review/jobs/job_tree_sitter_ast/job.py`, `src/appsec_review/retrieval/core.py`
+  TS-F05 is fixed in `6e91ad8a10f208d3b1f7b0de347147d01240dbab`: the separate CFG builder
+  identity and actual node bound enter the scope fingerprint and checkpoint metadata. Changed
+  semantics create new paths, preserve old bytes and reject mismatched metadata; valid reuse
+  remains. TS-F06 retrieval materialization and TS-F08 source-scope byte bounds remain open.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_tree_sitter_ast.md`; follow-up to closed T-168, T-169 (not reopened).
 

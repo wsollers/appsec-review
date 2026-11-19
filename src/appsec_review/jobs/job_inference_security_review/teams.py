@@ -1773,7 +1773,7 @@ def _review(ctx: ReviewContext, group: Mapping[str, Any], blues: tuple[_Cell, ..
                           if request_bytes is not None and check_path.is_file() else None),
         "request_markers_absent": (not any(
             marker.encode("utf-8") in request_bytes for marker in [*markers, *(other.actor_id for other in others)])
-            if verifier.requests else None),
+            if verifier.requests and request_bytes is not None else None),
     }
 
 
