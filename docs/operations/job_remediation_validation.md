@@ -232,6 +232,9 @@ See the [handler](../../src/appsec_review/jobs/job_remediation_validation/job.py
 4. Materialize bounded baseline and patched scratch workspaces. Apply exact declared edits only;
    verify untouched files and absence proofs. Check UTF-8 source policy, NUL bytes, new conflict
    markers and the declared edit set.
+   Exact-patch baseline reads also enforce `max_file_bytes` before hashing, including during
+   scope verification after source admission. Growth past the bound is refused, not fully read
+   merely because an earlier admission fit the budget.
 5. Ask the independent reviewer about the accepted invariant, evidence and patch. Missing/unresolved
    review is `inconclusive`; contradiction is `rejected`. A supported assessment permits
    `static_checked`, not an assertion of a successful fix.
@@ -354,7 +357,8 @@ passes `after_text` to its static validator.
 The exported `apply_unified_diff_in_memory` helper is a separate, nonexecuting API, not the
 production job's application path. It anchors zero-context insertions after the named old
 line, checks both old/new ranges and counts, preserves line endings and explicit no-final-newline
-markers, and refuses overlapping or mismatched context. Passing its unit tests does not establish
+markers, and refuses truncated hunk records or overlapping/mismatched context. An unterminated
+patch payload is not an implicit no-final-newline marker. Passing its unit tests does not establish
 that a live validation job used unified diffs.
 
 ## Model usage

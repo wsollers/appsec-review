@@ -95,3 +95,14 @@ def test_unified_diff_preserves_exact_line_endings_and_both_ranges(before, diff,
 def test_invalid_no_newline_markers_are_refused(diff):
     with pytest.raises(UnifiedDiffApplyError):
         apply_unified_diff_in_memory("a\nb\n", diff)
+
+
+@pytest.mark.parametrize("before,diff", [
+    ("a\n", "@@ -1 +1 @@\n-a\n+b"),
+    ("a", "@@ -1 +1 @@\n a"),
+    ("a", "@@ -1 +0,0 @@\n-a"),
+    ("a\r\n", "@@ -1 +1 @@\n-a\r\n+b\r"),
+], ids=["addition", "context", "deletion", "crlf-addition"])
+def test_truncated_hunk_records_are_not_implicit_no_newline_markers(before, diff):
+    with pytest.raises(UnifiedDiffApplyError, match="truncated hunk record"):
+        apply_unified_diff_in_memory(before, diff)

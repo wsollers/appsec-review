@@ -125,11 +125,12 @@ def patched_bytes(patch: ExactPatch, root: Path, manifest: Mapping[str, str],
         else:
             if manifest.get(name) != digest:
                 raise PatchError(f"patch baseline does not match accepted manifest: {name}")
-            data = target.read_bytes()
+            with target.open("rb") as stream:
+                data = stream.read(bounds.max_file_bytes + 1)
+            if len(data) > bounds.max_file_bytes:
+                raise PatchError(f"baseline file bound exceeded: {name}")
             if hashlib.sha256(data).hexdigest() != digest:
                 raise IntegrityError(f"accepted baseline changed: {name}")
-        if len(data) > bounds.max_file_bytes:
-            raise PatchError(f"baseline file bound exceeded: {name}")
         for edit in reversed(row["edits"]):
             if data[edit["start"]:edit["end"]] != edit["old"].encode("utf-8") or edit["end"] > len(data):
                 raise PatchError(f"exact edit does not match baseline bytes: {name}")

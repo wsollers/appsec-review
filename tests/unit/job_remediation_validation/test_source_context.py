@@ -143,6 +143,56 @@ def test_source_bound_refusal_precedes_workspace_reads_and_model_dispatch(tmp_pa
     assert read_bound_json(env.root, record["cleanup"])["created"] is False
 
 
+def test_patch_scope_read_remains_bounded_after_source_admission(tmp_path, monkeypatch):
+    env = _seed_env(tmp_path, monkeypatch, builds_fn=_builds)
+    original_open = Path.open
+    limit = 128
+    reads = []
+    opened = 0
+
+    class ObservedStream:
+        def __init__(self, stream):
+            self.stream = stream
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.stream.close()
+
+        def read(self, size=-1):
+            reads.append(size)
+            return self.stream.read(size)
+
+    def growing_open(path, *args, **kwargs):
+        nonlocal opened
+        mode = args[0] if args else kwargs.get("mode")
+        if path == env.src_file and mode == "rb":
+            opened += 1
+            if opened == 2:
+                with original_open(path, "ab") as stream:
+                    stream.write(b"x" * (limit + 1 - len(SOURCE.encode())))
+            return ObservedStream(original_open(path, *args, **kwargs))
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", growing_open)
+    reviewer, executor = support.Writer(), support.Executor()
+    result = build_job(
+        infer=reviewer, executor_factory=lambda _u, _p: executor,
+        builds_factory=lambda _root: env.builds, repository_root=support.ROOT,
+    ).execute(_val_ctx(env.root, support.validation_settings(max_file_bytes=limit)))
+    assert reads == [limit + 1, limit + 1], "admission and exact patch scope must both bound their reads"
+    assert not result["failed_units"], result
+    summary = read_bound_json(env.root, result["outputs"]["acceptance.publish_handoff"]["artifact"])
+    [item] = summary["items"]
+    assert item["status"] == "rejected"
+    assert item["reason"] == f"patch_rejected:baseline file bound exceeded: {PRIMARY}"
+    record = read_bound_json(env.root, item["validation"])
+    assert record["checks"]["patch_applicability"]["status"] == "failed"
+    assert read_bound_json(env.root, record["cleanup"])["created"] is False
+    assert not reviewer.requests and not executor.calls
+
+
 @pytest.mark.parametrize("damage", ["text", "hash", "build", "duplicate"])
 def test_source_readmission_never_replaces_accepted_text_or_identity(tmp_path, monkeypatch, damage):
     env = _seed_env(tmp_path, monkeypatch, builds_fn=_builds)

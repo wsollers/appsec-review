@@ -163,6 +163,8 @@ def apply_unified_diff_in_memory(original_text: str, unified_diff: str) -> str:
         consumed = produced = 0
         while idx < len(diff_lines):
             cur = diff_lines[idx]
+            if not cur.endswith("\n"):
+                raise UnifiedDiffApplyError(f"truncated hunk record on line {idx + 1}")
             if cur.rstrip("\r\n") == "\\ No newline at end of file":
                 if not body or not body[-1].endswith("\n"):
                     raise UnifiedDiffApplyError("orphaned or repeated no-newline marker")
