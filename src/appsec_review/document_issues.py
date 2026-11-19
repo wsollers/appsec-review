@@ -331,12 +331,24 @@ def normalize_route_template(route: str) -> str:
     return _PARAM_SEGMENT_RE.sub("{param}", cleaned)
 
 
-def _code_mask(text: str, language: str) -> str:
+def _code_mask(text: str, language: str, *, comments_only: bool = False) -> str:
     """Keep offsets while excluding comments and string contents from identifier matches."""
-    pattern = r"""'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|//[^\n]*|/\*[\s\S]*?\*/"""
+    single_quoted = r"'(?:\\.|[^'\\])*'"
+    if language == "rust":
+        # A Rust lifetime/label has no closing quote; character literals contain
+        # exactly one scalar or escape, not everything up to the next lifetime.
+        single_quoted = r"""'(?:\\(?:[nrt\\0'"]|x[0-9a-fA-F]{2}|u\{[0-9a-fA-F_]+\})|[^'\\\r\n])'"""
+    pattern = single_quoted + r"""|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|//[^\n]*|/\*[\s\S]*?\*/"""
     if language in {"python", "ruby"}:
         pattern += r"|#[^\n]*"
-    return re.sub(pattern, lambda match: "".join("\n" if c == "\n" else " " for c in match.group()), text)
+
+    def mask(match: re.Match[str]) -> str:
+        value = match.group()
+        if comments_only and not value.startswith(("//", "/*", "#")):
+            return value
+        return "".join("\n" if char == "\n" else " " for char in value)
+
+    return re.sub(pattern, mask, text)
 
 
 def _call_end(mask: str, start: int) -> int:
@@ -363,6 +375,7 @@ def _annotation_contexts(text: str, mask: str, language: str) -> dict[int, tuple
         pattern = r"#\["
     else:
         return {}
+    separators = _code_mask(text, language, comments_only=True)
     groups: list[list[tuple[int, int]]] = []
     previous_end = 0
     for match in re.finditer(pattern, mask):
@@ -377,7 +390,7 @@ def _annotation_contexts(text: str, mask: str, language: str) -> dict[int, tuple
             while end < len(mask) and depth:
                 depth += (mask[end] == "[") - (mask[end] == "]")
                 end += 1
-        if not groups or text[previous_end:match.start()].strip():
+        if not groups or separators[previous_end:match.start()].strip():
             groups.append([])
         groups[-1].append((match.start(), end))
         previous_end = end
@@ -394,13 +407,25 @@ def _route_context(text: str, mask: str, start: int, end: int, language: str,
     if language == "ruby":
         last = text.find("\n", end)
         return text[start:len(text) if last < 0 else last]
-    last = _call_end(mask, start)
-    last = max(end, last)
-    if language == "javascript":
-        callback = re.search(r"=>|\bfunction\b", mask[end:last])
+    registration_end = max(end, _call_end(mask, start))
+    last = registration_end
+    if language == "php":
+        while chain := re.match(r"\s*->\s*[A-Za-z_]\w*\s*\(", mask[last:]):
+            chain_end = _call_end(mask, last + chain.start())
+            if chain_end <= last:
+                break
+            last = chain_end
+    local_end = registration_end
+    callback_pattern = {
+        "javascript": r"=>|\bfunction\b",
+        "go": r"\bfunc\s*\(",
+        "php": r"\b(?:function|fn)\s*\(",
+    }.get(language)
+    if callback_pattern:
+        callback = re.search(callback_pattern, mask[end:registration_end])
         if callback:
-            last = end + callback.start()
-    return text[start:last]
+            local_end = end + callback.start()
+    return text[start:local_end] + text[registration_end:last]
 
 
 def extract_multilang_route_handlers(path: str, text: str, *, source_id: str | None = None) -> list[dict[str, Any]]:
@@ -525,6 +550,8 @@ def _parse_openapi_spec_operations(text: str, spec_path: str, spec_source_id: st
 
     ops = []
     for route, (_, path) in sorted(mapping(child(root, "paths")).items()):
+        if route.startswith("x-"):
+            continue
         if not route.startswith("/"):
             raise interfaces.DocumentParseError("expected an absolute OpenAPI route")
         for method_key, (key, operation) in sorted(mapping(path).items()):

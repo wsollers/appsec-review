@@ -313,3 +313,98 @@ def test_non_http_operation_context_and_identity_are_preserved(tmp_path, kind, t
     assert report["specs_parsed"] == 1
     assert not report["mismatches"]
     assert any(kind in gap and path in gap and "mapping" in gap for gap in report["gaps"])
+
+
+def test_review_rust_lifetimes_do_not_mask_later_routes():
+    text = r'''#[get("/first")]
+async fn first() -> &'static str {
+    let chars = ('x', '(', '\'', '\n', '\u{1f600}');
+    "first"
+}
+#[get("/second")]
+async fn second() -> &'static str { "second" }
+'''
+    for source in ("\n".join(line for line in text.splitlines() if "let chars" not in line), text):
+        handlers = issues.extract_multilang_route_handlers("src/routes.rs", source)
+        assert {(item["method"], item["route"]) for item in handlers} == {
+            ("GET", "/first"), ("GET", "/second")}
+        mask = issues._code_mask(source, "rust")
+        assert mask.count("'static") == 2
+        assert "'x'" not in mask and "'('" not in mask and r"'\''" not in mask
+
+
+def test_review_openapi_path_extensions_preserve_catalog_operations(tmp_path):
+    raw = b"""openapi: 3.0.3
+paths:
+  x-owner:
+    name: api-team
+  /orders:
+    get:
+      security:
+        - bearerAuth: []
+"""
+    core, _, rows = _catalog_core(
+        tmp_path, documents=[("api/openapi.yaml", "openapi", raw)],
+        sources=[("src/routes.ts", b"router.get('/orders', plain);\n", "TypeScript")])
+    assert len(rows) == 1
+    report = issues.analyze_api_spec_drift(core)
+    assert report["specs_parsed"] == 1
+    assert [(item["drift_kind"], item["route"], item["spec_source_id"])
+            for item in report["mismatches"]] == [
+        ("missing_auth_middleware", "/orders", rows[0].identity.value)]
+    assert not any("parse failed" in gap for gap in report["gaps"])
+
+
+def test_review_go_callback_does_not_lend_nested_guards():
+    text = '''r.GET("/outer", func(c *gin.Context) {
+    admin.GET("/inner", requireAuth, inner)
+    c.String(200, "ok")
+})
+r.GET("/guarded", requireRole("admin"), func(c *gin.Context) {
+    public.GET("/public", publicHandler)
+})
+'''
+    handlers = {item["route"]: item for item in issues.extract_multilang_route_handlers("src/routes.go", text)}
+    assert handlers["/outer"]["observed_guards"] == []
+    assert handlers["/inner"]["observed_guards"] == ["requireAuth"]
+    assert handlers["/guarded"]["observed_guards"] == ["requireRole"]
+    assert handlers["/guarded"]["observed_roles"] == ["admin"]
+    assert handlers["/public"]["observed_guards"] == []
+
+
+def test_review_php_fluent_middleware_stays_on_its_registration(tmp_path):
+    text = """Route::get('/private', [Controller::class, 'index'])
+    ->name('private')->middleware('auth');
+Route::get('/public', [Controller::class, 'publicIndex']); unrelated()->middleware('auth');
+Route::get('/closure', function () {
+    Route::get('/nested', [Controller::class, 'nested'])->middleware('auth');
+})->middleware('auth');
+"""
+    handlers = {item["route"]: item for item in issues.extract_multilang_route_handlers("routes/api.php", text)}
+    assert handlers["/private"]["observed_guards"]
+    assert handlers["/closure"]["observed_guards"]
+    assert handlers["/nested"]["observed_guards"]
+    assert handlers["/public"]["observed_guards"] == []
+    raw = json.dumps({"openapi": "3.0.3", "paths": {
+        route: {"get": {"security": [{"bearerAuth": []}] if route != "/public" else []}}
+        for route in sorted(handlers)}}, indent=2).encode()
+    core, _, _ = _catalog_core(tmp_path, documents=[("api/openapi.json", "openapi", raw)],
+                               sources=[("routes/api.php", text.encode(), "PHP")])
+    report = issues.analyze_api_spec_drift(core)
+    assert report["specs_parsed"] == 1
+    assert report["handlers_scanned"] == 4
+    assert report["mismatches"] == []
+
+
+@pytest.mark.parametrize(("path", "text", "guard"), [
+    ("src/routes.py", '@login_required\n# local guard\n@app.get("/private")\n'
+     'def private():\n    return "ok"\n# next handler\n@app.get("/public")\n'
+     'def public():\n    return "ok"\n', "login_required"),
+    ("src/routes.java", '@PreAuthorize("admin")\n/* local guard */\n// comment\n'
+     '@GetMapping("/private")\nvoid privateRoute() {}\n// next handler\n'
+     '@GetMapping("/public")\nvoid publicRoute() {}\n', "PreAuthorize"),
+], ids=["python", "java"])
+def test_review_comment_separated_annotations_keep_their_guard(path, text, guard):
+    handlers = {item["route"]: item for item in issues.extract_multilang_route_handlers(path, text)}
+    assert handlers["/private"]["observed_guards"] == [guard]
+    assert handlers["/public"]["observed_guards"] == []

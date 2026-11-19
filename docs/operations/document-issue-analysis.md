@@ -54,11 +54,16 @@ fetched and target code is never executed. A parse failure does not increment
 `specs_parsed`; an empty result never implies complete coverage.
 
 Literal registration/annotation heuristics cover the nine supported language families.
-Guards, role arguments and anonymous annotations are local to the registration or its
-contiguous annotation group: unrelated routes, comments, strings and early-file tokens
-are not global middleware. Effective enforcement, dynamic mounts and handler behavior
+Guards, role arguments and anonymous annotations are local to the registration, its
+attached PHP fluent middleware, or its annotation group. Comment-only separators do
+not detach annotations; actual declarations and unrelated statements still end the group.
+Nested registrations inside JavaScript, Go or PHP callbacks do not supply guards to the
+outer registration. Rust lifetimes remain code, distinct from character/string literals.
+Unrelated routes, comments, strings and early-file tokens are not global middleware.
+Effective enforcement, dynamic mounts and handler behavior
 remain explicitly unresolved. OpenAPI security alternatives retain anonymous options
 and operation overrides; optional authentication does not become an auth mismatch.
+Permitted `x-*` extension keys in OpenAPI `paths` are ignored, not rejected as routes.
 HTTP method and same-line occurrence participate in matching, so documented GET cannot
 hide POST and repeated registrations cannot become a unique ledger mapping.
 An `ANY` registration leaves method coverage unresolved, rather than proving every
