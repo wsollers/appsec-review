@@ -252,6 +252,13 @@ not a retrospective assertion that exposure or inspection was measured.
 environment input (`final-report-markdown/2`). Text that came from review artifacts is shown in code spans or escaped, so it
 cannot become Markdown or HTML structure.
 
+The same unit renders executive HTML from the report plus the exact gate-bound dossier JSON.
+HTML and executive LaTeX use one bounded narrative projection; source excerpts, generated code,
+patch text and raw protected payloads remain in the developer dossier. Certified composed chain
+severity comes from `attack_chain_cards` in every format, never the maximum member severity.
+Only historical reports without cards use the legacy fallback, which leaves missing composed
+severity unrated. An explicitly empty card list remains empty.
+
 `report.render_pdf` renders the executive PDF (next section) from `final-report.json` and the dossier
 JSON the gate binds, through the pinned `tool-report-latex` image, and writes `final-report.tex`,
 `final-report.pdf` when the renderer produced a valid PDF, the retained renderer logs and a
@@ -259,7 +266,8 @@ JSON the gate binds, through the pinned `tool-report-latex` image, and writes `f
 [`../schemas/final-report/final-report-pdf-receipt.schema.json`](../schemas/final-report/final-report-pdf-receipt.schema.json)).
 
 `acceptance.publish_handoff` re-validates the JSON, proves `final-report.md` is exactly the rendering
-of `final-report.json`, re-proves the executive PDF files (the LaTeX is exactly the rendering of the JSON
+of `final-report.json`, re-renders HTML from the same JSON and certified dossiers, and re-proves the executive PDF files
+(the LaTeX is exactly the rendering of the JSON
 plus the gate-bound dossiers, the receipt hashes those bytes, and a rendered PDF is the valid file the
 receipt names), and publishes the handoff. The handoff's `artifact` is `final-report.json`, the
 `report.render` output's `artifact` is `final-report.md`, and the handoff's `pdf` field carries the
@@ -321,8 +329,8 @@ needs a schema change.
 
 ### The executive PDF
 
-`report.render_pdf` writes `final-report.pdf`, an executive report whose readers are the project's tech
-lead and business owner. Its document model is built by
+`report.render` writes `final-report.html`; `report.render_pdf` writes `final-report.pdf`, executive
+reports whose readers are the project's tech lead and business owner. Their common document model is built by
 `appsec_review.reporting.executive_report.executive_document` (a pure function of `final-report.json`
 and the bound dossier documents) and rendered with the shared LaTeX template and `tool-report-latex`
 image exactly as the dossiers are (`SOURCE_DATE_EPOCH` 0; the `.tex` is byte-identical for the same
@@ -335,20 +343,11 @@ It contains, in plain language:
   review may be presented as complete (and, from `limitations`, why not), the ship-block counts in
   words, and what "not performed by policy" means (generated PoCs and regressions were compiled only,
   never executed; compilation is not runtime proof);
-- review coverage by security dimension: a radar chart whose nine axes group the closed
-  `security_predicate` vocabulary (memory safety; numeric handling; control and injection; parsing and
-  data; access control; secrets and crypto; concurrency; resource exhaustion; configuration and supply
-  chain) and whose two series are the confirmed findings and the claims examined (confirmed, verification
-  backlog and withheld packages) per axis, each scaled to its own largest axis; a key under the chart
-  names each series (colour swatch plus a distinct line style, so it reads in greyscale) and each axis
-  code with what counts there and the raw counts, and a table repeats the counts with a one-line
-  reading per axis. The counts come from `appsec_review.reporting.dimensions` (a confirmed finding's
-  gate-bound dossier predicate, otherwise the package title `<predicate> (<CWE>)`; a title that names
-  no vocabulary member is counted as unclassified, never guessed), and `final-report.md` carries the
-  same table so the two agree. A short spoke means little was found or examined in that dimension,
-  never that it is clean; an axis with no claims is uncovered. Scanner leads admitted and observed
-  per axis are shown as "not bound": the gate does not bind the review's excluded-leads record to
-  this job, so the report cannot read it;
+- review coverage by security dimension: the same report-owned twelve-axis, four-series radar
+  and metric reasons used by JSON/Markdown, described in
+  [domain coverage](#domain-coverage-and-unknown-measurements-t-5088). Format-specific dossier
+  metadata does not reclassify the certified radar. Unknown metrics remain N/A, not measured zero
+  or clean coverage;
 - one entry per confirmed finding: what the weakness is (the dossier statement and CWE), where it is
   (file and line range), what an attacker gains (the accepted security predicate and preconditions),
   the technical severity in words, whether an independent verifier confirmed it (state, label,
@@ -364,12 +363,14 @@ It contains, in plain language:
 The finding narratives come only from the dossier JSON the gate binds
 (`dossiers.items[*].files.json`), read through `bound_artifacts.read_bound_json`, so every byte is proven
 against the gate's hash before it is used, and `bind_dossiers` refuses a reference outside the gate's
-binding set. A dossier whose JSON is missing, changed or malformed is a named gap
-(`executive_dossier_unavailable`, `executive_dossier_unsupported`, `executive_dossier_mismatch`) in the
-receipt and the handoff; the finding is still listed with its accepted title, state, severity and
-ship-block decision and the entry says the narrative was unavailable. The PDF never contains exploit
-code, prompts, payloads, generated functions or dossier source excerpts (`sources[*].excerpt` is
-protected developer content): only paths and line ranges appear.
+binding set. Claimed JSON that is missing, changed, malformed, unsupported or names another
+run/dossier/kind/finding fails integrity validation before rendering; it is not relabelled as
+an ordinary unavailable narrative. If a standalone pure renderer receives certified references
+without loaded documents, it retains the certified count and explicitly says
+`executive_dossier_not_loaded`. No reference means no certified dossier, not complete coverage.
+Neither HTML nor PDF contains exploit code, prompts, payloads, generated functions, exact patch
+text or dossier source excerpts (`sources[*].excerpt` is protected developer content): only
+approved narrative fields and source paths/line ranges appear.
 
 Failure behaviour: `render_pdf = false` writes the LaTeX and a `not_rendered` receipt with the gap
 `final_report_pdf_disabled_by_policy`. A renderer failure (non-zero exit, timeout, OOM, oversized or

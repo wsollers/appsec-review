@@ -13,22 +13,25 @@ from appsec_review.container_runtime.executor import CommandOutcome, ContainerEx
 from appsec_review.indexing.inventory import Claim, FileClaims, runtime_claims, scan_run_tree
 from appsec_review.indexing.store import AcceptedHandoff
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound, read_bound_json
-from appsec_review.jobs.completion_contracts import DOSSIER_SCHEMA
+from appsec_review.jobs.completion_contracts import DOSSIER_PUBLICATION_SCHEMA
 from appsec_review.jobs.engineering_contracts import (
     FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA,
     FINAL_REPORT_HANDOFF_SCHEMA, FINAL_REPORT_SCHEMA,
 )
 from appsec_review.jobs.job_final_publication_gate import classify as gate_classify
-from appsec_review.jobs.job_final_publication_gate.attachments import capability
+from appsec_review.jobs.job_final_publication_gate.attachments import _dossiers, capability
 from appsec_review.jobs.job_final_publication_gate import verify as gate_verify
 from appsec_review.jobs.job_final_report_publication import JOB_ID, build_job
 from appsec_review.jobs.job_final_report_publication import job as report_job
 from appsec_review.jobs.job_final_report_publication.datasets import DATASETS
 from appsec_review.jobs.job_final_report_publication.pdf import RECEIPT_SCHEMA, bind_dossiers
+from appsec_review.reporting.dossier_render import render_dossier
+from appsec_review.reporting.dossiers import build_dossier
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import JobContext, UnitContext
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
+from tests.dossier_fixture import settings as dossier_settings
 from tests.unit.review_decision_audit_wiring.helpers import events, put, verified_document
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -66,18 +69,19 @@ def fake_executor(seen: list, *, render_status: int = 0, pdf: bytes | None = PDF
 
 
 def dossier_for(finding: dict[str, Any], run_id: str) -> dict[str, Any]:
-    binding = {key: finding[key] for key in ("claim_id", "finding_package_id", "sha256")}
-    return {
-        "schema": DOSSIER_SCHEMA, "dossier_id": "dossier-" + sha256_hex(finding["claim_id"]), "run_id": run_id,
-        "kind": "confirmed_finding", "finding": binding, "visibility": "protected_developer",
-        "title": finding["title"], "state": finding["state"], "lane": finding["lane"],
-        "statement": "An attacker-controlled length reaches a fixed-size copy without a bound check.",
-        "weakness_cwe": "CWE-120", "security_predicate": "memory_corruption", "preconditions": [],
-        "ship_block": {"policy": "ship-block-policy/1", "status": "ship_blocking", "technical_severity": "high"},
-        "missing_predicates": [], "evidence": [], "scores": [], "chains": [],
-        "sources": [{"path": "src/parser.c", "start_line": 40, "end_line": 52, "excerpt": EXCERPT}],
-        "poc": None, "remediation": [], "notices": [], "gaps": [], "truncations": [], "provenance": {},
-    }
+    return build_dossier(
+        run_id=run_id, kind="confirmed_finding", finding=finding,
+        claim={"claim_id": finding["claim_id"], "state": finding["state"],
+               "statement": "An attacker-controlled length reaches a fixed-size copy without a bound check.",
+               "weakness_cwe": "CWE-120", "security_predicate": "memory_corruption", "preconditions": []},
+        relations=[{"relation_id": key, "claim_id": finding["claim_id"], "kind": "supports",
+                    "admissibility": "direct", "complete": True}
+                   for key in finding["direct_evidence"] + finding["analyst_assessed_evidence"]],
+        excerpts=[{"identity": "asr:source_file:" + "f" * 64,
+                   "location": {"path": "src/parser.c", "source_id": "s", "file_sha256": "f" * 64},
+                   "excerpt_start_line": 40, "excerpt_end_line": 52, "excerpt": EXCERPT}],
+        provenance={},
+    )
 
 
 def _setup_run(
@@ -97,19 +101,30 @@ def _setup_run(
     verified["bindings"] = list(verified["inputs"].values())
     dossier_document = None
     if dossier:
-        # One gate-certified confirmed-finding dossier: its JSON, LaTeX and receipt are bound by the gate.
+        # Exercise the actual writer, publication verifier and gate projection, not a second file-map serializer.
         dossier_document = dossier_for(verified["packages"][0], root.name)
         base = "data/jobs/job_dossier_publication/attempts/attempt_0001/steps/dossiers/tasks/create/d1"
-        files = {"json": put(root, f"{base}/dossier.json", dossier_document),
-                 "latex": put(root, f"{base}/dossier.tex", b"\\documentclass{appsec-report}\n"),
-                 "pdf": None, "receipt": put(root, f"{base}/receipt.json", {"status": "latex_only"})}
-        verified["attachments"]["dossiers"] = [{
-            "dossier_id": dossier_document["dossier_id"], "kind": "confirmed_finding",
-            "finding": dossier_document["finding"], "status": "latex_only", "files": files, "gap_ids": []}]
+        item = render_dossier(root, root / base, dossier_document,
+                              settings=dossier_settings(render_pdf=False), repository_root=ROOT,
+                              executor_factory=lambda *_: pytest.fail("dossier PDF disabled"))
+        publication = {
+            "schema": DOSSIER_PUBLICATION_SCHEMA, "run_id": root.name, "items": [item], "omitted": [],
+            "counts": {"admitted": 1, "items": 1, "omitted": 0,
+                       "by_kind": {"confirmed_finding": 1, "poc": 0},
+                       "by_status": {"rendered": 0, "render_failed": 0, "latex_only": 1}},
+            "caps": {"max_dossiers": 1},
+        }
+        verified["attachments"]["dossiers"] = _dossiers(
+            root, publication, {row["finding_package_id"]: row for row in verified["packages"]},
+            [], verified["bindings"],
+        )
         handoff = put(root, "data/jobs/job_dossier_publication/attempts/attempt_0001/handoff.json", {"job": "dossiers"})
-        summary = put(root, "data/jobs/job_dossier_publication/attempts/attempt_0001/summary.json", {"items": 1})
+        summary = put(root, "data/jobs/job_dossier_publication/attempts/attempt_0001/summary.json", publication)
         verified["capabilities"]["dossiers"] = capability(True, handoff=handoff, summary=summary, count=1)
-        verified["bindings"] += [handoff, summary, files["json"], files["latex"], files["receipt"]]
+        verified["bindings"] += [handoff, summary]
+        verified["bindings"] = [{"path": path, "sha256": digest}
+                                for path, digest in sorted({(row["path"], row["sha256"])
+                                                           for row in verified["bindings"]})]
     if degraded:
         verified["review"]["status"] = "DEGRADED"
         verified["accounting"]["outcome"] = "DEGRADED"
@@ -349,7 +364,7 @@ def test_assemble_render_and_publish_integrity_guards_fail_closed(
     with monkeypatch.context() as mp:
         mp.setattr(report_job, "render_markdown", lambda *_a, **_kw: next(calls))
         with pytest.raises(IntegrityError, match="report rendering is not deterministic"):
-            built.units[2].handler(fx.unit("report.render", {"report.assemble": assembled}))
+            built.units[2].handler(fx.unit("report.render", {"load.accepted_gate": loaded, "report.assemble": assembled}))
 
     # 3. Markdown bytes that match their artifact_ref sha256 (forged re-pin) but not final-report.json fail publish.
     md_path = fx.root / rendered["artifact"]["path"]
@@ -483,27 +498,21 @@ def test_bound_dossier_narrative_reaches_the_pdf_source_without_its_excerpt(
     assert outputs["acceptance.publish_handoff"]["terminal_status"] == "SUCCEEDED"
 
 
-def test_tampered_dossier_is_a_named_gap_and_an_unbound_one_fails_closed(
+def test_tampered_or_unbound_claimed_dossier_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fx = _setup_run(tmp_path / "tampered", monkeypatch, dossier=True)
     built = build_job(executor_factory=fake_executor([]))
     loaded = built.units[0].handler(fx.unit("load.accepted_gate"))
     assembled = built.units[1].handler(fx.unit("report.assemble", {"load.accepted_gate": loaded}))
-    rendered = built.units[2].handler(fx.unit("report.render", {"report.assemble": assembled}))
+    rendered = built.units[2].handler(fx.unit("report.render", {"load.accepted_gate": loaded, "report.assemble": assembled}))
+    pdf = built.units[3].handler(fx.unit("report.render_pdf", {"load.accepted_gate": loaded, "report.assemble": assembled}))
     json_ref = fx.verified["attachments"]["dossiers"][0]["files"]["json"]
     tampered = {**fx.dossier, "statement": "edited after the gate accepted it"}
     atomic_json(fx.root / json_ref["path"], tampered)
-    # The gate's own binding check (publish) would also reject this; the PDF unit records it as a named gap
-    # instead of printing the changed narrative, and the report still renders.
-    pdf = built.units[3].handler(fx.unit("report.render_pdf", {"load.accepted_gate": loaded, "report.assemble": assembled}))
-    assert pdf["status"] == "rendered"
-    assert pdf["gaps"] == [f"executive_dossier_unavailable: {fx.dossier['dossier_id']}: run-owned artifact changed "
-                           f"after acceptance: {json_ref['path']}"]
-    receipt = read_bound_json(fx.root, pdf["files"]["receipt"])
-    assert receipt["dossiers"] == {"certified": 1, "read": 0, "unavailable": [fx.dossier["dossier_id"]]}
-    tex = (fx.root / pdf["files"]["latex"]["path"]).read_text(encoding="utf-8")
-    assert "edited after the gate accepted it" not in tex and "dossier was not available to this report" in tex
+    with pytest.raises(IntegrityError, match="changed after acceptance"):
+        built.units[3].handler(fx.unit("report.render_pdf", {
+            "load.accepted_gate": loaded, "report.assemble": assembled}))
     with pytest.raises(IntegrityError, match="changed after acceptance"):
         built.units[4].handler(fx.unit("acceptance.publish_handoff", {
             "load.accepted_gate": loaded, "report.assemble": assembled, "report.render": rendered,

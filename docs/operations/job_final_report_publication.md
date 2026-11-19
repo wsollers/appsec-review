@@ -123,8 +123,9 @@ The [handler](../../src/appsec_review/jobs/job_final_report_publication/job.py) 
    independence, shipment or nonexecution assurance.
 2. Validate the report schema and write attempt-owned `final-report.json`. Keep publishable
    findings, verification backlog and withheld records in separate sections.
-3. In `report.render`, render Markdown and executive HTML from that JSON using configured
-   evidence/gap display bounds. Require repeat rendering to produce identical text.
+3. In `report.render`, render Markdown from that JSON using configured evidence/gap display
+   bounds. Load only the gate-certified dossier JSON for executive HTML's bounded narratives,
+   using the same projection as executive LaTeX. Require repeat rendering to produce identical text.
 4. In `report.render_pdf`, render the executive LaTeX source with gate-bound dossiers and, when
    configured, invoke the pinned PDF tool. Unknown metrics remain N/A in the source; the receipt
    distinguishes rendered, disabled and failed outcomes.
@@ -142,12 +143,19 @@ fully inspected. Active chains use certified `component_claim_ids` and count eac
 member once without changing standalone severity. See
 [domain coverage and legacy reads](final-report.md#domain-coverage-and-unknown-measurements-t-5088).
 
+All formats retain the report's certified `attack_chain_cards`, including composed severity and
+gap counts. They never substitute member severity. Historical absence of cards uses an unrated
+fallback; an explicit empty card list stays empty. HTML and PDF-source rendering fail on
+changed, missing, malformed or identity-mismatched claimed dossiers. A pure render without loaded
+dossiers retains the certified reference count and names the not-loaded narrative gap.
+This does not expose protected source excerpts, patch text or generated payloads.
+
 ### `acceptance`
 
 1. In `acceptance.publish_handoff`, reverify the gate snapshot and report schema.
-2. Re-render Markdown from JSON and require byte equality; require report provenance to name the
-   loaded accepted gate handoff.
-3. Publish both hash-bound references with unchanged statuses, counts and limitations. The handoff
+2. Re-render Markdown from JSON and HTML/LaTeX from JSON plus the same bound dossier projection;
+   require byte equality and require report provenance to name the loaded accepted gate handoff.
+3. Publish hash-bound references with unchanged statuses, counts and limitations. The handoff
    item count is publishable plus backlog, not the total including withheld.
 
 ## Dataflow
@@ -160,8 +168,16 @@ flowchart LR
   assemble --> json["final-report.json"]
   json --> render["report.render"]
   render --> md["final-report.md"]
+  load --> dossier["Hash- and identity-checked dossier JSON"]
+  dossier --> render
+  render --> html["final-report.html"]
+  dossier --> pdf["report.render_pdf"]
+  json --> pdf
+  pdf --> tex["final-report.tex / PDF outcome receipt"]
   json --> accept["acceptance.publish_handoff"]
   md --> accept
+  html --> accept
+  tex --> accept
   accept --> out["final_report_publications"]
   gate -. "gap / not_run / notice retained" .-> accept
   accept -. "binding or rerender mismatch" .-> reject["reject publication"]

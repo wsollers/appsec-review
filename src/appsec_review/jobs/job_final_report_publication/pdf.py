@@ -2,8 +2,8 @@
 
 ``bind_dossiers`` reads the dossier documents the gate certified, each through
 :func:`appsec_review.jobs.bound_artifacts.read_bound_json`, so the bytes are proven against the gate's
-hash before a word of them reaches the report; a dossier whose JSON is missing, changed or malformed
-is a named gap, never a silent omission. ``render_executive_latex`` is the pure function from the report
+hash before a word of them reaches the report; claimed JSON that is missing, changed or malformed
+fails integrity validation. ``render_executive_latex`` is the pure function from the report
 and the bound dossiers to ``final-report.tex``. ``render_executive_pdf`` writes the LaTeX, runs the
 container once with ``SOURCE_DATE_EPOCH=0``, keeps only a valid PDF, retains the renderer's logs, and
 writes a receipt (``appsec-review/final-report-pdf-receipt/1``). A rendering failure retains the LaTeX
@@ -53,7 +53,7 @@ def template_dir(repository_root: Path) -> Path:
 
 def bind_dossiers(run_root: Path, report: Mapping[str, Any],
                   bindings: Sequence[Mapping[str, Any]] | None = None) -> tuple[BoundDossier, ...]:
-    """The gate-certified dossier documents, each hash-checked; an unverifiable one is a named gap.
+    """The gate-certified dossier documents, each hash- and identity-checked, or an integrity failure.
 
     With ``bindings`` (the gate's binding set), a dossier reference the gate did not bind is an
     :class:`IntegrityError`: the report reads nothing the gate does not bind.
@@ -64,19 +64,14 @@ def bind_dossiers(run_root: Path, report: Mapping[str, Any],
         reference = item["files"]["json"]
         if bound is not None and (reference["path"], reference["sha256"]) not in bound:
             raise IntegrityError(f"dossier {item['dossier_id']} is not bound by the accepted gate")
-        document, gap = None, None
-        try:
-            candidate = read_bound_json(run_root, reference)
-        except IntegrityError as exc:
-            gap = f"executive_dossier_unavailable: {item['dossier_id']}: {exc}"
-        else:
-            if not isinstance(candidate, Mapping) or candidate.get("schema") != DOSSIER_SCHEMA:
-                gap = f"executive_dossier_unsupported: {item['dossier_id']}: not an {DOSSIER_SCHEMA} document"
-            elif candidate.get("dossier_id") != item["dossier_id"] or candidate.get("finding") != item["finding"]:
-                gap = f"executive_dossier_mismatch: {item['dossier_id']}: the document names another dossier or finding"
-            else:
-                document = candidate
-        result.append(BoundDossier(item["dossier_id"], item["kind"], dict(item["finding"]), document, gap))
+        document = read_bound_json(run_root, reference)
+        if not isinstance(document, Mapping) or document.get("schema") != DOSSIER_SCHEMA:
+            raise IntegrityError(f"executive dossier {item['dossier_id']} has an unsupported schema")
+        if (document.get("dossier_id") != item["dossier_id"] or document.get("finding") != item["finding"]
+                or document.get("kind") != item["kind"] or document.get("run_id") != report["run_id"]
+                or document.get("visibility") != "protected_developer"):
+            raise IntegrityError(f"executive dossier {item['dossier_id']} disagrees with its certified identity")
+        result.append(BoundDossier(item["dossier_id"], item["kind"], dict(item["finding"]), document))
     return tuple(sorted(result, key=lambda row: row.dossier_id))
 
 

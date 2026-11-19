@@ -253,7 +253,11 @@ def _finding_box(index: int, item: Mapping[str, Any], dossier: BoundDossier | No
     block = item.get("ship_block") or {}
     title = _text(item.get("title") or (document or {}).get("title") or item.get("finding_package_id"), 200)
     statement = (document or {}).get("statement")
+    not_loaded = dossier is not None and (dossier.gap or "").startswith("executive_dossier_not_loaded:")
     what = (_text(statement) if statement else
+            "What is wrong: the certified protected dossier was not loaded into this rendering. Only the accepted "
+            "title, state, severity and ship-block decision are shown; the narrative remains in its certified "
+            "artifact, not absent from the review." if not_loaded else
             "What is wrong: the finding's dossier was not available to this report, so only the accepted title, "
             "state, severity and ship-block decision are shown. The absence of the narrative is a gap of this "
             "report, not of the finding.")
@@ -571,7 +575,9 @@ def _section_blocks(report: Mapping[str, Any], dossiers: Sequence[BoundDossier])
     poc_by_claim = {row.finding["claim_id"]: row for row in dossiers if row.kind == "poc" and row.document}
     chains = [f"{clean(row['chain_id'])}: {words(row['status'])}; links {len(row.get('component_claim_ids') or ())} "
               f"claims; {_plural(row.get('gap_count', 0), 'recorded gap')}" for row in report["attack_chains"]["items"]]
-    chain_cards = build_attack_chain_cards(report)
+    chain_cards = report.get("attack_chain_cards")
+    if chain_cards is None:
+        chain_cards = build_attack_chain_cards(report)
     card_boxes = []
     for card in chain_cards:
         step_lines = [
@@ -737,6 +743,13 @@ def _appendix_blocks(report: Mapping[str, Any], dossiers: Sequence[BoundDossier]
 def executive_document(report: Mapping[str, Any], dossiers: Sequence[BoundDossier] = (),
                        *, source_date_epoch: int = 0) -> Document:
     """Build the executive report document from ``final-report.json`` and the gate-bound dossiers."""
+    loaded_ids = {row.dossier_id for row in dossiers}
+    dossiers = (*dossiers, *(
+        BoundDossier(row["dossier_id"], row["kind"], row["finding"], None,
+                     f"executive_dossier_not_loaded: {row['dossier_id']}: certified protected document "
+                     "not loaded into this rendering; see its certified reference.")
+        for row in report["dossiers"]["items"] if row["dossier_id"] not in loaded_ids
+    ))
     for row in dossiers:
         if row.document is not None and row.document.get("schema") != DOSSIER_SCHEMA:
             raise ValueError(f"unsupported dossier model for {row.dossier_id}")

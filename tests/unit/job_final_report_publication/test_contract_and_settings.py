@@ -163,7 +163,7 @@ def test_contract_datasets_registry_topology_and_input_validator_parity() -> Non
     assert {u.unit_id: u.dependencies for u in job.units} == {
         "load.accepted_gate": (),
         "report.assemble": ("load.accepted_gate",),
-        "report.render": ("report.assemble",),
+        "report.render": ("load.accepted_gate", "report.assemble"),
         "report.render_pdf": ("load.accepted_gate", "report.assemble"),
         "acceptance.publish_handoff": ("load.accepted_gate", "report.assemble", "report.render", "report.render_pdf"),
     }

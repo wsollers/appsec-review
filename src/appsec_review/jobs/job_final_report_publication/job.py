@@ -2,8 +2,9 @@
 
 Units: ``load.accepted_gate`` re-verifies the accepted ``job_final_publication_gate`` handoff, the
 gate document and every artifact the gate binds, ``report.assemble`` writes the schema-validated
-``final-report.json``, ``report.render`` renders ``final-report.md`` and ``final-report.html`` from
-that JSON, ``report.render_pdf`` renders the executive ``final-report.pdf`` (with its ``final-report.tex``
+``final-report.json``, ``report.render`` renders ``final-report.md`` from that JSON and
+``final-report.html`` from that JSON plus gate-bound dossier summaries. ``report.render_pdf``
+renders the executive ``final-report.pdf`` (with its ``final-report.tex``
 and a receipt) from that JSON plus the gate-bound dossier documents, and ``acceptance.publish_handoff``
 re-proves every file and publishes the hash-pinned handoff. The job calls no model and reads nothing
 the gate does not bind.
@@ -165,12 +166,15 @@ def build_job(*, repository_root: Path | None = None,
 
     def render(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit)
-        report = read_bound_json(unit.job.run_root, unit.output("report.assemble")["artifact"])
+        root = unit.job.run_root
+        report = read_bound_json(root, unit.output("report.assemble")["artifact"])
+        gate = read_bound_json(root, unit.output("load.accepted_gate")["gate_document"])
+        dossiers = bind_dossiers(root, report, gate["bindings"])
         text = render_markdown(report, evidence_ids=settings.markdown_evidence_ids, gap_ids=settings.markdown_gap_ids)
         if text != render_markdown(report, evidence_ids=settings.markdown_evidence_ids, gap_ids=settings.markdown_gap_ids):
             raise IntegrityError("report rendering is not deterministic")
-        html_text = render_executive_html(report)
-        if html_text != render_executive_html(report):
+        html_text = render_executive_html(report, dossiers)
+        if html_text != render_executive_html(report, dossiers):
             raise IntegrityError("executive HTML rendering is not deterministic")
         path = unit.unit_root / REPORT_MARKDOWN
         html_path = unit.unit_root / REPORT_HTML
@@ -232,14 +236,15 @@ def build_job(*, repository_root: Path | None = None,
             raise IntegrityError("final-report.md is not the rendering of final-report.json")
         if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
             raise IntegrityError("final report is not bound to the accepted gate handoff")
-        expected_html = render_executive_html(report).encode("utf-8")
+        dossiers = bind_dossiers(run_root, report, gate["bindings"])
+        expected_html = render_executive_html(report, dossiers).encode("utf-8")
         if read_bound(run_root, rendered["html"]) != expected_html:
             raise IntegrityError("final-report.html is not the rendering of final-report.json")
         files = pdf["files"]
         receipt = read_bound_json(run_root, files["receipt"])
         _check(_schemas(unit), PDF_RECEIPT, receipt)
         tex = read_bound(run_root, files["latex"])
-        if tex != render_executive_latex(report, bind_dossiers(run_root, report, gate["bindings"]), template_dir(_root(unit))):
+        if tex != render_executive_latex(report, dossiers, template_dir(_root(unit))):
             raise IntegrityError("final-report.tex is not the rendering of final-report.json and its bound dossiers")
         if receipt["tex_sha256"] != hashlib.sha256(tex).hexdigest() or receipt["report"] != assembled["artifact"]:
             raise IntegrityError("the executive PDF receipt does not name the published report and LaTeX")
@@ -285,7 +290,7 @@ def build_job(*, repository_root: Path | None = None,
     units = (
         Unit("load.accepted_gate", load),
         Unit("report.assemble", assemble, ("load.accepted_gate",)),
-        Unit("report.render", render, ("report.assemble",)),
+        Unit("report.render", render, ("load.accepted_gate", "report.assemble")),
         Unit("report.render_pdf", render_pdf, ("load.accepted_gate", "report.assemble")),
         Unit("acceptance.publish_handoff", publish,
              ("load.accepted_gate", "report.assemble", "report.render", "report.render_pdf")),
