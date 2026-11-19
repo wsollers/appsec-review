@@ -54,7 +54,7 @@ def _succeeding_worker(root: Path, graph, action):
     def worker(request, _run_id):
         path = BuildWorkspace(root).paths.target / "build/control"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(minimal_elf())
+        path.write_bytes(minimal_elf(interpreter="/lib64/ld-linux-x86-64.so.2"))
         return IterationOutcome({"build_unit_id": request["node_id"], "terminal_status": "SUCCEEDED",
                                  "gaps": [], "artifacts": []},
                                 (ProductSpec("target/build/control", product["kind"], product["product_id"],

@@ -269,7 +269,7 @@ def _selected_trial(tmp_path):
     def execute(invocation):
         def behavior(argv, target, _cwd, _environment, capture):
             capture.exec("/usr/bin/clang", argv)
-            (target / "build/control").write_bytes(minimal_elf())
+            (target / "build/control").write_bytes(minimal_elf(interpreter="/lib64/ld-linux-x86-64.so.2"))
             return 0, b"", b""
 
         executor = simulated_executor(
