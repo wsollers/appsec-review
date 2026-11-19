@@ -512,10 +512,10 @@ def test_the_final_report_schema_accepts_the_poc_block_and_agrees_with_jsonschem
     schemas = {path.name: json.loads(path.read_text(encoding="utf-8"))
                for path in (ROOT / "docs" / "schemas" / "final-report").glob("*.json")}
     registry = Registry().with_resources((schema["$id"], Resource.from_contents(schema)) for schema in schemas.values())
-    validator = Draft202012Validator(schemas["final-report.schema.json"], registry=registry)
+    validator = Draft202012Validator(schemas["final-report-v3.schema.json"], registry=registry)
     closed = SchemaSet(ROOT / "docs" / "schemas" / "final-report")
     report = unit_json(mixed, "report.assemble", "final-report.json", REPORT)
-    assert list(validator.iter_errors(report)) == [] and closed.errors("final-report", report) == []
+    assert list(validator.iter_errors(report)) == [] and closed.errors("final-report-v3", report) == []
     item_index = next(index for index, item in enumerate(report["poc_outcomes"]["items"])
                       if item["status"] == "compile_verified")
     broken = []
@@ -529,7 +529,7 @@ def test_the_final_report_schema_accepts_the_poc_block_and_agrees_with_jsonschem
         edit(mutated)
         broken.append(mutated)
     for document in broken:
-        assert list(validator.iter_errors(document)) and closed.errors("final-report", document)
+        assert list(validator.iter_errors(document)) and closed.errors("final-report-v3", document)
 
 
 def test_a_report_in_the_previous_shape_is_explicitly_unsupported(mixed) -> None:
@@ -542,7 +542,7 @@ def test_a_report_in_the_previous_shape_is_explicitly_unsupported(mixed) -> None
                               "items": [{"finding_package_id": "finding-" + "1" * 64, "status": "compile_verified",
                                          "result_id": None}]}
     report["provenance"].pop("poc_handoff")
-    assert SchemaSet(ROOT / "docs" / "schemas" / "final-report").errors("final-report", report)
+    assert SchemaSet(ROOT / "docs" / "schemas" / "final-report").errors("final-report-v3", report)
 
 
 def test_the_default_package_view_is_built_from_the_accepted_review_and_unresolved_identities_are_named(chain) -> None:

@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
 
 from appsec_review.jobs.accepted_review import project_finding
 from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_SCHEMA
@@ -44,7 +45,7 @@ from tests.unit.review_decision_audit_wiring.helpers import verified_document
 from tests.unit.review_decision_audit_consumers.helpers import Fixture
 
 ROOT = Path(__file__).resolve().parents[3]
-RADAR_SCHEMA_PATH = ROOT / "docs" / "schemas" / "final-report" / "security-radar-tracker.schema.json"
+RADAR_SCHEMA_PATH = ROOT / "docs" / "schemas" / "final-report" / "security-radar-tracker-v2.schema.json"
 DOSSIER_SCHEMA_PATH = ROOT / "docs" / "schemas" / "dossier" / "finding-dossier.schema.json"
 TEMPLATE = ROOT / "containers" / "report" / "latex" / "template"
 
@@ -108,11 +109,14 @@ def test_twelve_domains_and_four_series_validate_against_schema() -> None:
         ],
     }
     tracker = build_radar_tracker(report_in)
-    assert tracker["schema"] == SECURITY_RADAR_TRACKER_SCHEMA == "appsec-review/security-radar-tracker/1"
+    assert tracker["schema"] == SECURITY_RADAR_TRACKER_SCHEMA == "appsec-review/security-radar-tracker/2"
     assert len(tracker["axes"]) == 12
     schema = json.loads(RADAR_SCHEMA_PATH.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
-    Draft202012Validator(schema).validate(tracker)
+    documents = [json.loads(path.read_text(encoding="utf-8"))
+                 for path in sorted(RADAR_SCHEMA_PATH.parent.glob("*.schema.json"))]
+    registry = Registry().with_resources((row["$id"], Resource.from_contents(row)) for row in documents)
+    Draft202012Validator(schema, registry=registry).validate(tracker)
 
     assert json.dumps(tracker, sort_keys=True) == json.dumps(build_radar_tracker(report_in), sort_keys=True)
     tel = radar_telemetry(tracker)
@@ -257,7 +261,10 @@ def test_executive_report_posture_chains_roadmap_and_multi_format_rendering() ->
     svg_start = html.index("<svg")
     svg_end = html.index("</svg>") + len("</svg>")
     ET.fromstring(html[svg_start:svg_end])
-    assert html.count('data-series=') == 4
+    assert html.count('data-series=') == 2
+    assert 'data-series="Surface exposure"' not in html
+    assert 'data-series="Verified coverage"' not in html
+    assert "N/A" in html and "N/A" in md
 
 
 def test_redesigned_dossier_sections_and_deterministic_latex_escaping(tmp_path: Path) -> None:

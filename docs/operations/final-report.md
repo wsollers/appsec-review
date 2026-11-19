@@ -9,7 +9,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 # Operating the final publication gate and the final report
 
 **Delivered snapshot contract (`c44eddc1`, integrated by `dd9c9ad`):** PoC, remediation
-and dossiers precede one final gate. Gate/report `/2` contracts certify and consume one snapshot;
+and dossiers precede one final gate. Gate `/2` and report `/3` contracts certify and consume one snapshot;
 the shared reader accepts review `/3`, including nested chain/package bindings.
 The [completion design](../architecture/evidence-completion-and-remediation.md) requires
 one gate-certified snapshot after every enabled producer, including protected
@@ -140,7 +140,7 @@ T-150 adds sanitized decision-audit availability, incomplete-population and scop
 The gate verifies the protected audit and retains certified read hashes; the report still reads
 only the gate snapshot. It does not publish raw audit narratives or change finding, score,
 ship-block or PoC decisions. See [the canonical gate](job_final_publication_gate.md#gaps) for
-the exact limitation IDs; the public gate/report schemas remain `/2`.
+the exact limitation IDs; these limitations retain their gate `/2` representation in report `/3`.
 
 Each limitation is a `limitation_id`, a `kind` and a statement. `gap` limitations make the gate
 status `PUBLISHABLE_WITH_LIMITATIONS` and the job `COMPLETED_WITH_GAPS`; `not_run` limitations name a
@@ -180,8 +180,8 @@ accounting/run identity, and re-hashes every certified binding. Every input/capa
 reference must belong to that binding set. A changed, escaped, missing or uncertified reference
 fails the job. No optional producer's latest pointer is read during report assembly.
 
-`report.assemble` writes `final-report.json` (`final-report/2`, handoff `/2`, schema
-[`../schemas/final-report/final-report.schema.json`](../schemas/final-report/final-report.schema.json)):
+`report.assemble` writes `final-report.json` (`final-report/3`, handoff `/2`, schema
+[`../schemas/final-report/final-report-v3.schema.json`](../schemas/final-report/final-report-v3.schema.json)):
 
 - `findings`: the publishable (confirmed) packages, each with its ship-block decision, independence,
   evidence relation ids, gap ids and every score package's four dimensions (technical severity,
@@ -205,6 +205,39 @@ fails the job. No optional producer's latest pointer is read during report assem
 - `withheld`: withheld packages with their reasons;
 - `limitations`, `gap_ids`, `status` (including `review_complete`, true only for a `COMPLETE`
   review that is not `review_incomplete` and has no `gap` limitation), `provenance` and `notices`.
+
+### Domain coverage and unknown measurements (T-5088)
+
+The report's `security-radar-tracker/2` keeps exposure, inspected scope, accepted claims,
+publishable findings and chain membership distinct. Package counts and the gate's lane-B
+coverage-cell summary are **not** domain exposure or inspection telemetry. The current gate
+supplies no such domain telemetry: report assembly leaves exposure/inspection and derived
+coverage percentages `null`, with `surface_exposure_unknown` / `inspected_units_unknown`
+gap reasons. It does not retrieve another producer to fill those fields.
+Each axis also records separate publishable, verification-backlog and withheld `package_counts`.
+
+The bounded dimension calculator can use explicitly supplied exposure and inspection counts.
+Measured zero stays `0`; a zero exposed denominator leaves the percentage `null` with
+`no_domain_coverage_bound`, not a clean verdict. A positive fully inspected population with no
+findings may be `verified_no_findings`. Withheld packages and unconfirmed verification backlog
+always retain their own gap reasons even with 100% inspected scope; inspection is not adjudication.
+Missing inspection never earns partial credit from a supported claim. Aggregate confidence is
+`null` with `domain_coverage_unknown` whenever an axis lacks a defined coverage percentage.
+
+Active chain membership uses the certified `component_claim_ids` of `confirmed` and
+`qualified_supported` chains. Each publishable finding contributes once, even across several
+chains or when already high/critical; neither backlog nor withheld packages inflate those counts.
+Standalone severity and ship-block status are unchanged.
+
+JSON and event telemetry preserve nulls and their reasons. Markdown, HTML and executive PDF
+source display **N/A**, not zero; charts omit unknown vertices and never close or fill a polygon
+through them. The formats use the same report radar rather than recomputing it from format-specific
+dossiers. Known counts remain numeric.
+
+Historical `final-report/2` and radar `/1` schemas are retained unchanged. Readers select the
+validator from the document's declared version and reject unsupported versions; they never rewrite
+accepted bytes. Legacy charts retain recorded estimates with an explicit legacy-estimate notice,
+not a retrospective assertion that exposure or inspection was measured.
 
 `report.render` renders `final-report.md` from that JSON with a pure function: the same
 `final-report.json` and display bounds give byte-identical Markdown, with no clock, locale or
@@ -249,7 +282,7 @@ PoC failure never contradicts the finding, and a compiled PoC cannot upgrade it 
 
 The user selected standalone post-gate export while preserving gate-only reporting.
 At `74d931273a383f2f33bac90d3569a070a0ef612d`, report dependencies and `CONSUMES` are exactly
-`job_final_publication_gate`; report `/2` has no `openvex_export` block, output links or
+`job_final_publication_gate`; report `/3` has no `openvex_export` block, output links or
 live optional attachment discovery. This supersedes the earlier OpenVEX report-link/fan-in
 proposal, not the pre-gate completion design.
 

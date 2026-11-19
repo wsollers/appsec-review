@@ -10,7 +10,7 @@ _A = "data/jobs/job_final_report_publication/attempts/*"
 # proof-of-concept handoff when job_poc_generation ran (an inactive job is dropped from the consumed set).
 DATASETS = (
     artifact_only(
-        "final_report_publications", "acceptance", "inference_review", "appsec-review/final-report/2",
+        "final_report_publications", "acceptance", "inference_review", "appsec-review/final-report/3",
         "The machine-readable final report (final-report.json), its deterministic Markdown rendering "
         "(final-report.md), HTML (final-report.html) and the executive PDF (final-report.tex, final-report.pdf, receipt.json and retained "
         "renderer logs), all hash-pinned by the accepted handoff.",

@@ -368,8 +368,11 @@ def _radar_legend(block: RadarChart) -> list[str]:
         values = ""
         position = axis_index.get(row.key) if row.kind == "axis" else None
         if position is not None:
-            shown = [f"{_fit(series.label, RADAR_LABEL_CHARS)} {_fit(series.displays[position], RADAR_DISPLAY_CHARS)}"
-                     for series in block.series if series.displays and clean(series.displays[position])]
+            shown = []
+            for series in block.series:
+                display = ("N/A" if series.values[position] is None else
+                           series.displays[position] if series.displays else f"{series.values[position]:g}")
+                shown.append(f"{_fit(series.label, RADAR_LABEL_CHARS)} {_fit(display, RADAR_DISPLAY_CHARS)}")
             values = tex("; ".join(shown))
         lines.append(rf"\radarkeyrow{{{tex(_fit(row.key, RADAR_KEY_CHARS))}}}{{{label}}}{{{meaning}}}{{{values}}}")
     return lines
@@ -378,8 +381,11 @@ def _radar_legend(block: RadarChart) -> list[str]:
 def _radar_chart(block: RadarChart) -> list[str]:
     lines = _chart_open(block.title, "")
     count = len(block.axes)
-    if not any(value > 0 for row in block.series for value in row.values):
-        lines.append(r"\chartempty{No data}")
+    if not any(value is not None and value > 0 for row in block.series for value in row.values):
+        unknown = any(value is None for row in block.series for value in row.values)
+        lines.append(r"\chartempty{N/A: unknown metrics; known values are zero}" if unknown else
+                     r"\chartempty{All measured values are zero}")
+        lines += _radar_legend(block)
         if clean(block.scale_note):
             lines.append(rf"\chartcaption{{{tex(block.scale_note)}}}")
         return lines + _chart_close(block.caption, None)
@@ -394,12 +400,20 @@ def _radar_chart(block: RadarChart) -> list[str]:
         lines.append(rf"\node[chartnote,anchor=east] at {_pt(*radar_ring_label_point(count, RADAR_R * ring))} {{{label}}};")
     for index, row in enumerate(block.series):
         color = _tone_color(row.tone)
-        points = [radar_point(axis, count, RADAR_R * value) for axis, value in enumerate(row.values)]
-        polygon = _radar_polygon(points)
-        lines.append(rf"\fill[{color},radarfill] {polygon};")
-        lines.append(rf"\draw[{color},radarline,{radar_line_style(index)}] {polygon};")
-        lines += [rf"\fill[{color}] {_pt(x, y)} circle ({_n(RADAR_MARKER_R)});"
-                  for (x, y), value in zip(points, row.values) if value > 0]
+        points = [None if value is None else radar_point(axis, count, RADAR_R * value)
+                  for axis, value in enumerate(row.values)]
+        if all(point is not None for point in points):
+            polygon = _radar_polygon(points)
+            lines.append(rf"\fill[{color},radarfill] {polygon};")
+            lines.append(rf"\draw[{color},radarline,{radar_line_style(index)}] {polygon};")
+        else:
+            for axis, point in enumerate(points):
+                following = points[(axis + 1) % count]
+                if point is not None and following is not None:
+                    lines.append(rf"\draw[{color},radarline,{radar_line_style(index)}] "
+                                 rf"{_pt(*point)} -- {_pt(*following)};")
+        lines += [rf"\fill[{color}] {_pt(*point)} circle ({_n(RADAR_MARKER_R)});"
+                  for point, value in zip(points, row.values) if point is not None and value > 0]
     for index, axis in enumerate(block.axes):
         lines.append(rf"\node[chartkey] at {_pt(*radar_point(index, count, RADAR_KEY_R))} "
                      rf"{{{tex(_fit(axis.key, RADAR_KEY_CHARS))}}};")

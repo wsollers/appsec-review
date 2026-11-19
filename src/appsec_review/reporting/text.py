@@ -42,6 +42,11 @@ def sha256_value(value: Any) -> str:
     return sha256_text(canonical(value))
 
 
+def metric_text(value: int | float | None, suffix: str = "") -> str:
+    """Unknown measurements are N/A; a measured zero keeps its numeric display."""
+    return "N/A" if value is None else f"{value:g}{suffix}"
+
+
 def clean(value: Any, *, keep_newlines: bool = False, code: bool = False) -> str:
     """Printable text only: control, format, surrogate and private-use characters are dropped.
 

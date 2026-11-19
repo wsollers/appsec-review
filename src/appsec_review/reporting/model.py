@@ -189,7 +189,7 @@ class RadarAxis:
 class RadarSeries:
     label: str
     tone: str                          # a verdict token or "neutral"
-    values: tuple[float, ...]          # one per axis, in [0, 1]; the chart clamps and counts anything outside
+    values: tuple[float | None, ...]   # null is unknown, never plotted at the centre
     displays: tuple[str, ...] = ()     # optional preformatted value text per axis, shown in the key table
 
 
@@ -207,6 +207,7 @@ class RadarChart:
 
     Values are fractions of the rim. Construction clamps every value into [0, 1] (a non-finite value
     becomes 0) and records how many were moved in ``clamped``, so a renderer can say so.
+    ``None`` remains unknown and is not clamped, plotted, or joined across.
     """
 
     title: str
@@ -233,6 +234,9 @@ class RadarChart:
                 raise ValueError(f"series {row.label!r} has {len(row.displays)} displays for {len(self.axes)} axes")
             values = []
             for value in row.values:
+                if value is None:
+                    values.append(None)
+                    continue
                 number = float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else math.nan
                 safe = 0.0 if math.isnan(number) else min(max(number, 0.0), 1.0)
                 clamped += safe != number

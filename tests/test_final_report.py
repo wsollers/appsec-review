@@ -38,7 +38,8 @@ from tests.fixtures.inference_review.fake_infer import NARRATIVES
 # A tampered upstream handoff is refused either when the attempt binds it or when a unit re-verifies it.
 INTEGRITY = (IntegrityError, RetrievalIntegrityError)
 SCHEMAS = ROOT / "docs" / "schemas" / "final-report"
-NAMES = ("common", "final-publication-gate", "final-report", "final-report-pdf-receipt", "security-radar-tracker")
+NAMES = ("common", "final-publication-gate", "final-report", "final-report-v3",
+         "final-report-pdf-receipt", "security-radar-tracker", "security-radar-tracker-v2")
 GATE_DOC = ("acceptance.publish_handoff", "final-publication-gate.json")
 REPORT_DOC = ("report.assemble", "final-report.json")
 REPORT_MD = ("report.render", "final-report.md")
@@ -205,7 +206,7 @@ def test_review_incomplete_is_never_presented_as_complete(failed_hunt_chain: Cha
                                 "publication": "PUBLISHABLE_WITH_LIMITATIONS", "review_complete": False}
     text = chain.unit_file(REPORT, *REPORT_MD).read_text(encoding="utf-8")
     assert "review presented as complete: **no**" in text and "`review_incomplete` (gap)" in text
-    validator("final-report").validate(report)
+    validator("final-report-v3").validate(report)
     assert chain.handoff(REPORT)["completion_status"] == "COMPLETED_WITH_GAPS"
     # Package accounting stays exact even with a failed lane.
     counts = gate["package_counts"]
@@ -214,8 +215,8 @@ def test_review_incomplete_is_never_presented_as_complete(failed_hunt_chain: Cha
 
 def test_report_json_is_schema_valid_and_contains_the_required_sections(chain: Chain) -> None:
     report = report_document(chain)
-    validator("final-report").validate(report)
-    assert SchemaSet(SCHEMAS).errors("final-report", report) == []
+    validator("final-report-v3").validate(report)
+    assert SchemaSet(SCHEMAS).errors("final-report-v3", report) == []
     gate = gate_document(chain)
     assert [item["finding_package_id"] for item in report["findings"]] == gate["buckets"]["publishable"]
     assert [item["finding_package_id"] for item in report["verification_backlog"]] == gate["buckets"]["verification_backlog"]
@@ -627,7 +628,7 @@ def _report_of(value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], d
     gate = gate_classify.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, value, classification)
     validator("final-publication-gate").validate(gate)
     report = build_report(gate, gate_handoff=gate["inputs"]["job_handoff"], gate_document=gate["inputs"]["review_handoff"])
-    validator("final-report").validate(report)
+    validator("final-report-v3").validate(report)
     return classification, gate, report
 
 
@@ -678,7 +679,7 @@ def test_a_clean_report_says_the_review_is_complete(chain: Chain, verified: dict
     gate = gate_classify.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, clean, gate_classify.classify(clean))
     validator("final-publication-gate").validate(gate)
     report = build_report(gate, gate_handoff=gate["inputs"]["job_handoff"], gate_document=gate["inputs"]["review_handoff"])
-    validator("final-report").validate(report)
+    validator("final-report-v3").validate(report)
     assert report["status"]["review_complete"] is True and report["status"]["publication"] == "PUBLISHABLE"
     text = render_markdown(report, evidence_ids=8, gap_ids=16)
     assert "review presented as complete: **yes**" in text and "This review is not complete" not in text
@@ -750,7 +751,7 @@ def _mutations(document: dict[str, Any], kind: str):
 def test_closed_validator_agrees_with_jsonschema_on_valid_and_mutated_documents(chain: Chain) -> None:
     closed = SchemaSet(SCHEMAS)
     for name, kind, document in (("final-publication-gate", "gate", gate_document(chain)),
-                                 ("final-report", "report", report_document(chain))):
+                                 ("final-report-v3", "report", report_document(chain))):
         assert validator(name).is_valid(document) and closed.errors(name, document) == []
         for label, mutated in _mutations(document, kind):
             assert validator(name).is_valid(mutated) is False, (name, label)
@@ -760,8 +761,8 @@ def test_closed_validator_agrees_with_jsonschema_on_valid_and_mutated_documents(
 def test_undeclared_limitation_kinds_are_refused(chain: Chain) -> None:
     report = report_document(chain)
     report["limitations"][0]["kind"] = "failure"
-    assert not validator("final-report").is_valid(report)
-    assert SchemaSet(SCHEMAS).errors("final-report", report)
+    assert not validator("final-report-v3").is_valid(report)
+    assert SchemaSet(SCHEMAS).errors("final-report-v3", report)
 
 
 # ---------------------------------------------------------------------------------------------- wiring

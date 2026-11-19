@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from .dimensions import DIMENSIONS, predicate_of
+from .text import metric_text
 
 _SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 _ACTIVE_CHAIN_STATUSES = frozenset({"confirmed", "qualified_supported", "confirmed_chain", "qualified_chain"})
@@ -78,6 +79,7 @@ def build_executive_posture(report: Mapping[str, Any], radar: Mapping[str, Any])
         "ship_blocking_count": blocking,
         "coverage_confidence_index": {
             "score": cov_conf["confidence_score"],
+            "gap_reasons": list(cov_conf.get("gap_reasons", ())),
             "verified_axes": cov_conf["verified_axes"],
             "gap_axes": cov_conf["gap_axes"],
             "unverified_axis_ids": [ax["domain_id"] for ax in radar.get("axes", ()) if ax.get("coverage_status") in {"unverified_gap", "partial_coverage_gap"}],
@@ -277,8 +279,9 @@ def build_named_coverage_gaps(
                 "disposition": "UNVERIFIED_COVERAGE_GAP",
                 "statement": (
                     f"{axis['label']} ({axis['key']}): verified coverage is "
-                    f"{axis['series']['verified_coverage']['score']:.1f}% "
-                    f"({axis['coverage_status']}). Missing or incomplete coverage is never evidence of cleanliness."
+                    f"{metric_text(axis['series']['verified_coverage']['score'], '%')} "
+                    f"({axis['coverage_status']}); {', '.join(axis['gap_reasons'])}. "
+                    "Missing or incomplete coverage is never evidence of cleanliness."
                 ),
             })
     if isinstance(limitations_or_report, Mapping):

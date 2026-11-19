@@ -37,6 +37,8 @@ NOTICES = (
     "The report holds identifiers, hashes and accepted summaries only. It contains no exploit code, proof "
     "payloads, queries or prompts.",
     "A named limitation is a limit of the review or of the pipeline, never evidence that the target is clean.",
+    "Domain exposure and inspection require explicit bound telemetry, not package or coverage-cell counts. "
+    "Unknown metrics are null (N/A), with gap reasons; measured zero remains zero.",
 )
 
 POC_REASON = ("Compile-only PoC generation outcomes for accepted review candidates. Each status distinguishes "
@@ -44,6 +46,15 @@ POC_REASON = ("Compile-only PoC generation outcomes for accepted review candidat
               "A failed or unavailable PoC does not contradict its finding.")
 
 CHAIN_STATUSES = ("confirmed", "qualified_supported", "refuted", "insufficient_evidence")
+
+
+def report_schema_name(report: Mapping[str, Any]) -> str:
+    """Validate historical bytes under their original contract; never reinterpret their metrics."""
+    versions = {"appsec-review/final-report/2": "final-report", FINAL_REPORT_SCHEMA: "final-report-v3"}
+    schema = report.get("schema")
+    if schema not in versions:
+        raise ValueError(f"unsupported final report schema: {schema!r}")
+    return versions[schema]
 
 
 def chain_status_counts(record: Mapping[str, Any], items: Mapping[str, Any] | list) -> dict[str, int]:
@@ -160,6 +171,7 @@ __all__ = [
     "build_named_coverage_gaps",
     "build_remediation_roadmap",
     "build_report",
+    "report_schema_name",
     "chain_reason",
     "chain_status_counts",
 ]

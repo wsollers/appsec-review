@@ -16,7 +16,7 @@ from typing import Any, Mapping, Sequence
 from appsec_review.review.models import SecurityPredicate
 from .text import clean
 
-SECURITY_RADAR_TRACKER_SCHEMA = "appsec-review/security-radar-tracker/1"
+SECURITY_RADAR_TRACKER_SCHEMA = "appsec-review/security-radar-tracker/2"
 RADAR_SERIES_IDS: tuple[str, ...] = (
     "surface_exposure",
     "verified_coverage",
@@ -203,8 +203,8 @@ class DimensionCounts:
     owasp_2025: str = ""
     high_critical_findings: int = 0
     corroborated_leads: int = 0
-    surface_exposure_raw: int = 0
-    verified_coverage_pct: float = 0.0
+    surface_exposure_raw: int | None = None
+    verified_coverage_pct: float | None = None
     coverage_status: str = "unverified_gap"
 
 
@@ -340,11 +340,18 @@ def _chain_claim_ids(report: Mapping[str, Any]) -> set[str]:
         if not isinstance(item, Mapping):
             continue
         status = str(item.get("status") or "")
-        if status in {"confirmed", "qualified_supported", "admitted", "supported"}:
-            for cid in item.get("claim_ids") or ():
+        if status in {"confirmed", "qualified_supported"}:
+            for cid in item.get("component_claim_ids") or ():
                 if isinstance(cid, str):
                     admitted.add(cid)
     return admitted
+
+
+def _telemetry_count(record: Mapping[str, Any], key: str) -> int | None:
+    value = record.get(key)
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+        raise ValueError(f"{key} must be a nonnegative integer or null")
+    return value
 
 
 def build_radar_tracker(
@@ -371,6 +378,7 @@ def build_radar_tracker(
     chain_by_key = {dim.key: 0 for dim in DIMENSIONS}
     claims_by_key = {dim.key: 0 for dim in DIMENSIONS}
     backlog_by_key = {dim.key: 0 for dim in DIMENSIONS}
+    withheld_by_key = {dim.key: 0 for dim in DIMENSIONS}
     unclassified = 0
 
     for section in ("findings", "verification_backlog", "withheld"):
@@ -386,30 +394,31 @@ def build_radar_tracker(
             if section == "findings":
                 findings_by_key[key] += 1
                 sev = _technical_severity(package, dossier)
-                in_chain = str(package.get("claim_id") or "") in chain_claims or bool(
-                    isinstance(dossier, Mapping) and dossier.get("chains")
-                )
+                in_chain = str(package.get("claim_id") or "") in chain_claims
                 if in_chain:
                     chain_by_key[key] += 1
                 if sev in _HIGH_CRITICAL or in_chain:
                     hc_by_key[key] += 1
             elif section == "verification_backlog":
                 backlog_by_key[key] += 1
+            else:
+                withheld_by_key[key] += 1
 
-    raw_surface: dict[str, int] = {}
+    raw_surface: dict[str, int | None] = {}
     raw_leads: dict[str, int] = {}
-    raw_cov_count: dict[str, int] = {}
-    cov_pct: dict[str, float] = {}
+    raw_cov_count: dict[str, int | None] = {}
+    cov_pct: dict[str, float | None] = {}
     cov_status: dict[str, str] = {}
     cov_gaps: dict[str, list[str]] = {}
 
     for dim in DIMENSIONS:
         dom = telemetry.get(dim.domain_id) if isinstance(telemetry.get(dim.domain_id), Mapping) else {}
-        leads_raw = int(dom.get("corroborated_leads", claims_by_key[dim.key]))
-        exposed_raw = int(dom.get("surface_exposure", dom.get("exposed_units", leads_raw)))
-        exposed_raw = max(exposed_raw, leads_raw)
-        raw_leads[dim.key] = max(0, leads_raw)
-        raw_surface[dim.key] = max(0, exposed_raw)
+        leads_raw = _telemetry_count(dom, "corroborated_leads")
+        exposed_raw = _telemetry_count(dom, "surface_exposure" if "surface_exposure" in dom else "exposed_units")
+        inspected = _telemetry_count(dom, "inspected_units")
+        raw_leads[dim.key] = claims_by_key[dim.key] if leads_raw is None else leads_raw
+        raw_surface[dim.key] = exposed_raw
+        raw_cov_count[dim.key] = inspected
 
         axis_gap_reasons: list[str] = []
         for extra_gap in dom.get("coverage_gaps") or ():
@@ -418,35 +427,35 @@ def build_radar_tracker(
         if dom.get("syntactic_fallback_only"):
             axis_gap_reasons.append("syntactic_fallback_only")
 
-        if "inspected_units" in dom and exposed_raw > 0:
-            inspected = max(0, min(int(dom["inspected_units"]), exposed_raw))
-            raw_cov_count[dim.key] = inspected
+        if backlog_by_key[dim.key]:
+            axis_gap_reasons.append("verification_backlog_unconfirmed")
+        if withheld_by_key[dim.key]:
+            axis_gap_reasons.append("withheld_packages")
+        if exposed_raw is None:
+            axis_gap_reasons.append("surface_exposure_unknown")
+        if inspected is None:
+            axis_gap_reasons.append("inspected_units_unknown")
+
+        pct = None
+        if exposed_raw is not None and inspected is not None:
+            if inspected > exposed_raw:
+                raise ValueError("inspected_units exceeds the bound surface_exposure")
+        if exposed_raw is not None and exposed_raw > 0 and inspected is not None:
             pct = round(100.0 * inspected / exposed_raw, 1)
             if inspected < exposed_raw:
                 axis_gap_reasons.append("uninspected_exposed_units")
-        elif exposed_raw > 0:
-            adjudicated = max(0, claims_by_key[dim.key] - backlog_by_key[dim.key])
-            inspected = claims_by_key[dim.key]
-            raw_cov_count[dim.key] = inspected
-            if backlog_by_key[dim.key] > 0:
-                pct = round(100.0 * (adjudicated + 0.5 * backlog_by_key[dim.key]) / exposed_raw, 1)
-                axis_gap_reasons.append("verification_backlog_unconfirmed")
-            else:
-                pct = round(100.0 * min(inspected, exposed_raw) / exposed_raw, 1)
-        else:
-            raw_cov_count[dim.key] = 0
-            pct = 0.0
+        elif exposed_raw == 0:
             axis_gap_reasons.append("no_domain_coverage_bound")
 
         if review_incomplete:
             axis_gap_reasons.append("review_incomplete")
-        elif review_status == "DEGRADED" and exposed_raw > 0:
+        elif review_status == "DEGRADED":
             axis_gap_reasons.append("review_degraded")
 
         dedup_reasons = list(dict.fromkeys(axis_gap_reasons))
         cov_gaps[dim.key] = dedup_reasons
-        cov_pct[dim.key] = max(0.0, min(100.0, pct))
-        if pct <= 0.0 or "no_domain_coverage_bound" in dedup_reasons:
+        cov_pct[dim.key] = pct
+        if pct is None or pct <= 0.0:
             cov_status[dim.key] = "unverified_gap"
         elif dedup_reasons:
             cov_status[dim.key] = "partial_coverage_gap"
@@ -455,10 +464,9 @@ def build_radar_tracker(
         else:
             cov_status[dim.key] = "verified_no_findings"
 
-    max_surface = max(raw_surface.values(), default=0)
+    max_surface = max((value for value in raw_surface.values() if value is not None), default=0)
     max_leads = max(raw_leads.values(), default=0)
     max_hc = max(hc_by_key.values(), default=0)
-    max_confirmed_any = max(findings_by_key.values(), default=0)
 
     axes_out: list[dict[str, Any]] = []
     verified_axes = 0
@@ -471,13 +479,12 @@ def build_radar_tracker(
         else:
             verified_axes += 1
 
-        surf_unit = round(raw_surface[k] / max_surface, 4) if max_surface > 0 else 0.0
-        cov_unit = round(cov_pct[k] / 100.0, 4)
+        surf_unit = (None if raw_surface[k] is None else
+                     round(raw_surface[k] / max_surface, 4) if max_surface > 0 else 0.0)
+        cov_unit = None if cov_pct[k] is None else round(cov_pct[k] / 100.0, 4)
         leads_unit = round(raw_leads[k] / max_leads, 4) if max_leads > 0 else 0.0
         if max_hc > 0:
             hc_unit = round(hc_by_key[k] / max_hc, 4)
-        elif max_confirmed_any > 0 and findings_by_key[k] > 0:
-            hc_unit = round(0.5 * findings_by_key[k] / max_confirmed_any, 4)
         else:
             hc_unit = 0.0
 
@@ -489,10 +496,15 @@ def build_radar_tracker(
             "predicates": list(dim.predicates),
             "coverage_status": cov_status[k],
             "gap_reasons": cov_gaps[k],
+            "package_counts": {
+                "publishable": findings_by_key[k],
+                "verification_backlog": backlog_by_key[k],
+                "withheld": withheld_by_key[k],
+            },
             "series": {
                 "surface_exposure": {
                     "raw_count": raw_surface[k],
-                    "score": round(surf_unit * 100.0, 1),
+                    "score": None if surf_unit is None else round(surf_unit * 100.0, 1),
                     "unit": surf_unit,
                 },
                 "verified_coverage": {
@@ -516,8 +528,9 @@ def build_radar_tracker(
             },
         })
 
-    mean_cov = sum(cov_pct.values()) / len(DIMENSIONS) if DIMENSIONS else 0.0
-    confidence_score = int(round(mean_cov * (0.6 if review_incomplete else 1.0)))
+    known_coverage = [value for value in cov_pct.values() if value is not None]
+    confidence_score = (int(round(sum(known_coverage) / len(DIMENSIONS) * (0.6 if review_incomplete else 1.0)))
+                        if len(known_coverage) == len(DIMENSIONS) else None)
     gap_summary = (
         f"{gap_axes} of {len(DIMENSIONS)} security domains have unverified or partial coverage gaps; "
         "missing coverage is never treated as clean."
@@ -532,7 +545,8 @@ def build_radar_tracker(
         "coverage_confidence": {
             "verified_axes": verified_axes,
             "gap_axes": gap_axes,
-            "confidence_score": max(0, min(100, confidence_score)),
+            "confidence_score": confidence_score,
+            "gap_reasons": ["domain_coverage_unknown"] if confidence_score is None else [],
             "review_complete": bool(status_obj.get("review_complete", False)),
             "global_gap_ids": global_gaps,
             "summary_statement": gap_summary,
@@ -548,7 +562,9 @@ def dimension_counts(
     domain_telemetry: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> tuple[tuple[DimensionCounts, ...], int]:
     """Per-axis counts over the report's three package buckets, and the number of unclassified packages."""
-    tracker = build_radar_tracker(report, dossiers_by_claim, domain_telemetry=domain_telemetry)
+    tracker = report.get("radar_tracker") if not dossiers_by_claim and domain_telemetry is None else None
+    if tracker is None:
+        tracker = build_radar_tracker(report, dossiers_by_claim, domain_telemetry=domain_telemetry)
     by_key = {axis["key"]: axis for axis in tracker["axes"]}
     return (
         tuple(
@@ -595,10 +611,10 @@ __all__ = [
 
 
 def radar_telemetry(tracker: Mapping[str, Any]) -> dict[str, Any]:
-    """Deterministic telemetry summary for a 12-axis security-radar-tracker/1 payload."""
+    """Keep unknown counts and undefined funnel ratios unknown in exported telemetry."""
     axes = tracker.get("axes") or ()
-    by_axis: dict[str, dict[str, int]] = {}
-    totals = {
+    by_axis: dict[str, dict[str, int | None]] = {}
+    totals: dict[str, int | None] = {
         "surface_exposure": 0,
         "verified_coverage": 0,
         "corroborated_leads": 0,
@@ -609,22 +625,34 @@ def radar_telemetry(tracker: Mapping[str, Any]) -> dict[str, Any]:
             continue
         did = str(axis.get("domain_id") or axis.get("key") or "unknown")
         series = axis.get("series") or {}
-        row: dict[str, int] = {}
+        row: dict[str, int | None] = {}
         for s_name in totals:
             entry = series.get(s_name) or {}
-            raw = int(entry.get("raw_count", 0)) if isinstance(entry, Mapping) else 0
+            raw = entry.get("raw_count") if isinstance(entry, Mapping) else None
             row[s_name] = raw
-            totals[s_name] += raw
+            total = totals[s_name]
+            totals[s_name] = None if raw is None or total is None else total + raw
         by_axis[did] = row
 
-    def _rate(num: int, den: int) -> float:
-        return round(num / den, 4) if den > 0 else 0.0
+    def _rate(num: int | None, den: int | None) -> float | None:
+        return round(num / den, 4) if num is not None and den is not None and den > 0 else None
 
+    rate_inputs = {
+        "exposure_to_coverage_rate": (totals["verified_coverage"], totals["surface_exposure"]),
+        "exposure_to_leads_rate": (totals["corroborated_leads"], totals["surface_exposure"]),
+        "leads_to_confirmed_rate": (totals["confirmed_high_critical"], totals["corroborated_leads"]),
+    }
     return {
         "reporting.radar_counts_by_axis_and_series": by_axis,
-        "reporting.funnel_conversion_rates": {
-            "exposure_to_coverage_rate": _rate(totals["verified_coverage"], totals["surface_exposure"]),
-            "exposure_to_leads_rate": _rate(totals["corroborated_leads"], max(totals["surface_exposure"], totals["corroborated_leads"])),
-            "leads_to_confirmed_rate": _rate(totals["confirmed_high_critical"], totals["corroborated_leads"]),
+        "reporting.radar_gap_reasons_by_axis": {
+            str(axis["domain_id"]): list(axis["gap_reasons"]) for axis in axes if isinstance(axis, Mapping)
+        },
+        "reporting.funnel_conversion_rates": {name: _rate(num, den) for name, (num, den) in rate_inputs.items()},
+        "reporting.funnel_gap_reasons": {
+            name: [reason for condition, reason in (
+                (num is None, "numerator_unknown"), (den is None, "denominator_unknown"),
+                (den == 0, "denominator_empty"),
+            ) if condition]
+            for name, (num, den) in rate_inputs.items()
         },
     }

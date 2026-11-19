@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/final-report/security-radar-tracker-v2.schema.json",
+  "title": "Security Radar Tracker with explicit unknown coverage",
+  "description": "Unknown exposure, inspection and derived coverage are null, with named gaps. Measured counts, including zero, remain numeric. Version 1 is retained separately.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "axis_count", "series_ids", "unclassified_packages", "coverage_confidence", "axes"],
+  "properties": {
+    "schema": {"const": "appsec-review/security-radar-tracker/2"},
+    "axis_count": {"const": 12},
+    "series_ids": {"$ref": "security-radar-tracker.schema.json#/properties/series_ids"},
+    "unclassified_packages": {"type": "integer", "minimum": 0},
+    "coverage_confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verified_axes", "gap_axes", "confidence_score", "review_complete", "global_gap_ids", "summary_statement", "gap_reasons"],
+      "properties": {
+        "verified_axes": {"type": "integer", "minimum": 0, "maximum": 12},
+        "gap_axes": {"type": "integer", "minimum": 0, "maximum": 12},
+        "confidence_score": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
+        "review_complete": {"type": "boolean"},
+        "global_gap_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "summary_statement": {"type": "string", "minLength": 1},
+        "gap_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      },
+      "if": {"properties": {"confidence_score": {"type": "null"}}},
+      "then": {"properties": {"gap_reasons": {"minItems": 1}}}
+    },
+    "axes": {
+      "type": "array", "minItems": 12, "maxItems": 12,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["domain_id", "key", "label", "owasp_2025", "predicates", "coverage_status", "gap_reasons", "package_counts", "series"],
+        "properties": {
+          "domain_id": {"$ref": "security-radar-tracker.schema.json#/properties/axes/items/properties/domain_id"},
+          "key": {"$ref": "security-radar-tracker.schema.json#/properties/axes/items/properties/key"},
+          "label": {"$ref": "security-radar-tracker.schema.json#/properties/axes/items/properties/label"},
+          "owasp_2025": {"$ref": "security-radar-tracker.schema.json#/properties/axes/items/properties/owasp_2025"},
+          "predicates": {"$ref": "security-radar-tracker.schema.json#/properties/axes/items/properties/predicates"},
+          "coverage_status": {"$ref": "security-radar-tracker.schema.json#/properties/axes/items/properties/coverage_status"},
+          "gap_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "package_counts": {
+            "type": "object", "additionalProperties": false,
+            "required": ["publishable", "verification_backlog", "withheld"],
+            "properties": {
+              "publishable": {"type": "integer", "minimum": 0},
+              "verification_backlog": {"type": "integer", "minimum": 0},
+              "withheld": {"type": "integer", "minimum": 0}
+            }
+          },
+          "series": {
+            "type": "object", "additionalProperties": false,
+            "required": ["surface_exposure", "verified_coverage", "corroborated_leads", "confirmed_high_critical"],
+            "properties": {
+              "surface_exposure": {"$ref": "#/$defs/exposure_metric"},
+              "verified_coverage": {"$ref": "#/$defs/coverage_metric"},
+              "corroborated_leads": {"$ref": "security-radar-tracker.schema.json#/$defs/series_metric"},
+              "confirmed_high_critical": {"$ref": "security-radar-tracker.schema.json#/$defs/confirmed_metric"}
+            }
+          }
+        },
+        "if": {"properties": {"series": {"properties": {"verified_coverage": {"properties": {"score": {"type": "null"}}}}}}},
+        "then": {
+          "properties": {
+            "coverage_status": {"const": "unverified_gap"},
+            "gap_reasons": {"minItems": 1},
+            "series": {"properties": {"verified_coverage": {"properties": {"is_gap": {"const": true}}}}}
+          }
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"series": {"properties": {"surface_exposure": {"properties": {"raw_count": {"type": "null"}}}}}}},
+            "then": {"properties": {
+              "gap_reasons": {"minItems": 1},
+              "series": {"properties": {"verified_coverage": {"properties": {"score": {"type": "null"}}}}}
+            }}
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "exposure_metric": {
+      "type": "object", "additionalProperties": false, "required": ["raw_count", "score", "unit"],
+      "properties": {
+        "raw_count": {"type": ["integer", "null"], "minimum": 0},
+        "score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "unit": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      },
+      "if": {"properties": {"raw_count": {"type": "null"}}},
+      "then": {"properties": {"score": {"type": "null"}, "unit": {"type": "null"}}},
+      "else": {"properties": {"score": {"type": "number"}, "unit": {"type": "number"}}}
+    },
+    "coverage_metric": {
+      "type": "object", "additionalProperties": false, "required": ["raw_count", "score", "unit", "is_gap"],
+      "properties": {
+        "raw_count": {"type": ["integer", "null"], "minimum": 0},
+        "score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "unit": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "is_gap": {"type": "boolean"}
+      },
+      "allOf": [
+        {"if": {"properties": {"raw_count": {"type": "null"}}}, "then": {"properties": {"score": {"type": "null"}}}},
+        {"if": {"properties": {"score": {"type": "null"}}},
+         "then": {"properties": {"unit": {"type": "null"}, "is_gap": {"const": true}}},
+         "else": {"properties": {"unit": {"type": "number"}}}}
+      ]
+    }
+  }
+}

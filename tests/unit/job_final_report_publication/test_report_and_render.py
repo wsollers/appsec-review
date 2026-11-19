@@ -2,30 +2,37 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections import Counter
+from dataclasses import replace
 import json
 from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
+import pytest
 from referencing import Registry, Resource
 
 from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_SCHEMA, FINAL_REPORT_SCHEMA
+from appsec_review.jobs.accepted_review import project_finding
+from appsec_review.jobs.job_inference_security_review import stages
 from appsec_review.jobs.job_final_publication_gate import classify as gate_classify
+from appsec_review.jobs.job_final_publication_gate.attachments import capability
 from appsec_review.jobs.job_final_report_publication.render import code, plain, render_markdown
 from appsec_review.jobs.job_final_report_publication.report import (
-    HTML_RENDERER, NOTICES, PDF_REASON, POC_REASON, RENDERER, build_report,
+    HTML_RENDERER, NOTICES, PDF_REASON, POC_REASON, RENDERER, build_report, report_schema_name,
 )
-from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
+from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
+from appsec_review.review import ship_block
+from appsec_review.review.claims import normalize_claim
 from appsec_review.review.identity import sha256_hex
+from appsec_review.review.ledger import ClaimView, Projection
+from appsec_review.review.models import ClaimState, Lane
 from tests.unit.review_decision_audit_wiring.helpers import HASH, verified_document
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMAS = ROOT / "docs" / "schemas" / "final-report"
-NAMES = ("common", "final-publication-gate", "final-report")
-
-
 def _validator(name: str) -> Draft202012Validator:
-    documents = [json.loads((SCHEMAS / f"{item}.schema.json").read_text(encoding="utf-8")) for item in NAMES]
+    documents = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(SCHEMAS.glob("*.schema.json"))]
     registry = Registry().with_resources((item["$id"], Resource.from_contents(item)) for item in documents)
     return Draft202012Validator(
         json.loads((SCHEMAS / f"{name}.schema.json").read_text(encoding="utf-8")),
@@ -48,9 +55,119 @@ def _gate_and_report(
         gate_document={"path": "data/gate.json", "sha256": sha256_hex("gate-doc")},
         configuration_profile=configuration_profile,
     )
-    _validator("final-report").validate(report)
-    assert SchemaSet(SCHEMAS).errors("final-report", report) == []
+    _validator("final-report-v3").validate(report)
+    assert SchemaSet(SCHEMAS).errors(report_schema_name(report), report) == []
     return gate, report
+
+
+def _serialized_review(tmp_path: Path, states: tuple[tuple[str, str], ...]) -> dict[str, Any]:
+    """Tiny accepted claims cross the real finding serializer and accepted-field projection."""
+    verified = verified_document()
+    packages = []
+    schemas = SchemaSet(ROOT / SCHEMA_DIRECTORY)
+    for index, (state, severity) in enumerate(states):
+        claim = normalize_claim(
+            lane=Lane.HUNT, package_id=f"package-{index}",
+            affected_entities=(f"asr:source_span:{sha256_hex(str(index))}",),
+            weakness_cwe="CWE-787", security_predicate="memory_corruption",
+            preconditions=(), statement="Synthetic bounded memory finding",
+            accepted_cwe_ids={"CWE-787"},
+        ).claim
+        claim = replace(claim, state=ClaimState(state))
+        projection = Projection(HASH, {claim.claim_id: ClaimView(claim, (), ())}, {}, (), {})
+        score_id = f"score-{sha256_hex(str(index))}"
+        score = {
+            "claim_id": claim.claim_id, "score_id": score_id, "provider": ship_block.SEVERITY_PROVIDER,
+            "technical_severity": severity,
+            "severity_assessment": {"severity_floor": severity, "severity_ceiling": severity,
+                                    "unresolved_factors": []},
+        }
+        entries = stages.finding_packages(
+            projection,
+            [{"claim_id": claim.claim_id, "state": state,
+              "adjudication_id": f"adjudication-{sha256_hex(str(index))}", "predicates": [], "gap_ids": []}],
+            {"independence": {claim.claim_id: [{
+                "independent": True, "provider_distinct": True, "verifier_model_distinct": True,
+                "review_id": f"review-{sha256_hex(str(index))}",
+            }]}}, [score], manifest_sha256=HASH, out_dir=tmp_path, schemas=schemas,
+        )
+        entry, = entries
+        package = json.loads((tmp_path / entry["file"]).read_bytes())
+        schemas.validate("finding-package", package)
+        packages.append(project_finding(
+            {"path": f"data/findings/{entry['file']}", "sha256": entry["sha256"]}, package, []
+        ))
+    verified["packages"] = packages
+    verified["partition"] = {
+        state: [row["finding_package_id"] for row in packages if row["state"] == state]
+        for state in ("confirmed", "supported")
+    }
+    verified["accounting"].update(claims_total=len(packages),
+                                  claims_by_state=dict(Counter(row["state"] for row in packages)))
+    verified["ship_block"] = {
+        "policy": "ship-block-policy/1",
+        "policy_sha256": ship_block.policy_sha256(ship_block.ShipBlockSettings(), True),
+        **ship_block.summarize({"lane": row["lane"], "status": row["ship_block"]["status"]} for row in packages),
+    }
+    return verified
+
+
+def _memory_axis(report: dict[str, Any]) -> dict[str, Any]:
+    return next(axis for axis in report["radar_tracker"]["axes"] if axis["key"] == "Mem")
+
+
+@pytest.mark.parametrize("state", ["confirmed", "supported"])
+def test_withheld_only_serialized_finding_never_certifies_clean_coverage(tmp_path: Path, state: str) -> None:
+    verified = _serialized_review(tmp_path, ((state, "low"),))
+    verified["packages"][0]["attack_chains"] = [f"chain-{sha256_hex('unavailable')}"]
+    gate, report = _gate_and_report(verified)
+    assert gate["package_counts"]["withheld"] == 1
+    assert report["findings"] == report["verification_backlog"] == []
+    assert report["withheld"][0]["state"] == state
+    axis = _memory_axis(report)
+    assert axis["package_counts"] == {"publishable": 0, "verification_backlog": 0, "withheld": 1}
+    assert axis["coverage_status"] == "unverified_gap"
+    assert "withheld_packages" in axis["gap_reasons"]
+    assert "surface_exposure_unknown" in axis["gap_reasons"]
+    assert axis["series"]["verified_coverage"]["is_gap"] is True
+    assert axis["series"]["surface_exposure"] == {"raw_count": None, "score": None, "unit": None}
+    assert axis["series"]["verified_coverage"]["raw_count"] is None
+    assert axis["series"]["verified_coverage"]["score"] is None
+    assert axis["series"]["confirmed_high_critical"]["all_confirmed_count"] == 0
+
+
+@pytest.mark.parametrize("state", ["supported", "confirmed"])
+def test_serialized_package_count_is_not_domain_inspection_or_exposure(tmp_path: Path, state: str) -> None:
+    _gate, report = _gate_and_report(_serialized_review(tmp_path, ((state, "high"),)))
+    axis = _memory_axis(report)
+    assert axis["coverage_status"] == "unverified_gap"
+    assert {"surface_exposure_unknown", "inspected_units_unknown"} <= set(axis["gap_reasons"])
+    assert ("verification_backlog_unconfirmed" in axis["gap_reasons"]) is (state == "supported")
+    assert axis["series"]["corroborated_leads"]["raw_count"] == 1
+    assert axis["series"]["confirmed_high_critical"]["all_confirmed_count"] == (state == "confirmed")
+
+
+@pytest.mark.parametrize("status", ["confirmed", "qualified_supported", "refuted", "insufficient_evidence"])
+def test_certified_chain_components_elevate_each_publishable_finding_once(tmp_path: Path, status: str) -> None:
+    verified = _serialized_review(tmp_path, (("confirmed", "low"), ("confirmed", "high"),
+                                            ("confirmed", "medium")))
+    members = [row["claim_id"] for row in verified["packages"][:2]]
+    verified["attachments"]["attack_chains"] = [
+        {"chain_id": f"chain-{sha256_hex(str(index))}", "status": status, "component_claim_ids": members,
+         "artifact": {"path": f"data/chain-{index}.json", "sha256": HASH}, "gap_count": 0, "disposition": "assessed"}
+        for index in range(2)
+    ]
+    manifest = {"path": "data/chains.json", "sha256": HASH}
+    verified["capabilities"]["attack_chains"] = capability(True, summary=manifest, count=2)
+    verified["bindings"].extend([manifest, *(row["artifact"] for row in verified["attachments"]["attack_chains"])])
+    _gate, report = _gate_and_report(verified)
+    active = status in {"confirmed", "qualified_supported"}
+    series = _memory_axis(report)["series"]["confirmed_high_critical"]
+    assert series["all_confirmed_count"] == 3
+    assert series["chain_elevated_count"] == (2 if active else 0)
+    assert series["raw_count"] == (2 if active else 1)
+    assert report["executive_posture"]["chain_elevated_findings_count"] == series["chain_elevated_count"]
+    assert [row["ship_block"]["technical_severity"] for row in report["findings"]].count("high") == 1
 
 
 def test_clean_and_incomplete_reports_are_schema_valid_and_track_completeness() -> None:
@@ -330,8 +447,8 @@ def test_attachments_filtering_poc_handoff_withheld_and_rendering_branches() -> 
         gate_handoff={"path": "data/gate-handoff.json", "sha256": HASH},
         gate_document={"path": "data/gate.json", "sha256": HASH},
     )
-    _validator("final-report").validate(report)
-    assert SchemaSet(SCHEMAS).errors("final-report", report) == []
+    _validator("final-report-v3").validate(report)
+    assert SchemaSet(SCHEMAS).errors(report_schema_name(report), report) == []
 
     # Only confirmed / qualified_supported chains survive into report["attack_chains"].
     assert report["attack_chains"]["status"] == "available"
@@ -402,7 +519,7 @@ def test_attachments_filtering_poc_handoff_withheld_and_rendering_branches() -> 
         "confirmed": 0, "qualified_supported": 0, "refuted": 1, "insufficient_evidence": 0}
     counted = build_report(counted_gate, gate_handoff={"path": "data/gate-handoff.json", "sha256": HASH},
                            gate_document={"path": "data/gate.json", "sha256": HASH})
-    _validator("final-report").validate(counted)
+    _validator("final-report-v3").validate(counted)
     assert counted["attack_chains"]["reason"].startswith(
         "4 candidate chain(s) proposed, 1 admitted: 0 confirmed, 0 qualified_supported, 1 refuted, "
         "0 insufficient_evidence; 2 rejected, 1 deduplicated, 0 capped by max_attack_chains. ")

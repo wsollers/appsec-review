@@ -119,7 +119,7 @@ def build_job(*, repository_root: Path | None = None,
         report = build_report(gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"],
                               configuration_profile=_configuration_profile(unit.job.run_root),
                               chain_manifest_items=chain_manifest_items(unit.job.run_root, gate))
-        _check(_schemas(unit), "final-report", report)
+        _check(_schemas(unit), "final-report-v3", report)
         path = unit.unit_root / REPORT_JSON
         atomic_json(path, report)
         sarif = gate_sarif(unit.job.run_root, gate, report)
@@ -146,12 +146,15 @@ def build_job(*, repository_root: Path | None = None,
                                        for name in sorted(gate["attachments"])},
             radar_verified_axes=int(radar_conf.get("verified_axes", 0)),
             radar_gap_axes=int(radar_conf.get("gap_axes", 0)),
-            coverage_confidence_score=int(radar_conf.get("confidence_score", 0)),
+            coverage_confidence_score=radar_conf.get("confidence_score"),
+            coverage_confidence_gap_reasons=radar_conf.get("gap_reasons", []),
             chain_elevated_count=int(posture.get("chain_elevated_findings_count", 0)),
             remediation_roadmap_count=len(report.get("remediation_roadmap") or ()),
             named_gap_count=len(report.get("named_coverage_gaps") or ()),
             radar_counts_by_axis_and_series=r_tel["reporting.radar_counts_by_axis_and_series"],
+            radar_gap_reasons_by_axis=r_tel["reporting.radar_gap_reasons_by_axis"],
             funnel_conversion_rates=r_tel["reporting.funnel_conversion_rates"],
+            funnel_gap_reasons=r_tel["reporting.funnel_gap_reasons"],
             runtime_verified=False,
         )
         return {"artifact": artifact_ref(unit.job.run_root, path),
@@ -208,7 +211,7 @@ def build_job(*, repository_root: Path | None = None,
         gate = read_bound_json(run_root, loaded["gate_document"])
         _verify_bindings(run_root, gate)
         report = read_bound_json(run_root, assembled["artifact"])
-        _check(_schemas(unit), "final-report", report)
+        _check(_schemas(unit), "final-report-v3", report)
         if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
             raise IntegrityError("final report is not bound to the accepted gate handoff")
         expected_report = build_report(

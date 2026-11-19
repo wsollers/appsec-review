@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/final-report/final-report-v3.schema.json",
+  "title": "Final security review report with explicit unknown coverage",
+  "description": "Version 3 preserves the version 2 publication fields and adds nullable radar coverage. The legacy final-report.schema.json retains the version 2 contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "run_id", "provenance", "status", "summary", "findings", "attack_chains", "poc_outcomes",
+    "verification_backlog", "withheld", "limitations", "gap_ids", "renderers", "notices", "capabilities",
+    "remediation_planning", "remediation_validation", "dossiers", "radar_tracker", "executive_posture"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/final-report/3"},
+    "run_id": {"$ref": "final-report.schema.json#/properties/run_id"},
+    "provenance": {"$ref": "final-report.schema.json#/properties/provenance"},
+    "status": {"$ref": "final-report.schema.json#/properties/status"},
+    "summary": {"$ref": "final-report.schema.json#/properties/summary"},
+    "findings": {"$ref": "final-report.schema.json#/properties/findings"},
+    "attack_chains": {"$ref": "final-report.schema.json#/properties/attack_chains"},
+    "poc_outcomes": {"$ref": "final-report.schema.json#/properties/poc_outcomes"},
+    "verification_backlog": {"$ref": "final-report.schema.json#/properties/verification_backlog"},
+    "withheld": {"$ref": "final-report.schema.json#/properties/withheld"},
+    "limitations": {"$ref": "final-report.schema.json#/properties/limitations"},
+    "gap_ids": {"$ref": "final-report.schema.json#/properties/gap_ids"},
+    "renderers": {"$ref": "final-report.schema.json#/properties/renderers"},
+    "notices": {"$ref": "final-report.schema.json#/properties/notices"},
+    "capabilities": {"$ref": "final-report.schema.json#/properties/capabilities"},
+    "remediation_planning": {"$ref": "final-report.schema.json#/properties/remediation_planning"},
+    "remediation_validation": {"$ref": "final-report.schema.json#/properties/remediation_validation"},
+    "dossiers": {"$ref": "final-report.schema.json#/properties/dossiers"},
+    "radar_tracker": {"$ref": "security-radar-tracker-v2.schema.json"},
+    "attack_chain_cards": {"$ref": "final-report.schema.json#/properties/attack_chain_cards"},
+    "remediation_roadmap": {"$ref": "final-report.schema.json#/properties/remediation_roadmap"},
+    "named_coverage_gaps": {"$ref": "final-report.schema.json#/properties/named_coverage_gaps"},
+    "executive_posture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release_readiness", "confirmed_by_severity", "chain_elevated_findings_count",
+        "reachable_supply_chain_advisories_count", "ship_blocking_count", "coverage_confidence_index"
+      ],
+      "properties": {
+        "release_readiness": {"$ref": "final-report.schema.json#/$defs/executive_posture/properties/release_readiness"},
+        "confirmed_by_severity": {"$ref": "final-report.schema.json#/$defs/executive_posture/properties/confirmed_by_severity"},
+        "chain_elevated_findings_count": {"$ref": "final-report.schema.json#/$defs/executive_posture/properties/chain_elevated_findings_count"},
+        "reachable_supply_chain_advisories_count": {"$ref": "final-report.schema.json#/$defs/executive_posture/properties/reachable_supply_chain_advisories_count"},
+        "ship_blocking_count": {"$ref": "final-report.schema.json#/$defs/executive_posture/properties/ship_blocking_count"},
+        "coverage_confidence_index": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["score", "verified_axes", "gap_axes", "unverified_axis_ids", "statement", "gap_reasons"],
+          "properties": {
+            "score": {"type": ["integer", "null"], "minimum": 0, "maximum": 100},
+            "verified_axes": {"type": "integer", "minimum": 0, "maximum": 12},
+            "gap_axes": {"type": "integer", "minimum": 0, "maximum": 12},
+            "unverified_axis_ids": {"type": "array", "items": {"type": "string"}},
+            "statement": {"type": "string", "minLength": 1},
+            "gap_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+          },
+          "if": {"properties": {"score": {"type": "null"}}},
+          "then": {"properties": {"gap_reasons": {"minItems": 1}}}
+        }
+      }
+    }
+  }
+}

@@ -11,6 +11,7 @@ import re
 from typing import Any, Iterable, Mapping, Sequence
 
 from appsec_review.reporting.dimensions import build_radar_tracker
+from appsec_review.reporting.text import metric_text
 from appsec_review.reporting.executive_posture import (
     build_attack_chain_cards,
     build_executive_posture,
@@ -152,17 +153,18 @@ def _dimensions(radar: Mapping[str, Any]) -> list[str]:
             else code(ax["coverage_status"])
         )
         lines.append(
-            f"| {ax['key']} | {plain(ax['label'])} | {s['surface_exposure']['raw_count']} "
-            f"({s['surface_exposure']['score']:.0f}) | {s['verified_coverage']['score']:.0f}% | "
+            f"| {ax['key']} | {plain(ax['label'])} | {metric_text(s['surface_exposure']['raw_count'])} "
+            f"({metric_text(s['surface_exposure']['score'])}) | {metric_text(s['verified_coverage']['score'], '%')} | "
             f"{s['corroborated_leads']['raw_count']} | "
             f"{s['confirmed_high_critical']['raw_count']} ({s['confirmed_high_critical']['all_confirmed_count']}) | "
-            f"{posture} |"
+            f"{posture}; {plain(', '.join(ax['gap_reasons']))} |"
         )
     lines += [
         "",
-        f"Counts come from the accepted packages' titles (`<predicate> (<CWE>)`); {unclassified} package(s) "
+        f"Claim and finding counts come from accepted packages' titles (`<predicate> (<CWE>)`); {unclassified} package(s) "
         "named no member of the vocabulary and are counted in no dimension. Missing, skipped or partial coverage "
-        "is explicitly marked as an Unverified Coverage Gap and is never evidence that a security domain is clean.",
+        "is explicitly marked as an Unverified Coverage Gap and is never evidence that a security domain is clean. "
+        "Exposure and inspection require explicit telemetry; N/A means unknown, not zero.",
         "",
     ]
     return lines
@@ -210,12 +212,14 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
         f"- report renderer {code(RENDERER)}; PDF: {plain(report['renderers']['pdf']['reason'])}", ""]
     if not status["review_complete"]:
         lines += ["> This review is not complete. The limitations section lists why; none of it is a clean verdict.", ""]
+    if radar.get("schema") == "appsec-review/security-radar-tracker/1":
+        lines += ["> Legacy radar /1 estimates are retained as recorded, not certified exposure or inspection measurements.", ""]
     lines += ["## Summary", "",
               f"- executive risk posture: confirmed critical {sev['critical']}, high {sev['high']}, "
               f"medium {sev['medium']}, low {sev['low']}, unrated {sev['unrated']}; "
               f"chain-elevated findings {posture['chain_elevated_findings_count']}; "
               f"reachable supply-chain advisories {posture['reachable_supply_chain_advisories_count']}",
-              f"- coverage confidence index: {cci['score']}/100 ({cci['verified_axes']}/12 verified domains, "
+              f"- coverage confidence index: {metric_text(cci['score'], '/100')} ({cci['verified_axes']}/12 verified domains, "
               f"{cci['gap_axes']}/12 unverified coverage gap domains)",
               f"- claims reviewed: {accounting['claims_total']} "
               f"({_counts({k: v for k, v in accounting['claims_by_state'].items() if v})})",

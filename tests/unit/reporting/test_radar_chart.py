@@ -8,6 +8,7 @@ import re
 import pytest
 
 from appsec_review.reporting.latex import RADAR_LINE_STYLES, RADAR_R, radar_line_style, radar_point, render_latex
+from appsec_review.reporting.html import render_html
 from appsec_review.reporting.model import Document, RadarAxis, RadarChart, RadarLegendRow, RadarSeries
 
 TEMPLATE = Path(__file__).resolve().parents[3] / "containers" / "report" / "latex" / "template"
@@ -82,7 +83,7 @@ def test_tikz_grid_polygons_rim_keys_legend_rows_and_greyscale_line_styles() -> 
     assert tikz.count("circle (0.700)") == 2 + 3       # markers only where a value is above zero
     assert all(COORD.fullmatch(part) for group in re.findall(r"\(([^()]*)\)", tikz) for part in group.split(","))
     assert r"\radarseriesrow{verdict-confirmed}{solid}{Confirmed findings}{confirmed packages}" in body
-    assert r"\radarkeyrow{M}{Memory safety}{memory corruption}{Confirmed findings 0}" in body
+    assert r"\radarkeyrow{M}{Memory safety}{memory corruption}{Confirmed findings 0; Claims examined 1}" in body
     assert r"\chartcaption{1.0 is the largest axis.}" in body
     assert RADAR_LINE_STYLES == ("solid", "dashed", "dotted", "densely dashdotted")
     assert len({radar_line_style(index) for index in range(4)}) == 4 and radar_line_style(4) == "solid"
@@ -98,7 +99,30 @@ def test_hostile_text_is_escaped_and_rendering_is_deterministic() -> None:
     assert _body(_doc(chart)) == body
 
 
-def test_all_zero_series_render_the_no_data_path_with_the_scale_note() -> None:
+def test_all_zero_series_retain_measured_zero_in_the_key_with_the_scale_note() -> None:
     body = _body(_doc(_chart(series=(RadarSeries("a", "neutral", (0.0, 0.0, 0.0)),))))
-    assert r"\chartempty{No data}" in body and "tikzpicture" not in body and r"\radarkeyrow" not in body
+    assert r"\chartempty{All measured values are zero}" in body and "tikzpicture" not in body
+    assert r"\radarkeyrow{M}{Memory safety}{memory corruption}{a 0}" in body
     assert r"\chartcaption{1.0 is the largest axis.}" in body
+
+
+def test_unknown_values_are_not_zero_vertices_or_filled_polygons() -> None:
+    chart = _chart(series=(RadarSeries("Measured", "confirmed", (None, 0.0, 1.0)),))
+    assert chart.series[0].values == (None, 0.0, 1.0) and chart.clamped == 0
+    html = render_html(_doc(chart))
+    latex = _body(_doc(chart))
+    assert "N/A" in html and "N/A" in latex.replace(r"\allowbreak{}", "")
+    assert 'polygon data-series="Measured"' not in html
+    assert r"\fill[verdict-confirmed,radarfill]" not in latex
+    assert html.count(' r="3"') == 1
+    assert latex.count("circle (0.700)") == 1
+
+
+def test_entirely_unknown_chart_has_na_not_numeric_zero() -> None:
+    chart = _chart(series=(RadarSeries("Unknown", "neutral", (None, None, None)),))
+    assert chart.series[0].values == (None, None, None)
+    html = render_html(_doc(chart))
+    latex = _body(_doc(chart))
+    assert "N/A" in html and "N/A" in latex
+    assert 'data-series="Unknown"' not in html
+    assert "radarfill" not in latex

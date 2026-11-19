@@ -252,7 +252,7 @@ def _radar_chart(block: RadarChart) -> str:
     neutral = dict(NEUTRALS)
     gap_accent = STYLE_BY_KIND[BoxKind.GAP].accent
     count = len(block.axes)
-    has_positive = any(val > 0.0 for series in block.series for val in series.values)
+    has_positive = any(val is not None and val > 0.0 for series in block.series for val in series.values)
     parts = [f'<section class="chart-card"><div class="chart-head"><h4>{esc_line(block.title)}</h4>'
              f'<span class="chart-unit">{count}-axis radar</span></div>']
     if not has_positive:
@@ -277,14 +277,23 @@ def _radar_chart(block: RadarChart) -> str:
             color = _tone_hex(series.tone)
             dash = SVG_SERIES_DASH[s_idx % len(SVG_SERIES_DASH)]
             dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
-            pts = [_svg_point(a_idx, count, SVG_RADAR_RADIUS * val) for a_idx, val in enumerate(series.values)]
-            svg.append(f'<polygon data-series="{esc_line(series.label)}" points="{_fmt_pts(pts)}" fill="#{color}" fill-opacity="0.12" stroke="#{color}" stroke-width="2"{dash_attr}/>')
-            for (px, py), val in zip(pts, series.values):
-                if val > 0.0:
+            pts = [None if val is None else _svg_point(a_idx, count, SVG_RADAR_RADIUS * val)
+                   for a_idx, val in enumerate(series.values)]
+            if all(point is not None for point in pts):
+                svg.append(f'<polygon data-series="{esc_line(series.label)}" points="{_fmt_pts(pts)}" fill="#{color}" fill-opacity="0.12" stroke="#{color}" stroke-width="2"{dash_attr}/>')
+            else:
+                for idx, point in enumerate(pts):
+                    following = pts[(idx + 1) % count]
+                    if point is not None and following is not None:
+                        svg.append(f'<polyline data-series="{esc_line(series.label)}" points="{_fmt_pts([point, following])}" fill="none" stroke="#{color}" stroke-width="2"{dash_attr}/>')
+            for point, val in zip(pts, series.values):
+                if point is not None and val > 0.0:
+                    px, py = point
                     svg.append(f'<circle cx="{px:.2f}" cy="{py:.2f}" r="3" fill="#{color}"/>')
         for a_idx, axis in enumerate(block.axes):
             is_gap_axis = any(
-                ("coverage" in series.label.lower() and series.values[a_idx] < 1.0)
+                ("coverage" in series.label.lower() and
+                 (series.values[a_idx] is None or series.values[a_idx] < 1.0))
                 or (series.displays and "gap" in series.displays[a_idx].lower())
                 for series in block.series
             )
@@ -307,7 +316,8 @@ def _radar_chart(block: RadarChart) -> str:
     for a_idx, axis in enumerate(block.axes):
         cells = [f"<td><code>{esc_line(axis.key)}</code></td>", f"<td>{esc_line(axis.label)}</td>"]
         for series in block.series:
-            disp = series.displays[a_idx] if series.displays else f"{series.values[a_idx]:.2f}"
+            disp = ("N/A" if series.values[a_idx] is None else
+                    series.displays[a_idx] if series.displays else f"{series.values[a_idx]:.2f}")
             cells.append(f"<td><code>{esc_line(disp)}</code></td>")
         note_txt = axis_meaning.get(axis.key, "")
         has_gap = "gap" in note_txt.lower() or any(series.displays and "gap" in series.displays[a_idx].lower() for series in block.series)

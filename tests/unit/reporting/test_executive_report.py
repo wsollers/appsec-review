@@ -199,17 +199,17 @@ def test_connected_line_ranges_of_one_file_collapse_to_their_union() -> None:
 
 def dimension_report() -> dict[str, Any]:
     """The wiring fixture with pipeline-shaped titles: one confirmed command injection, one backlog use after free."""
-    report = report_document()
-    report["findings"][0]["title"] = "command_injection (CWE-78)"
-    report["verification_backlog"][0]["title"] = "use_after_free (CWE-416)"
-    return report
+    verified = verified_document()
+    verified["packages"][0]["title"] = "command_injection (CWE-78)"
+    verified["packages"][1]["title"] = "use_after_free (CWE-416)"
+    return report_document(verified)
 
 
 def _chart_of(document: Document) -> RadarChart:
     return next(block for block in document.blocks if isinstance(block, RadarChart))
 
 
-def _by_axis(chart: RadarChart, series_index: int) -> dict[str, float]:
+def _by_axis(chart: RadarChart, series_index: int) -> dict[str, float | None]:
     return dict(zip((axis.key for axis in chart.axes), chart.series[series_index].values))
 
 
@@ -231,8 +231,8 @@ def test_coverage_by_dimension_counts_findings_and_claims_per_axis_and_agrees_wi
     surface, verified_cov, leads, confirmed_hc = (_by_axis(chart, idx) for idx in range(4))
     assert confirmed_hc["Inj"] == 1.0 and sum(confirmed_hc.values()) == 1.0
     assert leads["Inj"] == 1.0 and leads["Mem"] == 1.0 and sum(leads.values()) == 2.0
-    assert surface["Inj"] == 1.0 and surface["Mem"] == 1.0
-    assert verified_cov["Inj"] > 0.0 and chart.clamped == 0
+    assert surface["Inj"] is None and surface["Mem"] is None
+    assert verified_cov["Inj"] is None and chart.clamped == 0
     headings = [block.text for block in document.blocks if isinstance(block, Heading)]
     assert headings[:4] == [
         "Executive summary",
@@ -259,16 +259,16 @@ def test_coverage_by_dimension_counts_findings_and_claims_per_axis_and_agrees_wi
     assert sorted(members) == sorted({predicate.value for predicate in SecurityPredicate} - {"other"})
 
 
-def test_dossier_predicate_is_used_and_unparseable_titles_are_unclassified_never_guessed() -> None:
+def test_certified_radar_is_not_reclassified_by_format_specific_dossiers() -> None:
     report = report_document()                     # titles "Synthetic finding n" name no predicate
     dossier = dossier_for(report["findings"][0])   # the dossier says memory_corruption
     document = executive_document(report, (bound(dossier),))
-    assert _by_axis(_chart_of(document), 3)["Mem"] == 1.0 and _by_axis(_chart_of(document), 2)["Mem"] == 1.0
+    assert _by_axis(_chart_of(document), 3)["Mem"] == 0 and _by_axis(_chart_of(document), 2)["Mem"] == 0
     tex = tex_of(report, (bound(dossier),))
-    assert "1 package named no member of the vocabulary and is counted in no dimension" in tex
+    assert "2 packages named no member of the vocabulary and are counted in no dimension" in tex
     # Without the dossier nothing is classified: the chart says so instead of drawing a guess.
     tex = tex_of(report)
-    assert r"\chartempty{No data}" in tex
+    assert r"\chartempty{N/A: unknown metrics; known values are zero}" in tex
     assert "2 packages named no member of the vocabulary and are counted in no dimension" in tex
 
 
@@ -276,9 +276,12 @@ def test_dimension_section_with_nothing_bound_reads_as_uncovered_not_clean() -> 
     from appsec_review.reporting import executive_report as E
     blocks = E._dimension_blocks({"findings": [], "verification_backlog": [], "withheld": []}, ())
     chart = blocks[1]
-    assert isinstance(chart, RadarChart) and all(value == 0 for series in chart.series for value in series.values)
+    assert isinstance(chart, RadarChart)
+    assert all(value is None for series in chart.series[:2] for value in series.values)
+    assert all(value == 0 for series in chart.series[2:] for value in series.values)
     document = Document(title="x", run_id="r", subtitle="", status_badge="EMPTY", status_tone="unresolved",
                         source_date_epoch=0, ledger_head="ab" * 32, blocks=tuple(blocks))
     tex = render_latex(document, TEMPLATE)
-    assert r"\chartempty{No data}" in tex and tex.count("Uncovered: no claim was examined here.") == len(DIMENSIONS)
+    assert r"\chartempty{N/A: unknown metrics; known values are zero}" in tex
+    assert tex.count("Uncovered: no claim was examined here.") == len(DIMENSIONS)
     assert NOT_CLEAN.replace("-", "{-}") in tex

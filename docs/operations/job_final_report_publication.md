@@ -11,7 +11,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 
 ## Purpose
 
-Publish deterministic JSON and Markdown projections of the accepted final gate. The report
+Publish deterministic JSON, Markdown, HTML and executive PDF projections of the accepted final gate. The report
 separates publishable confirmed findings, verification backlog, withheld packages, coverage and
 completion limitations. It does not reassess vulnerabilities, upgrade assurance, resolve findings
 from build checks or turn a publication status into permission to ship.
@@ -29,11 +29,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L203) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L206) |
 | `load` | `load.accepted_gate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L101) |
 | `report` | `report.assemble` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L115) |
-| `report` | `report.render` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L162) |
-| `report` | `report.render_pdf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L183) |
+| `report` | `report.render` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L165) |
+| `report` | `report.render_pdf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L186) |
 
 ### Accepted input declarations
 
@@ -46,7 +46,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
-| `final_report_publications` | `acceptance` | `appsec-review/final-report/2` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `final_report_publications` | `acceptance` | `appsec-review/final-report/3` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 | `final_report_sarif` | `report` | `application/sarif+json;version=2.1.0` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 | `final_report_sarif_accounting` | `report` | `appsec-review/sarif-export-result/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
@@ -87,7 +87,7 @@ flowchart LR
   producer1 --> input1 --> job
   input1 -. schema .-> input_schema1
   output0["final_report_publications"]
-  output_schema0["appsec-review/final-report/2"]
+  output_schema0["appsec-review/final-report/3"]
   job --> output0
   output0 -. schema .-> output_schema0
   output1["final_report_sarif"]
@@ -123,8 +123,21 @@ The [handler](../../src/appsec_review/jobs/job_final_report_publication/job.py) 
    independence, shipment or nonexecution assurance.
 2. Validate the report schema and write attempt-owned `final-report.json`. Keep publishable
    findings, verification backlog and withheld records in separate sections.
-3. In `report.render`, render `final-report.md` from that JSON using configured evidence/gap display
-   bounds. Require repeat rendering to produce identical text and retain rendering settings.
+3. In `report.render`, render Markdown and executive HTML from that JSON using configured
+   evidence/gap display bounds. Require repeat rendering to produce identical text.
+4. In `report.render_pdf`, render the executive LaTeX source with gate-bound dossiers and, when
+   configured, invoke the pinned PDF tool. Unknown metrics remain N/A in the source; the receipt
+   distinguishes rendered, disabled and failed outcomes.
+
+The current report is `final-report/3` with `security-radar-tracker/2` (T-5088). Unknown
+exposure/inspection and undefined derived metrics are `null` with named reasons, displayed
+as **N/A** across formats and omitted from chart geometry. Measured zero remains numeric.
+The gate supplies no per-domain exposure/inspection telemetry; package density and lane-B
+coverage-cell counts cannot substitute for it, and report assembly gains no new upstream read.
+Unconfirmed backlog and withheld packages remain gaps even when an explicit population is
+fully inspected. Active chains use certified `component_claim_ids` and count each publishable
+member once without changing standalone severity. See
+[domain coverage and legacy reads](final-report.md#domain-coverage-and-unknown-measurements-t-5088).
 
 ### `acceptance`
 
@@ -157,17 +170,25 @@ this job to certified artifacts. Rendering does not grant payload retrieval acce
 
 ## Gaps
 
-There are no new domain gap causes in this projection. It carries the gate's limitation IDs and
+The projection carries the gate's limitation IDs and
 statements of kind `gap` into legacy handler strings; the producer supplies no retryability
 classification. The [gate gap table](job_final_publication_gate.md#gaps) names those causes.
 `not_run` and `notice` remain separate report limitations. In particular,
 `compile_only_nonexecution` is not a claim that runtime checks passed.
 
+Radar gap reasons describe unavailable domain measurements separately from the gate's
+canonical producer limitations. `surface_exposure_unknown`, `inspected_units_unknown`,
+`no_domain_coverage_bound`, `uninspected_exposed_units`, `verification_backlog_unconfirmed`
+and `withheld_packages` prevent unavailable or unresolved scope from becoming verified-no-findings.
+An aggregate confidence value without all domain percentages is N/A with
+`domain_coverage_unknown`. Historical report `/2` and radar `/1` remain readable under their
+original schemas and are labelled legacy estimates; no accepted artifact is rewritten.
+
 Gate/reference corruption, schema mismatch and Markdown unequal to a fresh rendering raise
 integrity errors and prevent publication. Use the handoff's verified
 [canonical outcomes](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
-for walk counts, not repeated Markdown gap labels. PDF status is projected from the report's
-renderer declaration; this handler does not invoke a PDF renderer.
+for walk counts, not repeated Markdown gap labels. The accepted handoff's `pdf` field carries
+the renderer receipt's actual outcome, not the pre-render declaration in `final-report.json`.
 
 ## Acceptance
 

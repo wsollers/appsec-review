@@ -172,7 +172,8 @@ def _accepted_final_report(run_root: Path, schema_root: Path | None) -> tuple[di
     _report_ref, report_output = published("job_final_report_publication")
     report = read_bound_json(run_root, report_output["artifact"])
     schemas = SchemaSet(schema_root / "docs" / "schemas" / "final-report")
-    schemas.validate("final-report", report)
+    from appsec_review.jobs.job_final_report_publication.report import report_schema_name
+    schemas.validate(report_schema_name(report), report)
     accepted_gate, gate = load_accepted_gate(run_root, schemas)
     gate_ref = {"path": accepted_gate.path, "sha256": accepted_gate.sha256}
     gate_output = accepted_gate.handoff["outputs"]["acceptance.publish_handoff"]
