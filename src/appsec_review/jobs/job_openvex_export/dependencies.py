@@ -28,7 +28,7 @@ def dependency_projection(
         return None, None
     _require(accepted.handoff["resolved_config_sha256"] == verified.provenance.resolved_config_sha256,
              "dependency export configuration differs from the certified gate", Reason.IDENTITY_CONFLICT)
-    output = accepted.handoff["outputs"]["publication.publish_handoff"]
+    output = accepted.handoff["outputs"]["acceptance.publish_handoff"]
     raw_ref = output.get("sca_reachability")
     _require(raw_ref is not None, "accepted dependency output omits SCA reachability", Reason.INPUT_MISSING)
     reference = _ref(raw_ref)

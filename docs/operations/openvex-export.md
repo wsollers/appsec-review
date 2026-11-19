@@ -41,6 +41,9 @@ and `openvex-dependencies-result.json` in the same `export.assemble` task. The h
 `dependencies` field is null when that input was not supplied. Otherwise its receipt binds
 the certified gate and exact accepted dependency handoff/artifact. Configuration and target
 snapshot must agree, and publication rechecks input identities and canonical output bytes.
+The reachability reference comes from the dependency producer's
+`outputs["acceptance.publish_handoff"].sca_reachability`; a supplied handoff missing that
+reference fails closed rather than falling back to another task key or accepted attempt.
 No additional job, network lookup or target scan is introduced.
 
 This companion projects supported static `symbol_reachable` observations with call sites as

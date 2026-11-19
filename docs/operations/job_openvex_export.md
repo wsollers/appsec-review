@@ -228,6 +228,12 @@ See the [handler](../../src/appsec_review/jobs/job_openvex_export/job.py),
 3. Verify and copy the pinned offline schema resources, upstream lock and license into this
    attempt. Write immutable `openvex_verified_inputs`; no network schema lookup occurs.
 
+The optional dependency companion reads `sca_reachability` from the admitted
+`job_dependency_intelligence` handoff's `outputs["acceptance.publish_handoff"]`.
+An unsupplied dependency handoff produces no companion; a supplied handoff without the
+reachability reference is rejected. Its accepted bytes must match the certified configuration
+and target snapshot; a newer accepted pointer does not replace the admitted handoff.
+
 ### `export`
 
 1. In `export.assemble`, reprove the loaded inventory and schema copies. Check source/configuration
