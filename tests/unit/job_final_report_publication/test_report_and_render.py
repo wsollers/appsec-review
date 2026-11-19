@@ -55,7 +55,7 @@ def _gate_and_report(
         gate_document={"path": "data/gate.json", "sha256": sha256_hex("gate-doc")},
         configuration_profile=configuration_profile,
     )
-    _validator("final-report-v3").validate(report)
+    _validator(report_schema_name(report)).validate(report)
     assert SchemaSet(SCHEMAS).errors(report_schema_name(report), report) == []
     return gate, report
 
@@ -449,7 +449,7 @@ def test_attachments_filtering_poc_handoff_withheld_and_rendering_branches() -> 
         gate_handoff={"path": "data/gate-handoff.json", "sha256": HASH},
         gate_document={"path": "data/gate.json", "sha256": HASH},
     )
-    _validator("final-report-v3").validate(report)
+    _validator(report_schema_name(report)).validate(report)
     assert SchemaSet(SCHEMAS).errors(report_schema_name(report), report) == []
 
     # Only confirmed / qualified_supported chains survive into report["attack_chains"].
@@ -521,7 +521,7 @@ def test_attachments_filtering_poc_handoff_withheld_and_rendering_branches() -> 
         "confirmed": 0, "qualified_supported": 0, "refuted": 1, "insufficient_evidence": 0}
     counted = build_report(counted_gate, gate_handoff={"path": "data/gate-handoff.json", "sha256": HASH},
                            gate_document={"path": "data/gate.json", "sha256": HASH})
-    _validator("final-report-v3").validate(counted)
+    _validator(report_schema_name(counted)).validate(counted)
     assert counted["attack_chains"]["reason"].startswith(
         "4 candidate chain(s) proposed, 1 admitted: 0 confirmed, 0 qualified_supported, 1 refuted, "
         "0 insufficient_evidence; 2 rejected, 1 deduplicated, 0 capped by max_attack_chains. ")

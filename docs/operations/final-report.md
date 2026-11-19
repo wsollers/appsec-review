@@ -180,8 +180,8 @@ accounting/run identity, and re-hashes every certified binding. Every input/capa
 reference must belong to that binding set. A changed, escaped, missing or uncertified reference
 fails the job. No optional producer's latest pointer is read during report assembly.
 
-`report.assemble` writes `final-report.json` (`final-report/3`, handoff `/2`, schema
-[`../schemas/final-report/final-report-v3.schema.json`](../schemas/final-report/final-report-v3.schema.json)):
+`report.assemble` writes `final-report.json` (`final-report/4`, handoff `/2`, schema
+[`../schemas/final-report/final-report-v4.schema.json`](../schemas/final-report/final-report-v4.schema.json)):
 
 - `findings`: the publishable (confirmed) packages, each with its ship-block decision, independence,
   evidence relation ids, gap ids and every score package's four dimensions (technical severity,
@@ -242,10 +242,27 @@ source display **N/A**, not zero; charts omit unknown vertices and never close o
 through them. The formats use the same report radar rather than recomputing it from format-specific
 dossiers. Known counts remain numeric.
 
-Historical `final-report/2` and radar `/1` schemas are retained unchanged. Readers select the
+Historical `final-report/2`, `final-report/3` and radar `/1` schemas are retained unchanged. Readers select the
 validator from the document's declared version and reject unsupported versions; they never rewrite
 accepted bytes. Legacy charts retain recorded estimates with an explicit legacy-estimate notice,
 not a retrospective assertion that exposure or inspection was measured.
+
+### Advisory reachability and admitted chain capacity (T-5139, T-5140)
+
+The current gate does not certify an advisory reachability measurement. Report `/4` therefore
+publishes `executive_posture.reachable_supply_chain_advisories_count: null` with
+`reachable_supply_chain_gap_reasons: ["certified_reachability_unavailable"]`; all three text
+formats show **N/A** and explain the missing measurement. Neither confirmed finding state,
+package counts, title keywords nor imported modules prove advisory reachability. No additional
+producer is read, and positive reachability counting is **not implemented** by this change.
+Renderers preserve recorded numeric values (including zero) in historical reports rather than
+recalculating them under the new semantics.
+
+Report `/4` retains every admitted active chain and every unrated-chain qualification. Its
+attachment array reuses the gate's bound of 10,000 chains; the card array permits the same
+population. The named-gap capacity is 10,076: at most 64 admitted gate limitations, 12 radar-axis
+rows and one severity-gap row per admitted chain. No chains or gaps are silently sliced to fit
+the former report bounds, and a missing composed severity remains unrated.
 
 `report.render` renders `final-report.md` from that JSON and certified dossier-format references
 with a pure function: the same inputs and display bounds give byte-identical Markdown, with no clock, locale or

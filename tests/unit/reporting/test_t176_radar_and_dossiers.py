@@ -248,7 +248,8 @@ def test_executive_report_posture_chains_roadmap_and_multi_format_rendering() ->
     posture = build_executive_posture(synthetic_report, syn_radar)
     assert posture["release_readiness"] == "BLOCK_RELEASE"
     assert posture["confirmed_by_severity"]["critical"] == 1
-    assert posture["reachable_supply_chain_advisories_count"] == 0
+    assert posture["reachable_supply_chain_advisories_count"] is None
+    assert posture["reachable_supply_chain_gap_reasons"] == ["certified_reachability_unavailable"]
     assert posture["chain_elevated_findings_count"] == 2
 
     md = render_markdown(report, evidence_ids=True, gap_ids=True)

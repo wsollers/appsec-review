@@ -50,7 +50,9 @@ CHAIN_STATUSES = ("confirmed", "qualified_supported", "refuted", "insufficient_e
 
 def report_schema_name(report: Mapping[str, Any]) -> str:
     """Validate historical bytes under their original contract; never reinterpret their metrics."""
-    versions = {"appsec-review/final-report/2": "final-report", FINAL_REPORT_SCHEMA: "final-report-v3"}
+    versions = {"appsec-review/final-report/2": "final-report",
+                "appsec-review/final-report/3": "final-report-v3",
+                "appsec-review/final-report/4": "final-report-v4"}
     schema = report.get("schema")
     if schema not in versions:
         raise ValueError(f"unsupported final report schema: {schema!r}")

@@ -15,6 +15,7 @@ from appsec_review.reporting.dimensions import build_radar_tracker
 from appsec_review.reporting.dossier_receipts import FORMAT_LEGACY, FORMAT_UNLOADED
 from appsec_review.reporting.text import metric_text
 from appsec_review.reporting.executive_posture import (
+    SUPPLY_CHAIN_REACHABILITY_REASON,
     build_attack_chain_cards,
     build_executive_posture,
     build_named_coverage_gaps,
@@ -225,7 +226,9 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
               f"- executive risk posture: confirmed critical {sev['critical']}, high {sev['high']}, "
               f"medium {sev['medium']}, low {sev['low']}, unrated {sev['unrated']}; "
               f"chain-elevated findings {posture['chain_elevated_findings_count']}; "
-              f"reachable supply-chain advisories {posture['reachable_supply_chain_advisories_count']}",
+              f"reachable supply-chain advisories {metric_text(posture['reachable_supply_chain_advisories_count'])}",
+              *([f"- {SUPPLY_CHAIN_REACHABILITY_REASON}"]
+                if posture.get("reachable_supply_chain_gap_reasons") else []),
               f"- coverage confidence index: {metric_text(cci['score'], '/100')} ({cci['verified_axes']}/12 verified domains, "
               f"{cci['gap_axes']}/12 unverified coverage gap domains)",
               f"- claims reviewed: {accounting['claims_total']} "

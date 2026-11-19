@@ -12,6 +12,10 @@ from .text import metric_text
 
 _SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 _ACTIVE_CHAIN_STATUSES = frozenset({"confirmed", "qualified_supported", "confirmed_chain", "qualified_chain"})
+SUPPLY_CHAIN_REACHABILITY_REASON = (
+    "No gate-certified advisory reachability measurement is available. Finding confirmation, package counts "
+    "and imported modules do not establish reachable supply-chain advisories."
+)
 
 
 def _clean_sev(value: Any) -> str:
@@ -43,19 +47,6 @@ def build_executive_posture(report: Mapping[str, Any], radar: Mapping[str, Any])
     confirmed_claim_ids = {str(pkg.get("claim_id")) for pkg in findings if pkg.get("claim_id")}
     chain_elevated_count = len(chain_claims & confirmed_claim_ids)
 
-    supply_chain_count = 0
-    for pkg in findings:
-        if pkg.get("reachability") not in {"symbol_reachable", "confirmed_reachable"}:
-            continue
-        pred = predicate_of(pkg)
-        if pred == "supply_chain_compromise":
-            supply_chain_count += 1
-        elif pred == "insecure_configuration" and any(
-            tok in str(pkg.get("title") or "").lower()
-            for tok in ("cve-", "ghsa-", "dependency", "package", "advisory", "supply", "sbom", "library")
-        ):
-            supply_chain_count += 1
-
     cov_conf = radar["coverage_confidence"]
     status = report.get("status") or {}
     review_complete = bool(status.get("review_complete"))
@@ -75,7 +66,8 @@ def build_executive_posture(report: Mapping[str, Any], radar: Mapping[str, Any])
         "release_readiness": readiness,
         "confirmed_by_severity": sev_counts,
         "chain_elevated_findings_count": chain_elevated_count,
-        "reachable_supply_chain_advisories_count": supply_chain_count,
+        "reachable_supply_chain_advisories_count": None,
+        "reachable_supply_chain_gap_reasons": ["certified_reachability_unavailable"],
         "ship_blocking_count": blocking,
         "coverage_confidence_index": {
             "score": cov_conf["confidence_score"],

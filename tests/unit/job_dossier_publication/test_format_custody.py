@@ -68,7 +68,7 @@ def test_report_lists_only_receipt_certified_format_refs_and_preserves_legacy_pu
     publication = outputs["acceptance.publish_handoff"]
     report = read_bound_json(fx.root, publication["artifact"])
     _validator("final-publication-gate").validate(fx.gate)
-    _validator("final-report-v3").validate(report)
+    _validator("final-report-v4").validate(report)
     item, = report["dossiers"]["items"]
     assert set(item["files"]) == PUBLIC_FILES
     receipt = read_bound_json(fx.root, item["files"]["receipt"])

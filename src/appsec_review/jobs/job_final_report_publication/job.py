@@ -40,7 +40,7 @@ from .pdf import (
     ExecutorFactory, bind_dossiers, render_executive_latex, render_executive_pdf, template_dir, valid_pdf,
 )
 from .render import render_markdown
-from .report import build_report
+from .report import build_report, report_schema_name
 from .settings import FinalReportSettings
 from .sarif import chain_manifest_items, gate_sarif
 
@@ -121,7 +121,7 @@ def build_job(*, repository_root: Path | None = None,
         report = build_report(gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"],
                               configuration_profile=_configuration_profile(unit.job.run_root),
                               chain_manifest_items=chain_manifest_items(unit.job.run_root, gate))
-        _check(_schemas(unit), "final-report-v3", report)
+        _check(_schemas(unit), report_schema_name(report), report)
         path = unit.unit_root / REPORT_JSON
         atomic_json(path, report)
         sarif = gate_sarif(unit.job.run_root, gate, report)
@@ -151,6 +151,8 @@ def build_job(*, repository_root: Path | None = None,
             coverage_confidence_score=radar_conf.get("confidence_score"),
             coverage_confidence_gap_reasons=radar_conf.get("gap_reasons", []),
             chain_elevated_count=int(posture.get("chain_elevated_findings_count", 0)),
+            reachable_supply_chain_advisories_count=posture["reachable_supply_chain_advisories_count"],
+            reachable_supply_chain_gap_reasons=posture["reachable_supply_chain_gap_reasons"],
             remediation_roadmap_count=len(report.get("remediation_roadmap") or ()),
             named_gap_count=len(report.get("named_coverage_gaps") or ()),
             radar_counts_by_axis_and_series=r_tel["reporting.radar_counts_by_axis_and_series"],
@@ -220,7 +222,7 @@ def build_job(*, repository_root: Path | None = None,
         gate = read_bound_json(run_root, loaded["gate_document"])
         _verify_bindings(run_root, gate)
         report = read_bound_json(run_root, assembled["artifact"])
-        _check(_schemas(unit), "final-report-v3", report)
+        _check(_schemas(unit), report_schema_name(report), report)
         if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
             raise IntegrityError("final report is not bound to the accepted gate handoff")
         expected_report = build_report(

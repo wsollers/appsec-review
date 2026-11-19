@@ -19,6 +19,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from appsec_review.jobs.completion_contracts import DOSSIER_SCHEMA
 from .executive_posture import (
+    SUPPLY_CHAIN_REACHABILITY_REASON,
     build_attack_chain_cards,
     build_executive_posture,
     build_named_coverage_gaps,
@@ -299,7 +300,7 @@ def _finding_box(index: int, item: Mapping[str, Any], dossier: BoundDossier | No
 def _summary_blocks(report: Mapping[str, Any], radar: Mapping[str, Any]) -> list[Any]:
     status, summary = report["status"], report["summary"]
     counts, accounting, block = summary["package_counts"], summary["accounting"], summary["ship_block"]
-    posture = build_executive_posture(report, radar)
+    posture = report.get("executive_posture") or build_executive_posture(report, radar)
     sev = posture["confirmed_by_severity"]
     cci = posture["coverage_confidence_index"]
     gaps = [row for row in report["limitations"] if row["kind"] == "gap"]
@@ -326,7 +327,8 @@ def _summary_blocks(report: Mapping[str, Any], radar: Mapping[str, Any]) -> list
                  "insufficient_evidence" if (sev["medium"] + sev["low"]) else "neutral"),
             Stat("Chain-elevated", str(posture["chain_elevated_findings_count"]),
                  "contradicted" if posture["chain_elevated_findings_count"] else "neutral"),
-            Stat("Supply-chain", str(posture["reachable_supply_chain_advisories_count"]),
+            Stat("Supply-chain", metric_text(posture["reachable_supply_chain_advisories_count"]),
+                 "coverage_gap" if posture["reachable_supply_chain_advisories_count"] is None else
                  "contradicted" if posture["reachable_supply_chain_advisories_count"] else "neutral"),
             Stat("Coverage confidence", f"{metric_text(cci['score'], '/100')} ({cci['verified_axes']}/12)",
                  "confirmed" if cci["gap_axes"] == 0 and complete else "coverage_gap"),
@@ -343,7 +345,7 @@ def _summary_blocks(report: Mapping[str, Any], radar: Mapping[str, Any]) -> list
                       f"critical {sev['critical']}, high {sev['high']}, medium {sev['medium']}, "
                       f"low {sev['low']}, unrated {sev['unrated']}", LIMITS),
                 field("Chain-elevated findings", posture["chain_elevated_findings_count"], LIMITS),
-                field("Reachable supply-chain", posture["reachable_supply_chain_advisories_count"], LIMITS),
+                field("Reachable supply-chain", metric_text(posture["reachable_supply_chain_advisories_count"]), LIMITS),
                 field("Coverage confidence",
                       f"{metric_text(cci['score'], '/100')} ({cci['verified_axes']} verified axes, "
                       f"{cci['gap_axes']} unverified coverage gap axes)", LIMITS),
@@ -354,6 +356,8 @@ def _summary_blocks(report: Mapping[str, Any], radar: Mapping[str, Any]) -> list
                 field("Gap ratio", f"{accounting.get('gap_ratio', 0):.3f} (incomplete above "
                       f"{accounting.get('incomplete_gap_ratio', 0):.3f})", LIMITS),
             )),
+            *((Para(SUPPLY_CHAIN_REACHABILITY_REASON, muted=True),)
+              if posture.get("reachable_supply_chain_gap_reasons") else ()),
             Para(cci["statement"], muted=True),
             *(() if complete else (Para("Why the review is not complete", muted=True),
                                    _bullets([f"{words(row['limitation_id'])}: {_text(row['statement'])}" for row in gaps]

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/final-report/final-report-v4.schema.json",
+  "title": "Final security review report with unavailable advisory reachability and conserved chain bounds",
+  "description": "Version 4 retains radar/2 and distinguishes unavailable advisory reachability from measured zero. Chain capacity equals the gate's 10000 admitted attachments; named gaps allow 64 gate limitations + 12 radar axes + 10000 unrated chains. Historical report/2 and report/3 schemas are unchanged.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "run_id", "provenance", "status", "summary", "findings", "attack_chains", "poc_outcomes",
+    "verification_backlog", "withheld", "limitations", "gap_ids", "renderers", "notices", "capabilities",
+    "remediation_planning", "remediation_validation", "dossiers", "radar_tracker", "executive_posture"
+  ],
+  "properties": {
+    "schema": {"const": "appsec-review/final-report/4"},
+    "run_id": {"$ref": "final-report-v3.schema.json#/properties/run_id"},
+    "provenance": {"$ref": "final-report-v3.schema.json#/properties/provenance"},
+    "status": {"$ref": "final-report-v3.schema.json#/properties/status"},
+    "summary": {"$ref": "final-report-v3.schema.json#/properties/summary"},
+    "findings": {"$ref": "final-report-v3.schema.json#/properties/findings"},
+    "attack_chains": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "items"],
+      "properties": {
+        "status": {"$ref": "final-report.schema.json#/properties/attack_chains/properties/status"},
+        "reason": {"$ref": "common.schema.json#/$defs/text"},
+        "items": {
+          "$ref": "common.schema.json#/$defs/attachments/properties/attack_chains",
+          "uniqueItems": true
+        },
+        "status_counts": {"$ref": "final-report.schema.json#/properties/attack_chains/properties/status_counts"}
+      }
+    },
+    "poc_outcomes": {"$ref": "final-report-v3.schema.json#/properties/poc_outcomes"},
+    "verification_backlog": {"$ref": "final-report-v3.schema.json#/properties/verification_backlog"},
+    "withheld": {"$ref": "final-report-v3.schema.json#/properties/withheld"},
+    "limitations": {"$ref": "final-report-v3.schema.json#/properties/limitations"},
+    "gap_ids": {"$ref": "final-report-v3.schema.json#/properties/gap_ids"},
+    "renderers": {"$ref": "final-report-v3.schema.json#/properties/renderers"},
+    "notices": {"$ref": "final-report-v3.schema.json#/properties/notices"},
+    "capabilities": {"$ref": "final-report-v3.schema.json#/properties/capabilities"},
+    "remediation_planning": {"$ref": "final-report-v3.schema.json#/properties/remediation_planning"},
+    "remediation_validation": {"$ref": "final-report-v3.schema.json#/properties/remediation_validation"},
+    "dossiers": {"$ref": "final-report-v3.schema.json#/properties/dossiers"},
+    "radar_tracker": {"$ref": "security-radar-tracker-v2.schema.json"},
+    "attack_chain_cards": {
+      "type": "array", "maxItems": 10000,
+      "items": {"$ref": "final-report.schema.json#/$defs/attack_chain_card"}
+    },
+    "remediation_roadmap": {"$ref": "final-report-v3.schema.json#/properties/remediation_roadmap"},
+    "named_coverage_gaps": {
+      "type": "array", "maxItems": 10076,
+      "items": {"$ref": "final-report.schema.json#/$defs/named_coverage_gap"}
+    },
+    "executive_posture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release_readiness", "confirmed_by_severity", "chain_elevated_findings_count",
+        "reachable_supply_chain_advisories_count", "reachable_supply_chain_gap_reasons",
+        "ship_blocking_count", "coverage_confidence_index"
+      ],
+      "properties": {
+        "release_readiness": {"$ref": "final-report-v3.schema.json#/properties/executive_posture/properties/release_readiness"},
+        "confirmed_by_severity": {"$ref": "final-report-v3.schema.json#/properties/executive_posture/properties/confirmed_by_severity"},
+        "chain_elevated_findings_count": {"$ref": "final-report-v3.schema.json#/properties/executive_posture/properties/chain_elevated_findings_count"},
+        "reachable_supply_chain_advisories_count": {"type": ["integer", "null"], "minimum": 0},
+        "reachable_supply_chain_gap_reasons": {
+          "type": "array", "maxItems": 1, "uniqueItems": true,
+          "items": {"const": "certified_reachability_unavailable"}
+        },
+        "ship_blocking_count": {"$ref": "final-report-v3.schema.json#/properties/executive_posture/properties/ship_blocking_count"},
+        "coverage_confidence_index": {"$ref": "final-report-v3.schema.json#/properties/executive_posture/properties/coverage_confidence_index"}
+      },
+      "if": {"properties": {"reachable_supply_chain_advisories_count": {"type": "null"}}},
+      "then": {"properties": {"reachable_supply_chain_gap_reasons": {"minItems": 1}}},
+      "else": {"properties": {"reachable_supply_chain_gap_reasons": {"maxItems": 0}}}
+    }
+  }
+}

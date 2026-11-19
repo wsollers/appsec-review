@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from collections import Counter
 import math
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
+
+from appsec_review.reporting.dimensions import DOMAIN_IDS, RADAR_SERIES_IDS
 
 
 LANES = {
@@ -28,6 +30,8 @@ COUNTERS = frozenset({
     "timeout_count", "failure_count", "output_bytes",
     "usage_unavailable_count",
     "json_bytes", "latex_bytes", "pdf_bytes", "receipt_bytes",
+    "radar_verified_axes", "radar_gap_axes", "chain_elevated_count",
+    "remediation_roadmap_count", "named_gap_count", "dossiers_certified", "dossiers_read",
 })
 OUTCOME_FIELDS = ("outcomes", "outcome_counts", "by_kind", "by_status")
 LIMITS = ("max_dossiers", "max_source_excerpts", "max_evidence_rows")
@@ -35,7 +39,7 @@ CAPABILITIES = frozenset({"poc_generation", "attack_chains", "remediation_planni
                           "remediation_validation", "dossiers"})
 CAPABILITY_COUNTERS = ("attachment_counts", "gap_counts", "omitted_counts", "certified_outcome_counts")
 FLAGS = ("explicit_poc_admission", "frontier_truncated", "pdf_requested", "render_failed",
-         "baseline_attempted", "patched_attempted", "usage_unavailable")
+         "baseline_attempted", "patched_attempted", "usage_unavailable", "render_pdf")
 DIMENSIONS = {"kind": {"confirmed_finding", "poc", "refuter", "weakest_link_verifier"},
               "adapter": {"native_syntax"}, "role": {"remediation_writer", "remediation_reviewer"}}
 OUTCOMES = frozenset({
@@ -47,9 +51,88 @@ OUTCOMES = frozenset({
     "not_applicable", "not_attempted", "not_launched", "skipped_policy", "capped",
     "proposal_generated", "manual_design_required", "rejected", "inconclusive",
     "build_checked", "static_checked", "manual_validation_required",
-    "rendered", "render_failed", "latex_only", "confirmed_finding", "poc",
+    "rendered", "render_failed", "not_rendered", "latex_only", "confirmed_finding", "poc",
     "answered", "invalid", "declined", "cap_reached", "passed", "baseline_failed", "patched_failed", "unsafe",
 })
+REPORT_RATES = frozenset({"exposure_to_coverage_rate", "exposure_to_leads_rate", "leads_to_confirmed_rate"})
+REPORT_GAP_REASONS = frozenset({
+    "domain_coverage_unknown", "surface_exposure_unknown", "inspected_units_unknown",
+    "corroborated_leads_unknown", "certified_reachability_unavailable", "syntactic_fallback_only",
+    "verification_backlog_unconfirmed", "withheld_packages", "uninspected_exposed_units",
+    "no_domain_coverage_bound", "review_incomplete", "review_degraded",
+    "numerator_unknown", "denominator_unknown", "denominator_empty",
+})
+
+
+def _report_measurements(details: Mapping[str, Any], bucket: dict[str, Any],
+                         invalid: Callable[[str], None]) -> None:
+    """Ranges describe observed snapshots, not sums of percentages or accepted finding counts."""
+    measurements = bucket.setdefault("measurements", {})
+    qualifications = bucket.setdefault("qualifications", Counter())
+
+    def measure(field: str, value: Any, *, integer: bool = True, maximum: float = 2**63 - 1) -> None:
+        if value is not None and not (
+            type(value) in ((int,) if integer else (int, float))
+            and 0 <= value <= maximum and math.isfinite(value)
+        ):
+            invalid(field)
+            return
+        row = measurements.setdefault(field, {"count": 0, "unavailable": 0, "min": None, "max": None})
+        if value is None:
+            row["unavailable"] += 1
+        else:
+            row["count"] += 1
+            row["min"] = value if row["min"] is None else min(row["min"], value)
+            row["max"] = value if row["max"] is None else max(row["max"], value)
+
+    def reasons(field: str, values: Any) -> None:
+        if not isinstance(values, list) or len(values) > len(REPORT_GAP_REASONS):
+            invalid(field)
+            return
+        for reason in values:
+            if not isinstance(reason, str) or reason not in REPORT_GAP_REASONS:
+                invalid(field)
+            else:
+                qualifications[f"{field}.{reason}"] += 1
+
+    def entries(field: str, allowed: Sequence[str] | frozenset[str]):
+        if field not in details:
+            return ()
+        value = details[field]
+        if not isinstance(value, Mapping):
+            invalid(field)
+            return ()
+        result = []
+        for key, item in value.items():
+            if key not in allowed:
+                invalid(field)
+            else:
+                result.append((key, item))
+        return result
+
+    for field in ("coverage_confidence_score", "reachable_supply_chain_advisories_count"):
+        if field in details:
+            measure(field, details[field], maximum=100 if field == "coverage_confidence_score" else 2**63 - 1)
+    for field in ("coverage_confidence_gap_reasons", "reachable_supply_chain_gap_reasons"):
+        if field in details:
+            reasons(field, details[field])
+    for axis, values in entries("radar_counts_by_axis_and_series", DOMAIN_IDS):
+        prefix = f"radar_counts_by_axis_and_series.{axis}"
+        if not isinstance(values, Mapping):
+            invalid(prefix)
+            continue
+        for series, value in values.items():
+            if series not in RADAR_SERIES_IDS:
+                invalid(prefix)
+            else:
+                measure(f"{prefix}.{series}", value)
+    for field in ("radar_gap_reasons_by_axis", "radar_metric_gap_reasons_by_axis"):
+        for axis, values in entries(field, DOMAIN_IDS):
+            reasons(f"{field}.{axis}", values)
+    for rate, value in entries("funnel_conversion_rates", REPORT_RATES):
+        measure(f"funnel_conversion_rates.{rate}", value, integer=False)
+    for rate, values in entries("funnel_gap_reasons", REPORT_RATES):
+        reasons(f"funnel_gap_reasons.{rate}", values)
 
 
 def _lane(record: Mapping[str, Any]) -> str | None:
@@ -90,6 +173,8 @@ def completion_metrics(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                     "flags": Counter(), "dimensions": Counter(), "limits": {},
                     "duration_ms": [], "unavailable_token_measurements": 0})
         bucket["count"] += 1
+        if lane == "report_publication" and event == "FINAL_REPORT_ASSEMBLED":
+            _report_measurements(details, bucket, lambda field: invalid(lane, event, field))
         for field in sorted(COUNTERS & details.keys()):
             value = details[field]
             if value is None and field in {"input_tokens", "output_tokens", "cache_tokens"}:
@@ -171,6 +256,12 @@ def completion_metrics(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         outcome = details.get("outcome") or details.get("status")
         if isinstance(outcome, str) and outcome in OUTCOMES:
             bucket["outcomes"][outcome] += 1
+        if lane == "report_publication" and event == "FINAL_REPORT_PUBLISHED" and "pdf" in details:
+            pdf = details["pdf"]
+            if isinstance(pdf, str) and pdf in {"rendered", "render_failed", "not_rendered"}:
+                bucket["outcomes"][f"pdf.{pdf}"] += 1
+            else:
+                invalid(lane, event, "pdf")
 
     for lane in lanes.values():
         events = {}
@@ -193,6 +284,9 @@ def completion_metrics(records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                     "summed_work": sum(durations) if durations else None,
                 },
             }
+            if "measurements" in bucket:
+                events[event]["measurements"] = dict(sorted(bucket["measurements"].items()))
+                events[event]["qualifications"] = dict(sorted(bucket["qualifications"].items()))
         lane["events"] = events
     return {
         "semantics": "appsec-review/completion-process-metrics/1",

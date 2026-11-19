@@ -300,6 +300,18 @@ Generic step lifecycle disposition lists are not capability maps or measurement 
 `FINAL_REPORT_ASSEMBLED.counters.certified_outcome_counts.<capability>` counts the gate-certified
 attachment rows reported for each fixed capability. These are counts, not dispositions or unique
 findings, and do not establish reproduction or a fixed finding.
+The same assembly event retains radar verified/gap-axis, chain-elevated, roadmap and named-gap
+counters. Its `measurements` map records coverage-confidence, advisory-reachability, per-axis
+radar counts and funnel rates as `{count, unavailable, min, max}` observations. Keys are the
+event field names, with closed axis/series/rate names appended for nested maps. Repeated report
+attempts add observations, **not percentages, ratios or accepted finding counts**. Explicit null
+increments `unavailable`; a measured zero contributes to the range as zero. Absent fields remain
+absent. `qualifications` counts closed gap-reason labels by field and axis/rate; malformed values
+or unknown labels create bounded measurement gaps without retaining untrusted labels.
+`FINAL_REPORT_PDF_RENDERED` preserves `rendered`, `render_failed` and `not_rendered` distinctly;
+the publication event separately records `pdf.<outcome>`. Disabled rendering and failed rendering
+remain incomplete outcomes, never successful PDF production. These observations do not replace
+the accepted report, renderer receipt or its integrity checks.
 `unavailable_token_measurements` counts explicit-null token fields;
 `counters.usage_unavailable_count` counts producer-reported missing-usage turns instead.
 Neither means a missing field was measured as zero. An unobserved lane is not an observed zero.
