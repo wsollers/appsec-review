@@ -3865,11 +3865,12 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** Archived audit/feedback cases: RP-01, RP-08. Composite scores above one are divided by 100 downstream; The silence-hunt threshold is not validated and bad values silently change policy.
 - **Scope:** `src/appsec_review/jobs/job_review_prioritization/composite.py`, `src/appsec_review/review/units.py`
   Coordinator-owned `priority-scale` assignment, based on `d492b21b0d7736441a1cb41ca728a6f534235d62`.
-  The owner reports that RP-01 needs a bounded monotonic representation decision before
-  implementation; its red regression continues. RP-08 remains tracked here but, according to
-  the owner, is outside that active assignment. Neither clamping, removing the consumer bound
-  nor choosing a normalization/squashing policy is authorized by this ledger update.
-- **Done when:** Boost combinations preserve a documented score representation and monotonic ordering; no indiscriminate clamping or magnitude-based percentage inference. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  User decision, 2026-11-19: normalize to the existing 0–1 scale without clipping, using
+  the maximum contribution allowed by the frozen run configuration while preserving raw
+  components and ordering. Owner `131ded6a-712b-4534-bfd9-3a398997c6b9` has resumed under
+  that policy; no alternative mapping is selected by this ledger. RP-08 remains tracked here
+  but outside that active assignment according to the owner.
+- **Done when:** Frozen-configuration maximum-contribution normalization preserves the existing 0–1 scale, raw components and ordering without clipping or magnitude-based percentage inference. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-171 (not reopened).
 
 ### T-5085 — Rank remediation from the actual accepted finding projection
