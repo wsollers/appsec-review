@@ -73,7 +73,10 @@ uses each row's own include search paths.
 
 The source reader uses the prepared accepted source copy, rejects symlink components, and reads at most
 1 MiB per file. A larger file is omitted before content reads and names `include_scan_bytes_limit_reached`;
-its existence still shadows later candidates, but its transitive includes are unavailable. Count-budget
+its existence still shadows later candidates, but its transitive includes are unavailable.
+Short physical reads are completed up to the opened file's observed size without exceeding the byte
+limit or consuming another candidate allowance. Premature end-of-read or a changed size names
+`include_scan_incomplete`; an incomplete prefix is never parsed as a complete source. Count-budget
 exhaustion names `include_scan_limit_reached` and does not probe further or substitute a cached later
 candidate for an uninspected earlier one. File counts bound all probes, not just parsed or selected files;
 the include walk has no additional silent closure cutoff. Direct main-source seeds need no include reads.

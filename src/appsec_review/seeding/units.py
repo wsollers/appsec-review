@@ -16,7 +16,7 @@ import posixpath
 import re
 
 from .ledger import Seed
-from .plan import SourceScanLimit
+from .plan import SourceScanIncomplete, SourceScanLimit
 
 SOURCE_ROOT = "/scratch/source/"
 _INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"\n]+)[>"]', re.MULTILINE)
@@ -98,7 +98,7 @@ class _Scanner:
             self.reads += 1
             try:
                 text = self.read_text(path)
-            except SourceScanLimit as error:
+            except (SourceScanLimit, SourceScanIncomplete) as error:
                 self.gaps.append(str(error))
                 # The file exists and shadows later include directories even though its includes
                 # are unavailable. Do not select a different same-named header as a substitute.

@@ -327,7 +327,9 @@ def test_header_seed_unit_limit_keeps_highest_priority_before_path_order(tmp_pat
         assert any(gap.startswith(units.UNIT_LIMIT_REACHED) for gap in result.gaps)
 
 
-def _observe_file_reads(monkeypatch: pytest.MonkeyPatch, root: Path) -> list[tuple[str, int, int]]:
+def _observe_file_reads(monkeypatch: pytest.MonkeyPatch, root: Path, *,
+                        chunk_size: int | None = None,
+                        stop_after: int | None = None) -> list[tuple[str, int, int]]:
     original = Path.open
     reads = []
 
@@ -340,8 +342,13 @@ def _observe_file_reads(monkeypatch: pytest.MonkeyPatch, root: Path) -> list[tup
             return getattr(self.stream, name)
 
         def read(self, size: int = -1):
+            requested = size
+            if chunk_size is not None:
+                size = min(size, chunk_size) if size >= 0 else chunk_size
+            if stop_after is not None:
+                size = min(size, max(0, stop_after - self.stream.tell()))
             data = self.stream.read(size)
-            reads.append((self.relative, size, len(data)))
+            reads.append((self.relative, requested, len(data)))
             return data
 
     @contextmanager
@@ -351,6 +358,52 @@ def _observe_file_reads(monkeypatch: pytest.MonkeyPatch, root: Path) -> list[tup
 
     monkeypatch.setattr(Path, "open", observed_open)
     return reads
+
+
+@pytest.mark.parametrize("at_limit", (False, True), ids=("tiny", "exact-byte-limit"))
+def test_header_seed_short_file_reads_finish_within_byte_and_candidate_limits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, at_limit: bool,
+) -> None:
+    prefix, directive = "// € source\n".encode(), b'#include "h.h"\n'
+    size = plan.MAX_SCAN_BYTES if at_limit else len(prefix) + len(directive)
+    data = prefix + b" " * (size - len(prefix) - len(directive)) + directive
+    (tmp_path / "a.cpp").write_bytes(data)
+    (tmp_path / "h.h").write_bytes(b"int h;")
+    reads = _observe_file_reads(monkeypatch, tmp_path, chunk_size=131071 if at_limit else 5)
+    reader = seeding.source_reader(tmp_path)
+    candidates = []
+
+    def observed_read(path: str) -> str | None:
+        candidates.append(path)
+        return reader(path)
+
+    result = units.select_units([_row("a.cpp")], [_seed("h.h")], unit_limit=1,
+                                include_scan_files=2, read_text=observed_read)
+    assert result.selected == (0,) and not result.gaps
+    assert candidates == ["a.cpp", "h.h"]
+    for path, expected in (("a.cpp", size), ("h.h", 6)):
+        consumed = 0
+        chunks = [(requested, count) for file, requested, count in reads if file == path]
+        assert chunks
+        for requested, count in chunks:
+            assert 0 < requested <= plan.MAX_SCAN_BYTES - consumed
+            consumed += count
+        assert consumed == expected
+
+
+def test_header_seed_premature_read_end_never_parses_a_prefix_as_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    directive = '#include "h.h"\n'
+    _sources(tmp_path, {"a.cpp": directive + "int more_source;\n", "h.h": "int h;"})
+    reads = _observe_file_reads(monkeypatch, tmp_path, chunk_size=len(directive), stop_after=len(directive))
+    result = units.select_units([_row("a.cpp")], [_seed("h.h")], unit_limit=1,
+                                include_scan_files=2, read_text=seeding.source_reader(tmp_path))
+    assert result.selected == ()
+    assert result.uncovered == (_seed("h.h").key,)
+    assert any(gap.startswith("include_scan_incomplete:") for gap in result.gaps)
+    assert [(path, count) for path, _requested, count in reads] == [
+        ("a.cpp", len(directive)), ("a.cpp", 0)]
 
 
 @pytest.mark.parametrize("extra", (0, 1), ids=("exact-byte-limit", "over-byte-limit"))
