@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/final-report/security-radar-tracker-v2.schema.json",
   "title": "Security Radar Tracker with explicit unknown coverage",
-  "description": "Unknown exposure, inspection and derived coverage are null, with named gaps. Measured counts, including zero, remain numeric. Version 1 is retained separately.",
+  "description": "Unknown exposure, inspection, corroboration and derived metrics are null, with named gaps. Corroboration metric gaps do not change independently measured coverage. Measured counts, including zero, remain numeric. Version 1 is retained separately.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "axis_count", "series_ids", "unclassified_packages", "coverage_confidence", "axes"],
@@ -55,7 +55,7 @@
             "properties": {
               "surface_exposure": {"$ref": "#/$defs/exposure_metric"},
               "verified_coverage": {"$ref": "#/$defs/coverage_metric"},
-              "corroborated_leads": {"$ref": "security-radar-tracker.schema.json#/$defs/series_metric"},
+              "corroborated_leads": {"$ref": "#/$defs/corroboration_metric"},
               "confirmed_high_critical": {"$ref": "security-radar-tracker.schema.json#/$defs/confirmed_metric"}
             }
           }
@@ -81,6 +81,23 @@
     }
   },
   "$defs": {
+    "corroboration_metric": {
+      "type": "object", "additionalProperties": false, "required": ["raw_count", "score", "unit", "gap_reasons"],
+      "properties": {
+        "raw_count": {"type": ["integer", "null"], "minimum": 0},
+        "score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "unit": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "gap_reasons": {"type": "array", "items": {"const": "corroborated_leads_unknown"}}
+      },
+      "if": {"properties": {"raw_count": {"type": "null"}}},
+      "then": {"properties": {
+        "score": {"type": "null"}, "unit": {"type": "null"},
+        "gap_reasons": {"const": ["corroborated_leads_unknown"]}
+      }},
+      "else": {"properties": {
+        "score": {"type": "number"}, "unit": {"type": "number"}, "gap_reasons": {"const": []}
+      }}
+    },
     "exposure_metric": {
       "type": "object", "additionalProperties": false, "required": ["raw_count", "score", "unit"],
       "properties": {

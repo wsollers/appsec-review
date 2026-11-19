@@ -202,7 +202,7 @@ class DimensionCounts:
     domain_id: str = ""
     owasp_2025: str = ""
     high_critical_findings: int = 0
-    corroborated_leads: int = 0
+    corroborated_leads: int | None = None
     surface_exposure_raw: int | None = None
     verified_coverage_pct: float | None = None
     coverage_status: str = "unverified_gap"
@@ -376,7 +376,6 @@ def build_radar_tracker(
     findings_by_key = {dim.key: 0 for dim in DIMENSIONS}
     hc_by_key = {dim.key: 0 for dim in DIMENSIONS}
     chain_by_key = {dim.key: 0 for dim in DIMENSIONS}
-    claims_by_key = {dim.key: 0 for dim in DIMENSIONS}
     backlog_by_key = {dim.key: 0 for dim in DIMENSIONS}
     withheld_by_key = {dim.key: 0 for dim in DIMENSIONS}
     unclassified = 0
@@ -390,7 +389,6 @@ def build_radar_tracker(
             if key is None:
                 unclassified += 1
                 continue
-            claims_by_key[key] += 1
             if section == "findings":
                 findings_by_key[key] += 1
                 sev = _technical_severity(package, dossier)
@@ -405,7 +403,7 @@ def build_radar_tracker(
                 withheld_by_key[key] += 1
 
     raw_surface: dict[str, int | None] = {}
-    raw_leads: dict[str, int] = {}
+    raw_leads: dict[str, int | None] = {}
     raw_cov_count: dict[str, int | None] = {}
     cov_pct: dict[str, float | None] = {}
     cov_status: dict[str, str] = {}
@@ -416,7 +414,7 @@ def build_radar_tracker(
         leads_raw = _telemetry_count(dom, "corroborated_leads")
         exposed_raw = _telemetry_count(dom, "surface_exposure" if "surface_exposure" in dom else "exposed_units")
         inspected = _telemetry_count(dom, "inspected_units")
-        raw_leads[dim.key] = claims_by_key[dim.key] if leads_raw is None else leads_raw
+        raw_leads[dim.key] = leads_raw
         raw_surface[dim.key] = exposed_raw
         raw_cov_count[dim.key] = inspected
 
@@ -465,7 +463,7 @@ def build_radar_tracker(
             cov_status[dim.key] = "verified_no_findings"
 
     max_surface = max((value for value in raw_surface.values() if value is not None), default=0)
-    max_leads = max(raw_leads.values(), default=0)
+    max_leads = max((value for value in raw_leads.values() if value is not None), default=0)
     max_hc = max(hc_by_key.values(), default=0)
 
     axes_out: list[dict[str, Any]] = []
@@ -482,7 +480,8 @@ def build_radar_tracker(
         surf_unit = (None if raw_surface[k] is None else
                      round(raw_surface[k] / max_surface, 4) if max_surface > 0 else 0.0)
         cov_unit = None if cov_pct[k] is None else round(cov_pct[k] / 100.0, 4)
-        leads_unit = round(raw_leads[k] / max_leads, 4) if max_leads > 0 else 0.0
+        leads_unit = (None if raw_leads[k] is None else
+                      round(raw_leads[k] / max_leads, 4) if max_leads > 0 else 0.0)
         if max_hc > 0:
             hc_unit = round(hc_by_key[k] / max_hc, 4)
         else:
@@ -515,8 +514,9 @@ def build_radar_tracker(
                 },
                 "corroborated_leads": {
                     "raw_count": raw_leads[k],
-                    "score": round(leads_unit * 100.0, 1),
+                    "score": None if leads_unit is None else round(leads_unit * 100.0, 1),
                     "unit": leads_unit,
+                    "gap_reasons": ["corroborated_leads_unknown"] if raw_leads[k] is None else [],
                 },
                 "confirmed_high_critical": {
                     "raw_count": hc_by_key[k],
@@ -572,7 +572,8 @@ def dimension_counts(
                 key=dim.key,
                 label=dim.label,
                 findings=by_key[dim.key]["series"]["confirmed_high_critical"]["all_confirmed_count"],
-                claims=by_key[dim.key]["series"]["corroborated_leads"]["raw_count"],
+                claims=(sum(by_key[dim.key]["package_counts"].values()) if "package_counts" in by_key[dim.key]
+                        else by_key[dim.key]["series"]["corroborated_leads"]["raw_count"]),
                 domain_id=dim.domain_id,
                 owasp_2025=dim.owasp_2025,
                 high_critical_findings=by_key[dim.key]["series"]["confirmed_high_critical"]["raw_count"],
@@ -646,6 +647,10 @@ def radar_telemetry(tracker: Mapping[str, Any]) -> dict[str, Any]:
         "reporting.radar_counts_by_axis_and_series": by_axis,
         "reporting.radar_gap_reasons_by_axis": {
             str(axis["domain_id"]): list(axis["gap_reasons"]) for axis in axes if isinstance(axis, Mapping)
+        },
+        "reporting.radar_metric_gap_reasons_by_axis": {
+            str(axis["domain_id"]): list(axis["series"]["corroborated_leads"].get("gap_reasons", ()))
+            for axis in axes if isinstance(axis, Mapping)
         },
         "reporting.funnel_conversion_rates": {name: _rate(num, den) for name, (num, den) in rate_inputs.items()},
         "reporting.funnel_gap_reasons": {

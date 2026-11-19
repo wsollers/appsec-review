@@ -261,9 +261,10 @@ def test_executive_report_posture_chains_roadmap_and_multi_format_rendering() ->
     svg_start = html.index("<svg")
     svg_end = html.index("</svg>") + len("</svg>")
     ET.fromstring(html[svg_start:svg_end])
-    assert html.count('data-series=') == 2
+    assert html.count('data-series=') == 1
     assert 'data-series="Surface exposure"' not in html
     assert 'data-series="Verified coverage"' not in html
+    assert 'data-series="Corroborated leads"' not in html
     assert "N/A" in html and "N/A" in md
 
 

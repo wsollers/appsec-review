@@ -37,7 +37,7 @@ NOTICES = (
     "The report holds identifiers, hashes and accepted summaries only. It contains no exploit code, proof "
     "payloads, queries or prompts.",
     "A named limitation is a limit of the review or of the pipeline, never evidence that the target is clean.",
-    "Domain exposure and inspection require explicit bound telemetry, not package or coverage-cell counts. "
+    "Domain exposure, inspection and corroborated leads require explicit bound telemetry, not package or coverage-cell counts. "
     "Unknown metrics are null (N/A), with gap reasons; measured zero remains zero.",
 )
 

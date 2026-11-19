@@ -243,6 +243,10 @@ def test_units_execute_clean_and_gapped_flows_and_claim_every_written_file(
                for row in assembled_event["radar_counts_by_axis_and_series"].values())
     assert all("surface_exposure_unknown" in reasons
                for reasons in assembled_event["radar_gap_reasons_by_axis"].values())
+    assert all(row["corroborated_leads"] is None
+               for row in assembled_event["radar_counts_by_axis_and_series"].values())
+    assert all(reasons == ["corroborated_leads_unknown"]
+               for reasons in assembled_event["radar_metric_gap_reasons_by_axis"].values())
 
     # The executive PDF: rendered through the container once, with the template and inputs mounted read-only.
     pdf_out = outputs["report.render_pdf"]

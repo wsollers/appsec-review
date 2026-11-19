@@ -369,12 +369,13 @@ def _dimension_reading(axis: Mapping[str, Any]) -> str:
     series = axis["series"]
     confirmed_all = series["confirmed_high_critical"]["all_confirmed_count"]
     hc = series["confirmed_high_critical"]["raw_count"]
-    leads = series["corroborated_leads"]["raw_count"]
+    claims = (sum(axis["package_counts"].values()) if "package_counts" in axis else
+              series["corroborated_leads"]["raw_count"])
     cov_status = axis["coverage_status"]
     if confirmed_all:
-        base = f"{_plural(confirmed_all, 'confirmed finding')} ({hc} high/critical) of {_plural(leads, 'claim')} examined."
-    elif leads:
-        base = f"{_plural(leads, 'claim')} examined, none confirmed. Not a clearance."
+        base = f"{_plural(confirmed_all, 'confirmed finding')} ({hc} high/critical) of {_plural(claims, 'accepted package')}."
+    elif claims:
+        base = f"{_plural(claims, 'accepted package')}, none confirmed. Not a clearance."
     elif cov_status == "verified_no_findings":
         base = "Explicitly inspected domain scope; no publishable findings in that population."
     else:
@@ -383,6 +384,9 @@ def _dimension_reading(axis: Mapping[str, Any]) -> str:
         base += f" Unverified coverage gap ({words(cov_status)})."
     if axis["gap_reasons"]:
         base += " " + ", ".join(axis["gap_reasons"]) + "."
+    metric_gaps = series["corroborated_leads"].get("gap_reasons", ())
+    if metric_gaps:
+        base += " Metric gap: " + ", ".join(metric_gaps) + "."
     return base
 
 
@@ -400,7 +404,8 @@ def _dimension_blocks(report: Mapping[str, Any], radar_or_dossiers: Mapping[str,
     unclassified = int(radar["unclassified_packages"])
     top_surface = max((ax["series"]["surface_exposure"]["raw_count"] for ax in axes_data
                        if ax["series"]["surface_exposure"]["raw_count"] is not None), default=None)
-    top_leads = max((ax["series"]["corroborated_leads"]["raw_count"] for ax in axes_data), default=0)
+    top_leads = max((ax["series"]["corroborated_leads"]["raw_count"] for ax in axes_data
+                     if ax["series"]["corroborated_leads"]["raw_count"] is not None), default=None)
     top_hc = max((ax["series"]["confirmed_high_critical"]["raw_count"] for ax in axes_data), default=0)
 
     chart = RadarChart(
@@ -426,8 +431,8 @@ def _dimension_blocks(report: Mapping[str, Any], radar_or_dossiers: Mapping[str,
             RadarSeries(
                 "Corroborated leads",
                 "proposed",
-                tuple(float(ax["series"]["corroborated_leads"]["unit"]) for ax in axes_data),
-                tuple(str(ax["series"]["corroborated_leads"]["raw_count"]) for ax in axes_data),
+                tuple(ax["series"]["corroborated_leads"]["unit"] for ax in axes_data),
+                tuple(metric_text(ax["series"]["corroborated_leads"]["raw_count"]) for ax in axes_data),
             ),
             RadarSeries(
                 "Confirmed High/Critical",
@@ -446,7 +451,9 @@ def _dimension_blocks(report: Mapping[str, Any], radar_or_dossiers: Mapping[str,
             RadarLegendRow("series", "Verified coverage", "Verified coverage",
                            "percentage of exposed domain scope verified; <100% or unbound is an Unverified Coverage Gap"),
             RadarLegendRow("series", "Corroborated leads", "Corroborated leads",
-                           f"corroborated claims/packages entering adjudication; rim is {top_leads}"),
+                           (f"legacy package-count estimates, not measured corroboration; recorded rim is {metric_text(top_leads)}"
+                            if radar.get("schema") == "appsec-review/security-radar-tracker/1" else
+                            f"explicitly measured corroborated leads, not accepted packages; known rim is {metric_text(top_leads)}")),
             RadarLegendRow("series", "Confirmed High/Critical", "Confirmed High/Critical",
                            f"confirmed high/critical or chain-elevated findings (with total confirmed); rim is {top_hc}"),
             *(
@@ -470,7 +477,7 @@ def _dimension_blocks(report: Mapping[str, Any], radar_or_dossiers: Mapping[str,
             ax["label"],
             metric_text(ax["series"]["surface_exposure"]["raw_count"]),
             metric_text(ax["series"]["verified_coverage"]["score"], "%"),
-            str(ax["series"]["corroborated_leads"]["raw_count"]),
+            metric_text(ax["series"]["corroborated_leads"]["raw_count"]),
             f"{ax['series']['confirmed_high_critical']['raw_count']} ({ax['series']['confirmed_high_critical']['all_confirmed_count']})",
             _dimension_reading(ax),
         )
@@ -490,7 +497,7 @@ def _dimension_blocks(report: Mapping[str, Any], radar_or_dossiers: Mapping[str,
              "counted in no dimension." if unclassified else
              "Every accepted package names a member of the vocabulary and is counted in one of the 12 security domains.",
              muted=True),
-        Para("N/A means unknown, not measured zero. Package counts do not establish exposure or inspected scope. "
+        Para("N/A means unknown, not measured zero. Package counts do not establish exposure, inspected scope or corroboration. "
              "An unverified coverage gap is never a clean verdict. " + NOT_CLEAN, muted=True),
     ]
     return [

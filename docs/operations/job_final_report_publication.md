@@ -29,11 +29,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L206) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L207) |
 | `load` | `load.accepted_gate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L101) |
 | `report` | `report.assemble` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L115) |
-| `report` | `report.render` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L165) |
-| `report` | `report.render_pdf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L186) |
+| `report` | `report.render` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L166) |
+| `report` | `report.render_pdf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L187) |
 
 ### Accepted input declarations
 
@@ -130,10 +130,13 @@ The [handler](../../src/appsec_review/jobs/job_final_report_publication/job.py) 
    distinguishes rendered, disabled and failed outcomes.
 
 The current report is `final-report/3` with `security-radar-tracker/2` (T-5088). Unknown
-exposure/inspection and undefined derived metrics are `null` with named reasons, displayed
+exposure/inspection/corroboration and undefined derived metrics are `null` with named reasons, displayed
 as **N/A** across formats and omitted from chart geometry. Measured zero remains numeric.
 The gate supplies no per-domain exposure/inspection telemetry; package density and lane-B
 coverage-cell counts cannot substitute for it, and report assembly gains no new upstream read.
+Accepted package counts likewise cannot establish scanner-lead corroboration. Missing corroboration
+is a metric-local `corroborated_leads_unknown` reason, not a change to independently measured
+coverage or an inferred zero. The known package bucket counts remain separate.
 Unconfirmed backlog and withheld packages remain gaps even when an explicit population is
 fully inspected. Active chains use certified `component_claim_ids` and count each publishable
 member once without changing standalone severity. See

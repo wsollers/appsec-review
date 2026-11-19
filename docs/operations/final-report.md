@@ -215,6 +215,11 @@ supplies no such domain telemetry: report assembly leaves exposure/inspection an
 coverage percentages `null`, with `surface_exposure_unknown` / `inspected_units_unknown`
 gap reasons. It does not retrieve another producer to fill those fields.
 Each axis also records separate publishable, verification-backlog and withheld `package_counts`.
+These counts do not measure corroborated scanner leads either. Without an explicit corroboration
+measurement, `series.corroborated_leads` has null count/score/unit and the metric-local
+`gap_reasons: ["corroborated_leads_unknown"]`. Explicit measured zero stays zero. This optional
+metric qualification does not change `coverage_status`, inspected-scope percentages or coverage
+confidence: those depend on their own measurements and unresolved work, not corroboration telemetry.
 
 The bounded dimension calculator can use explicitly supplied exposure and inspection counts.
 Measured zero stays `0`; a zero exposed denominator leaves the percentage `null` with
@@ -229,7 +234,10 @@ Active chain membership uses the certified `component_claim_ids` of `confirmed` 
 chains or when already high/critical; neither backlog nor withheld packages inflate those counts.
 Standalone severity and ship-block status are unchanged.
 
-JSON and event telemetry preserve nulls and their reasons. Markdown, HTML and executive PDF
+JSON and event telemetry preserve nulls and their reasons, keeping metric reasons separate from
+coverage reasons. Funnel rates with an unavailable corroboration numerator/denominator are also
+null with a reason; an empty measured denominator is separately `denominator_empty`.
+Markdown, HTML and executive PDF
 source display **N/A**, not zero; charts omit unknown vertices and never close or fill a polygon
 through them. The formats use the same report radar rather than recomputing it from format-specific
 dossiers. Known counts remain numeric.

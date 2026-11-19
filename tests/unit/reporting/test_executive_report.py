@@ -230,7 +230,7 @@ def test_coverage_by_dimension_counts_findings_and_claims_per_axis_and_agrees_wi
     ]
     surface, verified_cov, leads, confirmed_hc = (_by_axis(chart, idx) for idx in range(4))
     assert confirmed_hc["Inj"] == 1.0 and sum(confirmed_hc.values()) == 1.0
-    assert leads["Inj"] == 1.0 and leads["Mem"] == 1.0 and sum(leads.values()) == 2.0
+    assert all(value is None for value in leads.values())
     assert surface["Inj"] is None and surface["Mem"] is None
     assert verified_cov["Inj"] is None and chart.clamped == 0
     headings = [block.text for block in document.blocks if isinstance(block, Heading)]
@@ -244,8 +244,8 @@ def test_coverage_by_dimension_counts_findings_and_claims_per_axis_and_agrees_wi
     assert r"\radarkeyrow{Inj}{Injection \& Command/\allowbreak{}SQL/\allowbreak{}Template}" in tex
     assert r"\draw[verdict-contradicted,radarline,densely dashdotted]" in tex
     assert "NEVER evidence that a security domain is clean" in tex
-    assert "Uncovered: no claim was examined here." in tex and "1 claim examined, none confirmed. Not a clearance." in tex
-    assert r"1 confirmed finding (1 high/\allowbreak{}critical) of 1 claim examined." in tex
+    assert "Uncovered: no claim was examined here." in tex and "1 accepted package, none confirmed. Not a clearance." in tex
+    assert r"1 confirmed finding (1 high/\allowbreak{}critical) of 1 accepted package." in tex
     assert "Every accepted package names a member of the vocabulary" in tex
     # Markdown parity: 12-axis security radar & verification funnel agrees with dimension_counts.
     markdown = render_markdown(report, evidence_ids=8, gap_ids=16)
@@ -263,7 +263,7 @@ def test_certified_radar_is_not_reclassified_by_format_specific_dossiers() -> No
     report = report_document()                     # titles "Synthetic finding n" name no predicate
     dossier = dossier_for(report["findings"][0])   # the dossier says memory_corruption
     document = executive_document(report, (bound(dossier),))
-    assert _by_axis(_chart_of(document), 3)["Mem"] == 0 and _by_axis(_chart_of(document), 2)["Mem"] == 0
+    assert _by_axis(_chart_of(document), 3)["Mem"] == 0 and _by_axis(_chart_of(document), 2)["Mem"] is None
     tex = tex_of(report, (bound(dossier),))
     assert "2 packages named no member of the vocabulary and are counted in no dimension" in tex
     # Without the dossier nothing is classified: the chart says so instead of drawing a guess.
@@ -277,8 +277,8 @@ def test_dimension_section_with_nothing_bound_reads_as_uncovered_not_clean() -> 
     blocks = E._dimension_blocks({"findings": [], "verification_backlog": [], "withheld": []}, ())
     chart = blocks[1]
     assert isinstance(chart, RadarChart)
-    assert all(value is None for series in chart.series[:2] for value in series.values)
-    assert all(value == 0 for series in chart.series[2:] for value in series.values)
+    assert all(value is None for series in chart.series[:3] for value in series.values)
+    assert all(value == 0 for value in chart.series[3].values)
     document = Document(title="x", run_id="r", subtitle="", status_badge="EMPTY", status_tone="unresolved",
                         source_date_epoch=0, ledger_head="ab" * 32, blocks=tuple(blocks))
     tex = render_latex(document, TEMPLATE)

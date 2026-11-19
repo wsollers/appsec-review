@@ -143,7 +143,9 @@ def test_serialized_package_count_is_not_domain_inspection_or_exposure(tmp_path:
     assert axis["coverage_status"] == "unverified_gap"
     assert {"surface_exposure_unknown", "inspected_units_unknown"} <= set(axis["gap_reasons"])
     assert ("verification_backlog_unconfirmed" in axis["gap_reasons"]) is (state == "supported")
-    assert axis["series"]["corroborated_leads"]["raw_count"] == 1
+    assert axis["series"]["corroborated_leads"]["raw_count"] is None
+    assert axis["package_counts"] == {"publishable": int(state == "confirmed"),
+                                     "verification_backlog": int(state == "supported"), "withheld": 0}
     assert axis["series"]["confirmed_high_critical"]["all_confirmed_count"] == (state == "confirmed")
 
 

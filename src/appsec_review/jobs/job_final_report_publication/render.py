@@ -152,19 +152,23 @@ def _dimensions(radar: Mapping[str, Any]) -> list[str]:
             if ax["coverage_status"] in {"unverified_gap", "partial_coverage_gap"}
             else code(ax["coverage_status"])
         )
+        qualifications = list(ax["gap_reasons"]) + [
+            f"metric: {reason}" for reason in s["corroborated_leads"].get("gap_reasons", ())
+        ]
         lines.append(
             f"| {ax['key']} | {plain(ax['label'])} | {metric_text(s['surface_exposure']['raw_count'])} "
             f"({metric_text(s['surface_exposure']['score'])}) | {metric_text(s['verified_coverage']['score'], '%')} | "
-            f"{s['corroborated_leads']['raw_count']} | "
+            f"{metric_text(s['corroborated_leads']['raw_count'])} | "
             f"{s['confirmed_high_critical']['raw_count']} ({s['confirmed_high_critical']['all_confirmed_count']}) | "
-            f"{posture}; {plain(', '.join(ax['gap_reasons']))} |"
+            f"{posture}{'; ' + plain(', '.join(qualifications)) if qualifications else ''} |"
         )
     lines += [
         "",
         f"Claim and finding counts come from accepted packages' titles (`<predicate> (<CWE>)`); {unclassified} package(s) "
         "named no member of the vocabulary and are counted in no dimension. Missing, skipped or partial coverage "
         "is explicitly marked as an Unverified Coverage Gap and is never evidence that a security domain is clean. "
-        "Exposure and inspection require explicit telemetry; N/A means unknown, not zero.",
+        "Exposure, inspection and corroboration require explicit telemetry; N/A means unknown, not zero. "
+        "Corroboration metric gaps do not change independently measured coverage.",
         "",
     ]
     return lines

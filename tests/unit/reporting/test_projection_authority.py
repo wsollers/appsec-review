@@ -107,7 +107,7 @@ def test_nullable_metrics_survive_real_schemas_and_renderers(tmp_path, telemetry
     assert telemetry_out["reporting.funnel_conversion_rates"]["exposure_to_coverage_rate"] is None
     assert "denominator_unknown" in telemetry_out["reporting.funnel_gap_reasons"]["exposure_to_coverage_rate"]
     assert telemetry_out["reporting.funnel_conversion_rates"]["leads_to_confirmed_rate"] is None
-    assert telemetry_out["reporting.funnel_gap_reasons"]["leads_to_confirmed_rate"] == ["denominator_empty"]
+    assert telemetry_out["reporting.funnel_gap_reasons"]["leads_to_confirmed_rate"] == ["denominator_unknown"]
     document = executive_document(report, ())
     chart = next(block for block in document.blocks if isinstance(block, RadarChart))
     assert chart.series[0].values[3] == axis["series"]["surface_exposure"]["unit"]
@@ -133,7 +133,8 @@ def test_known_population_does_not_inflate_exposure_to_number_of_claims(tmp_path
     axis = _memory_axis(report)
     assert axis["coverage_status"] == "verified_findings"
     assert axis["series"]["surface_exposure"]["raw_count"] == 1
-    assert axis["series"]["corroborated_leads"]["raw_count"] == 3
+    assert axis["series"]["corroborated_leads"]["raw_count"] is None
+    assert axis["package_counts"] == {"publishable": 3, "verification_backlog": 0, "withheld": 0}
     assert axis["series"]["confirmed_high_critical"]["all_confirmed_count"] == 3
     assert axis["series"]["confirmed_high_critical"]["raw_count"] == 0
     assert report["radar_tracker"]["coverage_confidence"]["confidence_score"] == 100
@@ -143,16 +144,89 @@ def test_known_population_does_not_inflate_exposure_to_number_of_claims(tmp_path
     assert radar_telemetry(report["radar_tracker"])["reporting.funnel_conversion_rates"]["exposure_to_coverage_rate"] == 1
 
 
+@pytest.mark.parametrize("measured_leads", [None, 0, 2], ids=["unknown", "measured-zero", "measured-two"])
+def test_corroboration_requires_measurement_not_publication_packages(tmp_path, measured_leads):
+    verified = _serialized_review(tmp_path, (("confirmed", "low"), ("supported", "low"), ("supported", "low")))
+    verified["packages"][2]["attack_chains"] = ["chain-" + "a" * 64]
+    gate, report = _gate_and_report(verified)
+    if measured_leads is not None:
+        report["radar_tracker"] = build_radar_tracker(
+            report, domain_telemetry={"memory_safety_native": {"corroborated_leads": measured_leads}},
+        )
+    axis = _memory_axis(report)
+    assert axis["package_counts"] == {"publishable": 1, "verification_backlog": 1, "withheld": 1}
+    assert gate["package_counts"]["total"] == 3
+    metric = axis["series"]["corroborated_leads"]
+    assert metric["raw_count"] == measured_leads
+    expected_gaps = ["corroborated_leads_unknown"] if measured_leads is None else []
+    assert metric["gap_reasons"] == expected_gaps
+    assert metric["unit"] == (None if measured_leads is None else 0 if measured_leads == 0 else 1)
+    assert axis["coverage_status"] == "unverified_gap"
+    assert axis["series"]["verified_coverage"]["score"] is None
+    assert axis["series"]["surface_exposure"]["raw_count"] is None
+    counts, _ = dimension_counts(report)
+    memory = next(row for row in counts if row.key == "Mem")
+    assert memory.claims == 3 and memory.corroborated_leads == measured_leads
+    _validator("final-report-v3").validate(report)
+    SchemaSet(SCHEMAS).validate(report_schema_name(report), report)
+    exported = radar_telemetry(report["radar_tracker"])
+    assert exported["reporting.radar_counts_by_axis_and_series"]["memory_safety_native"]["corroborated_leads"] == measured_leads
+    assert exported["reporting.radar_metric_gap_reasons_by_axis"]["memory_safety_native"] == expected_gaps
+    document = executive_document(report, ())
+    chart = next(block for block in document.blocks if isinstance(block, RadarChart))
+    assert chart.series[2].values[3] == metric["unit"]
+    assert chart.series[2].displays[3] == ("N/A" if measured_leads is None else str(measured_leads))
+    markdown = render_markdown(report, evidence_ids=8, gap_ids=16)
+    html = render_executive_html(report)
+    latex = render_executive_latex(report, (), ROOT / "containers" / "report" / "latex" / "template").decode()
+    if measured_leads is None:
+        assert "corroborated_leads_unknown" in markdown and "corroborated_leads_unknown" in html
+        assert "corroborated\\_leads\\_unknown" in latex.replace(r"\allowbreak{}", "")
+        assert 'data-series="Corroborated leads"' not in html
+    else:
+        memory_row = next(line for line in markdown.splitlines() if line.startswith("| Mem |"))
+        assert f"| {measured_leads} |" in memory_row
+
+
+def test_missing_optional_corroboration_does_not_change_measured_coverage(tmp_path):
+    _gate, report = _gate_and_report(_serialized_review(tmp_path, ()))
+    measured = {domain: {"surface_exposure": 2, "inspected_units": 2} for domain in DOMAIN_IDS}
+    unknown = build_radar_tracker(report, domain_telemetry=measured)
+    known_zero = build_radar_tracker(
+        report, domain_telemetry={domain: {**values, "corroborated_leads": 0} for domain, values in measured.items()},
+    )
+    for tracker in (unknown, known_zero):
+        _validator("security-radar-tracker-v2").validate(tracker)
+        SchemaSet(SCHEMAS).validate("security-radar-tracker-v2", tracker)
+    assert unknown["coverage_confidence"] == known_zero["coverage_confidence"]
+    assert unknown["coverage_confidence"]["confidence_score"] == 100
+    for unknown_axis, known_axis in zip(unknown["axes"], known_zero["axes"], strict=True):
+        assert unknown_axis["coverage_status"] == known_axis["coverage_status"] == "verified_no_findings"
+        assert unknown_axis["gap_reasons"] == known_axis["gap_reasons"] == []
+        assert unknown_axis["series"]["verified_coverage"] == known_axis["series"]["verified_coverage"]
+        assert unknown_axis["series"]["corroborated_leads"]["raw_count"] is None
+        assert unknown_axis["series"]["corroborated_leads"]["gap_reasons"] == ["corroborated_leads_unknown"]
+        assert known_axis["series"]["corroborated_leads"]["raw_count"] == 0
+    unknown_export = radar_telemetry(unknown)
+    assert unknown_export["reporting.funnel_conversion_rates"]["leads_to_confirmed_rate"] is None
+    assert unknown_export["reporting.funnel_gap_reasons"]["leads_to_confirmed_rate"] == ["denominator_unknown"]
+    zero_export = radar_telemetry(known_zero)
+    assert zero_export["reporting.funnel_conversion_rates"]["exposure_to_leads_rate"] == 0
+    assert zero_export["reporting.funnel_gap_reasons"]["leads_to_confirmed_rate"] == ["denominator_empty"]
+
+
 def test_legacy_report_validation_and_rendering_preserve_original_bytes(tmp_path):
     _gate, legacy = _gate_and_report(_serialized_review(tmp_path, ()))
     legacy["radar_tracker"] = build_radar_tracker(
-        legacy, domain_telemetry={domain: {"surface_exposure": 1, "inspected_units": 0} for domain in DOMAIN_IDS},
+        legacy, domain_telemetry={domain: {"surface_exposure": 1, "inspected_units": 0, "corroborated_leads": 0}
+                                 for domain in DOMAIN_IDS},
     )
     legacy["executive_posture"] = build_executive_posture(legacy, legacy["radar_tracker"])
     legacy["schema"] = "appsec-review/final-report/2"
     legacy["radar_tracker"]["schema"] = "appsec-review/security-radar-tracker/1"
     for axis in legacy["radar_tracker"]["axes"]:
         del axis["package_counts"]
+        del axis["series"]["corroborated_leads"]["gap_reasons"]
     del legacy["radar_tracker"]["coverage_confidence"]["gap_reasons"]
     del legacy["executive_posture"]["coverage_confidence_index"]["gap_reasons"]
     original = json.dumps(legacy, sort_keys=True).encode()
@@ -162,6 +236,8 @@ def test_legacy_report_validation_and_rendering_preserve_original_bytes(tmp_path
     assert schemas.errors("final-report-v3", legacy)
     assert "Legacy radar /1 estimates" in render_markdown(legacy, evidence_ids=8, gap_ids=16)
     assert "Legacy radar /1 estimates" in render_executive_html(legacy)
+    legacy_tex = render_executive_latex(legacy, (), ROOT / "containers" / "report" / "latex" / "template").decode()
+    assert "legacy package{-}count estimates, not measured corroboration" in legacy_tex
     assert json.dumps(legacy, sort_keys=True).encode() == original
     _memory_axis(legacy)["series"]["surface_exposure"]["raw_count"] = None
     assert schemas.errors(report_schema_name(legacy), legacy)
@@ -171,7 +247,7 @@ def test_legacy_report_validation_and_rendering_preserve_original_bytes(tmp_path
         report_schema_name({"schema": "appsec-review/final-report/999"})
 
 
-@pytest.mark.parametrize("corruption", ["missing-gap", "false-clean", "invented-zero"], ids=str)
+@pytest.mark.parametrize("corruption", ["missing-gap", "false-clean", "invented-zero", "missing-corroboration-gap"], ids=str)
 def test_new_schema_rejects_unknown_metrics_without_gap_semantics(tmp_path, corruption):
     _gate, report = _gate_and_report(_serialized_review(tmp_path, ()))
     axis = _memory_axis(report)
@@ -180,8 +256,10 @@ def test_new_schema_rejects_unknown_metrics_without_gap_semantics(tmp_path, corr
     elif corruption == "false-clean":
         axis["coverage_status"] = "verified_no_findings"
         axis["series"]["verified_coverage"]["is_gap"] = False
-    else:
+    elif corruption == "invented-zero":
         axis["series"]["surface_exposure"].update(score=0, unit=0)
+    else:
+        axis["series"]["corroborated_leads"]["gap_reasons"] = []
     assert SchemaSet(SCHEMAS).errors(report_schema_name(report), report)
     with pytest.raises(ValidationError):
         _validator("final-report-v3").validate(report)
