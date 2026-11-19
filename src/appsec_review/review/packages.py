@@ -63,6 +63,7 @@ from typing import Callable, Any
 from appsec_review.graph.contract import FAMILY_KINDS, GRAPH_INDEX, Family, GraphSettings
 from appsec_review.graph.settings import run_graph_settings
 from appsec_review.review.artifact_context import ArtifactContext
+from appsec_review.review.bounded_analysis import BoundedAnalysisContext
 from appsec_review.graph.svf_crosscheck import function_tail
 from appsec_review.indexing.store import ShardSet, shard_key
 from appsec_review.retrieval.model import LogicalIdentity
@@ -110,7 +111,7 @@ from appsec_review.storage.atomic import canonical_json
 
 
 PACKAGE_SCHEMA = "appsec-review/review-package/7"
-ASSEMBLY_RULE = "appsec-review/assemble-review-packages/16"
+ASSEMBLY_RULE = "appsec-review/assemble-review-packages/17"
 UNIT_CONTEXT_SCHEMA = "appsec-review/package-unit-context/2"
 UNIT_FACETS_RULE = "appsec-review/unit-facets/2"
 HUNT_FACET_OBLIGATION_RULE = "appsec-review/hunt-facet-obligations/1"
@@ -1514,6 +1515,7 @@ class _Assembler:
         self.reference_weaknesses = _reference_weaknesses(scope)
         self.graph = GraphContext(scope)
         self.memory = MemoryContext(scope, max_entries=settings.max_memory_context_entries)
+        self.bounded_analysis = BoundedAnalysisContext(scope)
         self.routing_tags: dict[str, list[ContextEntry]] = defaultdict(list)
         # Collation facets (T-5008) by subject logical id, path and component id: tag, basis, ids.
         self.facet_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -2072,6 +2074,9 @@ class _Assembler:
         memory = self.memory.lead_context(lead.path, lead.start_line, partition_key)
         context.extend(memory.entries)
         context_gaps = list(memory.gaps)
+        bounded_entries, bounded_gaps = self.bounded_analysis.for_leads(leads)
+        context.extend(bounded_entries)
+        context_gaps.extend(bounded_gaps)
         functions: set[tuple[str | None, str]] = {(None, name) for name in memory.functions}
         for member in leads:
             functions |= self.graph.enclosing_functions(member.path, member.start_line)
@@ -2198,11 +2203,14 @@ class _Assembler:
         bound = self.settings.max_context_entries
         budget = bound - len({(item.role, item.id) for item in unit.context})
         graph_context, graph_omitted = ([], 0) if unit.operation else self.graph.unit_context(unit.paths, budget)
+        bounded_entries, bounded_gaps = self.bounded_analysis.for_leads(unit.leads)
         context, omitted, gaps = self._cap(
-            (*unit.context, *graph_context, *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths),
+            (*unit.context, *graph_context, *bounded_entries,
+             *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths),
              *self.scoped_controls(unit.component_id, unit.source_ids), *self.document_entries(unit.paths)),
             unit.key, "lane_b_hunt")
         gaps.extend(self.document_gaps)
+        gaps.extend(bounded_gaps)
         if graph_omitted:
             omitted += graph_omitted
             gaps.append(ScopeGap(GRAPH_PRODUCER, unit.key, "truncated",

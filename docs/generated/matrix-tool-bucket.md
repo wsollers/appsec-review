@@ -19,6 +19,7 @@ Bindings are source declarations, not observed launches. Input compatibility is 
 | --- | --- | --- | --- | --- | --- |
 | `tool-actionlint` | `scanner_observations` | `job_ci_configuration_analysis`<br>`job_ci_configuration_analysis.ci_analysis.github_actionlint_scan` | Undeclared; see gap | enabled | [T-157](../TODO.md) |
 | `tool-blint` | `artifacts_and_binary` | `job_evidence_collection`<br>`job_evidence_collection.binary_hardening.blint_scan` | Undeclared; see gap | enabled | [T-157](../TODO.md) |
+| `tool-cbmc` | `scanner_observations` | Undeclared; see gap<br>Undeclared; see gap | Undeclared; see gap | enabled | [T-147](../TODO.md), [T-157](../TODO.md) |
 | `tool-checkov` | `scanner_observations` | `job_ci_configuration_analysis`, `job_evidence_collection`<br>`job_ci_configuration_analysis.ci_analysis.azure_checkov_scan`, `job_ci_configuration_analysis.ci_analysis.bitbucket_checkov_scan`, `job_ci_configuration_analysis.ci_analysis.circleci_checkov_scan` (+3 in JSON) | Undeclared; see gap | enabled | [T-157](../TODO.md) |
 | `tool-clang-static-analysis` | `scanner_observations` | Undeclared; see gap<br>Undeclared; see gap | Undeclared; see gap | enabled | [T-147](../TODO.md), [T-157](../TODO.md) |
 | `tool-clangd-indexer` | `symbols_and_calls` | Undeclared; see gap<br>Undeclared; see gap | Undeclared; see gap | enabled | [T-147](../TODO.md), [T-157](../TODO.md) |

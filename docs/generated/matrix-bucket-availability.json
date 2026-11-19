@@ -848,6 +848,11 @@
           "artifact_security_acceptance",
           "artifact_security_observations",
           "artifact_security_results",
+          "cbmc_coverage",
+          "cbmc_plan",
+          "cbmc_raw",
+          "cbmc_results",
+          "cbmc_summary",
           "ci_documents",
           "ci_findings",
           "ci_observations",
@@ -915,6 +920,7 @@
         "state": "declared",
         "values": [
           "job_artifact_security_analysis",
+          "job_cbmc_analysis",
           "job_ci_configuration_analysis",
           "job_clang_static_analysis",
           "job_codeql_analysis",
@@ -8688,6 +8694,267 @@
       "stage": "artifact_only",
       "store": "retrieval",
       "target_access": "checkout"
+    },
+    {
+      "access": "indexed_evidence",
+      "authority": "producer_evidence",
+      "bucket": "scanner_observations",
+      "dataset": "cbmc_coverage",
+      "description": "Selection, incomplete-model and resource-bound coverage of CBMC attempts.",
+      "family": "scanner_findings",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "coverage index=observations",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage"
+        ]
+      },
+      "producer": "job_cbmc_analysis",
+      "producer_languages": {
+        "basis": "job_cbmc_analysis: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.indexes",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "observations"
+        ]
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer",
+          "hypothesis_hunter"
+        ]
+      },
+      "schema": "appsec-review/retrieval-index/2",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_cbmc_analysis.datasets",
+      "stage": "indexed",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "scanner_observations",
+      "dataset": "cbmc_plan",
+      "description": "Deterministic seed and translation-unit selection with explicit omissions.",
+      "family": "scanner_findings",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_cbmc_analysis",
+      "producer_languages": {
+        "basis": "job_cbmc_analysis: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/cbmc-plan/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_cbmc_analysis.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "scanner_observations",
+      "dataset": "cbmc_raw",
+      "description": "Verified source copies, GOTO binaries, native JSON/traces and container receipts.",
+      "family": "scanner_findings",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_cbmc_analysis",
+      "producer_languages": {
+        "basis": "job_cbmc_analysis: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=protected; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "application/octet-stream",
+      "sensitivity": "sensitive",
+      "source": "docs/generated/inventory.json: jobs.job_cbmc_analysis.datasets",
+      "stage": "protected",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "indexed_evidence",
+      "authority": "producer_evidence",
+      "bucket": "scanner_observations",
+      "dataset": "cbmc_results",
+      "description": "Conditional CBMC judgments bound to exact scanner seeds, source hashes and native receipts.",
+      "family": "scanner_findings",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "find/search index=observations; review-package bounded_analysis context",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "find",
+          "search"
+        ]
+      },
+      "producer": "job_cbmc_analysis",
+      "producer_languages": {
+        "basis": "job_cbmc_analysis: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.indexes",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "observations"
+        ]
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "adjudication_judge",
+          "attack_chain_analyst",
+          "blue_team_refuter",
+          "completeness_reviewer",
+          "hypothesis_hunter",
+          "independent_verifier",
+          "poc_designer",
+          "red_team_analyst"
+        ]
+      },
+      "schema": "appsec-review/retrieval-index/2",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_cbmc_analysis.datasets",
+      "stage": "indexed",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "scanner_observations",
+      "dataset": "cbmc_summary",
+      "description": "Accepted CBMC accounting and exact result/receipt references.",
+      "family": "scanner_findings",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_cbmc_analysis",
+      "producer_languages": {
+        "basis": "job_cbmc_analysis: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/cbmc-summary/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_cbmc_analysis.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
     },
     {
       "access": "sanitized_metadata_only",
@@ -22738,6 +23005,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -22754,6 +23026,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -22834,6 +23107,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -22850,6 +23128,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -22930,6 +23209,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -22946,6 +23230,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23026,6 +23311,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23042,6 +23332,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23122,6 +23413,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23138,6 +23434,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23218,6 +23515,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23234,6 +23536,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23314,6 +23617,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23330,6 +23638,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23410,6 +23719,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23426,6 +23740,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23506,6 +23821,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23522,6 +23842,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23588,6 +23909,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23604,6 +23930,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23670,6 +23997,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23686,6 +24018,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23766,6 +24099,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23782,6 +24120,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23862,6 +24201,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23878,6 +24222,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -23958,6 +24303,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -23974,6 +24324,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -24040,6 +24391,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -24056,6 +24412,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -24122,6 +24479,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -24138,6 +24500,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",
@@ -24218,6 +24581,11 @@
         "job_artifact_security_analysis/artifact_security_acceptance",
         "job_artifact_security_analysis/artifact_security_observations",
         "job_artifact_security_analysis/artifact_security_results",
+        "job_cbmc_analysis/cbmc_coverage",
+        "job_cbmc_analysis/cbmc_plan",
+        "job_cbmc_analysis/cbmc_raw",
+        "job_cbmc_analysis/cbmc_results",
+        "job_cbmc_analysis/cbmc_summary",
         "job_ci_configuration_analysis/ci_documents",
         "job_ci_configuration_analysis/ci_findings",
         "job_ci_configuration_analysis/ci_observations",
@@ -24234,6 +24602,7 @@
       ],
       "unbound_producers": [
         "job_artifact_security_analysis",
+        "job_cbmc_analysis",
         "job_ci_configuration_analysis",
         "job_clang_static_analysis",
         "job_cpp_compiled_analysis",

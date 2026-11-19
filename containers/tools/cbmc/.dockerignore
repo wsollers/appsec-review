@@ -1,0 +1,7 @@
+*
+!Dockerfile
+!downloads/
+!downloads/cbmc.deb
+!downloads/cbmc-debs.tar
+!downloads/LICENSE-CBMC
+!downloads/minisat2_2.2.1.orig.tar.gz

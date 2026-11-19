@@ -991,6 +991,7 @@
             "points_to",
             "indirect_call",
             "memory_object",
+            "bounded_analysis",
             "caller",
             "function",
             "callee",
@@ -2150,7 +2151,8 @@
         },
         "assembly_rule": {
           "enum": ["appsec-review/assemble-review-packages/12", "appsec-review/assemble-review-packages/13",
-                   "appsec-review/assemble-review-packages/15", "appsec-review/assemble-review-packages/16"]
+                   "appsec-review/assemble-review-packages/15", "appsec-review/assemble-review-packages/16",
+                   "appsec-review/assemble-review-packages/17"]
         },
         "scope": {
           "$ref": "#/$defs/inference_scope"

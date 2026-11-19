@@ -76,6 +76,53 @@ def test_dependency_order_puts_base_before_tool() -> None:
     assert order == ["base-ubuntu", "tool-gitleaks"]
 
 
+@pytest.fixture
+def cbmc_smoke():
+    path = ROOT / "containers" / "fixtures" / "cbmc" / "smoke.py"
+    spec = importlib.util.spec_from_file_location("cbmc_smoke", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("success", [True, False], ids=["safe", "counterexample"])
+def test_cbmc_smoke_accepts_structured_verification_results(cbmc_smoke, success: bool) -> None:
+    records = [
+        {"result": [{"description": "cbmc fixture index bound",
+                     "status": "SUCCESS" if success else "FAILURE",
+                     "trace": [] if success else [{"stepType": "failure"}]}]},
+        {"cProverStatus": "success" if success else "failure"},
+    ]
+    cbmc_smoke.check_result(
+        subprocess.CompletedProcess(["cbmc"], 0 if success else 10, json.dumps(records), ""),
+        success=success,
+    )
+
+
+@pytest.mark.parametrize("defect", ["exit", "terminal", "empty", "property", "trace"])
+def test_cbmc_smoke_rejects_incomplete_or_inconsistent_results(cbmc_smoke, defect: str) -> None:
+    success = defect != "trace"
+    records = [
+        {"result": [{"description": "cbmc fixture index bound",
+                     "status": "SUCCESS" if success else "FAILURE", "trace": []}]},
+        {"cProverStatus": "success" if success else "failure"},
+    ]
+    code = 0 if success else 10
+    if defect == "exit":
+        code = 6
+    elif defect == "terminal":
+        records[-1]["cProverStatus"] = "failure"
+    elif defect == "empty":
+        records[0]["result"] = []
+    elif defect == "property":
+        records[0]["result"][0]["status"] = "UNKNOWN"
+    with pytest.raises(RuntimeError):
+        cbmc_smoke.check_result(
+            subprocess.CompletedProcess(["cbmc"], code, json.dumps(records), ""), success=success,
+        )
+
+
 def test_android_buildenv_recipe_is_hash_locked_and_its_identity_is_host_owned() -> None:
     catalog = container_build.load_catalog()
     image = catalog["by_id"]["audit-buildenv-android"]

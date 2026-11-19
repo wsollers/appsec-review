@@ -211,6 +211,10 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_document_issue_analysis` | `document_issue_ledger` | `appsec-review/document-issue-ledger/1` | handoff | optional | gap |
 | `job_document_issue_analysis` | `document_drift_issues` | `appsec-review/document-drift-issue/1` | handoff | optional | gap |
 | `job_document_issue_analysis` | `document_navigation` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_cbmc_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_cbmc_analysis` | `cbmc_results` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_cbmc_analysis` | `cbmc_coverage` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_cbmc_analysis` | `cbmc_summary` | `appsec-review/cbmc-summary/1` | handoff | optional | gap |
 
 ### Published dataset declarations
 
@@ -1443,6 +1447,26 @@ flowchart LR
   input_schema151["appsec-review/retrieval-index/2"]
   producer151 --> input151 --> job
   input151 -. schema .-> input_schema151
+  producer152["job_cbmc_analysis"]
+  input152["handoff"]
+  input_schema152["appsec-review/job-handoff/2"]
+  producer152 --> input152 --> job
+  input152 -. schema .-> input_schema152
+  producer153["job_cbmc_analysis"]
+  input153["cbmc_results"]
+  input_schema153["appsec-review/retrieval-index/2"]
+  producer153 --> input153 --> job
+  input153 -. schema .-> input_schema153
+  producer154["job_cbmc_analysis"]
+  input154["cbmc_coverage"]
+  input_schema154["appsec-review/retrieval-index/2"]
+  producer154 --> input154 --> job
+  input154 -. schema .-> input_schema154
+  producer155["job_cbmc_analysis"]
+  input155["cbmc_summary"]
+  input_schema155["appsec-review/cbmc-summary/1"]
+  producer155 --> input155 --> job
+  input155 -. schema .-> input_schema155
   output0["accepted_scope"]
   output_schema0["appsec-review/inference-review-accepted-scope/1"]
   job --> output0

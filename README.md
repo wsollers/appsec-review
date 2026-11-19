@@ -22,6 +22,11 @@ Unknown exposure, inspection and corroboration remain `null` with reasons (**N/A
 not measured zero. Protected [dossiers](docs/operations/dossier-publication.md) preserve accepted
 evidence and exact-edit patch references without inventing paths, guard conclusions or fix verification.
 
+The [CBMC bounded-analysis job](docs/architecture/cbmc-bounded-analysis.md) uses the reusable,
+host-pinned tooling image to explore accepted C/C++ scanner seeds before review indexing.
+Its counterexample candidates and bounded passes are conditional review context, never automatic
+confirmation or dismissal. [Operations and budgets](docs/operations/job_cbmc_analysis.md).
+
 Build discovery now separates the recipe-independent whole-bundle **graph/2** from immutable,
 recipe-bound selection/refinement receipts. Null recipes remain accepted planning unknowns, not
 execution authority. Windows/Linux x64 intent and project-declared mobile facts do not substitute

@@ -18,6 +18,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 | [Shared bounded model execution](bounded-worker-execution.md) | review inference and guidance | current |
 | [Build environments, execution capture, and secret scanning](build-environments-and-execution-capture.md) | target acquisition and build | current |
 | [Target build topology and bounded iterations](build-topology-and-iterations.md) | target acquisition and build | current |
+| [Finding-seeded CBMC bounded analysis](cbmc-bounded-analysis.md) | code intelligence | current |
 | [Change-context analysis](change-context-analysis.md) | scanners and evidence collection | current |
 | [Static CI configuration analysis](ci-configuration-analysis.md) | scanners and evidence collection | historical |
 | [Clang static analysis](clang-static-analysis.md) | scanners and evidence collection | current |

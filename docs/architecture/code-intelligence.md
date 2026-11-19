@@ -3,7 +3,7 @@ title: "Code intelligence"
 kind: "architecture"
 subsystem: "code intelligence"
 status: "current"
-jobs: ["job_binary_evidence_indexing", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_svf_alias_analysis", "job_tree_sitter_ast"]
+jobs: ["job_binary_evidence_indexing", "job_cbmc_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_svf_alias_analysis", "job_tree_sitter_ast"]
 last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Code intelligence
@@ -23,6 +23,7 @@ the dated designs below explain decisions, not additional implemented capability
 | Syntax | Tree-sitter scope planning, locked parsing and host projection | Located AST nodes, containment, written definitions/calls/imports/identifier occurrences | Type/name/module resolution, semantic references, resolved call targets or dataflow |
 | Compile and symbol relationships | Accepted compiled catalogs, clangd, Clang AST and LLVM IR | Build/source/output identities; located symbols and supported call/reference/control-flow facts | Complete dynamic dispatch or a vulnerability verdict |
 | CodeQL observations | Database/query execution and SARIF normalization | Scanner judgment with exact native-result references and located flow support where resolvable | An adjudicated finding or an exhaustive graph export |
+| Bounded CBMC analysis | Accepted original translation units and exact scanner seeds | Conditional function-entry judgments, bounded witness previews, source/image/receipt identities and explicit omissions | Unbounded safety, attacker reachability, native reproduction, automatic confirmation or dismissal |
 | Graph facts | CodeQL exports normalized by the graph job | Calls, sinks, entry points, summaries, paths, guards and ranges within the exported scope and bounds | Whole-program coverage outside a seeded neighborhood, or automatic independent corroboration |
 | Alias cross-check | SVF module planning and normalization | Points-to, indirect targets and memory-object accessors over accepted bitcode | A safe negative when the module/site is open-world, incomplete or truncated |
 | Binary-derived context | Frozen decompilation publication indexing | Functions, calls, imports and strings; native pseudo-C backing when permitted | Original-source equivalence; located native pseudo-C for managed code |
@@ -100,6 +101,13 @@ closed-world contradiction from open-world absence. Uncovered and secondary-only
 Disagreement can remove direct eligibility; incomplete sources do not refute an otherwise positive
 fact. Seeded mode records seeds, unresolved selections, depth/frontier bounds and omitted extent.
 No-seed execution is not whole-program fallback, and a seeded neighborhood is not complete coverage.
+
+[`job_cbmc_analysis`](cbmc-bounded-analysis.md) runs after the accepted native/scanner producers
+and before review indexing. It compiles original accepted source to GOTO, maps seeds to the
+engine's function identifiers, and applies explicit safety/unwinding checks within central budgets.
+Its `review_signal` records are indirect context, not another scanner lead or a commissioned
+semantic proof. Review packages join by exact seed identities and source hashes; raw solver output
+stays protected. See [operations](../operations/job_cbmc_analysis.md) for provisioning and limits.
 
 **Publication, retrieval and non-facts**
 

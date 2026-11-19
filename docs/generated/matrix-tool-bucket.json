@@ -272,6 +272,41 @@
       "bucket": "scanner_observations",
       "catalog_state": "enabled",
       "gap": [
+        "T-147",
+        "T-157"
+      ],
+      "input_languages": {
+        "basis": "declared input compatibility, not rule coverage or observed execution",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "input_support": [],
+      "jobs": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "launch_bindings": [],
+      "tasks": {
+        "basis": "source-bound task adapter declarations",
+        "gaps": [
+          "T-147"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "tool": "tool-cbmc"
+    },
+    {
+      "bucket": "scanner_observations",
+      "catalog_state": "enabled",
+      "gap": [
         "T-157"
       ],
       "input_languages": {

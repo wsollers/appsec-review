@@ -16,6 +16,9 @@ from appsec_review.runtime.contracts import (
     JobContract, MissingPolicy, TargetAccess,
 )
 
+from appsec_review.jobs.job_cbmc_analysis.datasets import DATASETS as CBMC_DATASETS
+from appsec_review.runtime.contracts import accepted_inputs
+
 CONTRACT = JobContract(
     inputs=(
         InputRequirement("job_artifact_indexing", "handoff", "appsec-review/job-handoff/2",
@@ -307,6 +310,8 @@ CONTRACT = JobContract(
                          "appsec-review/generated-source-backing/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_tree_sitter_ast", "tree_sitter_tool_io",
                          "appsec-review/container-execution/1", authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        *accepted_inputs("job_cbmc_analysis", CBMC_DATASETS,
+                         output_kinds=("cbmc_results", "cbmc_coverage", "cbmc_summary")),
     ),
     schedule_after=('job_review_data_indexing',),
     dispatch=DispatchClass.REVIEW_GRAPH,

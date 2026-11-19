@@ -1794,6 +1794,42 @@ workers = 4
 workers = 1
 [jobs.job_clang_static_analysis.steps.acceptance.tasks.publish_handoff]
 
+[jobs.job_cbmc_analysis]
+name = "cbmc_analysis"
+workers = 1
+
+[jobs.job_cbmc_analysis.settings]
+enabled = true
+tag = "appsec-review/tool-cbmc:6.11.0"
+max_scopes = 8
+max_seeds_per_scope = 32
+max_translation_units = 8
+max_functions = 16
+max_output_bytes = 4194304
+max_goto_bytes = 67108864
+max_source_bytes = 134217728
+max_source_files = 10000
+max_instructions = 100000
+max_properties = 2000
+max_property_summaries = 16
+max_trace_steps = 24
+max_trace_value_chars = 200
+command_timeout_seconds = 45
+total_timeout_seconds = 300
+unwind_limits = [8, 32]
+
+[jobs.job_cbmc_analysis.steps.load]
+workers = 1
+[jobs.job_cbmc_analysis.steps.load.tasks.accepted_inputs]
+
+[jobs.job_cbmc_analysis.steps.analyze]
+workers = 1
+[jobs.job_cbmc_analysis.steps.analyze.tasks.bounded_checks]
+
+[jobs.job_cbmc_analysis.steps.acceptance]
+workers = 1
+[jobs.job_cbmc_analysis.steps.acceptance.tasks.publish_handoff]
+
 # SVF points-to cross-check producer (docs/architecture/svf-alias-producer.md). Opt-in: its records
 # only add doubt to graph facts, and large C++ modules may exceed the central 1 GiB/600 s tool policy,
 # which is then reported as a module gap.

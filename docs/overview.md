@@ -43,9 +43,12 @@ flowchart TB
     ts --> cgi["job_code_graph_index: appsec-review/alternate-cpg/1"]
     cql --> cgi
     cpp --> cgi
+    cpp --> cbmc["job_cbmc_analysis: bounded original-source function-entry checks"]
+    cql --> cbmc
     cat --> ev["job_evidence_collection: corroborated SAST + OSV index"]
     cat --> dep["job_dependency_intelligence: appsec-review/sca-reachability/1"]
     ev --> dep
+    ev --> cbmc
     cat --> ctx["job_ci_configuration_analysis / job_source_history_analysis / job_artifact_security_analysis"]
     retired["job_cpg_analysis / job_svf_alias_analysis: disabled by default; manual = true"]
   end
@@ -56,6 +59,7 @@ flowchart TB
     ctx --> prio
     cgi --> idx["job_review_data_indexing: RetrievalCore shards"]
     ev --> idx
+    cbmc --> idx
     dep --> idx
     prio --> idx
     owasp["job_owasp_control_assessment / job_threat_model_generation"] --> idx

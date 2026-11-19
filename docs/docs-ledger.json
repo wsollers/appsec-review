@@ -1,6 +1,30 @@
 {
   "documents": [
     {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/cbmc-bounded-analysis.md",
+      "reason": "Define source-level bounded CBMC artifacts, judgment limits, consumer integration and implementation plan.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_cbmc_analysis.md",
+      "reason": "Document provisioning, typed budgets, protected evidence, conditional judgments and manual validation.",
+      "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "containers/tools/cbmc/README.md",
+      "reason": "Document standalone manual CBMC image acquisition, bounded cross-project use, validation and license obligations without adding a review consumer.",
+      "subsystem": "images and deployment"
+    },
+    {
       "decision_record": false,
       "disposition": "keep",
       "kind": "process",

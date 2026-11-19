@@ -30,6 +30,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 | [Garnet result cache: Windows Nano Server image](../../containers/services/garnet/README.md) | images and deployment | current |
 | [actionlint tool image](../../containers/tools/actionlint/README.md) | images and deployment | current |
 | [blint tool image](../../containers/tools/blint/README.md) | images and deployment | current |
+| [Reusable CBMC tooling image](../../containers/tools/cbmc/README.md) | images and deployment | current |
 | [checkov tool image](../../containers/tools/checkov/README.md) | images and deployment | current |
 | [Clang static-analysis tool image](../../containers/tools/clang-static-analysis/README.md) | images and deployment | current |
 | [tool-clangd-indexer: pinned clangd static indexer](../../containers/tools/clangd-indexer/README.md) | images and deployment | current |
@@ -90,6 +91,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 | [binary_evidence_indexing](job_binary_evidence_indexing.md) | code intelligence | current |
 | [build_environment_analysis](job_build_environment_analysis.md) | target acquisition and build | current |
 | [build_iteration](job_build_iteration.md) | target acquisition and build | current |
+| [CBMC bounded analysis](job_cbmc_analysis.md) | code intelligence | current |
 | [change_context_analysis](job_change_context_analysis.md) | scanners and evidence collection | current |
 | [ci_configuration_analysis](job_ci_configuration_analysis.md) | scanners and evidence collection | current |
 | [clang_static_analysis](job_clang_static_analysis.md) | scanners and evidence collection | current |

@@ -1,0 +1,71 @@
+{
+  "schema": "appsec-review/assets-lock/1",
+  "image_id": "tool-cbmc",
+  "tool_version": "6.11.0",
+  "project": "https://github.com/diffblue/cbmc",
+  "license": "BSD-4-Clause AND MIT",
+  "architecture": "linux/amd64",
+  "generated_from": "CBMC cbmc-6.11.0 Ubuntu 24.04 amd64 release and Ubuntu snapshot 20261015T070000Z",
+  "artifacts": [
+    {
+      "name": "ubuntu-24.04-cbmc-6.11.0-Linux.deb",
+      "url": "https://github.com/diffblue/cbmc/releases/download/cbmc-6.11.0/ubuntu-24.04-cbmc-6.11.0-Linux.deb",
+      "path": "downloads/cbmc.deb",
+      "sha256": "b3721aa541038384d7801ea3aeabbcddc3e8845ac8f1cbff637cf8dec7481ac8",
+      "bytes": 73477756,
+      "version": "6.11.0",
+      "license": "BSD-4-Clause AND MIT",
+      "license_source": "https://github.com/diffblue/cbmc/blob/cbmc-6.11.0/LICENSE",
+      "provenance": "Official diffblue/cbmc release asset; observed SHA-256 matches the GitHub release API asset digest.",
+      "signature_verification": {
+        "status": "not-published",
+        "reason": "No detached signature is listed for this release asset; HTTPS, exact byte size and GitHub asset SHA-256 are verified."
+      }
+    },
+    {
+      "name": "LICENSE-CBMC",
+      "url": "https://raw.githubusercontent.com/diffblue/cbmc/cbmc-6.11.0/LICENSE",
+      "path": "downloads/LICENSE-CBMC",
+      "sha256": "858c0e744b9bab750f6b2801c6921db8c64076d90201977d6219666a75eba0f9",
+      "bytes": 1960,
+      "version": "6.11.0",
+      "license": "BSD-4-Clause",
+      "license_source": "https://github.com/diffblue/cbmc/blob/cbmc-6.11.0/LICENSE",
+      "provenance": "Unmodified license from the exact upstream release tag, retained in the image.",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "Retrieved over HTTPS; exact byte size and SHA-256 are enforced."
+      }
+    },
+    {
+      "name": "minisat2_2.2.1.orig.tar.gz",
+      "url": "https://deb.debian.org/debian/pool/main/m/minisat2/minisat2_2.2.1.orig.tar.gz",
+      "path": "downloads/minisat2_2.2.1.orig.tar.gz",
+      "sha256": "e54afa3c192c1753bc8075c0c7e126d5c495d9066e3f90a2588091149ac9ca40",
+      "bytes": 44229,
+      "version": "2.2.1",
+      "license": "MIT",
+      "license_source": "minisat2-2.2.1/LICENSE in the locked source archive",
+      "provenance": "Source archive named by CBMC 6.11.0 src/solvers/CMakeLists.txt for its default bundled MiniSAT backend; only its license is copied, no second solver is compiled.",
+      "signature_verification": {
+        "status": "not-performed",
+        "reason": "Retrieved over HTTPS; exact byte size and SHA-256 are enforced."
+      }
+    },
+    {
+      "name": "cbmc-debs.tar",
+      "url": "https://snapshot.ubuntu.com/ubuntu/",
+      "path": "downloads/cbmc-debs.tar",
+      "sha256": "080f91c3c066de186e9a5c691b8893639510fe28e1d2daef7b281b13ef6f05fc",
+      "bytes": 104919040,
+      "version": "ubuntu-24.04-20261015T070000Z",
+      "license": "mixed Ubuntu packages; package copyright files retained in the image",
+      "license_source": "https://packages.ubuntu.com/noble/",
+      "provenance": "Deterministic 85-package tar from acquire_assets.sh in the digest-pinned Ubuntu base: CBMC Debian dependencies plus g++, make, cmake, ninja-build, pkg-config and python3. Exact versions and SHA-256 values are recorded in packages.manifest.",
+      "signature_verification": {
+        "status": "verified",
+        "reason": "APT verified signed Release metadata and package hashes during acquisition; the builder enforces the resulting tar size and SHA-256."
+      }
+    }
+  ]
+}

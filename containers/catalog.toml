@@ -522,6 +522,22 @@ build_args = { TOOL_VERSION = "1.0.0" }
 purpose = "Offline C/C++ configure, compilation, Clang AST, LLVM IR, and ELF/symbol evidence."
 
 [[images]]
+id = "tool-cbmc"
+state = "enabled"
+kind = "tool"
+version = "6.11.0"
+tag = "appsec-review/tool-cbmc:6.11.0"
+context = "containers/tools/cbmc"
+dockerfile = "Dockerfile"
+dependencies = []
+architectures = ["linux/amd64"]
+tool_manifest = "containers/tools/cbmc/tool.toml"
+assets_lock = "containers/tools/cbmc/assets.lock.json"
+acquire = "containers/tools/cbmc/acquire_assets.sh"
+build_args = { TOOL_VERSION = "6.11.0" }
+purpose = "Reusable bounded C/C++ model checking and GOTO tooling for finding-seeded CBMC analysis; no Lean proof authority."
+
+[[images]]
 id = "tool-tree-sitter"
 state = "enabled"
 kind = "tool"

@@ -53,6 +53,9 @@ from appsec_review.runtime.contracts import (
     JobContract, MissingPolicy, TargetAccess,
 )
 
+from appsec_review.jobs.job_cbmc_analysis.datasets import DATASETS as CBMC_DATASETS
+from appsec_review.runtime.contracts import accepted_inputs
+
 CONTRACT = JobContract(
     inputs=(
         InputRequirement("job_model_connectivity", "handoff", "appsec-review/job-handoff/2",
@@ -400,6 +403,7 @@ CONTRACT = JobContract(
         InputRequirement("job_third_party_data_sync", "feed_snapshot",
                          "appsec-review/public-feed-use/1", channel=InputChannel.EXTERNAL,
                          authority=EvidenceAuthority.REFERENCE),
+        *accepted_inputs("job_cbmc_analysis", CBMC_DATASETS),
     ),
     schedule_after=('job_binary_evidence_indexing', 'job_dependency_intelligence', 'job_owasp_control_assessment', 'job_profile_data', 'job_sanitizer_build', 'job_test_coverage', 'job_threat_model_generation'),
     dispatch=DispatchClass.REVIEW_GRAPH,

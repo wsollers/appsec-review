@@ -66,6 +66,8 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("clang_static_analysis", ("job_clang_static_analysis",), "current",
      ("scanner_correlation", "review_package", "hotspot_context"),
      ("query_observations", "query_precomputed", "coverage")),
+    ("cbmc_bounded_analysis", ("job_cbmc_analysis",), "current", ("review_package",),
+     ("find", "search", "coverage")),
     ("clangd_symbols", ("job_cpp_symbol_index",), "current", ("symbol_links",), ("core", "query_precomputed")),
     ("debug_symbols", ("job_debug_symbol_indexing",), "current", (), ("query_debug_symbols", "coverage")),
     # Ghidra pseudo-C, call neighbourhoods, imports and strings of configured third-party binaries.

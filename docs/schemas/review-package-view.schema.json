@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://appsec-review.local/schemas/review-package-view.schema.json",
-  "title": "Review package view (package-view/6; reads /4 and /5)",
+  "title": "Review package view (package-view/7; reads /4, /5 and /6)",
   "description": "The labelled, budgeted, model-facing view of a stored review package (review/package_view.py, review-protocol-v2.md section 4). Built at cell time and never stored as an identity; build_view validates every view against this schema. Persona and stack profile are routing fields the caller sets per cell.",
   "type": "object",
   "additionalProperties": false,
@@ -12,7 +12,7 @@
   "properties": {
     "schema": {"const": "appsec-review/review-package-view/1"},
     "rule": {"enum": ["appsec-review/package-view/4", "appsec-review/package-view/5",
-                      "appsec-review/package-view/6"]},
+                      "appsec-review/package-view/6", "appsec-review/package-view/7"]},
     "protocol": {"const": "review-protocol/2"},
     "kind": {"type": ["string", "null"]},
     "lane": {"type": ["string", "null"]},

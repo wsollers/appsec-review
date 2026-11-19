@@ -1,6 +1,12 @@
 {
   "schema": "appsec-review/job-test-map/2",
   "jobs": {
+    "job_cbmc_analysis": {
+      "unit": ["tests/unit/job_cbmc_analysis/test_cbmc_analysis.py"],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
     "job_artifact_indexing": {
       "unit": [
         "tests/unit/job_artifact_indexing/test_contract.py",

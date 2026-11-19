@@ -1,4 +1,4 @@
-"""The model-facing view of a review package (``package-view/6``, review-protocol-v2.md section 4).
+"""The model-facing view of a review package (``package-view/7``, review-protocol-v2.md section 4).
 
 The stored package is hash-pinned and keeps every identity and every gap. A review cell is shown a *view* of
 it, built at cell time and never stored as an identity: labelled sections (``L`` lead, ``S`` source, ``K`` sink,
@@ -36,13 +36,14 @@ import re
 from typing import Any
 
 from appsec_review.review.identity import sha256_hex
+from appsec_review.review.models import IntegrityError
 from appsec_review.review.labels import LabelTable
 from appsec_review.review.neighborhood import function_extent, type_names
 from appsec_review.review.schemas import VIEW_SCHEMA_FILE, validate as validate_schema
 from appsec_review.review.secret_redaction import redact_source_line
 
 VIEW_SCHEMA = "appsec-review/review-package-view/1"
-VIEW_RULE = "appsec-review/package-view/6"
+VIEW_RULE = "appsec-review/package-view/7"
 GAP_VIEW_RULE = "appsec-review/package-gap-view/1"
 PROTOCOL = "review-protocol/2"
 MAX_INLINE_GAPS = 12
@@ -538,9 +539,16 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
                     key: result[key] for key in ("authority", "drift_kind", "mapping_status", "subject",
                                                 "summary", "method", "route", "handler_path", "handler_line",
                                                 "spec_path") if key in result}}
+        bounded = {}
+        if role == "bounded_analysis":
+            from appsec_review.review.bounded_analysis import summary as bounded_summary
+            found = builder.core.find(identity=ref, limit=1)["results"]
+            if len(found) != 1 or found[0]["kind"] != "review_signal":
+                raise IntegrityError("CBMC package context no longer resolves to its accepted result")
+            bounded = {"bounded_analysis": bounded_summary(found[0]["payload"])}
         if unit_reference is not None:
             unit_rows.append({"ref": ref, "role": role, "kind": entry["kind"],
-                              **navigation,
+                              **navigation, **bounded,
                               **({"control_assessment": entry["control_assessment"]}
                                  if entry.get("control_assessment") is not None else {})})
         elif entry["kind"] == "tag_assignment":
@@ -549,7 +557,7 @@ def build_view(package: Mapping[str, Any], core: Any, limits: ViewLimits) -> Pac
             memory.append({"ref": ref, "role": role, "kind": entry["kind"]})
         else:
             other.append({"ref": ref, "role": role, "kind": entry["kind"],
-                          **navigation,
+                          **navigation, **bounded,
                           **({"control_assessment": entry["control_assessment"]}
                              if entry.get("control_assessment") is not None else {})})
 

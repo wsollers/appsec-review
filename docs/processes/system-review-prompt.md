@@ -226,7 +226,7 @@ paths are under `src/appsec_review/` unless they start with another top-level di
 - **Code:** `binary_decompilation/`, `debug_symbols/`, `blint_report.py`, `jobs/cpp_seeded.py`,
   `graph/svf_crosscheck.py`, `retrieval/debug_symbols.py`, `retrieval/debug_symbol_index.py`,
   `containers/analysis/`.
-- **Jobs:** `job_cpp_compiled_analysis`, `job_clang_static_analysis`, `job_svf_alias_analysis`,
+- **Jobs:** `job_cpp_compiled_analysis`, `job_clang_static_analysis`, `job_cbmc_analysis`, `job_svf_alias_analysis`,
   `job_debug_symbol_indexing`, `job_binary_evidence_indexing`,
   `job_artifact_security_analysis`, `job_post_build_security_assessment`.
 - **Docs:** `docs/architecture/clang-static-analysis.md`, `svf-alias-producer.md`,

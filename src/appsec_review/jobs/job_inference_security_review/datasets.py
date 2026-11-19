@@ -109,6 +109,9 @@ from appsec_review.runtime.contracts import (
     JobContract, MissingPolicy, TargetAccess,
 )
 
+from appsec_review.jobs.job_cbmc_analysis.datasets import DATASETS as CBMC_DATASETS
+from appsec_review.runtime.contracts import accepted_inputs
+
 CONTRACT = JobContract(
     inputs=(
         *(InputRequirement("job_threat_model_generation", kind, schema,
@@ -430,6 +433,8 @@ CONTRACT = JobContract(
                          "appsec-review/retrieval-index/2",
                          availability=Availability.OPTIONAL, missing=MissingPolicy.GAP,
                          authority=EvidenceAuthority.PROVISIONAL),
+        *accepted_inputs("job_cbmc_analysis", CBMC_DATASETS,
+                         output_kinds=("cbmc_results", "cbmc_coverage", "cbmc_summary")),
     ),
     schedule_after=('job_document_issue_analysis',),
     dispatch=DispatchClass.REVIEW_GRAPH,

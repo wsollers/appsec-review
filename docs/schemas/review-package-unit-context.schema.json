@@ -8,7 +8,8 @@
   "required": ["schema", "assembly_rule", "unit_key", "scope", "context", "facets", "entity_ids"],
   "properties": {
     "schema": {"const": "appsec-review/package-unit-context/2"},
-    "assembly_rule": {"enum": ["appsec-review/assemble-review-packages/15", "appsec-review/assemble-review-packages/16"]},
+    "assembly_rule": {"enum": ["appsec-review/assemble-review-packages/15", "appsec-review/assemble-review-packages/16",
+                              "appsec-review/assemble-review-packages/17"]},
     "unit_key": {"type": "string", "minLength": 1},
     "scope": {
       "description": "The unit's scope without a partition key: every partition of the unit shares it.",

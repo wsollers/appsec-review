@@ -9,8 +9,8 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 # Container packaging
 
 `catalog.toml` is the inventory for every image built by `build.py`. For the legacy audit it
-accounts for all 42 audited legacy image variants. The current enabled inventory contains 47
-images: 33 tool images, four narrow shared runtime bases, and ten build environments (the shared
+accounts for all 42 audited legacy image variants. The current enabled inventory contains 48
+images: 34 tool images, four narrow shared runtime bases, and ten build environments (the shared
 native toolchain plus the C/C++, Go, Python, PHP, Rust/WebAssembly, Node/TypeScript, Android,
 Java/Kotlin and .NET
 buildenvs). An
@@ -30,6 +30,10 @@ The [generated tool matrix](../docs/generated/matrix-tool-bucket.md) lists the c
 their consumers. Catalog enablement means the image is available for provisioning, not that every
 consumer is enabled or provides complete coverage. For example, `tool-report-latex` replaces
 `audit-report` for [PDF rendering](report/latex/README.md), while Joern's consumer remains disabled.
+
+[`tool-cbmc`](tools/cbmc/README.md) is a reusable C/C++ bounded model-checking image.
+[`job_cbmc_analysis`](../docs/operations/job_cbmc_analysis.md) consumes it for automatic,
+bounded analysis of eligible accepted scanner seeds; this does not change the Lean proof lane.
 
 CodeQL is the exception: its licensed source image is operator-provided and its derived
 `appsec-review-codeql:*` analysis images are built by the CodeQL job
@@ -105,13 +109,13 @@ once per host, the first time the image is built there, and again after a re-loc
 files that no longer match first (the helpers produce what is missing and keep what exists), then
 verifies the result; bytes that no
 longer match mean the upstream moved, and re-locking is a reviewed edit, not something the launcher
-does. Four images have one: `tool-native-cpp`, `tool-report-latex` and `tool-svf` (`.deb` closures
+does. Five images have one: `tool-native-cpp`, `tool-report-latex`, `tool-cbmc` and `tool-svf` (`.deb` closures
 resolved against the Ubuntu **snapshot** service inside a pinned image by their `acquire_assets.sh`,
 with the host's CA bundle lent read-only; the lock URL is the archive root, which marks the artifact
 as not fetchable) and `tool-tree-sitter` (`acquire_assets.sh` downloads the two
 hash-locked wheels and runs `acquire_assets.py` in the pinned base for the grammar libraries; its lock
 has no `artifacts` list, the wheels and grammars themselves are the local files). The helpers may use
-the network; these four tool-image build steps do not. `tool-sqlite-fts` has no asset lock.
+the network; these five tool-image build steps do not. `tool-sqlite-fts` has no asset lock.
 
 ## Rule and query packs
 

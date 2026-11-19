@@ -127,7 +127,7 @@ decision would weaken the recorded acceptance contract.
 
 ## Status update (2026-10-14)
 
-The counts above describe the 2026-10-08 acceptance. The catalog has since grown to 33 enabled tool
+The counts above describe the 2026-10-08 acceptance. The catalog has since grown to 34 enabled tool
 images plus 4 bases and ten build environments (shared native toolchain, C/C++, Go, Python, PHP,
 Rust/WebAssembly, Node/TypeScript, Android, Java/Kotlin, .NET), adding tools not derived from the legacy archive (see
 `containers/README.md`). Not every enabled tool has an asset lock: `tool-sqlite-fts` packages a

@@ -1435,6 +1435,9 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             settings["execution_mode"] = typed_settings.execution_mode.value
             for language, language_settings in typed_settings.languages.items():
                 settings["languages"][language]["mode"] = language_settings.mode.value
+        elif job_id == "job_cbmc_analysis":
+            from .cbmc import CbmcSettings
+            typed_settings = CbmcSettings.from_mapping(settings)
         elif job_id == "job_inference_security_review":
             from .inference_review import parse_inference_review_settings
             typed_settings = parse_inference_review_settings(settings)

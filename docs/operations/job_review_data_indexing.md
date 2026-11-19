@@ -220,6 +220,12 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_tree_sitter_ast` | `tree_sitter_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_cfg` | `appsec-review/tree-sitter-cfg/1` | handoff | optional | gap |
 | `job_third_party_data_sync` | `feed_snapshot` | `appsec-review/public-feed-use/1` | external | optional | gap |
+| `job_cbmc_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_cbmc_analysis` | `cbmc_plan` | `appsec-review/cbmc-plan/1` | handoff | optional | gap |
+| `job_cbmc_analysis` | `cbmc_results` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_cbmc_analysis` | `cbmc_coverage` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
+| `job_cbmc_analysis` | `cbmc_summary` | `appsec-review/cbmc-summary/1` | handoff | optional | gap |
+| `job_cbmc_analysis` | `cbmc_raw` | `application/octet-stream` | handoff | optional | gap |
 
 ### Published dataset declarations
 
@@ -253,7 +259,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 
 Dispatch: `review_graph`. Review graph member: **true**. Enabled graph member: **true**.
 
-Declared predecessors: `job_sanitizer_build`, `job_threat_model_generation`.
+Declared predecessors: `job_sanitizer_build`, `job_threat_model_generation`, `job_cbmc_analysis`.
 
 ### Declared dataflow
 
@@ -1105,6 +1111,36 @@ flowchart LR
   input_schema168["appsec-review/public-feed-use/1"]
   producer168 --> input168 --> job
   input168 -. schema .-> input_schema168
+  producer169["job_cbmc_analysis"]
+  input169["handoff"]
+  input_schema169["appsec-review/job-handoff/2"]
+  producer169 --> input169 --> job
+  input169 -. schema .-> input_schema169
+  producer170["job_cbmc_analysis"]
+  input170["cbmc_plan"]
+  input_schema170["appsec-review/cbmc-plan/1"]
+  producer170 --> input170 --> job
+  input170 -. schema .-> input_schema170
+  producer171["job_cbmc_analysis"]
+  input171["cbmc_results"]
+  input_schema171["appsec-review/retrieval-index/2"]
+  producer171 --> input171 --> job
+  input171 -. schema .-> input_schema171
+  producer172["job_cbmc_analysis"]
+  input172["cbmc_coverage"]
+  input_schema172["appsec-review/retrieval-index/2"]
+  producer172 --> input172 --> job
+  input172 -. schema .-> input_schema172
+  producer173["job_cbmc_analysis"]
+  input173["cbmc_summary"]
+  input_schema173["appsec-review/cbmc-summary/1"]
+  producer173 --> input173 --> job
+  input173 -. schema .-> input_schema173
+  producer174["job_cbmc_analysis"]
+  input174["cbmc_raw"]
+  input_schema174["application/octet-stream"]
+  producer174 --> input174 --> job
+  input174 -. schema .-> input_schema174
   output0["accepted_input_summary"]
   output_schema0["appsec-review/review-data-indexing-inputs/2"]
   job --> output0

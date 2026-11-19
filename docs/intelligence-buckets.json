@@ -38,6 +38,11 @@
     }
   },
   "datasets": {
+    "cbmc_plan": "scanner_observations",
+    "cbmc_results": "scanner_observations",
+    "cbmc_coverage": "scanner_observations",
+    "cbmc_summary": "scanner_observations",
+    "cbmc_raw": "scanner_observations",
     "accepted_input_summary": "documents_and_retrieval",
     "accepted_scope": "review_products",
     "alternate_cpg": "dataflow",
@@ -239,6 +244,7 @@
   "tools": {
     "tool-actionlint": "scanner_observations",
     "tool-blint": "artifacts_and_binary",
+    "tool-cbmc": "scanner_observations",
     "tool-checkov": "scanner_observations",
     "tool-clang-static-analysis": "scanner_observations",
     "tool-clangd-indexer": "symbols_and_calls",
