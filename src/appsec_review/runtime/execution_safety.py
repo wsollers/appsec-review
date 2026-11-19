@@ -19,6 +19,7 @@ from typing import Any, Iterator, Mapping
 from uuid import UUID, uuid4
 
 from appsec_review.storage import atomic_json
+from appsec_review.runtime._process_capture import PipeCapture
 
 
 SCHEMA = "appsec-review/execution-safety/1"
@@ -404,8 +405,8 @@ def cleanup_scope() -> Iterator[None]:
         _CLEANUP.reset(token)
 
 
-def run_process(argv, timeout: int, *, stdout=None, stderr=None):
-    """Bound a local CLI process group; callers retain streams before classifying its exit."""
+def run_process(argv, timeout: int, *, stdout=None, stderr=None, output_bytes: int | None = None):
+    """Bound a local CLI group; a supplied byte limit retains a prefix and overflow byte."""
     from appsec_review.config.native_dagster import native_execution_requested
     from appsec_review.runtime.resources import process_identity, quarantine_resources
     if native_execution_requested():
@@ -420,7 +421,9 @@ def run_process(argv, timeout: int, *, stdout=None, stderr=None):
     deadline = time.monotonic() + timeout
     stopped = False
     out = err = b""
+    capture = None
     try:
+        capture = PipeCapture(process, output_bytes)
         current = _ACTIVE.get()
         if current is not None and not _CLEANUP.get():
             current.request("process", permit=_PERMIT.get(), process={
@@ -434,8 +437,9 @@ def run_process(argv, timeout: int, *, stdout=None, stderr=None):
             if stopped or remaining <= 0:
                 break
             try:
-                out, err = process.communicate(timeout=min(0.1, remaining))
-                return process.returncode, out or b"", err or b"", False
+                capture.wait(min(0.1, remaining))
+                out, err = capture.output()
+                return process.returncode, out, err, False
             except subprocess.TimeoutExpired:
                 continue
         if process_identity(process.pid) != generation or generation is None:
@@ -443,13 +447,15 @@ def run_process(argv, timeout: int, *, stdout=None, stderr=None):
             raise ReviewStopped("local process generation cannot be confirmed for cancellation")
         os.killpg(process.pid, signal.SIGKILL)
         try:
-            out, err = process.communicate(timeout=5)
+            capture.wait(5)
         except subprocess.TimeoutExpired as exc:
             quarantine_resources("local_descendant_death_unconfirmed")
-            out, err = exc.stdout or b"", exc.stderr or b""
             raise ReviewStopped("local descendants remain unconfirmed after cancellation") from exc
-        return None, out or b"", err or b"", True
+        out, err = capture.output()
+        return None, out, err, True
     finally:
+        if capture is not None:
+            capture.close()
         if process.poll() is None:
             if generation is not None and process_identity(process.pid) == generation:
                 try:

@@ -23,6 +23,7 @@ from appsec_review.config.native_dagster import native_execution_requested
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.runtime.resources import reserve_execution, review_resources_active, tracked_container
 from appsec_review.runtime import execution_safety as safety
+from appsec_review.runtime._process_capture import PipeCapture
 from appsec_review.signing.core import SignatureVerificationError
 from appsec_review.signing.images import ImageSignatureVerifier
 from appsec_review.signing.policy import default_image_verifier
@@ -119,23 +120,41 @@ def _stamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def _default_runner(argv: Sequence[str], timeout: int) -> CommandOutcome:
+def _default_runner(argv: Sequence[str], timeout: int, *, output_bytes: int | None = None) -> CommandOutcome:
     if safety.active():
-        code, stdout, stderr, timed_out = safety.run_process(argv, timeout)
+        code, stdout, stderr, timed_out = safety.run_process(argv, timeout, output_bytes=output_bytes)
         return CommandOutcome(code, stdout, stderr, timed_out, oom_killed=code == 137)
     from .native_client import native_run
     native = native_run(argv, timeout)
     if native is not None:
         return CommandOutcome(native[0], native[1], native[2], native[3],
                               oom_killed=native[0] == 137)
+    process = subprocess.Popen(
+        list(argv), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        start_new_session=True)
+    capture = None
     try:
-        completed = subprocess.run(
-            list(argv), stdin=subprocess.DEVNULL, capture_output=True, check=False, timeout=timeout
-        )
-        return CommandOutcome(completed.returncode, completed.stdout, completed.stderr,
-                              oom_killed=completed.returncode == 137)
-    except subprocess.TimeoutExpired as exc:
-        return CommandOutcome(None, exc.stdout or b"", exc.stderr or b"", timed_out=True)
+        capture = PipeCapture(process, output_bytes)
+        try:
+            capture.wait(timeout)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            capture.wait(5)
+            return CommandOutcome(None, *capture.output(), timed_out=True)
+        return CommandOutcome(process.returncode, *capture.output(),
+                              oom_killed=process.returncode == 137)
+    finally:
+        if capture is not None:
+            capture.close()
+        if process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=5)
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
 
 
 class ContainerExecutor:
@@ -316,7 +335,8 @@ class ContainerExecutor:
                          if review_resources_active() or safety.active() or measurement is not None else nullcontext())
             with lifecycle:
                 try:
-                    outcome = self.runner(command, tool.timeout_seconds)
+                    outcome = (_default_runner(command, tool.timeout_seconds, output_bytes=tool.output_bytes)
+                               if self.runner is _default_runner else self.runner(command, tool.timeout_seconds))
                 except BaseException as exc:
                     if measurement is not None:
                         termination = terminate_measured()
@@ -342,6 +362,8 @@ class ContainerExecutor:
                             datetime.fromisoformat(started)).total_seconds() * 1000)),
                         "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
                         "oom_killed": outcome.oom_killed, "cleanup": "PENDING",
+                        "stdout_truncated": len(outcome.stdout) > tool.output_bytes,
+                        "stderr_truncated": len(outcome.stderr) > tool.output_bytes,
                         "stdout_sha256": file_sha256(stdout_path),
                         "stderr_sha256": file_sha256(stderr_path),
                         **({"metrics_receipt": measurement.receipt} if measurement is not None else {}),

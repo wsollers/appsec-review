@@ -31,6 +31,16 @@ catalog-binary hardening. Grype consumes the accepted per-task Syft output; OSV 
 supported lockfiles and mounts only the required available ecosystem snapshots. Missing
 prerequisites and unselected/unsupported work retain distinct dispositions.
 
+For local Linux scanner execution, `ContainerExecutor` drains stdout and stderr concurrently
+while the process runs, retaining each catalog `output_bytes` prefix plus one overflow-detection
+byte. Only the configured prefix is published; full and first-error partial receipts record
+each stream's truncation independently. Excess output is drained, not buffered; a zero exit code
+does not make truncated coverage complete. This applies both with and without execution safety; timeout, cancellation,
+process-generation checks and failure classification remain in their existing execution paths.
+File-directed build capture still retains complete files, and safety callers without an explicit
+byte budget retain their existing complete-output contract. The native broker retains its separate
+bounded capture and fail-closed completeness validation; it never falls back to local execution.
+
 [Artifact indexing](../../src/appsec_review/jobs/job_artifact_indexing/job.py) first establishes
 canonical retained-artifact identities, receipt-based archive membership and exact or explicitly
 ambiguous producing/linking relations. It does not scan archive contents to rediscover members.
