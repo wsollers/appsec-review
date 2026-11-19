@@ -269,11 +269,12 @@ the executed tool is resolved in the handler, not inferred from that table.
 6. Publish one analysis shard per scope and save its checkpoint. Coverage is unavailable for a
    failed exit with no symbols, partial with reasons, complete otherwise.
 
-The job validates `workers`, `max_documents_per_scope`, `max_symbols_per_scope`,
-`max_relations_per_scope` and `locations_per_relation` as positive integers before execution.
+Configuration loading and the job boundary validate `workers`, `max_documents_per_scope`,
+`max_symbols_per_scope`, `max_relations_per_scope` and `locations_per_relation` as positive integers.
 Booleans, strings, floats, missing values and nonpositive values are rejected, not coerced or
 clamped. There is no additional upper cap. The separate centrally resolved `source_dispositions`
-table and generic `enabled` setting retain their existing validation.
+table and generic `enabled` setting retain their existing validation. Disposition resolution
+preserves the typed symbol-index bounds.
 
 ### `acceptance`
 

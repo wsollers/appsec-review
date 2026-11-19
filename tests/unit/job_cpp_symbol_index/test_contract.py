@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from dataclasses import replace
+import json
+import re
 from types import SimpleNamespace
+import tomllib
 
 import pytest
 
@@ -12,6 +15,7 @@ from appsec_review.config import load_config
 from appsec_review.jobs.job_cpp_symbol_index import JOB_ID, build_job
 from appsec_review.jobs.job_cpp_symbol_index.datasets import CONSUMES, CONTRACT, DATASETS
 from appsec_review.jobs.job_cpp_symbol_index.job import SCHEMA, _validate
+from appsec_review.jobs.job_cpp_symbol_index.settings import CppSymbolIndexSettings
 from appsec_review.orchestration.topology import describe_wave1
 from appsec_review.runtime.contracts import (
     Availability,
@@ -143,3 +147,61 @@ def test_unknown_index_setting_is_rejected_before_job_execution() -> None:
     config = replace(config, settings={**config.settings, "locations_per_relations": 8})
     with pytest.raises(ValueError, match="unknown.*locations_per_relations"):
         build_job().input_validators[0](SimpleNamespace(config=config), {})
+
+
+def _load_symbol_config(tmp_path: Path, overrides: dict[str, str | None], *,
+                        explicit_dispositions: bool = False):
+    source = (REPO_ROOT / "appsec-review.toml").read_text(encoding="utf-8")
+    before, settings = source.split(f"[jobs.{JOB_ID}.settings]\n", 1)
+    settings, after = settings.split(f"[jobs.{JOB_ID}.steps.load]", 1)
+    for name, value in overrides.items():
+        replacement = "" if value is None else f"{name} = {value}\n"
+        settings, count = re.subn(rf"(?m)^{re.escape(name)} = [^\n]*\n", replacement, settings)
+        if not count:
+            settings += replacement
+    if explicit_dispositions:
+        table = tomllib.loads(source)["jobs"]["job_inference_security_review"]["settings"]["source_dispositions"]
+        settings += "source_dispositions = { " + ", ".join(
+            f"{key} = {json.dumps(value)}" for key, value in sorted(table.items())
+        ) + " }\n"
+    path = tmp_path / "appsec-review.toml"
+    path.write_text(before + f"[jobs.{JOB_ID}.settings]\n" + settings
+                    + f"[jobs.{JOB_ID}.steps.load]" + after, encoding="utf-8")
+    return load_config(path)
+
+
+@pytest.mark.parametrize("name,value", (
+    ("workers", '"2"'),
+    ("max_documents_per_scope", "true"),
+    ("max_symbols_per_scope", "0"),
+    ("max_relations_per_scope", "-1"),
+    ("locations_per_relation", "1.5"),
+    ("locations_per_relation", None),
+    ("locations_per_relations", "8"),
+), ids=("worker-string", "documents-bool", "symbols-zero", "relations-negative",
+        "locations-float", "missing", "unknown"))
+def test_load_config_rejects_invalid_symbol_bounds(tmp_path: Path, name: str, value: str | None) -> None:
+    with pytest.raises(ValueError, match=name):
+        _load_symbol_config(tmp_path, {name: value})
+
+
+@pytest.mark.parametrize("value,explicit_dispositions", ((1, False), (10**10, True)),
+                         ids=("inherited", "explicit"))
+def test_load_config_preserves_typed_symbol_bounds_through_disposition_resolution(
+    tmp_path: Path, value: int, explicit_dispositions: bool,
+) -> None:
+    bounds = {name: value for name in (
+        "workers", "max_documents_per_scope", "max_symbols_per_scope",
+        "max_relations_per_scope", "locations_per_relation",
+    )}
+    config = _load_symbol_config(
+        tmp_path, {name: str(value) for name in bounds}, explicit_dispositions=explicit_dispositions,
+    )
+    symbol = config.job(JOB_ID)
+    assert isinstance(symbol.typed_settings, CppSymbolIndexSettings)
+    assert symbol.typed_settings.limits() == bounds
+    assert symbol.settings["source_dispositions"] == config.job(
+        "job_inference_security_review").settings["source_dispositions"]
+    resolved = json.loads(config.resolved_json)["jobs"][JOB_ID]["settings"]
+    assert {name: resolved[name] for name in bounds} == bounds
+    _validate(SimpleNamespace(config=symbol), {})

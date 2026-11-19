@@ -1426,6 +1426,9 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             )
         elif job_id == "job_cpp_compiled_analysis":
             typed_settings = CppCompiledAnalysisSettings(lane=str(settings.get("lane", "")))
+        elif job_id == "job_cpp_symbol_index":
+            from appsec_review.jobs.job_cpp_symbol_index.settings import CppSymbolIndexSettings
+            typed_settings = CppSymbolIndexSettings.from_mapping(settings)
         elif job_id == "job_codeql_analysis":
             from .codeql import parse_codeql_settings
             typed_settings = parse_codeql_settings(settings)
