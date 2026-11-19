@@ -315,20 +315,20 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5081 | [Admit querying guidance from trusted job wiring](#t-5081-admit-querying-guidance-from-trusted-job-wiring) | review | done (2026-11-19, d492b21b0d7736441a1cb41ca728a6f534235d62) |
 | T-5082 | [Read the accepted dependency task key in OpenVEX](#t-5082-read-the-accepted-dependency-task-key-in-openvex) | evidence | done (2026-11-19, f9f04585ac12449328be849cce45d57d3ffe126a) |
 | T-5083 | [Separate validation execution receipts from source custody and expected compile failures](#t-5083-separate-validation-execution-receipts-from-source-custody-and-expected-compile-failures) | review | done (2026-11-19, 9d141ce1135406d4bf19657c420cefaaa3b70ade) |
-| T-5084 | [Keep composite priority scores and consumer ordering coherent](#t-5084-keep-composite-priority-scores-and-consumer-ordering-coherent) | review | in-progress |
+| T-5084 | [Keep composite priority scores and consumer ordering coherent](#t-5084-keep-composite-priority-scores-and-consumer-ordering-coherent) | review | done (2026-11-19, 01c540f59ab5ff109000179bad40ee49872cde32) |
 | T-5085 | [Rank remediation from the actual accepted finding projection](#t-5085-rank-remediation-from-the-actual-accepted-finding-projection) | review | done (2026-11-19, 7cc5c7c564f0081afb4d3eb94ff6488dae74e0bd) |
 | T-5086 | [Render dossier claims only from explicit accepted evidence](#t-5086-render-dossier-claims-only-from-explicit-accepted-evidence) | review | done (2026-11-19, 7ccbafbb4f72604498c25750f74fd9d3d5a34043) |
 | T-5087 | [Render accepted patches and validation tiers truthfully](#t-5087-render-accepted-patches-and-validation-tiers-truthfully) | review | done (2026-11-19, 7ccbafbb4f72604498c25750f74fd9d3d5a34043) |
 | T-5088 | [Derive report coverage and chain dimensions from certified evidence](#t-5088-derive-report-coverage-and-chain-dimensions-from-certified-evidence) | review | done (2026-11-19, 38707646255ff5122caca9498989847dade2b02e) |
-| T-5089 | [Preserve certified chain severity and dossier availability in executive output](#t-5089-preserve-certified-chain-severity-and-dossier-availability-in-executive-output) | review | open |
+| T-5089 | [Preserve certified chain severity and dossier availability in executive output](#t-5089-preserve-certified-chain-severity-and-dossier-availability-in-executive-output) | review | in-progress |
 | T-5090 | [Require real header release evidence for dependency versions](#t-5090-require-real-header-release-evidence-for-dependency-versions) | evidence | done (2026-11-19, b577faf8fe20300ec0572a1e6780dbdf26b6b350) |
 | T-5091 | [Bind advisory reachability to exact package symbols and bounded call sites](#t-5091-bind-advisory-reachability-to-exact-package-symbols-and-bounded-call-sites) | evidence | done (2026-11-19, 874b13235ffcc340072489cda97da1840d372e2a) |
 | T-5092 | [Preserve clangd call occurrences locations and coverage](#t-5092-preserve-clangd-call-occurrences-locations-and-coverage) | graph | done (2026-11-19, 0c37a8bb505c4f9b6049350002368f86f8d18261) |
 | T-5093 | [Preserve overload linkage and exact AST source identities](#t-5093-preserve-overload-linkage-and-exact-ast-source-identities) | graph | done (2026-11-19, 081722277a076f38db3b95082611c343ee430bc9) |
-| T-5094 | [Preserve failed and partial compiled-analysis outcomes through reuse](#t-5094-preserve-failed-and-partial-compiled-analysis-outcomes-through-reuse) | graph | open |
-| T-5095 | [Preserve full-mode control flow under presentation and AST filtering bounds](#t-5095-preserve-full-mode-control-flow-under-presentation-and-ast-filtering-bounds) | graph | open |
-| T-5096 | [Retain accepted native link source and compile-directory context](#t-5096-retain-accepted-native-link-source-and-compile-directory-context) | build | open |
-| T-5097 | [Select header seeds and enforce actual include-read budgets](#t-5097-select-header-seeds-and-enforce-actual-include-read-budgets) | graph | open |
+| T-5094 | [Preserve failed and partial compiled-analysis outcomes through reuse](#t-5094-preserve-failed-and-partial-compiled-analysis-outcomes-through-reuse) | graph | in-progress |
+| T-5095 | [Preserve full-mode control flow under presentation and AST filtering bounds](#t-5095-preserve-full-mode-control-flow-under-presentation-and-ast-filtering-bounds) | graph | in-progress |
+| T-5096 | [Retain accepted native link source and compile-directory context](#t-5096-retain-accepted-native-link-source-and-compile-directory-context) | build | in-progress |
+| T-5097 | [Select header seeds and enforce actual include-read budgets](#t-5097-select-header-seeds-and-enforce-actual-include-read-budgets) | graph | in-progress |
 | T-5098 | [Preserve alternate graph symbol kinds identities and disputed evidence](#t-5098-preserve-alternate-graph-symbol-kinds-identities-and-disputed-evidence) | graph | done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7) |
 | T-5099 | [Keep alternate graph storage immutable and traversal honestly bounded](#t-5099-keep-alternate-graph-storage-immutable-and-traversal-honestly-bounded) | graph | done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7) |
 | T-5100 | [Preserve artifact index content and unambiguous relationship identities](#t-5100-preserve-artifact-index-content-and-unambiguous-relationship-identities) | evidence | open |
@@ -382,14 +382,14 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5148 | [Honor Rust metadata and dotnet PHP build policies](#t-5148-honor-rust-metadata-and-dotnet-php-build-policies) | build | open |
 | T-5149 | [Keep identical compiler argv distinct across working directories](#t-5149-keep-identical-compiler-argv-distinct-across-working-directories) | build | open |
 | T-5150 | [Apply configured diagnostic tail bounds to every build family](#t-5150-apply-configured-diagnostic-tail-bounds-to-every-build-family) | build | open |
-| T-5151 | [Preserve dependency OpenVEX identity gaps nullable coordinates and telemetry](#t-5151-preserve-dependency-openvex-identity-gaps-nullable-coordinates-and-telemetry) | evidence | in-progress |
-| T-5152 | [Enforce dependency result and aggregate OpenVEX input bounds](#t-5152-enforce-dependency-result-and-aggregate-openvex-input-bounds) | evidence | in-progress |
+| T-5151 | [Preserve dependency OpenVEX identity gaps nullable coordinates and telemetry](#t-5151-preserve-dependency-openvex-identity-gaps-nullable-coordinates-and-telemetry) | evidence | done (2026-11-19, 3dd3c1f441148caf3361796daf7897e847d4a198) |
+| T-5152 | [Enforce dependency result and aggregate OpenVEX input bounds](#t-5152-enforce-dependency-result-and-aggregate-openvex-input-bounds) | evidence | done (2026-11-19, 3dd3c1f441148caf3361796daf7897e847d4a198) |
 | T-5153 | [Reject malformed OWASP model field types within the bounded cell](#t-5153-reject-malformed-owasp-model-field-types-within-the-bounded-cell) | review | open |
 | T-5154 | [Conserve OWASP dispatch and characterization gap accounting](#t-5154-conserve-owasp-dispatch-and-characterization-gap-accounting) | review | open |
 | T-5155 | [Accept resolving OWASP prerequisite citations and adverse qualifications](#t-5155-accept-resolving-owasp-prerequisite-citations-and-adverse-qualifications) | review | open |
 | T-5156 | [Make workbench filters retrieve finding-package records](#t-5156-make-workbench-filters-retrieve-finding-package-records) | review | open |
 | T-5157 | [Resolve bounded PoC declarations from the correct accepted build](#t-5157-resolve-bounded-poc-declarations-from-the-correct-accepted-build) | review | open |
-| T-5158 | [Validate actual PoC calls bounds numeric triggers and denied names](#t-5158-validate-actual-poc-calls-bounds-numeric-triggers-and-denied-names) | review | in-progress |
+| T-5158 | [Validate actual PoC calls bounds numeric triggers and denied names](#t-5158-validate-actual-poc-calls-bounds-numeric-triggers-and-denied-names) | review | done (2026-11-19, 77d228461b7a2ee344cef5587b26ad387a4d2761) |
 | T-5159 | [Bound PoC briefs and retain nested compile qualifications](#t-5159-bound-poc-briefs-and-retain-nested-compile-qualifications) | review | open |
 | T-5160 | [Bind hardening conclusions to the exact binary command and evidence](#t-5160-bind-hardening-conclusions-to-the-exact-binary-command-and-evidence) | evidence | open |
 | T-5161 | [Keep post-build shards immutable and rejected artifact hashes rejected](#t-5161-keep-post-build-shards-immutable-and-rejected-artifact-hashes-rejected) | evidence | open |
@@ -447,7 +447,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5213 | [Align optional intake declarations and Tree-sitter loader behavior](#t-5213-align-optional-intake-declarations-and-tree-sitter-loader-behavior) | pipeline | open |
 | T-5214 | [Verify every native scope checkpoint evidence artifact](#t-5214-verify-every-native-scope-checkpoint-evidence-artifact) | graph | open |
 | T-5215 | [Bind seed omission and provenance accounting into native checkpoint reuse](#t-5215-bind-seed-omission-and-provenance-accounting-into-native-checkpoint-reuse) | graph | open |
-| T-5216 | [Bind dossier Markdown and HTML through publication and the gate](#t-5216-bind-dossier-markdown-and-html-through-publication-and-the-gate) | evidence | open |
+| T-5216 | [Bind dossier Markdown and HTML through publication and the gate](#t-5216-bind-dossier-markdown-and-html-through-publication-and-the-gate) | evidence | in-progress |
 | T-5217 | [Observe exact accepted build payload reads](#t-5217-observe-exact-accepted-build-payload-reads) | evidence | open |
 | T-5218 | [Observe exact private analysis payload reads](#t-5218-observe-exact-private-analysis-payload-reads) | evidence | open |
 | T-5219 | [Observe exact completion payload reads](#t-5219-observe-exact-completion-payload-reads) | evidence | open |
@@ -3869,7 +3869,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5084 — Keep composite priority scores and consumer ordering coherent
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 01c540f59ab5ff109000179bad40ee49872cde32)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RP-01, RP-08. Composite scores above one are divided by 100 downstream; The silence-hunt threshold is not validated and bad values silently change policy.
 - **Scope:** `src/appsec_review/jobs/job_review_prioritization/composite.py`, `src/appsec_review/review/units.py`
@@ -3878,8 +3878,12 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   the maximum contribution allowed by the frozen run configuration while preserving raw
   components and ordering. RP-01 was integrated in
   `ee228e5a90eba054e95653f25137c5c5d43a62db`; combined priority/compiled/Clang verification
-  passed 119 cases in 9.11 s, with no skips or cases over ten seconds. RP-08 threshold
-  validation remains outstanding, so this entry is not closed.
+  passed 119 cases in 9.11 s, with no skips or cases over ten seconds. The State commit fixes
+  RP-08 through the same typed settings used by the job validator: explicit invalid thresholds
+  raise instead of silently coercing/defaulting. Existing zero, positive integers and the
+  omitted default remain; no upper ceiling was invented. New regressions: 7 failed before,
+  10 passed after; affected settings/scoring selection: 37 passed/6.12 s, two workers,
+  seed 5084, no skips or slow cases.
 - **Done when:** Frozen-configuration maximum-contribution normalization preserves the existing 0–1 scale, raw components and ordering without clipping or magnitude-based percentage inference. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-171 (not reopened).
 
@@ -3941,7 +3945,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5089 — Preserve certified chain severity and dossier availability in executive output
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** Archived audit/feedback cases: FR-F02, FR-F04. HTML and executive PDF discard the certified composed chain severity; HTML reports certified dossiers as nonexistent and omits available narratives.
 - **Scope:** `src/appsec_review/jobs/job_final_report_publication/render.py`, `src/appsec_review/reporting/executive_report.py`
@@ -3999,7 +4003,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5094 — Preserve failed and partial compiled-analysis outcomes through reuse
 
-- **State:** open
+- **State:** in-progress
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CPP-F03, CPP-F06, CPP-F07, CPP-F08. Seeded parse failures are marked resolved and cached; CFG failures are cached too; Whole-program AST/IR accepts an unusable replay receipt as clean.
 - **Scope:** `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/seeded.py`
@@ -4008,7 +4012,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5095 — Preserve full-mode control flow under presentation and AST filtering bounds
 
-- **State:** open
+- **State:** in-progress
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CPP-F05, K04, K05. IR block detail limit also erases CFG edges; K04 — High, full-mode IR drops flow.
 - **Scope:** `containers/tools/native-cpp/native.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`; paired callers/tests identified by those cases.
@@ -4017,7 +4021,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5096 — Retain accepted native link source and compile-directory context
 
-- **State:** open
+- **State:** in-progress
 - **Area:** build
 - **Why:** Archived audit/feedback cases: K01, K02, K03. K01 — High, links lost; K02 — High, valid sources removed.
 - **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`
@@ -4026,7 +4030,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5097 — Select header seeds and enforce actual include-read budgets
 
-- **State:** open
+- **State:** in-progress
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CPP-F04, K06. Header seeds through `-isystem`, `-iquote`, `-idirafter` are never selected; K06 — Medium, include scan budget not actual reads.
 - **Scope:** `src/appsec_review/seeding/plan.py`, `src/appsec_review/seeding/units.py`
@@ -4538,21 +4542,28 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5151 — Preserve dependency OpenVEX identity gaps nullable coordinates and telemetry
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 3dd3c1f441148caf3361796daf7897e847d4a198)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: OX-01, OX-02, OX-03, OX-06. Dependency product omits source/configuration identity; Empty/all-positive dependency export drops upstream coverage gaps.
 - **Scope:** `src/appsec_review/jobs/job_openvex_export/dependencies.py`, `src/appsec_review/jobs/job_openvex_export/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_openvex_export.md`; follow-up to closed T-170, T-176 (not reopened).
+  Primary integration `c6797112c7a8b84a0deaed46f5286f65d256d957`; the State commit completes
+  verified historical companion aggregation, accepted/reuse/replay deduplication and separate
+  primary counts. Missing companions remain null measurements, not zero. Main selections:
+  134 passed/130.53 s and 138 passed/28.07 s, two workers, seed 5151, no skips or individual
+  cases over ten seconds. No live export or review was run.
 
 ### T-5152 — Enforce dependency result and aggregate OpenVEX input bounds
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 3dd3c1f441148caf3361796daf7897e847d4a198)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: OX-04, OX-05. Dependency result is read with the document byte limit only at acceptance; Separate dependency reader bypasses aggregate input limits.
 - **Scope:** `src/appsec_review/jobs/job_openvex_export/dependencies.py`, `src/appsec_review/jobs/job_openvex_export/inputs.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_openvex_export.md`; follow-up to closed T-176 (not reopened).
+  Shares the two main selections with T-5151. Dependency/source/schema bindings share one
+  unique-path/hash inventory; result and document bounds apply before writing and on reproof.
 
 ### T-5153 — Reject malformed OWASP model field types within the bounded cell
 
@@ -4601,12 +4612,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5158 — Validate actual PoC calls bounds numeric triggers and denied names
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 77d228461b7a2ee344cef5587b26ad387a4d2761)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: POC-F03, POC-F04, POC-F07, POC-F10. A sink reference counts as a sink call; Loop bounds ignore direction and inclusive endpoints.
 - **Scope:** `src/appsec_review/jobs/job_poc_generation/policy.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_poc_generation.md`.
+  Primary integration `13eb7465b32cc0e8eb88b0c07f61ae9bc70691c1`; the State commit also
+  refuses unproven typed unsigned negation instead of treating `-1u` as mathematical `-1`.
+  Main strict affected selection: 167 passed/13.50 s, two workers, seed 5158, no skips or
+  slow cases. Compiler/model/target execution was faked at external boundaries only.
+  POC-F09 unchecked-trigger aggregation remains separately open under T-5159.
 
 ### T-5159 — Bound PoC briefs and retain nested compile qualifications
 
@@ -5136,7 +5152,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5216 — Bind dossier Markdown and HTML through publication and the gate
 
-- **State:** open
+- **State:** in-progress
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: DP-04. Newly written Markdown/HTML are absent from publication and gate file bindings.
 - **Scope:** `src/appsec_review/jobs/job_dossier_publication/job.py`, `src/appsec_review/jobs/job_final_publication_gate/attachments.py`; paired callers/tests identified by those cases.

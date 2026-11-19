@@ -534,7 +534,8 @@
         "tests/test_poc_policy.py",
         "tests/test_poc_writer.py",
         "tests/unit/job_poc_generation/test_brief_inputs_and_helpers.py",
-        "tests/unit/job_poc_generation/test_job_units.py"
+        "tests/unit/job_poc_generation/test_job_units.py",
+        "tests/unit/job_poc_generation/test_policy_regressions.py"
       ],
       "integration": [
         "tests/integration/job_poc_generation/test_poc_generation_job.py",
