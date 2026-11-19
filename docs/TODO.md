@@ -331,12 +331,12 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5097 | [Select header seeds and enforce actual include-read budgets](#t-5097-select-header-seeds-and-enforce-actual-include-read-budgets) | graph | done (2026-11-19, a6a46b517a7965a53d62b39256f01f07ab09008d) |
 | T-5098 | [Preserve alternate graph symbol kinds identities and disputed evidence](#t-5098-preserve-alternate-graph-symbol-kinds-identities-and-disputed-evidence) | graph | done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7) |
 | T-5099 | [Keep alternate graph storage immutable and traversal honestly bounded](#t-5099-keep-alternate-graph-storage-immutable-and-traversal-honestly-bounded) | graph | done (2026-11-19, a4a68abcbab037514c0a0e5f81cba3b75a5401d7) |
-| T-5100 | [Preserve artifact index content and unambiguous relationship identities](#t-5100-preserve-artifact-index-content-and-unambiguous-relationship-identities) | evidence | open |
+| T-5100 | [Preserve artifact index content and unambiguous relationship identities](#t-5100-preserve-artifact-index-content-and-unambiguous-relationship-identities) | evidence | done (2026-11-19, 0c613e7e3b4bf06f16d021b2a9b7cce5aff9850e) |
 | T-5101 | [Validate artifact scanner native selectors output shapes and staging custody](#t-5101-validate-artifact-scanner-native-selectors-output-shapes-and-staging-custody) | scanners | done (2026-11-19, fdee874d3625f01514d55ed77ecc2e7aaa565ab0) |
 | T-5102 | [Bound artifact scan reads and guarantee archive parser progress](#t-5102-bound-artifact-scan-reads-and-guarantee-archive-parser-progress) | scanners | done (2026-11-19, bc4ae5fc78b3e10192ac12759d94d93d1538cfe0) |
-| T-5103 | [Recognize imported Wasm features and universal Mach-O format correctly](#t-5103-recognize-imported-wasm-features-and-universal-mach-o-format-correctly) | binary | open |
-| T-5104 | [Deliver artifact risks without losing identity or inventing severity](#t-5104-deliver-artifact-risks-without-losing-identity-or-inventing-severity) | review | open |
-| T-5105 | [Bind artifact scan indexes to immutable result content](#t-5105-bind-artifact-scan-indexes-to-immutable-result-content) | evidence | open |
+| T-5103 | [Recognize imported Wasm features and universal Mach-O format correctly](#t-5103-recognize-imported-wasm-features-and-universal-mach-o-format-correctly) | binary | in-progress |
+| T-5104 | [Deliver artifact risks without losing identity or inventing severity](#t-5104-deliver-artifact-risks-without-losing-identity-or-inventing-severity) | review | in-progress |
+| T-5105 | [Bind artifact scan indexes to immutable result content](#t-5105-bind-artifact-scan-indexes-to-immutable-result-content) | evidence | in-progress |
 | T-5106 | [Resolve binary external references and real pseudo-C call sites](#t-5106-resolve-binary-external-references-and-real-pseudo-c-call-sites) | binary | open |
 | T-5107 | [Report stored binary relationships and truncated evidence accurately](#t-5107-report-stored-binary-relationships-and-truncated-evidence-accurately) | binary | open |
 | T-5108 | [Preserve shell dialect and uncertainty under environment bounds](#t-5108-preserve-shell-dialect-and-uncertainty-under-environment-bounds) | build | open |
@@ -482,9 +482,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5248 | [Resolve tree sitter ast conditional audit boundaries](#t-5248-resolve-tree-sitter-ast-conditional-audit-boundaries) | pipeline | open |
 | T-5249 | [Reproduce and repair recurrent Grype database listing selection](#t-5249-reproduce-and-repair-recurrent-grype-database-listing-selection) | data | open |
 | T-5250 | [Repair the three stateful guidance prompt-size test failures](#t-5250-repair-the-three-stateful-guidance-prompt-size-test-failures) | testing | done (2026-11-19, 86d81cae0680fd8fa97ffe6c7fd773fdc55e3a8e) |
-| T-5251 | [Bound shared subprocess stream capture before materialization](#t-5251-bound-shared-subprocess-stream-capture-before-materialization) | pipeline | open |
+| T-5251 | [Bound shared subprocess stream capture before materialization](#t-5251-bound-shared-subprocess-stream-capture-before-materialization) | pipeline | in-progress |
 | T-5252 | [Reconcile inherited documentation contract failures](#t-5252-reconcile-inherited-documentation-contract-failures) | testing | done (2026-11-19, f131b7c48ac4623e71cbe1b93cbc6ec393d6ca95) |
 | T-5253 | [Keep documentation fixtures stable across exact file selections](#t-5253-keep-documentation-fixtures-stable-across-exact-file-selections) | testing | done (2026-11-19, 358c93d7a49003342e2f81159a58762a8f954e4e) |
+| T-5254 | [Keep recovery-map selection checks independently bounded](#t-5254-keep-recovery-map-selection-checks-independently-bounded) | testing | done (2026-11-19, d3603a204ab144bc04ec61da441a82c65d6e60dc) |
 
 ## Active entries
 
@@ -4088,12 +4089,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5100 — Preserve artifact index content and unambiguous relationship identities
 
-- **State:** open
+- **State:** done (2026-11-19, 0c613e7e3b4bf06f16d021b2a9b7cce5aff9850e)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: AI-01, AI-02, AI-03. changed indexed facts reuse stale catalog/member/relationship shards; adding an earlier batch makes a valid existing shard fail as corrupt metadata.
 - **Scope:** `src/appsec_review/jobs/job_artifact_indexing/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_artifact_indexing.md`.
+  Content, coverage, gap reasons and physical shard identity now determine immutable reuse.
+  Conflicting or ambiguous retained link inputs become gaps, not order-dependent exact edges.
+  Main selections: 125 passed/3.68 s and 87 passed/3.57 s, two workers, seed 5100,
+  no skips or slow cases. The directly coupled manual integration assertion was aligned
+  without executing that suite; its pre-existing fixture-admission work remains under T-113.
 
 ### T-5101 — Validate artifact scanner native selectors output shapes and staging custody
 
@@ -4122,7 +4128,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5103 — Recognize imported Wasm features and universal Mach-O format correctly
 
-- **State:** open
+- **State:** in-progress
 - **Area:** binary
 - **Why:** Archived audit/feedback cases: ASA-F04, ASA-F05. Wasm resource/feature summaries omit imported memories and tables; Universal Mach-O files are classified as Java classes.
 - **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/formats.py`
@@ -4131,7 +4137,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5104 — Deliver artifact risks without losing identity or inventing severity
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** Archived audit/feedback cases: ASA-F06, ASA-F08. New packaged-risk helpers never participate in a job task; Prioritization collapses different artifact findings and upgrades unknown severity.
 - **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/findings.py`, `src/appsec_review/jobs/job_artifact_security_analysis/job.py`; paired callers/tests identified by those cases.
@@ -4140,7 +4146,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5105 — Bind artifact scan indexes to immutable result content
 
-- **State:** open
+- **State:** in-progress
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: ASA-F07. Nonreusable reruns overwrite published result identities and reuse stale observation content.
 - **Scope:** `src/appsec_review/jobs/job_artifact_security_analysis/job.py`
@@ -5518,7 +5524,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5251 — Bound shared subprocess stream capture before materialization
 
-- **State:** open
+- **State:** in-progress
 - **Area:** pipeline
 - **Why:** `ContainerExecutor` applies `tool.output_bytes` after its runner returns.
   `_default_runner` uses `subprocess.run(capture_output=True)` and the active-safety path
@@ -5575,6 +5581,22 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   final selection: 140 passed/22.41 s, two workers, seed 5216.
 - **Refs:** `tests/docs/test_docs_identifiers.py`,
   `tests/conftest.py`; receipt documentation verification, 2026-11-19; T-5216.
+
+### T-5254 — Keep recovery-map selection checks independently bounded
+
+- **State:** done (2026-11-19, d3603a204ab144bc04ec61da441a82c65d6e60dc)
+- **Area:** testing
+- **Why:** the 140-case metadata selection passed its assertions, but the recovery-map test
+  took 10.67 s because it performed three independent full-map selections in one case.
+  The mechanical summary omitted that timing; the durable log retained it.
+- **Scope:** keep the static mapping assertions and split actual per-job selection into
+  three independently runnable parameter cases. No selector mock, shared mutable cache,
+  removed assertion, skip or raised time budget.
+- **Done when:** all original assertions remain exercised and the affected test file passes
+  shuffled with bounded parallelism, with every case below ten seconds. Main selection:
+  110 passed/16.98 s, two workers, seed 5254, no skips or slow cases.
+- **Refs:** `tests/test_job_test_selection.py`; compiled/seeding metadata verification,
+  2026-11-19.
 
 ## Legacy backlog
 
