@@ -43,6 +43,12 @@ New repair completion uses focused unit regressions, not automatic live/acceptan
 Native/provider behavior and meaningful live finding quality remain separately unvalidated.
 File ownership and integration are serialized by the campaign coordinator; T-178 remains reserved
 for the separate binary-symbolic design.
+The inventory counts **records**, including duplicate confirmations, historical context,
+documented nondefects and referenced deferred features—not confirmed independent bugs.
+Only bounded defect/test/documentation repairs belong in the actionable repair queue.
+Conditional leads require attribution first; linking a legacy TODO does not authorize implementing
+its broader feature scope or executing its live/acceptance coverage. Preserve those records with
+explicit context/deferred dispositions rather than silently dropping them or scheduling them.
 
 ## Index
 
@@ -306,14 +312,14 @@ for the separate binary-symbolic design.
 | T-033 | [Decide how to assert correctness for large query-set jobs](#t-033-decide-how-to-assert-correctness-for-large-query-set-jobs) | testing | open |
 | T-034 | [Host a dependency proxy so builds can run without external egress](#t-034-host-a-dependency-proxy-so-builds-can-run-without-external-egress) | images | open |
 | T-5080 | [Admit alternate CPG in every consuming review contract](#t-5080-admit-alternate-cpg-in-every-consuming-review-contract) | graph | done (2026-11-19, 9efede41a4ab1e1bb5984cc89a5976a224a331ec) |
-| T-5081 | [Compose required querying guidance within the approved procedure bound](#t-5081-compose-required-querying-guidance-within-the-approved-procedure-bound) | review | blocked |
+| T-5081 | [Admit querying guidance from trusted job wiring](#t-5081-admit-querying-guidance-from-trusted-job-wiring) | review | done (2026-11-19, d492b21b0d7736441a1cb41ca728a6f534235d62) |
 | T-5082 | [Read the accepted dependency task key in OpenVEX](#t-5082-read-the-accepted-dependency-task-key-in-openvex) | evidence | done (2026-11-19, f9f04585ac12449328be849cce45d57d3ffe126a) |
-| T-5083 | [Separate validation execution receipts from source custody and expected compile failures](#t-5083-separate-validation-execution-receipts-from-source-custody-and-expected-compile-failures) | review | in-progress |
-| T-5084 | [Keep composite priority scores and consumer ordering coherent](#t-5084-keep-composite-priority-scores-and-consumer-ordering-coherent) | review | open |
-| T-5085 | [Rank remediation from the actual accepted finding projection](#t-5085-rank-remediation-from-the-actual-accepted-finding-projection) | review | in-progress |
-| T-5086 | [Render dossier claims only from explicit accepted evidence](#t-5086-render-dossier-claims-only-from-explicit-accepted-evidence) | review | open |
-| T-5087 | [Render accepted patches and validation tiers truthfully](#t-5087-render-accepted-patches-and-validation-tiers-truthfully) | review | open |
-| T-5088 | [Derive report coverage and chain dimensions from certified evidence](#t-5088-derive-report-coverage-and-chain-dimensions-from-certified-evidence) | review | open |
+| T-5083 | [Separate validation execution receipts from source custody and expected compile failures](#t-5083-separate-validation-execution-receipts-from-source-custody-and-expected-compile-failures) | review | done (2026-11-19, 9d141ce1135406d4bf19657c420cefaaa3b70ade) |
+| T-5084 | [Keep composite priority scores and consumer ordering coherent](#t-5084-keep-composite-priority-scores-and-consumer-ordering-coherent) | review | in-progress |
+| T-5085 | [Rank remediation from the actual accepted finding projection](#t-5085-rank-remediation-from-the-actual-accepted-finding-projection) | review | done (2026-11-19, 7cc5c7c564f0081afb4d3eb94ff6488dae74e0bd) |
+| T-5086 | [Render dossier claims only from explicit accepted evidence](#t-5086-render-dossier-claims-only-from-explicit-accepted-evidence) | review | in-progress |
+| T-5087 | [Render accepted patches and validation tiers truthfully](#t-5087-render-accepted-patches-and-validation-tiers-truthfully) | review | in-progress |
+| T-5088 | [Derive report coverage and chain dimensions from certified evidence](#t-5088-derive-report-coverage-and-chain-dimensions-from-certified-evidence) | review | in-progress |
 | T-5089 | [Preserve certified chain severity and dossier availability in executive output](#t-5089-preserve-certified-chain-severity-and-dossier-availability-in-executive-output) | review | open |
 | T-5090 | [Require real header release evidence for dependency versions](#t-5090-require-real-header-release-evidence-for-dependency-versions) | evidence | open |
 | T-5091 | [Bind advisory reachability to exact package symbols and bounded call sites](#t-5091-bind-advisory-reachability-to-exact-package-symbols-and-bounded-call-sites) | evidence | open |
@@ -475,6 +481,7 @@ for the separate binary-symbolic design.
 | T-5247 | [Resolve third party data sync conditional audit boundaries](#t-5247-resolve-third-party-data-sync-conditional-audit-boundaries) | pipeline | open |
 | T-5248 | [Resolve tree sitter ast conditional audit boundaries](#t-5248-resolve-tree-sitter-ast-conditional-audit-boundaries) | pipeline | open |
 | T-5249 | [Reproduce and repair recurrent Grype database listing selection](#t-5249-reproduce-and-repair-recurrent-grype-database-listing-selection) | data | open |
+| T-5250 | [Repair the three stateful guidance prompt-size test failures](#t-5250-repair-the-three-stateful-guidance-prompt-size-test-failures) | testing | open |
 
 ## Active entries
 
@@ -3804,14 +3811,22 @@ for the separate binary-symbolic design.
 - **Done when:** Real published alternate shards are admitted by all three consumers; removing each grant is rejected in focused pairing tests.
 - **Refs:** `audit-results/job-audit-job_code_graph_index.md`, `audit-results/job-audit-job_owasp_control_assessment.md`; follow-up to closed T-169, T-173 (not reopened).
 
-### T-5081 — Compose required querying guidance within the approved procedure bound
+### T-5081 — Admit querying guidance from trusted job wiring
 
-- **State:** blocked
+- **State:** done (2026-11-19, d492b21b0d7736441a1cb41ca728a6f534235d62)
 - **Area:** review
-- **Why:** Archived audit/feedback cases: FB-QUERY-ATTACH. Compose required querying guidance without exceeding the two-procedure limit.
-- **Scope:** `src/appsec_review/guidance/skills.py`, `src/appsec_review/jobs/job_inference_security_review/evidence_fulfillment.py` Blocked decision: Choose a consolidated registered procedure or an explicitly approved composition contract; do not silently drop either required role procedure or querying guidance.
-- **Done when:** Real hunter/red control-gap composition retains required guidance, deterministic selection and pinned identities without raising the bound or widening capabilities; focused assembly tests pass.
-- **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory); follow-up to closed T-173 (not reopened).
+- **Why:** FB-QUERY-ATTACH: a local two-procedure guard rejected guidance already wired into
+  the job. The user decided admission follows trusted job wiring, not an arbitrary procedure count.
+- **Scope:** `src/appsec_review/jobs/job_inference_security_review/evidence_fulfillment.py`,
+  its real composition/authority regressions and related guidance documentation. Preserve
+  registered loading, source hashes and actual request budgets; do not grant unwired capabilities.
+  Ready commit `c79929a22b16e1abaff75acde5473dc92598916c` was integrated as the State commit.
+- **Done when:** supported wired combinations compose without the count guard and invalid
+  authority still fails. Owner differential: 12 fixed, 0 new, 3 unchanged stateful-size failures.
+  Coordinator main check: `tests/test_guidance_procedures.py`, 53 passed in 4.23 s, no skips
+  or slow cases. The three unchanged failures remain open under T-5250, not relabelled passes.
+- **Refs:** user decision and coordinator handoff, 2026-11-19;
+  `docs/architecture/guidance-procedures.md`; follow-up to closed T-173 (not reopened).
 
 ### T-5082 — Read the accepted dependency task key in OpenVEX
 
@@ -3824,7 +3839,7 @@ for the separate binary-symbolic design.
 
 ### T-5083 — Separate validation execution receipts from source custody and expected compile failures
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 9d141ce1135406d4bf19657c420cefaaa3b70ade)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RV-F01, FB-COMPILE-STOP. Successful safety-scoped compiler checks always contaminate the source manifest; Contain expected compiler failure without swallowing genuine ReviewStopped.
 - **Scope:** `src/appsec_review/container_runtime/build_executor.py`, `src/appsec_review/jobs/job_remediation_validation/job.py`; paired callers/tests identified by those cases.
@@ -3833,46 +3848,59 @@ for the separate binary-symbolic design.
 
 ### T-5084 — Keep composite priority scores and consumer ordering coherent
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RP-01, RP-08. Composite scores above one are divided by 100 downstream; The silence-hunt threshold is not validated and bad values silently change policy.
 - **Scope:** `src/appsec_review/jobs/job_review_prioritization/composite.py`, `src/appsec_review/review/units.py`
+  Coordinator-owned `priority-scale` assignment, based on `d492b21b0d7736441a1cb41ca728a6f534235d62`.
+  The owner reports that RP-01 needs a bounded monotonic representation decision before
+  implementation; its red regression continues. RP-08 remains tracked here but, according to
+  the owner, is outside that active assignment. Neither clamping, removing the consumer bound
+  nor choosing a normalization/squashing policy is authorized by this ledger update.
 - **Done when:** Boost combinations preserve a documented score representation and monotonic ordering; no indiscriminate clamping or magnitude-based percentage inference. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-171 (not reopened).
 
 ### T-5085 — Rank remediation from the actual accepted finding projection
 
-- **State:** in-progress
+- **State:** done (2026-11-19, 7cc5c7c564f0081afb4d3eb94ff6488dae74e0bd)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RMP-01. Risk-first ordering is disconnected from real accepted findings.
 - **Scope:** `docs/operations/job_remediation_planning.md`, `src/appsec_review/jobs/job_remediation_planning/prioritization.py`; paired callers/tests identified by those cases.
 - **Done when:** Pair real accepted projections with capped prioritization; critical and higher-risk items cannot be demoted by missing flat aliases. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
-- **Refs:** `audit-results/job-audit-job_remediation_planning.md`.
+- **Refs:** `audit-results/job-audit-job_remediation_planning.md`;
+  documentation commit `84ac695e5a5280f72f71a7434ce92ddfc81ee2c9`.
+  Coordinator combined main checks before guidance: 111 passed in 13.63 s and 197 passed
+  in 5.65 s, no failures, skips or slow cases; these are combined checks, not per-fix counts.
 
 ### T-5086 — Render dossier claims only from explicit accepted evidence
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** Archived audit/feedback cases: DP-01, DP-03. Fallback dossier sections invent taint paths and guard/verification conclusions; Markdown dossiers silently drop decision basis, qualifications, risk and provenance.
 - **Scope:** `src/appsec_review/reporting/dossiers.py`
+  One coordinator-owned assignment with T-5087, based on
+  `d492b21b0d7736441a1cb41ca728a6f534235d62`; do not assign their shared renderer concurrently.
 - **Done when:** Missing taint/guard/verification evidence generates no invented claims, and Markdown retains available counterevidence, qualifications and provenance. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dossier_publication.md`; follow-up to closed T-176 (not reopened).
 
 ### T-5087 — Render accepted patches and validation tiers truthfully
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** Archived audit/feedback cases: DP-02, RV-F05. Remediation projection cannot render the actual accepted patch format; Dossier labels a statically failed, rejected patch `static_checked`.
 - **Scope:** `src/appsec_review/jobs/job_dossier_publication/inputs.py`, `src/appsec_review/reporting/dossiers.py`
+  Owned with T-5086 as one assignment at `d492b21b0d7736441a1cb41ca728a6f534235d62`.
 - **Done when:** Real exact-patch and rejected/static/build validation projections retain patch contents and never imply stronger assurance than accepted status. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_dossier_publication.md`, `audit-results/job-audit-job_remediation_validation.md`; follow-up to closed T-176 (not reopened).
 
 ### T-5088 — Derive report coverage and chain dimensions from certified evidence
 
-- **State:** open
+- **State:** in-progress
 - **Area:** review
 - **Why:** Archived audit/feedback cases: FR-F01, FR-F03. A withheld, unconfirmed package can certify 100% domain coverage with no findings; Radar ignores every gate-shaped chain membership.
 - **Scope:** `src/appsec_review/jobs/job_final_report_publication/report.py`, `src/appsec_review/reporting/dimensions.py`
+  Coordinator-owned `report-coverage` assignment, based on
+  `d492b21b0d7736441a1cb41ca728a6f534235d62`.
 - **Done when:** Withheld or uninspected work cannot become verified-no-findings; gate-shaped chain memberships produce correct dimension counts. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_final_report_publication.md`; follow-up to closed T-176 (not reopened).
 
@@ -5339,6 +5367,25 @@ for the separate binary-symbolic design.
   unsupported and unpinned alternatives in focused units. Live sync and feed freshness remain
   separately outstanding; neither is an automatic repair gate.
 - **Refs:** user feedback attachment, 2026-11-19; T-106; `audit-results/job-audit-job_third_party_data_sync.md`.
+
+### T-5250 — Repair the three stateful guidance prompt-size test failures
+
+- **State:** open
+- **Area:** testing
+- **Why:** after T-5081, three unchanged
+  `tests/test_stateful_guidance.py::test_stateful_selection_uses_only_trusted_dispatch_ids`
+  cases still fail the strict rendered-prompt assertion `< 26000` bytes. All use
+  `hypothesis_hunter-control_gap`: `authentication_session` is 27579 bytes,
+  `business_logic_abuse` is 26761, and `filesystem_resources` is 27051.
+- **Scope:** attribute these exact fixtures and their composed guidance without undoing
+  trusted job-wiring admission. Preserve required guidance and authority; do not raise the
+  asserted bound, silently drop wired procedures, weaken assertions or label these passes.
+- **Done when:** each exact parameterized node passes alone and shuffled/parallel with its
+  meaningful size/selection/custody assertions intact; record the actual rendered byte counts.
+  No model/provider or live review is required for these unit regressions.
+- **Refs:** `tests/test_stateful_guidance.py`;
+  `tests/test_guidance_procedures.py`; coordinator differential (12 fixed, 0 new,
+  3 unchanged failures), 2026-11-19; T-5081.
 
 ## Legacy backlog
 
