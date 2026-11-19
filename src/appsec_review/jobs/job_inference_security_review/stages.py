@@ -631,7 +631,7 @@ def finding_judge(verdicts: Sequence[JudgeVerdict]) -> dict[str, Any] | None:
             "disagrees_with_state": overall in (JudgeVerdictValue.BLUE_CORRECT, JudgeVerdictValue.NEITHER),
             "judges": [{"verdict_id": item.verdict_id, "verdict": item.verdict.value, "cell_id": item.cell_id,
                         "judge_model_distinct": item.judge_model_distinct, "reason": item.reason[:2000]}
-                       for item in ordered[:8]]}
+                       for item in ordered]}
 
 
 def judge_cells_by_claim(projection: Projection) -> dict[str, list[CellRecord]]:

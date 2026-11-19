@@ -89,7 +89,9 @@ def test_objects_closed_strings_and_arrays_bounded(name: str) -> None:
             if node.get("type") == "string":
                 assert {"maxLength", "pattern", "enum", "const"} & set(node), node
             if node.get("type") == "array":
-                assert "maxItems" in node, node
+                # This ledger projection retains all configured, admitted judge work across rounds.
+                assert ("maxItems" in node
+                        or node is DEFS["finding_judge_verdict"]["properties"]["judges"]), node
             for value in node.values():
                 walk(value)
         elif isinstance(node, list):
@@ -265,6 +267,22 @@ def _finding() -> dict:
         "ship_block": _ship_block(),
         "gaps": [ident("gap")], "provenance": {"run_manifest_sha256": SHA, "ledger_head_sha256": SHA},
     }
+
+
+@pytest.mark.parametrize("damage", ["empty", "missing-field", "extra-field", "invalid-verdict"])
+def test_finding_judge_list_retains_minimum_and_closed_element_constraints(damage):
+    document = _finding()
+    judges = document["judge_verdict"]["judges"]
+    if damage == "empty":
+        judges.clear()
+    elif damage == "missing-field":
+        del judges[0]["cell_id"]
+    elif damage == "extra-field":
+        judges[0]["unregistered"] = True
+    else:
+        judges[0]["verdict"] = "unregistered"
+    assert not valid("finding-package", document)
+    assert SchemaSet(ROOT).errors("finding-package", document)
 
 
 @pytest.mark.parametrize("name,build", [("claim", _claim), ("score-package", _score), ("finding-package", _finding)])

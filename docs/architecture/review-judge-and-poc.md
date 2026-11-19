@@ -127,6 +127,13 @@ without a resolvable citation becomes `unresolved`.
 4. Publishes `judge_verdict` in the finding package and the report. A confirmed claim whose judge sided with blue
    is shown with that disagreement, never hidden.
 
+The finding's `judges` list retains every admitted verdict in canonical verdict-id order, including repeated
+rounds and packages for the same claim. Configured round, cell and resource budgets bound the admitted work;
+publication does not impose a second count limit. This cardinality relaxation retains `finding-package/2`:
+the field shapes, meanings, minimum list size and closed element constraints are unchanged, and historical
+valid packages keep their bytes and identities. The accepted reader still requires exact agreement with
+all ledger verdicts; older readers with the eight-item validator must be updated before reading larger lists.
+
 ## 4. PoC candidates
 
 After adjudication, the inference handoff lists `poc_candidates`: every claim that meets **all** of

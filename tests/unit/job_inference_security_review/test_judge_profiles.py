@@ -7,15 +7,24 @@ import pytest
 from appsec_review.config.inference_review import PocCandidateSettings
 from appsec_review.inference import ModelResult
 from appsec_review.inference.errors import ProviderError
-from appsec_review.jobs.accepted_review import poc_candidate_agrees
+from appsec_review.jobs.accepted_review import load_accepted_review, poc_candidate_agrees
+from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound_json
 from appsec_review.jobs.job_inference_security_review import stages, teams
+from appsec_review.retrieval import RetrievalCore
+from appsec_review.review.accounting import exact_accounting
+from appsec_review.review.budget import JobBudget
 from appsec_review.review.ledger import LedgerWriter, merge_shards, project
 from appsec_review.review.models import (
     Admissibility, CellStatus, Claim, EvidenceRelation, Lane, Predicate, RelationKind, Role,
 )
 from appsec_review.review.package_view import PackageView
 from appsec_review.review.ship_block import SEVERITY_PROVIDER
+from appsec_review.review.teams import ReviewTeamSemaphore
+from appsec_review.storage import atomic_json, file_sha256
+from tests.downstream_contract_fixture import fixture as accepted_fixture
 from tests.fixtures.inference_review.fake_infer import ScriptedInfer
+from tests.handoff_fixture import write_fixture_handoff
+from tests.review.test_inference_review_schemas import validator as schema_validator
 from tests.unit.job_inference_security_review.test_t173_evidence_and_budgets import (
     evidence_core, review_context,  # noqa: F401
 )
@@ -72,7 +81,7 @@ def _run_judge(ctx, claim, mode, result, *, strategy="judge-1"):
     return plan.cell
 
 
-def _publish(ctx, claim, result, root):
+def _publish(ctx, claim, result, root, *, scores=None):
     ledger_path = root / "team.jsonl"
     writer = LedgerWriter(ledger_path, "lead_review.teams")
     writer.propose_claim(claim)
@@ -94,10 +103,12 @@ def _publish(ctx, claim, result, root):
     adjudication = stages.apply_policy(merged, projection, root / "adjudication.jsonl",
                                        "adjudicate.apply_policy")
     assert adjudication["states"] == {"supported": 1}
+    projection = project(merge_shards([ledger_path, root / "adjudication.jsonl"]).events)
+    if scores is None:
+        scores = [{"claim_id": claim.claim_id, "provider": SEVERITY_PROVIDER, "score_id": "score-" + "d" * 64,
+                   "technical_severity": "high"}]
     findings = stages.finding_packages(
-        projection, adjudication["adjudications"], merged,
-        [{"claim_id": claim.claim_id, "provider": SEVERITY_PROVIDER, "score_id": "score-" + "d" * 64,
-          "technical_severity": "high"}],
+        projection, adjudication["adjudications"], merged, scores,
         manifest_sha256=ctx.core.manifest_sha256, out_dir=root / "findings", schemas=ctx.schemas)
     finding, = findings
     package = json.loads((root / "findings" / finding["file"]).read_text())
@@ -107,6 +118,117 @@ def _publish(ctx, claim, result, root):
                            "trigger": [], "input_format": "query", "preconditions": [],
                            "expected_observation": "query reaches sink", "unknowns": []}}
     return finding, package, stages.poc_candidates(findings, [brief], PocCandidateSettings()), projection
+
+
+@pytest.mark.parametrize("rounds,judges_per_claim", [(1, 1), (2, 4), (2, 5)],
+                         ids=["historical-one", "historical-eight", "multi-round-ten"])
+def test_all_round_judges_reach_the_accepted_consumer(review_context, tmp_path, rounds, judges_per_claim):
+    (tmp_path / "accepted").mkdir()
+    case = accepted_fixture(tmp_path / "accepted")
+    prior = case.accepted_review.handoff
+    old_review = read_bound_json(case.root, prior["outputs"]["publication.publish_handoff"]["artifact"])
+    old_package_path = case.root / case.review["packages"][0]["path"]
+    old_package_bytes = old_package_path.read_bytes()
+    ctx = review_context
+    ctx.run_root, ctx.run_id = case.root, case.root.name
+    ctx.core = RetrievalCore(case.root.parent, case.root.name)
+    ctx.receipts_root = case.root / "data" / "judge-round-cells"
+    ctx.covers = {"generalist": ()}
+    ctx.index_names = tuple(sorted(ctx.core.indexes))
+    settings = ctx.settings
+    ctx.settings = replace(
+        settings,
+        teams=replace(settings.teams, red_per_team=1, blue_per_team=0, verifier_per_team=1),
+        roles={**settings.roles, Role.ADJUDICATION_JUDGE: replace(
+            settings.judge, judges_per_claim=judges_per_claim, workers=1)},
+        rounds=replace(settings.rounds, max_rounds=rounds, stable_rounds_required=1),
+        retry=replace(settings.retry, max_attempts=1))
+    ctx.budget = JobBudget.for_run(case.root, ctx.settings.budgets)
+    ctx.semaphore = ReviewTeamSemaphore.for_run(case.root, 1)
+    package_id = case.package["package_id"]
+    package_set = read_bound_json(case.root, prior["outputs"]["packages.assemble_lead_packages"]["artifact"])
+    package_ref, = package_set["packages"]
+    affected, lead = case.ids["affected"], case.ids["copy"]
+    work = teams.PackageWork(package_id, Lane.LEAD, package_ref["sha256"], case.package,
+                             (1, package_id), "b" * 64, (affected, lead), None)
+    ctx._views[package_id] = PackageView(
+        {"leads": [{"ref": lead}]}, {"K1": affected, "L1": lead}, {},
+        frozenset(), (lead,), frozenset((affected, lead)))
+
+    def infer(request, **kwargs):
+        if request.role == Role.RED_TEAM_ANALYST.value:
+            return ScriptedInfer._final({
+                "claims": [{"id": "p1", "leads": ["L1"], "affected": ["K1"],
+                            "security_predicate": "sql_injection",
+                            "statement": "Untrusted input reaches a query.",
+                            "support": {"affected_construct": ["K1"]}}],
+                "no_claim": [], "blocked": [],
+            })
+        if request.role == Role.INDEPENDENT_VERIFIER.value:
+            return ScriptedInfer._final({
+                "disposition": "insufficient_evidence", "per_predicate": {}, "why": "More evidence is needed."})
+        assert request.role == Role.ADJUDICATION_JUDGE.value
+        sides = request.task_input["input"]["sides"]
+        side = next(letter for letter, value in sides.items() if value["stance"] == "supports")
+        cites = sides[side]["per_predicate"]["affected_construct"]["cites"]
+        return ScriptedInfer._final({
+            "verdict": side, "per_predicate": {"affected_construct": {"verdict": side, "cites": cites}},
+            "reason": "The cited construct supports this side.",
+        })
+
+    ctx.infer = infer
+    result = teams.run_team(ctx, work, launch=True)
+    claim, = result.claims
+    assert len(result.rounds) == rounds
+    if rounds > 1:
+        assert result.rounds[-1]["stop_reason"] == "stable"
+    judges = [cell for cell in result.cells if cell.role is Role.ADJUDICATION_JUDGE]
+    assert len(judges) == rounds * judges_per_claim
+    assert all(cell.status is CellStatus.SUCCEEDED for cell in judges)
+    assert len(result.judge_verdicts) == len(judges)
+
+    attempt = case.root / "data" / "jobs" / "job_inference_security_review" / "attempts" / "attempt_0002"
+    directory = attempt / "steps" / "publication" / "tasks" / "publish_handoff"
+    finding, package, candidates, projection = _publish(ctx, claim, result, directory, scores=())
+    assert candidates == []  # This fixture has no severity score; do not fabricate one for acceptance.
+    ctx.schemas.validate("finding-package", package)
+    schema_validator("finding-package").validate(package)
+    shards = [directory / "team.jsonl", directory / "adjudication.jsonl"]
+    stages.write_ledger(stages.merge_verified(shards), projection, directory / "ledger")
+    accounting = exact_accounting(projection, {cell.cell_id: cell.lane for cell in result.cells},
+                                  {package_id: Lane.LEAD}, incomplete_gap_ratio=0.5)
+    handoff = stages.build_handoff(
+        run_id=case.root.name, manifest_sha256=ctx.core.manifest_sha256,
+        configuration_sha256=old_review["configuration_sha256"], projection=projection, accounting=accounting,
+        shards=stages.shard_records(case.root, shards), findings=[finding], scores=(),
+        package_manifest_sha256=old_review["package_manifest_sha256"],
+        lead_package_manifest_sha256=old_review["lead_package_manifest_sha256"],
+        coverage=old_review["coverage_matrix"], possible=(), schemas=ctx.schemas,
+        ship_block_policy_sha256=package["ship_block"]["policy_sha256"],
+        verification=ctx.settings.verifier_distinctness(), attack_chain_manifest=old_review["attack_chain_manifest"])
+    atomic_json(directory / "review.json", handoff)
+    outputs = {**prior["outputs"],
+               "publication.publish_claim_ledger": {
+                   "artifact": artifact_ref(case.root, directory / "ledger" / "ledger-head.json")},
+               "publication.publish_handoff": {
+                   "schema": prior["outputs"]["publication.publish_handoff"]["schema"],
+                   "artifact": artifact_ref(case.root, directory / "review.json")}}
+    declarations = prior["dataset_contract_sha256"]
+    old_claim = json.loads((case.root / prior["resolving_paths"]["attempt"] / "claim.json").read_bytes())
+    assert old_claim["dataset_contract"]["sha256"] == declarations
+    atomic_json(attempt / "claim.json", {"dataset_contract": old_claim["dataset_contract"]})
+    path = write_fixture_handoff(case.root, attempt / "handoff.json", {
+        "job_id": "job_inference_security_review", "source_fingerprint": case.snapshot,
+        "outputs": outputs, "upstream_handoff_sha256": prior["upstream_handoff_sha256"]})
+    atomic_json(attempt.parent.parent / "latest.json",
+                {"handoff_path": path.relative_to(case.root).as_posix(), "handoff_sha256": file_sha256(path)})
+    accepted = load_accepted_review(case.root, ctx.schemas, max_packages=10)
+    accepted_package, = accepted.document["packages"]
+    expected_ids = sorted(verdict.verdict_id for verdict in result.judge_verdicts)
+    assert accepted_package["judge_verdict"]["verdict_ids"] == expected_ids
+    assert [item["verdict_id"] for item in package["judge_verdict"]["judges"]] == expected_ids
+    assert old_package_path.read_bytes() == old_package_bytes
+    ctx.schemas.validate("finding-package", json.loads(old_package_bytes))
 
 
 @pytest.mark.parametrize("mode,status", [

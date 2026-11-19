@@ -1196,7 +1196,7 @@
         "judges": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 8,
+          "description": "All admitted judge verdicts for the claim, ordered by verdict identity. Cardinality follows configured admitted review work, not a second serialization limit.",
           "items": {
             "type": "object",
             "additionalProperties": false,
