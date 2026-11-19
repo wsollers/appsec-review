@@ -106,6 +106,8 @@ def test_missing_recipe_cannot_borrow_a_nonnull_accepted_refinement(tmp_path):
 
 
 def test_direct_resume_planner_reuses_valid_releases_and_rejects_stale_recipe(tmp_path):
+    from tests.release_support import write_release
+    write_release(tmp_path, ("job_target_analysis_plan", "job_project_build"))
     runner, root, _graph, action = accepted_native(tmp_path)
     calls = []
     job = native_cache_job(action, calls)

@@ -449,9 +449,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise ValueError(f"job is not in wave1_review: {args.job_id}")
         upstream = accepted_upstream_handoffs(RunStore(config.runtime.runs_dir).resolve(args.run_id),
                                               entry["upstream_handoffs"])
-    inputs = launch_inputs(job, target=args.target or configured_target(
-                               config.runtime.repository_root, config.target_acquisition.targets_dir),
-                           upstream_handoffs=upstream)
     if args.job_id == "job_build_iteration":
         if not args.run_id or not args.iteration_request:
             parser().error("job_build_iteration requires --run-id and --iteration-request")
@@ -467,6 +464,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         if args.iteration_request:
             parser().error("--iteration-request is only valid for job_build_iteration")
+        inputs = launch_inputs(job, target=args.target or configured_target(
+                                   config.runtime.repository_root, config.target_acquisition.targets_dir),
+                               upstream_handoffs=upstream)
         outcome = launch(JobRunner(config), job, inputs, run_id=args.run_id, trigger=args.trigger)
     print(json.dumps(outcome, sort_keys=True))
     return 0

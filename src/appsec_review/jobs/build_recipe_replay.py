@@ -221,7 +221,7 @@ def _product_views(products: tuple[ProductSpec, ...]) -> list[dict[str, Any]]:
 
 
 def _validate_context(workspace: BuildWorkspace, context: ReplayContext,
-                      writer: WorkspaceWriter) -> dict[str, Any]:
+                      writer: WorkspaceWriter, *, selected_revision: bool = False) -> dict[str, Any]:
     if workspace.replay_id is not None or not context.run_id or not context.failed_attempt_id:
         raise ReplayRefused("invalid_context", "a named production run and failed attempt are required")
     if context.run_id != workspace.run_dir.name:
@@ -304,16 +304,30 @@ def _validate_context(workspace: BuildWorkspace, context: ReplayContext,
     # failed command has left the production mount dirty. Never scan/restore it here.
     generation = writer.committed_generation(context.generation_identity)
     state = writer.state()
-    if state["generation"] != context.generation_identity:
+    if not selected_revision and state["generation"] != context.generation_identity:
         raise ReplayRefused("stale_generation", "production advanced since the selected failure")
     if state["condition"] == "running":
         raise ReplayRefused("active_production_attempt", "production has an unfinished active command")
-    if state["attempt"] is not None and state["attempt"]["attempt_id"] != context.failed_attempt_id:
+    if (not selected_revision and state["attempt"] is not None
+            and state["attempt"]["attempt_id"] != context.failed_attempt_id):
         raise ReplayRefused("stale_failure", "production now names a different failed attempt")
     if generation["input_identity"] != context.inputs["source"]["sha256"]:
         raise ReplayRefused("source_mismatch", "workspace input differs from the frozen source evidence")
     if context.binding.node_id in generation["accepted"]:
         raise ReplayRefused("node_already_accepted", "the failed node has since succeeded")
+    if selected_revision:
+        # A selected recipe outlives its failure generation; a new trial or promotion does not.
+        current = writer.committed_generation()
+        if current["input_identity"] != generation["input_identity"]:
+            raise ReplayRefused("source_mismatch", "selected recipe has incompatible current source custody")
+        for ref in current["accepted"].values():
+            binding = _read(workspace.run_dir, ref)["binding"]
+            if any(binding[key] != getattr(context.binding, key) for key in (
+                    "source_identity", "graph_identity", "configuration_identity")):
+                raise ReplayRefused("upstream_mismatch", "current production has incompatible frozen inputs")
+        if any(current["accepted"].get(upstream.binding.node_id) != dict(upstream.reference)
+               for upstream in context.upstreams):
+            raise ReplayRefused("upstream_mismatch", "selected recipe prerequisite products have changed")
     identities: list[str] = []
     for upstream in context.upstreams:
         ref = dict(upstream.reference)
@@ -627,9 +641,9 @@ def replay_recipe(workspace: BuildWorkspace, context: ReplayContext, candidate: 
 
 
 def _verified_trial(workspace: BuildWorkspace, context: ReplayContext,
-                    trial_ref: Mapping[str, Any], writer: WorkspaceWriter
+                    trial_ref: Mapping[str, Any], writer: WorkspaceWriter, *, selected_revision: bool = False
                     ) -> tuple[dict[str, Any], dict[str, Any], BuildProfile | None]:
-    graph = _validate_context(workspace, context, writer)
+    graph = _validate_context(workspace, context, writer, selected_revision=selected_revision)
     run = workspace.run_dir
     trial = _load(run, "trials", trial_ref)
     if (trial.get("schema") != REPLAY_SCHEMA or trial.get("status") != "SUCCEEDED"
@@ -833,7 +847,8 @@ def load_promoted_revision(workspace: BuildWorkspace, context: ReplayContext,
                 or promotion.get("production_reexecution_required") is not True
                 or promotion.get("trial_products_reusable_in_production") is not False):
             raise ReplayRefused("invalid_promotion", "promotion is not a recipe-only reexecution input")
-        trial, recipe, profile = _verified_trial(workspace, context, promotion["trial"], writer)
+        trial, recipe, profile = _verified_trial(
+            workspace, context, promotion["trial"], writer, selected_revision=True)
         if (promotion.get("context") != trial["context"] or promotion.get("recipe") != recipe
                 or promotion.get("recipe_identity") != canonical_json_sha256(recipe)
                 or promotion.get("image_identity") != trial["binding"]["image_identity"]

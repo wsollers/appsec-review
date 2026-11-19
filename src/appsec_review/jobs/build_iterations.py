@@ -113,12 +113,14 @@ class BuildIterations:
             raise ValueError("iteration ledger is malformed; refusing to invent accepted state")
         return value
 
-    def _binding(self, uid: str, upstreams: Sequence[str]) -> NodeBinding:
-        dispatch = self.dispatches[uid]
-        from appsec_review.jobs.build_topology_artifacts import guard_cache_action as guard_action
+    def _binding(self, uid: str, upstreams: Sequence[str], *,
+                 request: Mapping[str, Any] | None = None) -> NodeBinding:
+        dispatch = self.dispatches[uid] if request is None else request["dispatch"]
+        from appsec_review.jobs.build_topology_artifacts import guard_action, guard_cache_action
         try:
-            selected_proof = guard_action(self.run_root, dispatch, graph=self.graph,
-                                          configuration=self.configuration, releases=self.releases)
+            guard = guard_cache_action if request is None else guard_action
+            selected_proof = guard(self.run_root, dispatch, graph=self.graph,
+                                   configuration=self.configuration, releases=self.releases)
         except ValueError as error:
             raise ReconstructionMiss(str(error)) from error
         missing = {"platform", "build_toolchain", "validation"} - self.releases.keys()
@@ -138,7 +140,8 @@ class BuildIterations:
             digest(self.configuration), digest(dispatch["recipe"]), str(image["image_id"]),
             self.releases["build_toolchain"], tuple(sorted(upstreams)),
             self.execution_identity, digest({"policy": self.output_policy_identity,
-                                             "products": self.product_overrides.get(uid),
+                                             "products": (self.product_overrides.get(uid) if request is None
+                                                          else request.get("products")),
                                              "selected_proof": selected_proof}),
         )
 
@@ -284,24 +287,32 @@ class BuildIterations:
                     refusals[uid] = "retained producer has no selected recipe admission for workspace reconstruction"
                     continue
                 try:
-                    from appsec_review.jobs.build_topology_artifacts import guard_cache_action
+                    from appsec_review.jobs.build_topology_artifacts import guard_action
                     from appsec_review.jobs.build_topology import verify_product_contract
                     completion = read_reference(self.run_root, entry["completion"])
                     request = read_reference(self.run_root, completion["request"])
-                    bound = guard_cache_action(
+                    bound = guard_action(
                         self.run_root, request["dispatch"], graph=self.graph,
                         configuration=self.configuration, releases=self.releases)
                     binding = self._decode_binding(entry["binding"])
-                    if self._binding(uid, binding.upstream_products).view() != binding.view():
-                        raise ReconstructionMiss("retained producer differs from the selected recipe binding")
+                    if (request["binding"] != binding.view() or completion["binding"] != binding.view()
+                            or completion["workspace_product"] != entry["product"]
+                            or completion["receipt"] != entry["receipt"]
+                            or request["graph"] != self.graph_ref
+                            or request["configuration"] != self.configuration_ref
+                            or self._binding(uid, binding.upstream_products, request=request).view() != binding.view()):
+                        raise ReconstructionMiss("retained producer differs from its immutable completion")
                     from appsec_review.jobs.build_workspace import verify_retained_product
                     product = verify_retained_product(
                         self.run_root, entry["generation"], entry["product"], binding)
                     if product["binding"] != entry["binding"]:
                         raise ReconstructionMiss("retained product differs from its admitted producer")
                     verify_product_contract(bound, product["products"])
+                    receipt = read_reference(self.run_root, entry["receipt"])
+                    if receipt.get("terminal_status") != "SUCCEEDED" or receipt.get("build_unit_id") != uid:
+                        raise ReconstructionMiss("retained producer lacks its successful immutable receipt")
                     if self.validate_receipt is not None:
-                        self.validate_receipt(read_reference(self.run_root, entry["receipt"]))
+                        self.validate_receipt(receipt)
                 except (ValueError, WorkspaceError, OSError, KeyError, TypeError) as error:
                     refusals[uid] = str(error)
         if not self.dispatches:
@@ -377,6 +388,11 @@ class BuildIterations:
 
     def _invalidate(self, uid: str, ledger: Mapping[str, Any]) -> dict[str, Any]:
         invalid = {uid}
+        # Recompose all selected changes together so no survivor carries a stale binding.
+        for key, entry in ledger["nodes"].items():
+            binding = self._decode_binding(entry["binding"])
+            if key not in self.dispatches or self._binding(key, binding.upstream_products).view() != binding.view():
+                invalid.add(key)
         while True:
             expanded = invalid | {edge["consumer_build_unit_id"] for edge in self.graph["edges"]
                                   if edge["producer_build_unit_id"] in invalid}
@@ -583,8 +599,22 @@ class BuildIterations:
                     writer.restore(before)
                 self.workspace.set_hold(hold, held=False)
                 states[uid] = "FAILED"
-                (self.run_root / "data/build/iterations/pending.json").unlink()
                 failed_receipt = read_reference(self.run_root, prepared["receipt"])
+                if failed_receipt.get("terminal_status") == "SUCCEEDED":
+                    from appsec_review.jobs.job_project_build.repair import FailureKind
+                    prepared_ref = json.loads(prepared_path.read_bytes())["prepared"]
+                    failure = retain(self.run_root, "failures", {
+                        "attempt_id": request["attempt_id"], "binding": binding.view(),
+                        "terminal_status": "FAILED", "request": dict(request_ref),
+                        "receipt": prepared["receipt"], "prepared": prepared_ref,
+                        "evidence": [prepared["receipt"], prepared_ref],
+                        "transaction_error": f"{type(error).__name__}: {error}",
+                        "diagnosis": {"kind": FailureKind.UNKNOWN.value, "reason": str(error),
+                                      "evidence": [f"{type(error).__name__}: {error}"]},
+                    })
+                    atomic_json(self.run_root / "data/build/iterations/failures" / f"{uid}.json",
+                                {"failure": failure, "request": dict(request_ref)})
+                (self.run_root / "data/build/iterations/pending.json").unlink()
                 from appsec_review.jobs.job_project_build.enforcement import unique_gaps
                 receipts[uid] = {
                     **failed_receipt, "terminal_status": "FAILED", "artifacts": [],

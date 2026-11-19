@@ -199,6 +199,7 @@ def test_product_interfaces_are_durably_bound_to_producer_and_content(tmp_path):
             "producer_build_unit_id": "A", "product_id": "install/lib/liba.so",
             "kind": "library", "interface": "test:install/lib/liba.so",
             "variant": dict(record.products[0].variant), "path": "/install/lib/liba.so",
+            "role": None, "axes": None,
             "sha256": hashlib.sha256(b"verified-A-library").hexdigest(),
             "topology_id": "structural-topology", "recipe_revision": "recipe-A",
             "workspace_product": dict(record.reference),

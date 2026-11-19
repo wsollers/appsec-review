@@ -195,13 +195,15 @@ def native_product_axes(path: Path) -> dict[str, Any]:
     """Read machine/class from bounded headers, including every retained archive member."""
     machines = {0x14C: ("x86", 32), 0x8664: ("x86_64", 64), 0xAA64: ("arm64", 64)}
 
-    def header(head: bytes) -> tuple[str, int, bool]:
+    def header(head: bytes, *, archive_member: bool = False) -> tuple[str, int, bool]:
         if head.startswith(b"\x7fELF") and len(head) >= 20:
             order = {1: "<", 2: ">"}.get(head[5])
             bits = {1: 32, 2: 64}.get(head[4])
             machine = struct.unpack_from(order + "H", head, 18)[0] if order else None
             target = {3: ("x86", 32), 62: ("x86_64", 64), 183: ("arm64", 64)}.get(machine)
             if target and target[1] == bits:
+                if archive_member and struct.unpack_from(order + "H", head, 16)[0] != 1:
+                    raise WorkspaceError("native archive member role is not a relocatable object")
                 return (*target, False)
         if head[:4] in {b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf",
                          b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xce"} and len(head) >= 16:
@@ -210,6 +212,8 @@ def native_product_axes(path: Path) -> dict[str, Any]:
             target = {7: ("x86", 32), 0x01000007: ("x86_64", 64),
                       0x0100000C: ("arm64", 64)}.get(machine)
             if target and (head[:4] in {b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf"}) == (target[1] == 64):
+                if archive_member and struct.unpack_from(order + "I", head, 12)[0] != 1:
+                    raise WorkspaceError("native archive member role is not a relocatable object")
                 return (*target, False)
         if len(head) >= 20:
             if head[:4] == b"\0\0\xff\xff" and struct.unpack_from("<H", head, 4)[0] == 0:
@@ -275,7 +279,7 @@ def native_product_axes(path: Path) -> dict[str, Any]:
                     raise WorkspaceError("native archive name escapes its member")
                 stream.seek(start)
                 if name not in {"__.SYMDEF", "__.SYMDEF SORTED"}:
-                    isa, bits, imported = header(stream.read(min(64, end - start)))
+                    isa, bits, imported = header(stream.read(min(64, end - start)), archive_member=True)
                     targets.add((isa, bits))
                     imports |= imported
             offset = end + length % 2
@@ -285,12 +289,40 @@ def native_product_axes(path: Path) -> dict[str, Any]:
         return {"isa": isa, "bits": bits, "import_library": imports}
 
 
+def _native_product_role(path: Path, logical_name: str) -> str | None:
+    from appsec_review.jobs.artifact_kinds import _elf_role, _macho_role
+
+    with path.open("rb") as stream:
+        head = stream.read(4096)
+        if head.startswith(b"!<arch>\n"):
+            return "static-library"
+        if head.startswith(b"\x7fELF"):
+            # Retained bytes live under a CAS hash, not their original shared-library name.
+            return _elf_role(head, logical_name)
+        if head.startswith(b"MZ"):
+            offset = struct.unpack_from("<I", head, 60)[0]
+            stream.seek(offset)
+            pe = stream.read(24)
+            return "shared-library" if struct.unpack_from("<H", pe, 22)[0] & 0x2000 else "executable"
+        role = _macho_role(head)
+        if role is not None:
+            return role
+        if (len(head) >= 20 and struct.unpack_from("<H", head)[0] in {0x14C, 0x8664, 0xAA64}
+                and 0 < struct.unpack_from("<H", head, 2)[0] <= 1024):
+            return "object"
+    return None
+
+
 def verify_native_product(path: Path, spec: ProductSpec) -> None:
     if spec.role not in {"static_archive", "import_library", "runtime_shared", "executable", "native_object"}:
         return
     actual = native_product_axes(path)
     if not isinstance(spec.axes, Mapping) or actual["isa"] != spec.axes.get("isa"):
         raise WorkspaceError("native retained binary target differs from its accepted enforcement")
+    expected_role = {"static_archive": "static-library", "import_library": "static-library",
+                     "runtime_shared": "shared-library", "executable": "executable", "native_object": "object"}
+    if _native_product_role(path, PurePosixPath(spec.path).name) != expected_role[spec.role]:
+        raise WorkspaceError("native product role differs from its actual binary container")
     if spec.role in {"static_archive", "import_library"} and (
             actual["import_library"] != (spec.role == "import_library")):
         raise WorkspaceError("native archive/import-library role differs from its actual members")

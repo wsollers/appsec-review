@@ -873,7 +873,10 @@ Successful A commits a content-addressed workspace generation and product record
 overwrite/delete A's target or install files: recovery restores committed bytes, modes/mtime and
 removes failed-only writes before retry. It verifies A instead of accepting an old success label
 or recompiling A merely because B failed. A changed B recipe invalidates B and its descendants;
-retained independent checkpoints keep their original provenance during recomposition.
+retained independent checkpoints keep their original provenance during recomposition. Admission
+verifies old custody against its immutable request and completion, separately from comparison with
+the new selected binding. Multiple changed bindings are invalidated together before recomposition;
+corrupt retained evidence remains a refusal, not permission to rebuild over untrusted state.
 
 `data/build/iterations/pending.json` records in-flight requests; `prepared/` supports a result
 committed before ledger publication; exact-name `leases/<attempt-id>/` support worker cleanup.
@@ -883,6 +886,9 @@ cleanup or tainted state is unfinished, never reusable success.
 
 Failure blocks dependent nodes while unrelated ready nodes may continue; family/aggregate results
 can be `COMPLETED_WITH_GAPS` when a prepared receipt and confirmed cleanup permit rollback.
+If a successful command receipt fails product verification or commit, the rollback publishes a
+failure context for that exact transaction, retaining the original receipt unchanged, the prepared
+record and the transaction error. It replaces any older failure pointer for that node.
 Pre-receipt command-custody refusals and unconfirmed cleanup can still stop the controller;
 see [T-092](../TODO.md#t-092-decide-whether-a-refused-build-command-fails-one-unit-or-the-whole-language-build).
 There is no durable `AWAITING_RECIPE` state or mandatory whole-review
@@ -928,6 +934,9 @@ product bytes, verified interfaces/variants and explicit cleanup. Exit zero alon
 Promotion (`appsec-review/build-recipe-promotion/1`) selects recipe/products/image-profile
 evidence, not trial output bytes. `selection.json` references immutable selections; consumption
 revalidates source/node/graph/configuration, releases, toolchain, upstreams and generation custody.
+Consuming an already selected revision permits compatible production progress, including successful
+production of the repaired node; it still verifies the immutable trial and exact current prerequisite
+products. Starting a new trial or promotion continues to require the original failure generation.
 Frozen run configuration is not edited. B must execute again in a new production invocation;
 verified A remains reusable, and no opaque replay mutation is transplanted.
 Promotion alone does not advance production; the next explicitly authorized controller entry
@@ -953,6 +962,15 @@ Detached recovery is not inherently network-disabled. Explicit replay `--offline
 already be prepared. CLI configuration must match the frozen run. The narrow
 `run job_build_iteration --run-id <id> --iteration-request <reference-json>` only consumes a
 controller-claimed immutable request; it cannot start an arbitrary free-standing node.
+Its target admission comes from that verified request, not the default checkout or an unrelated
+`--target` argument.
+
+Explicit native product declarations receive the same physical-role checks during commit and
+retained-byte verification as automatically discovered products. Machine/class alone is insufficient:
+executables cannot stand in for static archives, shared libraries or objects. Archives must contain
+compatible relocatable/import members, and import libraries retain their positive member check.
+ELF, PE and Mach-O roles use bounded headers; ELF shared-object naming fallback uses the declared
+logical product path even when retained bytes are read from a content-addressed object.
 
 ### Build-output dispositions
 
