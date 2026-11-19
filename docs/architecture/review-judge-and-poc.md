@@ -146,7 +146,9 @@ Each entry carries `claim_id`, `package_id`, `state`, `judge_verdict`, `poc_basi
 invalid, untrusted or budget-not-launched judge excludes the claim from PoC candidates, including when
 another judge supplied an eligible verdict. Terminal judge cells and their gaps remain in the ledger;
 their gap ids are included in the finding. The accepted-review reader checks candidate eligibility
-against those terminal cells as well as the finding's verdict. R5 state is unchanged.
+against those terminal cells as well as the finding's verdict. Completeness requires the terminal
+cell identities and admitted verdict cell identities to match exactly: an empty or partial terminal
+set cannot certify recorded verdicts. R5 state is unchanged.
 
 ## 5. `job_poc_generation`
 

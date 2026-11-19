@@ -163,6 +163,27 @@ def test_poc_admission_distinguishes_selection_and_partial_judging(review_contex
     assert package["state"] == "supported"
 
 
+@pytest.mark.parametrize("missing", ["all", "one"])
+def test_admitted_verdicts_require_matching_terminal_cells(review_context, tmp_path, missing):
+    ctx = review_context
+    claim = _claim(ctx)
+    result = teams.TeamResult(claim.package_id, Lane.LEAD, None)
+    _run_judge(ctx, claim, "success", result)
+    if missing == "one":
+        _run_judge(ctx, claim, "success", result, strategy="judge-2")
+    result.cells.pop()
+    finding, package, candidates, projection = _publish(ctx, claim, result, tmp_path)
+    assert package["judge_verdict"]["verdict"] == "red_correct"
+    assert finding["judge_complete"] is False
+    assert candidates == []
+    stale_candidate = {"claim_id": claim.claim_id, "state": finding["state"], "judge_verdict": "red_correct",
+                       "finding_package": {"finding_package_id": finding["finding_package_id"],
+                                           "sha256": finding["sha256"]}}
+    assert not poc_candidate_agrees(
+        stale_candidate, package, finding["sha256"],
+        judge_cells=stages.judge_cells_by_claim(projection).get(claim.claim_id, ()))
+
+
 @pytest.mark.parametrize("disabled", ["profile", "role"])
 def test_disabled_judge_is_intentionally_not_selected(review_context, tmp_path, disabled):
     ctx = review_context

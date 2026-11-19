@@ -191,7 +191,8 @@ def poc_candidate_agrees(candidate: Mapping[str, Any], package: Mapping[str, Any
     judged = package["judge_verdict"]
     if judged is None:
         return not judge_cells and candidate["judge_verdict"] == stages.JUDGE_NOT_CONVENED
-    return (stages.judge_review_complete(judge_cells, {item["cell_id"] for item in judged["judges"]})
+    return (bool(judge_cells)
+            and stages.judge_review_complete(judge_cells, {item["cell_id"] for item in judged["judges"]})
             and judged["verdict"] == candidate["judge_verdict"])
 
 

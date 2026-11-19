@@ -3,6 +3,7 @@ import pytest
 
 from appsec_review.jobs.accepted_review import poc_candidate_agrees
 from appsec_review.jobs.job_inference_security_review.stages import JUDGE_NOT_CONVENED
+from appsec_review.review.models import CellRecord, CellStatus, Lane, Role
 
 SHA = "a" * 64
 
@@ -16,13 +17,24 @@ def candidate(**overrides):
 
 def package(**overrides):
     row = {"finding_package_id": "finding-1", "claim_id": "claim-1", "state": "supported",
-           "judge_verdict": {"verdict": "red_correct", "judges": []}}
+           "judge_verdict": {"verdict": "red_correct", "judges": [{
+               "verdict_id": "judge-1", "verdict": "red_correct", "cell_id": "cell-1",
+               "judge_model_distinct": True, "reason": "The cited evidence supports the claim."}]}}
     row.update(overrides)
     return row
 
 
+def terminal_judges():
+    return (CellRecord("cell-1", Lane.LEAD, "package-1", Role.ADJUDICATION_JUDGE,
+                       "generalist", "generic", "judge", "claim-1", CellStatus.SUCCEEDED, 1, (), SHA),)
+
+
 def test_judged_package_agrees_with_a_candidate_carrying_the_same_verdict():
-    assert poc_candidate_agrees(candidate(), package(), SHA, judge_cells=())
+    assert poc_candidate_agrees(candidate(), package(), SHA, judge_cells=terminal_judges())
+
+
+def test_admitted_judge_requires_terminal_evidence():
+    assert not poc_candidate_agrees(candidate(), package(), SHA, judge_cells=())
 
 
 def test_unjudged_package_agrees_only_with_a_not_convened_candidate():
@@ -34,16 +46,17 @@ def test_unjudged_package_agrees_only_with_a_not_convened_candidate():
 
 
 def test_judged_package_rejects_a_not_convened_candidate():
-    assert not poc_candidate_agrees(candidate(judge_verdict=JUDGE_NOT_CONVENED), package(), SHA, judge_cells=())
+    assert not poc_candidate_agrees(candidate(judge_verdict=JUDGE_NOT_CONVENED), package(), SHA,
+                                    judge_cells=terminal_judges())
 
 
 @pytest.mark.parametrize("field, value", sorted({
     "claim_id": "claim-2", "state": "confirmed", "judge_verdict": "partly"}.items()))
 def test_any_restated_field_must_match(field, value):
-    assert not poc_candidate_agrees(candidate(**{field: value}), package(), SHA, judge_cells=())
+    assert not poc_candidate_agrees(candidate(**{field: value}), package(), SHA, judge_cells=terminal_judges())
 
 
 def test_package_identity_and_accepted_digest_are_required():
-    assert not poc_candidate_agrees(candidate(), None, SHA, judge_cells=())
-    assert not poc_candidate_agrees(candidate(), package(), None, judge_cells=())
-    assert not poc_candidate_agrees(candidate(), package(), "b" * 64, judge_cells=())
+    assert not poc_candidate_agrees(candidate(), None, SHA, judge_cells=terminal_judges())
+    assert not poc_candidate_agrees(candidate(), package(), None, judge_cells=terminal_judges())
+    assert not poc_candidate_agrees(candidate(), package(), "b" * 64, judge_cells=terminal_judges())

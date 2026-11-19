@@ -645,8 +645,9 @@ def judge_cells_by_claim(projection: Projection) -> dict[str, list[CellRecord]]:
 
 
 def judge_review_complete(cells: Sequence[CellRecord], verdict_cell_ids: Collection[str]) -> bool:
-    """Every selected judge must have succeeded and supplied an admitted verdict."""
-    return all(cell.status is CellStatus.SUCCEEDED and cell.cell_id in verdict_cell_ids for cell in cells)
+    """Successful terminal cells and admitted verdicts must account for each other exactly."""
+    return ({cell.cell_id for cell in cells} == set(verdict_cell_ids)
+            and all(cell.status is CellStatus.SUCCEEDED for cell in cells))
 
 
 def finding_packages(projection: Projection, adjudications: Sequence[Mapping[str, Any]],
