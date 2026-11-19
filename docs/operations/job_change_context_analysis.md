@@ -34,7 +34,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `analyze` | `analyze.unit_signals` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `attribute` | `attribute.fix_on_fix` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `attribute` | `attribute.line_attribution` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
-| `load` | `load.accepted_history` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_change_context_analysis/job.py#L165) |
+| `load` | `load.accepted_history` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_change_context_analysis/job.py#L166) |
 | `load` | `load.external_sources` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `publish` | `publish.index_change_context` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `publish` | `publish.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
@@ -86,7 +86,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_change_context_analysis/test_change_context_graph.py` |
 | live | None declared |
-| unit | `tests/unit/job_change_context_analysis/test_attribution.py`<br>`tests/unit/job_change_context_analysis/test_contract.py`<br>`tests/unit/job_change_context_analysis/test_handlers.py`<br>`tests/unit/job_change_context_analysis/test_metrics.py`<br>`tests/unit/job_change_context_analysis/test_settings_and_sources.py`<br>`tests/unit/runtime/test_wave2_consumers.py`<br>`tests/unit/runtime/test_wave3_contracts.py` |
+| unit | `tests/unit/job_change_context_analysis/test_regressions.py`<br>`tests/unit/job_change_context_analysis/test_attribution.py`<br>`tests/unit/job_change_context_analysis/test_contract.py`<br>`tests/unit/job_change_context_analysis/test_handlers.py`<br>`tests/unit/job_change_context_analysis/test_metrics.py`<br>`tests/unit/job_change_context_analysis/test_settings_and_sources.py`<br>`tests/unit/runtime/test_wave2_consumers.py`<br>`tests/unit/runtime/test_wave3_contracts.py` |
 
 ### Dagster placement
 

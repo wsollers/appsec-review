@@ -343,8 +343,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5109 | [Reconstruct build iterations and preserve current failure context](#t-5109-reconstruct-build-iterations-and-preserve-current-failure-context) | build | done (2026-11-19, 083f216e12b0eed9aa0e9cb86548bf7002545416) |
 | T-5110 | [Read manual build transaction requests before unrelated checkout requirements](#t-5110-read-manual-build-transaction-requests-before-unrelated-checkout-requirements) | build | done (2026-11-19, 083f216e12b0eed9aa0e9cb86548bf7002545416) |
 | T-5111 | [Validate native product bytes against declared product kind](#t-5111-validate-native-product-bytes-against-declared-product-kind) | build | done (2026-11-19, 083f216e12b0eed9aa0e9cb86548bf7002545416) |
-| T-5112 | [Retain unknown review state bounded hunks and unique change churn](#t-5112-retain-unknown-review-state-bounded-hunks-and-unique-change-churn) | history | open |
-| T-5113 | [Preserve function identity through change-priority consumption](#t-5113-preserve-function-identity-through-change-priority-consumption) | review | open |
+| T-5112 | [Retain unknown review state bounded hunks and unique change churn](#t-5112-retain-unknown-review-state-bounded-hunks-and-unique-change-churn) | history | done (2026-11-19, 8ab58ca676257f337cee31bd18ca1a6dba60142d) |
+| T-5113 | [Preserve function identity through change-priority consumption](#t-5113-preserve-function-identity-through-change-priority-consumption) | review | done (2026-11-19, 8ab58ca676257f337cee31bd18ca1a6dba60142d) |
 | T-5114 | [Reject incomplete CI scanner output and bound reads before execution](#t-5114-reject-incomplete-ci-scanner-output-and-bound-reads-before-execution) | scanners | done (2026-11-19, fb969549b24fb7d733622a9031d5038a1cd874be) |
 | T-5115 | [Honor CI provider tool framework and identity settings](#t-5115-honor-ci-provider-tool-framework-and-identity-settings) | scanners | done (2026-11-19, fb969549b24fb7d733622a9031d5038a1cd874be) |
 | T-5116 | [Preserve exact CI locations and real job hierarchy](#t-5116-preserve-exact-ci-locations-and-real-job-hierarchy) | scanners | open |
@@ -4250,22 +4250,29 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5112 — Retain unknown review state bounded hunks and unique change churn
 
-- **State:** open
+- **State:** done (2026-11-19, 8ab58ca676257f337cee31bd18ca1a6dba60142d)
 - **Area:** history
 - **Why:** Archived audit/feedback cases: CC-01, CC-02, CC-03, CC-06. entirely missing review facts become trusted zero-valued ranking inputs; unknown approval commit is reported as a confirmed stale approval.
 - **Scope:** `src/appsec_review/jobs/job_change_context_analysis/job.py`, `metrics.py` and
   `sources.py`, with paired prioritization regressions.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_change_context_analysis.md`.
+  Unknown review/approval facts remain unavailable rather than trusted zero or confirmed stale.
+  Bounded hunk omissions retain explicit accounting; review-unit churn is deduplicated.
+  Independent read-only review found no significant issue; main affected selection:
+  51 passed/9.15 s, two workers, seed 5112, no skips or slow cases.
 
 ### T-5113 — Preserve function identity through change-priority consumption
 
-- **State:** open
+- **State:** done (2026-11-19, 8ab58ca676257f337cee31bd18ca1a6dba60142d)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: CC-05. final function priorities lose the fields their consumer needs.
 - **Scope:** `src/appsec_review/jobs/job_change_context_analysis/job.py`, `src/appsec_review/jobs/job_review_prioritization/composite.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_change_context_analysis.md`; follow-up to closed T-171 (not reopened).
+  Shares the 51-case main verification with T-5112. Exact callable identity and source spans
+  survive producer/consumer joins; function boosts remain separate from file-level factors.
+  Prior normalized-score, typed-threshold and artifact-lead repairs remain intact.
 
 ### T-5114 — Reject incomplete CI scanner output and bound reads before execution
 

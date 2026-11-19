@@ -98,6 +98,7 @@
     },
     "job_change_context_analysis": {
       "unit": [
+        "tests/unit/job_change_context_analysis/test_regressions.py",
         "tests/unit/job_change_context_analysis/test_attribution.py",
         "tests/unit/job_change_context_analysis/test_contract.py",
         "tests/unit/job_change_context_analysis/test_handlers.py",
