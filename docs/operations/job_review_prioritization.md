@@ -126,7 +126,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_review_prioritization/test_review_prioritization_graph.py` |
 | live | None declared |
-| unit | `tests/test_cpp_memory_safety_rules.py`<br>`tests/test_review_prioritization.py`<br>`tests/test_syntax_metrics_streaming.py`<br>`tests/unit/job_review_prioritization/test_contract.py`<br>`tests/unit/job_review_prioritization/test_signals_and_rewiring.py`<br>`tests/unit/runtime/test_wave2_consumers.py` |
+| unit | `tests/unit/job_remediation_validation/test_source_context.py`<br>`tests/unit/job_remediation_validation/test_patch_lexical_edges.py`<br>`tests/test_cpp_memory_safety_rules.py`<br>`tests/test_review_prioritization.py`<br>`tests/test_syntax_metrics_streaming.py`<br>`tests/unit/job_review_prioritization/test_contract.py`<br>`tests/unit/job_review_prioritization/test_signals_and_rewiring.py`<br>`tests/unit/runtime/test_wave2_consumers.py` |
 
 ### Dagster placement
 

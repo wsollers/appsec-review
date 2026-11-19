@@ -29,10 +29,10 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_profile_data/job.py#L375) |
-| `index` | `index.profile_data` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_profile_data/job.py#L323) |
-| `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_profile_data/job.py#L291) |
-| `normalize` | `normalize.profile_data` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_profile_data/job.py#L319) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_profile_data/job.py#L390) |
+| `index` | `index.profile_data` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_profile_data/job.py#L335) |
+| `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_profile_data/job.py#L303) |
+| `normalize` | `normalize.profile_data` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_profile_data/job.py#L331) |
 
 ### Accepted input declarations
 
@@ -62,7 +62,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
-| `profile_data` | `index` | `appsec-review/retrieval-index/2` | indexed | `analysis` | `query_precomputed` |
+| `profile_data` | `index` | `appsec-review/retrieval-index/2` | indexed | `analysis` | `query_engineering_signals` |
 | `profile_data_handoff` | `acceptance` | `appsec-review/profile-data-handoff/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
@@ -78,7 +78,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/test_signal_job_acceptance.py` |
 | live | None declared |
-| unit | `tests/unit/job_profile_data/test_contract.py`<br>`tests/unit/job_profile_data/test_parsers.py`<br>`tests/unit/job_profile_data/test_ingestion.py`<br>`tests/unit/job_profile_data/test_job_graph.py`<br>`tests/unit/runtime/test_wave3_contracts.py` |
+| unit | `tests/unit/job_profile_data/test_semantics.py`<br>`tests/unit/job_profile_data/test_contract.py`<br>`tests/unit/job_profile_data/test_parsers.py`<br>`tests/unit/job_profile_data/test_ingestion.py`<br>`tests/unit/job_profile_data/test_job_graph.py`<br>`tests/unit/runtime/test_wave3_contracts.py` |
 
 ### Dagster placement
 

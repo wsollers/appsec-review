@@ -595,6 +595,7 @@
     },
     "job_profile_data": {
       "unit": [
+        "tests/unit/job_profile_data/test_semantics.py",
         "tests/unit/job_profile_data/test_contract.py",
         "tests/unit/job_profile_data/test_parsers.py",
         "tests/unit/job_profile_data/test_ingestion.py",
@@ -691,6 +692,7 @@
     },
     "job_review_package_assembly": {
       "unit": [
+        "tests/unit/job_review_package_assembly/test_coverage_regressions.py",
         "tests/unit/job_review_package_assembly/test_contract.py",
         "tests/unit/job_review_package_assembly/test_handlers.py",
         "tests/review/test_packages.py"
@@ -701,6 +703,8 @@
     },
     "job_review_prioritization": {
       "unit": [
+        "tests/unit/job_remediation_validation/test_source_context.py",
+        "tests/unit/job_remediation_validation/test_patch_lexical_edges.py",
         "tests/test_cpp_memory_safety_rules.py",
         "tests/test_review_prioritization.py",
         "tests/test_syntax_metrics_streaming.py",

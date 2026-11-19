@@ -395,19 +395,19 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5161 | [Keep post-build shards immutable and rejected artifact hashes rejected](#t-5161-keep-post-build-shards-immutable-and-rejected-artifact-hashes-rejected) | evidence | done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31) |
 | T-5162 | [Reject error-shaped post-build model assessments](#t-5162-reject-error-shaped-post-build-model-assessments) | review | done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31) |
 | T-5163 | [Interpret PE Mach-O and truncated ELF protection evidence correctly](#t-5163-interpret-pe-mach-o-and-truncated-elf-protection-evidence-correctly) | binary | done (2026-11-19, 1bad89cb4bbb8dd813f5b12826109f3e53d92b31) |
-| T-5164 | [Index duplicate profile content without conflicting source identities](#t-5164-index-duplicate-profile-content-without-conflicting-source-identities) | evidence | open |
-| T-5165 | [Preserve Callgrind perf LLVM and UTF-8 profile semantics](#t-5165-preserve-callgrind-perf-llvm-and-utf-8-profile-semantics) | evidence | open |
-| T-5166 | [Route profile queries and retain source attribution and gaps](#t-5166-route-profile-queries-and-retain-source-attribution-and-gaps) | evidence | open |
+| T-5164 | [Index duplicate profile content without conflicting source identities](#t-5164-index-duplicate-profile-content-without-conflicting-source-identities) | evidence | done (2026-11-19, 7834895251763484c3098da73318c8ebe97f8256) |
+| T-5165 | [Preserve Callgrind perf LLVM and UTF-8 profile semantics](#t-5165-preserve-callgrind-perf-llvm-and-utf-8-profile-semantics) | evidence | done (2026-11-19, 7834895251763484c3098da73318c8ebe97f8256) |
+| T-5166 | [Route profile queries and retain source attribution and gaps](#t-5166-route-profile-queries-and-retain-source-attribution-and-gaps) | evidence | done (2026-11-19, 7834895251763484c3098da73318c8ebe97f8256) |
 | T-5167 | [Keep canonical CMake build directories and output requirements aligned](#t-5167-keep-canonical-cmake-build-directories-and-output-requirements-aligned) | build | done (2026-11-19, aeb53814124562953ed5c4e77f2d9a681c67209e) |
 | T-5168 | [Admit reusable native planning records without invented image bindings](#t-5168-admit-reusable-native-planning-records-without-invented-image-bindings) | build | done (2026-11-19, aeb53814124562953ed5c4e77f2d9a681c67209e) |
 | T-5169 | [Handle absent optional builds without sticky admission violations](#t-5169-handle-absent-optional-builds-without-sticky-admission-violations) | review | done (2026-11-19, 3dce5c2ff5b907536058dcbd90394fc36e9dae24) |
 | T-5170 | [Retain discovered source gaps when remediation writing fails](#t-5170-retain-discovered-source-gaps-when-remediation-writing-fails) | review | done (2026-11-19, 3dce5c2ff5b907536058dcbd90394fc36e9dae24) |
-| T-5171 | [Preserve bounded validation source and exact build working-directory context](#t-5171-preserve-bounded-validation-source-and-exact-build-working-directory-context) | review | open |
-| T-5172 | [Apply valid C++ patches and unified diffs without lexical misclassification](#t-5172-apply-valid-c-patches-and-unified-diffs-without-lexical-misclassification) | review | open |
+| T-5171 | [Preserve bounded validation source and exact build working-directory context](#t-5171-preserve-bounded-validation-source-and-exact-build-working-directory-context) | review | done (2026-11-19, 6bb90ba113133bf67f484ba76c621ab10c3315ba) |
+| T-5172 | [Apply valid C++ patches and unified diffs without lexical misclassification](#t-5172-apply-valid-c-patches-and-unified-diffs-without-lexical-misclassification) | review | done (2026-11-19, 6bb90ba113133bf67f484ba76c621ab10c3315ba) |
 | T-5173 | [Preserve failed CodeQL language coverage in review indexes](#t-5173-preserve-failed-codeql-language-coverage-in-review-indexes) | evidence | open |
 | T-5174 | [Bound review-index relations facts and threat retrieval without corrupting totals](#t-5174-bound-review-index-relations-facts-and-threat-retrieval-without-corrupting-totals) | evidence | open |
 | T-5175 | [Build OWASP inventory from the admitted publication rather than a floating pointer](#t-5175-build-owasp-inventory-from-the-admitted-publication-rather-than-a-floating-pointer) | evidence | open |
-| T-5176 | [Retain package gaps qualifications and scoped artifact grants](#t-5176-retain-package-gaps-qualifications-and-scoped-artifact-grants) | review | open |
+| T-5176 | [Retain package gaps qualifications and scoped artifact grants](#t-5176-retain-package-gaps-qualifications-and-scoped-artifact-grants) | review | done (2026-11-19, 119476b93aa8812648dc2db983f6f301a4d03644) |
 | T-5177 | [Deliver promoted leads and the bounded hunt queue to real consumers](#t-5177-deliver-promoted-leads-and-the-bounded-hunt-queue-to-real-consumers) | review | open |
 | T-5178 | [Preserve prioritization coverage and omitted-context qualifications](#t-5178-preserve-prioritization-coverage-and-omitted-context-qualifications) | review | open |
 | T-5179 | [Assign semantic evidence to the exact function rather than shared lines](#t-5179-assign-semantic-evidence-to-the-exact-function-rather-than-shared-lines) | review | open |
@@ -3620,6 +3620,13 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   before reaching the SCA query. This was observed during T-5126's affected checks, not repaired
   or counted as a pass. The separate real SCA publication/query regressions pass; exact-base
   attribution and the mixed fixture's repair remain here.
+  Two legacy offline graph checks selected during T-5176 also remain unresolved:
+  `tests/test_target_document_pipeline.py::test_ported_documents_flow_through_existing_indexes_and_source_retrieval`
+  asserts absence of RPC/MUTATION context now emitted by its input path (not separately replayed
+  on a pristine base), and it took 11.28 s. The sibling
+  `test_document_hunts_grant_only_accepted_context_and_sources` passed assertions but took
+  13.63 s. Neither is a green completion gate; narrow real package/capability/document-consumer
+  checks cover T-5176 without rerunning or relabeling these legacy graph checks.
 - **Done when:** the named node ids pass shuffled with `-n 4`.
 - **Refs:** the files above, T-5043, T-5032.
 
@@ -4894,29 +4901,40 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5164 — Index duplicate profile content without conflicting source identities
 
-- **State:** open
+- **State:** done (2026-11-19, 7834895251763484c3098da73318c8ebe97f8256)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: PD-01. Identical report copies at different paths abort indexing.
 - **Scope:** `src/appsec_review/jobs/job_profile_data/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 82 passed/7.40 s, two workers, seed 9164, no skips or cases over 10 s.
+  Report path/hash identity preserves distinct origins of identical copies; normalized rows,
+  metadata and coverage bind immutable shard reuse. No profiler or live workload was run.
 - **Refs:** `audit-results/job-audit-job_profile_data.md`.
 
 ### T-5165 — Preserve Callgrind perf LLVM and UTF-8 profile semantics
 
-- **State:** open
+- **State:** done (2026-11-19, 7834895251763484c3098da73318c8ebe97f8256)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: PD-02, PD-03, PD-04, PD-09. Callgrind call costs are attached to the wrong source line; Perf sample periods become part of the event identity.
 - **Scope:** `src/appsec_review/jobs/job_profile_data/parsers.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5164's 82-case selection. Self/call-inclusive metrics keep distinct callee/callsite
+  coordinates; perf periods do not become event identity or invented weights. LLVM header gaps
+  and UTF-8 prefix/accepted-byte distinctions remain explicit. Reserved Callgrind unknown-file
+  markers become unlocated with a gap, retaining measured costs and known-file controls.
 - **Refs:** `audit-results/job-audit-job_profile_data.md`.
 
 ### T-5166 — Route profile queries and retain source attribution and gaps
 
-- **State:** open
+- **State:** done (2026-11-19, 7834895251763484c3098da73318c8ebe97f8256)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: PD-05, PD-06, PD-07, PD-10. The declared dataset retrieval route cannot retrieve the dataset; Engineering-signals path filtering discards profile rows with that exact source.
 - **Scope:** `src/appsec_review/jobs/job_profile_data/datasets.py`, `src/appsec_review/retrieval/core.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5164's selection. Profile filtering precedes bounds/pagination and preserves empty
+  result coverage. Located facts remain file-specific; unlocated facts remain same-build
+  context without a fabricated verified source location. The independent review finding and
+  its real publication/context regression were verified before integration.
 - **Refs:** `audit-results/job-audit-job_profile_data.md`; follow-up to closed T-172 (not reopened).
 
 ### T-5167 — Keep canonical CMake build directories and output requirements aligned
@@ -4972,22 +4990,34 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5171 — Preserve bounded validation source and exact build working-directory context
 
-- **State:** open
+- **State:** done (2026-11-19, 6bb90ba113133bf67f484ba76c621ab10c3315ba)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RV-F02, RV-F03, RV-F07. Related files in the same build are mistaken for a multi-build proposal; Validation source-context bounds are fingerprinted but not enforced.
 - **Scope:** `src/appsec_review/jobs/job_remediation_validation/job.py`, `src/appsec_review/jobs/job_remediation_validation/workspace.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 194 affected validation/patch cases passed/9.08 s; 41 paired package/planning cases
+  passed/14.41 s, two workers, no skips or cases over 10 s. Same-build supporting files are
+  not multiple builds; source admission, copy and exact-patch rereads enforce byte/hash bounds.
+  Recorded producer cwd reaches replay and include lookup without guessing or double-prefixing
+  source paths. The newer planning fixture now uses the actual native row serializer; its
+  unchanged positive assertion failed before correction and passed afterward.
+  Only mounted application source changed, not the baked native tool wrapper. No image build,
+  compiler/model, integration, acceptance or live validation was performed.
 - **Refs:** `audit-results/job-audit-job_remediation_validation.md`.
 
 ### T-5172 — Apply valid C++ patches and unified diffs without lexical misclassification
 
-- **State:** open
+- **State:** done (2026-11-19, 6bb90ba113133bf67f484ba76c621ab10c3315ba)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RV-F04, RV-F06. Legal existing C++ digit separators reject otherwise applicable patches; Exported unified-diff helper misplaces zero-context insertions and ignores new counts.
 - **Scope:** `src/appsec_review/jobs/job_poc_generation/static_compile_check.py` and
   `src/appsec_review/jobs/job_remediation_validation/static_validator.py`. The broken unified-diff
   helper is latent: current validation uses `apply_exact` and `after_text`, not that branch.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5171's verification. Valid numeric digit separators retain literal/comment and
+  prohibited-call checks. The exported diff helper enforces coordinates/counts/context and
+  rejects truncated records; explicit no-final-newline and CRLF controls remain valid.
+  Production validation continues to use exact edits and after-text, not the latent diff path.
 - **Refs:** `audit-results/job-audit-job_remediation_validation.md`.
 
 ### T-5173 — Preserve failed CodeQL language coverage in review indexes
@@ -5019,11 +5049,16 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5176 — Retain package gaps qualifications and scoped artifact grants
 
-- **State:** open
+- **State:** done (2026-11-19, 119476b93aa8812648dc2db983f6f301a4d03644)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RPA-01, RPA-02, RPA-03. An empty package set erases accepted coverage gaps and publishes success; Selected partial build facts lose their omitted-work qualifications.
 - **Scope:** `src/appsec_review/jobs/job_review_package_assembly/job.py`, `src/appsec_review/review_packages.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main's 41-case package/planning selection passed/14.41 s with no skips or slow cases,
+  including 15 new package regressions. Input gaps survive empty membership; selected build
+  qualifications retain exact producer reasons and never invent upstream omission counts.
+  Artifact grants are restricted to package scope and still require declared pinned inputs
+  and verified shard reads. Legacy graph assertion/timing gaps are recorded in T-5056.
 - **Refs:** `audit-results/job-audit-job_review_package_assembly.md`.
 
 ### T-5177 — Deliver promoted leads and the bounded hunt queue to real consumers
