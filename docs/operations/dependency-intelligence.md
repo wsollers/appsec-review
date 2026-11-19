@@ -116,6 +116,10 @@ Versions remain case-sensitive; Maven group IDs, npm scopes and Go module paths 
 decoding. A nested corroborated version contributes its scalar value, never a stringified record.
 Inferred, conflicted or unknown versions and manifest constraints cannot become installed versions
 through a PURL fallback. Distinct ecosystems and roots do not merge merely because names match.
+Explicit non-string grades, including null, are unknown rather than absent: malformed `status`,
+`kind` or outer `version_kind` cannot authorize a PURL fallback. Original claims remain in observation
+provenance and OSV matching reports `osv_dependency_identity_incomplete`. Truly absent legacy grades
+still allow exact scalar or PURL versions; normalization does not invent a null grade for them.
 Conflicting versions, missing coordinates or missing/unmatched instance IDs retain an unbound advisory
 with empty `dependency_ids`, `unknown` reachability and a `sca_dependency_binding_unresolved`
 gap. An advisory for one version or ecosystem does not attach to fixed releases or same-named
@@ -218,7 +222,7 @@ as alternate-vendor leads, four `davegamble/cjson` ranges.
 Focused verification:
 
 ```text
-scripts/run-tests.sh --expect-tests 20 --parallel --test-workers 2 --shuffle-seed 5126 -- tests/unit/job_dependency_intelligence/test_coordinate_consumers.py
+scripts/run-tests.sh --expect-tests 31 --parallel --test-workers 2 --shuffle-seed 5126 -- tests/unit/job_dependency_intelligence/test_coordinate_consumers.py
 ```
 
 Mocked tests verify parser, inference, HTTP, gap, and publication contracts. They do not prove live

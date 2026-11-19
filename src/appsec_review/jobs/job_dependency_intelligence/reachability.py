@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import parse_qsl, unquote
 
 from appsec_review import osv_matching
-from appsec_review.jobs.job_dependency_intelligence.resolution import _version_claim
+from appsec_review.jobs.job_dependency_intelligence.resolution import _ABSENT_VERSION_GRADE, _version_claim
 from appsec_review.jobs.job_dependency_intelligence.native_advisories import purl_parts
 from appsec_review.storage import file_sha256
 from appsec_review.storage.shared import safe_path
@@ -610,15 +610,15 @@ def _coordinate_name(ecosystem: str, name: str) -> str:
 def _package_coordinate(dep: Mapping[str, Any]) -> tuple[str, str, str, str] | None:
     """Keep namespace, release and instance qualifiers; reject conflicting supplied identity."""
     purl = dep.get("purl") if isinstance(dep.get("purl"), str) else None
-    version, grade = _version_claim(dep.get("version"), dep.get("version_kind"))
+    version, grade = _version_claim(dep.get("version"), dep.get("version_kind", _ABSENT_VERSION_GRADE))
+    if grade is not None and version is None:
+        return None
     release = dep.get("release")
     if isinstance(release, Mapping):
         claimed, release_grade = _version_claim(release)
         if claimed is None or (version is not None and version != claimed):
             return None
         version, grade = claimed, release_grade
-    if grade is not None and version is None:
-        return None
     version = version or ""
     name = str(dep.get("name") or "").strip()
     declared = str(dep.get("ecosystem") or "").strip().casefold()

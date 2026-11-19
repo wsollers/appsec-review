@@ -117,6 +117,53 @@ def test_nested_version_is_decoded_without_stringifying_or_promoting(tmp_path, g
     assert bool(gaps) is not bool(expected)
 
 
+@pytest.mark.parametrize("field,grade", [
+    ("status", ["unknown"]), ("status", {"certainty": "unknown"}), ("status", 1),
+    ("kind", {"certainty": "unknown"}),
+    ("version_kind", ["unknown"]), ("version_kind", {"certainty": "unknown"}),
+    ("version_kind", 1), ("version_kind", None), ("version_kind", False),
+], ids=["status-list", "status-map", "status-number", "kind-map",
+        "outer-list", "outer-map", "outer-number", "outer-null", "outer-bool"])
+def test_malformed_explicit_grade_cannot_promote_purl_version(tmp_path, field, grade):
+    raw = {"dependency_id": "raw-package", "name": "demo", "ecosystem": "PyPI",
+           "purl": "pkg:pypi/demo@1.0", "version": {"value": "1.0", "status": "corroborated"}}
+    if field == "version_kind":
+        raw[field] = grade
+    else:
+        raw["version"] = {"value": "1.0", field: grade}
+    dependencies, _ = _normalize(packages=[raw])
+    database = tmp_path / "osv.sqlite"
+    _build_osv_sqlite(database, [{"id": "ADV-package", "affected": [{
+        "package": {"ecosystem": "PyPI", "name": "demo"}, "versions": ["1.0"],
+    }]}])
+    for records in ([raw], dependencies):
+        matches, gaps = _match_osv_indexed(database, records, 10, max_candidates_per_package=10)
+        assert matches == []
+        assert gaps == [f"osv_dependency_identity_incomplete:{records[0]['dependency_id']}"]
+    assert dependencies[0]["version"] is None
+    assert dependencies[0]["version_kind"] == "unknown"
+    observation = dependencies[0]["observations"][0]
+    assert observation["version"] == raw["version"]
+    if field == "version_kind":
+        assert observation[field] == grade
+
+
+@pytest.mark.parametrize("purl_only", [False, True], ids=["scalar", "purl-only"])
+def test_absent_legacy_grade_preserves_exact_version_matching(tmp_path, purl_only):
+    raw = {"name": "demo", "ecosystem": "PyPI", "purl": "pkg:pypi/demo@1.0"}
+    if not purl_only:
+        raw["version"] = "1.0"
+    dependencies, _ = _normalize(packages=[raw])
+    database = tmp_path / "osv.sqlite"
+    _build_osv_sqlite(database, [{"id": "ADV-package", "affected": [{
+        "package": {"ecosystem": "PyPI", "name": "demo"}, "versions": ["1.0"],
+    }]}])
+    matches, gaps = _match_osv_indexed(database, dependencies, 10, max_candidates_per_package=10)
+    assert gaps == []
+    assert [(row["package_version"], row["dependency_ids"]) for row in matches] == [
+        ("1.0", [dependencies[0]["dependency_id"]])]
+
+
 def test_declared_constraint_does_not_become_installed_version(tmp_path):
     dependencies, _ = normalize_dependencies(
         [{"name": "same", "ecosystem": "npm", "constraint": "1.0.0"}], [], [],

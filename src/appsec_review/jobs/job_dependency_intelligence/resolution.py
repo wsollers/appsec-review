@@ -41,16 +41,21 @@ _EXPOSURE_TERMS = {
 }
 _RUNTIME_OBSERVATION_KINDS = frozenset({"loader_needed", "soname"})
 _EXACT_VERSION_KINDS = frozenset({"exact", "observed", "installed", "resolved", "corroborated"})
+_ABSENT_VERSION_GRADE = object()
 
 
-def _version_claim(value: object, kind: object = None) -> tuple[str | None, str | None]:
+def _version_claim(value: object, kind: object = _ABSENT_VERSION_GRADE) -> tuple[str | None, str | None]:
     """Decode a version without upgrading a graded claim or stringifying a record."""
+    if kind is not _ABSENT_VERSION_GRADE and not isinstance(kind, str):
+        return None, "unknown"
     grade = kind if isinstance(kind, str) else None
     if grade is not None and grade not in _EXACT_VERSION_KINDS:
         return None, grade
     if isinstance(value, Mapping):
+        if any(field in value and not isinstance(value[field], str) for field in ("status", "kind")):
+            return None, "unknown"
         grade = value.get("status", value.get("kind", kind))
-        return _version_claim(value.get("value"), grade or "unknown")
+        return _version_claim(value.get("value"), "unknown" if grade is _ABSENT_VERSION_GRADE else grade)
     if value is not None and not isinstance(value, str):
         return None, grade or "unknown"
     version = value.strip() or None if isinstance(value, str) else None
@@ -227,13 +232,14 @@ def normalize_dependencies(
         purl = str(raw.get("purl") or "").strip() or None
         metadata = raw.get("metadata") if isinstance(raw.get("metadata"), Mapping) else {}
         release = raw.get("release")
+        raw_grade = raw.get("version_kind", _ABSENT_VERSION_GRADE)
         if source == "native" and isinstance(release, Mapping):
-            version, version_kind = _version_claim(release)
+            version, version_kind = _version_claim(release, raw_grade)
         else:
             raw_version = raw.get("version")
             if raw_version is None and source == "native":
                 raw_version = metadata.get("version")
-            version, version_kind = _version_claim(raw_version, raw.get("version_kind"))
+            version, version_kind = _version_claim(raw_version, raw_grade)
             if raw.get("version") is None and raw.get("constraint") is not None:
                 # Retain declarations for inventory, but not as installed OSV versions.
                 version = raw["constraint"] if isinstance(raw["constraint"], str) else None
@@ -256,7 +262,7 @@ def normalize_dependencies(
             continue
         entry = grouped.setdefault(key, {
             "name": name, "version": version, "purl": purl, "repository": repo,
-            "version_kind": version_kind, **scope,
+            **({"version_kind": version_kind} if version_kind is not None else {}), **scope,
             "resolution_basis": (ResolutionBasis.PACKAGE_METADATA.value if repo else
                                  ResolutionBasis.DECLARED.value if source == "declared" else
                                  ResolutionBasis.LINKER_EVIDENCE.value if source == "native" else
@@ -275,8 +281,11 @@ def normalize_dependencies(
             direct = False if isinstance(relation, str) and relation in {"transitive", "indirect"} else None
         if isinstance(direct, bool):
             entry["direct"] = entry.get("direct", False) or direct
-        if version and version_kind != "constraint" and entry["version_kind"] == "constraint":
-            entry["version_kind"] = version_kind
+        if version and version_kind != "constraint" and entry.get("version_kind") == "constraint":
+            if version_kind is None:
+                entry.pop("version_kind")
+            else:
+                entry["version_kind"] = version_kind
         if entry["version"] is None and version:
             entry["version"] = version
         if entry["purl"] is None and purl:
@@ -292,7 +301,7 @@ def normalize_dependencies(
         for key_name in ("source", "location", "path", "component_id", "candidate_id",
                          "ecosystem", "direct", "relationship", "scope", "version", "version_kind",
                          "constraint", "release", "domain", "root_id", "package_root", "purl"):
-            if raw.get(key_name) is not None:
+            if raw.get(key_name) is not None or (key_name == "version_kind" and key_name in raw):
                 observation[key_name] = raw[key_name]
         if observation not in entry["observations"]:
             entry["observations"].append(observation)
