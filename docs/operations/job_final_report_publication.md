@@ -122,7 +122,9 @@ The [handler](../../src/appsec_review/jobs/job_final_report_publication/job.py) 
    Build report sections from certified gate data without changing package state, scoring,
    independence, shipment or nonexecution assurance.
 2. Validate the report schema and write attempt-owned `final-report.json`. Keep publishable
-   findings, verification backlog and withheld records in separate sections.
+   findings, verification backlog and withheld records in separate sections. The same task writes
+   protected `findings.sarif` and `sarif-export-result.json`, retaining export omissions and the
+   gate's scoped gap records.
 3. In `report.render`, render Markdown from that JSON and the gate-certified private format
    references using configured evidence/gap display bounds. Load only the gate-certified dossier JSON for executive HTML's bounded narratives,
    using the same projection as executive LaTeX. Require repeat rendering to produce identical text.
@@ -152,6 +154,15 @@ changed, missing, malformed or identity-mismatched claimed dossiers. A pure rend
 dossiers retains the certified reference count and names the not-loaded narrative gap.
 This does not expose protected source excerpts, patch text or generated payloads.
 
+Executive verification wording follows the recorded `independence.independent` flag, separately
+from the unchanged accepted finding state. An explicit false flag never becomes “yes” merely
+because state is `confirmed`; absent independence is unknown. Same-provider/model verification
+can still be independent under R6. Model distinctness remains a separate ship-block condition.
+The contradictory confirmed/false fixture is supported by the finding/gate schemas and serializers;
+ordinary R5 adjudication requires independence to confirm and otherwise retains supported evidence
+in the backlog. This renderer qualification does not establish a reachable contradictory accepted
+ledger, change that policy or introduce another verifier (FR-U01 / T-5238).
+
 Private rendering receipt `/2` adds exact Markdown/HTML references without expanding the public
 four-key dossier map. Both the receipt and every additional reference must belong to the
 accepted gate binding set. Legacy `/1` is read without certifying absent formats or guessing
@@ -174,6 +185,7 @@ flowchart LR
   gate["job_final_publication_gate / publication_gate_decisions"] --> load
   load --> assemble["report.assemble"]
   assemble --> json["final-report.json"]
+  assemble --> sarif["findings.sarif + sarif-export-result.json"]
   json --> render["report.render"]
   render --> md["final-report.md"]
   load --> dossier["Hash- and identity-checked dossier JSON"]
@@ -189,6 +201,7 @@ flowchart LR
   md --> accept
   html --> accept
   tex --> accept
+  sarif --> accept
   accept --> out["final_report_publications"]
   gate -. "gap / not_run / notice retained" .-> accept
   accept -. "binding or rerender mismatch" .-> reject["reject publication"]
@@ -200,11 +213,21 @@ this job to certified artifacts. Rendering does not grant payload retrieval acce
 
 ## Gaps
 
-The projection carries the gate's limitation IDs and
-statements of kind `gap` into legacy handler strings; the producer supplies no retryability
-classification. The [gate gap table](job_final_publication_gate.md#gaps) names those causes.
+The projection retains the gate's limitation IDs and statements unchanged in report JSON.
+SARIF accounting carries each `gap` limitation as a `producer-gap/1` record, scoped by that
+limitation ID; it supplies no new retryability classification. Publication reuses those records,
+not an additional string copy of each gate limitation. PDF-unit gaps likewise retain their
+canonical records when forwarded to publication, so runtime outcome aggregation counts each once.
+The [gate gap table](job_final_publication_gate.md#gaps) names those causes.
 `not_run` and `notice` remain separate report limitations. In particular,
 `compile_only_nonexecution` is not a claim that runtime checks passed.
+
+Ledger `gap_ids`, gate limitation counts, capability counts, radar-domain gaps and named gap rows
+describe different populations and are not additive. For example, `review_degraded` and
+`gaps_recorded` may both describe the same ledger population without duplicating ledger identities.
+Repeated records for one ledger gap already collapse in the ledger; different subject scopes
+remain different gaps, even with identical reason text. The T-5227 repair removes a proved
+publication/forwarding duplication, not those distinct scope summaries or CodeQL seed counters.
 
 Radar gap reasons describe unavailable domain measurements separately from the gate's
 canonical producer limitations. `surface_exposure_unknown`, `inspected_units_unknown`,

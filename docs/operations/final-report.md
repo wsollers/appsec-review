@@ -9,7 +9,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 # Operating the final publication gate and the final report
 
 **Delivered completion ordering (`c44eddc1`, integrated by `dd9c9ad`):** PoC, remediation
-and dossiers precede one final gate. The current gate `/2` and report `/3` contracts certify and consume one snapshot;
+and dossiers precede one final gate. The current gate `/2` and report `/4` contracts certify and consume one snapshot;
 the shared reader accepts review `/3`, including nested chain/package bindings.
 The [completion design](../architecture/evidence-completion-and-remediation.md) requires
 one gate-certified snapshot after every enabled producer, including protected
@@ -301,7 +301,11 @@ executive PDF's outcome from the receipt (`state` `rendered` with `file` and `sh
 or `not_rendered` by policy, always with a `reason`, the `latex` and the `receipt` references). All are
 hash-pinned by the accepted job handoff and are run-owned
 (`data/jobs/job_final_report_publication/attempts/<attempt>/steps/...`). The job is
-`COMPLETED_WITH_GAPS` whenever a `gap` limitation exists or the PDF unit recorded a named gap.
+`COMPLETED_WITH_GAPS` whenever a `gap` limitation exists, SARIF records an export gap or the PDF
+unit recorded a named gap. Gate limitations reach publication through SARIF's scoped
+`producer-gap/1` records, without a second string copy. PDF-unit records also keep their identity
+when forwarded, avoiding a second count in runtime outcomes. Distinct limitation scopes and
+ledger identities are preserved; limitation/coverage/axis counters are not a summed gap total.
 
 ### Proof-of-concept outcomes
 
@@ -324,7 +328,7 @@ PoC failure never contradicts the finding, and a compiled PoC cannot upgrade it 
 
 The user selected standalone post-gate export while preserving gate-only reporting.
 Since `74d931273a383f2f33bac90d3569a070a0ef612d`, report dependencies and `CONSUMES` are exactly
-`job_final_publication_gate`; the current report `/3` retains no `openvex_export` block, output links or
+`job_final_publication_gate`; the current report `/4` retains no `openvex_export` block, output links or
 live optional attachment discovery. This supersedes the earlier OpenVEX report-link/fan-in
 proposal, not the pre-gate completion design.
 
@@ -348,10 +352,13 @@ integration, acceptance, Linux or live Dagster result is claimed here.
 
 ### What the report never contains
 
-It holds identifiers, hashes, accepted titles and summaries, and score dimensions. It carries no
+The closed JSON finding projection holds identifiers, hashes, accepted titles and summaries, and score dimensions. It carries no
 claim statement, worker narrative, rationale, prompt, retrieval query, transcript, exploit code or PoC
 source (only its description, status and file references), and no secret or target source. The finding projection is a closed schema, so a new field
 needs a schema change.
+Executive HTML and LaTeX additionally use the gate-bound dossier narrative fields described below;
+this does not add them to JSON or certify invented paths as evidence. Protected SARIF can carry only
+the separately qualified exact remediation described in [export integrity](#final-report-export-integrity).
 
 ### The executive PDF
 
@@ -397,6 +404,13 @@ without loaded documents, it retains the certified count and explicitly says
 Neither HTML nor PDF contains exploit code, prompts, payloads, generated functions, exact patch
 text or dossier source excerpts (`sources[*].excerpt` is protected developer content): only
 approved narrative fields and source paths/line ranges appear.
+
+Verification wording preserves the distinction between accepted state, R6 independence and
+provider/model distinctness. A schema-supported `confirmed` finding with explicit false independence
+is described as confirmed **but not independently verified**, not silently reclassified.
+An absent flag is unknown. Normal R5 adjudication still requires independence for confirmation;
+the conditional renderer fixture is not proof of a normally accepted contradictory ledger.
+See [the report's qualification boundary](job_final_report_publication.md#report).
 
 Failure behaviour: `render_pdf = false` writes the LaTeX and a `not_rendered` receipt with the gap
 `final_report_pdf_disabled_by_policy`. A renderer failure (non-zero exit, timeout, OOM, oversized or

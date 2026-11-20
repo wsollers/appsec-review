@@ -277,10 +277,17 @@ boundary; this subsystem observes and projects it rather than widening it.
   geometry omits unknown vertices rather than joining or filling through them.
   See [coverage and metric qualifications](../operations/final-report.md#domain-coverage-and-unknown-measurements-t-5088).
 - **Executive Report (`appsec-review/final-report/4`) & Finding Dossiers (`appsec-review/dossier/1`)**:
-  `job_final_report_publication` renders an executive risk narrative, exploitability funnel,
-  multi-step attack-chain summaries, top remediation choke-points, OWASP/CWE posture matrix, and
+  `job_final_report_publication` renders an executive risk narrative, verification funnel,
+  multi-step attack-chain summaries, prioritized remediation roadmap, and
   named coverage gaps. Active chains use certified `component_claim_ids` and count each publishable
   member once. Backlog and withheld packages remain separate and cannot certify a domain clean.
+  The report does not render a dedicated OWASP posture matrix; that projection remains
+  [T-5012](../TODO.md). Its twelve radar domains and SARIF taxonomy mappings are not that matrix.
+  Executive verification wording retains explicit independence qualifications without changing
+  accepted state or conflating R6 independence with provider/model distinctness.
+  Gate limitations and PDF failures retain canonical gap records across report units;
+  publication does not append another copy of limitations already carried by SARIF accounting.
+  Ledger, limitation, capability and domain-gap populations remain distinct, non-additive counts.
   `job_dossier_publication` uses one common document across Markdown/HTML/LaTeX, preserving
   counterevidence, qualifications, risk and provenance. Ordered paths, guard conclusions and
   scanner corroboration stay unrecorded when absent from accepted projections. Actual exact-edit

@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
+from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.jobs.bound_artifacts import read_bound_json
 from appsec_review.jobs.completion_contracts import REMEDIATION_VALIDATION_SCHEMA, verify_nonexecution_assurance
 from appsec_review.reporting.sarif_contracts import SarifExportBundle
@@ -86,7 +87,10 @@ def gate_sarif(run_root: Path, gate: Mapping[str, Any], report: Mapping[str, Any
     by_finding = {row.finding["finding_package_id"]: row.document for row in dossiers
                   if row.document and row.kind == "confirmed_finding"}
     findings = []
-    gaps = [row["statement"] for row in report["limitations"] if row["kind"] == "gap"]
+    gaps = [
+        producer_gap(GapCode.PRODUCER_REPORTED_GAP, row["statement"], scope_id=row["limitation_id"])
+        for row in report["limitations"] if row["kind"] == "gap"
+    ]
     for package in sorted(report["findings"], key=lambda row: row["finding_package_id"]):
         dossier = by_finding.get(package["finding_package_id"]) or {}
         sources = dossier.get("sources") or []
@@ -105,14 +109,16 @@ def gate_sarif(run_root: Path, gate: Mapping[str, Any], report: Mapping[str, Any
         if dossier:
             identity = package["finding_package_id"]
             # DP-01 deliberately removed invented timelines. No admitted producer supplies ordered paths.
-            gaps.append(f"sarif_codeflow_omitted:{identity}:ordered_trace_not_in_accepted_dossier_contract")
+            gaps.append(producer_gap(
+                GapCode.PRODUCER_REPORTED_GAP,
+                f"sarif_codeflow_omitted:{identity}:ordered_trace_not_in_accepted_dossier_contract"))
             fix, reason = _qualified_fix(run_root, gate, dossier)
             if fix is not None:
                 finding["exact_remediation"] = fix
             else:
-                gaps.append(f"sarif_fix_omitted:{identity}:{reason}")
+                gaps.append(producer_gap(GapCode.PRODUCER_REPORTED_GAP, f"sarif_fix_omitted:{identity}:{reason}"))
         findings.append(finding)
     return export_sarif_bundle(
         findings, run_id=report["run_id"],
-        upstream_gaps=sorted(gaps),
+        upstream_gaps=sorted(gaps, key=lambda row: (row["reason"], row["scope_id"] or "")),
     )

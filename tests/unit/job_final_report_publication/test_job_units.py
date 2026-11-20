@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -28,8 +29,10 @@ from appsec_review.jobs.job_final_report_publication.pdf import RECEIPT_SCHEMA, 
 from appsec_review.reporting.dossier_render import render_dossier
 from appsec_review.reporting.dossiers import build_dossier
 from appsec_review.review.identity import sha256_hex
-from appsec_review.review.models import IntegrityError
+from appsec_review.review.ledger import LedgerWriter, merge_shards, project
+from appsec_review.review.models import GapClass, IntegrityError, make_gap
 from appsec_review.runtime import JobContext, UnitContext
+from appsec_review.runtime.handoff import build_outcomes
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, file_sha256
 from tests.dossier_fixture import settings as dossier_settings
 from tests.unit.review_decision_audit_wiring.helpers import events, put, verified_document
@@ -92,9 +95,10 @@ def _setup_run(
     profile: dict[str, Any] | None = None,
     render_pdf: bool = True,
     dossier: bool = False,
+    verified: dict[str, Any] | None = None,
 ) -> SimpleNamespace:
     root = tmp_path / "run-report"
-    verified = verified_document()
+    verified = deepcopy(verified) if verified is not None else verified_document()
     verified["run_id"] = root.name
     for name in verified["inputs"]:
         verified["inputs"][name] = put(root, f"data/{name}.json", {"input": name})
@@ -213,6 +217,57 @@ def run_units(fx: SimpleNamespace, built: Any) -> dict[str, Any]:
     return outputs
 
 
+@pytest.mark.parametrize("distinct_scope", [False, True], ids=["repeated-canonical-gap", "distinct-scoped-gaps"])
+@pytest.mark.parametrize("pdf_failed", [False, True], ids=["pdf-disabled", "pdf-failed"])
+def test_publication_counts_gate_gaps_once_and_preserves_scoped_ledger_gaps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, distinct_scope: bool, pdf_failed: bool,
+) -> None:
+    paths = []
+    for index in range(2):
+        writer = LedgerWriter(tmp_path / f"ledger-{index}.jsonl", f"review.scope_{index}")
+        gap = make_gap(GapClass.WORKER_GAP, f"scope-{index if distinct_scope else 0}", "worker unavailable")
+        writer.record_gap(gap)
+        writer.seal()
+        paths.append(writer.path)
+    ledger = project(merge_shards(paths).events)
+    verified = verified_document()
+    verified["gap_ids"] = [gap.gap_id for gap in ledger.gaps]
+    verified["accounting"]["gaps_by_class"] = dict(Counter(gap.gap_class.value for gap in ledger.gaps))
+    verified["review"]["status"] = verified["accounting"]["outcome"] = "DEGRADED"
+    fx = _setup_run(tmp_path, monkeypatch, render_pdf=pdf_failed, verified=verified)
+    factory = (fake_executor([], render_status=1, pdf=None) if pdf_failed else
+               lambda *_: pytest.fail("PDF renderer disabled"))
+    outputs = run_units(fx, build_job(executor_factory=factory))
+    report = read_bound_json(fx.root, outputs["report.assemble"]["artifact"])
+    published = outputs["acceptance.publish_handoff"]
+    sarif_gaps = read_bound_json(fx.root, published["sarif_result"])["gaps"]
+    for unit_id, result in outputs.items():
+        unit = fx.unit(unit_id)
+        result_ref = put(fx.root, str((unit.unit_root / "result.json").relative_to(fx.root)), result)
+        put(fx.root, str((unit.unit_root / "status.json").relative_to(fx.root)), {
+            "status": "SUCCEEDED", "unit_id": unit_id, "step_id": unit.step_id, "task_id": unit.task_id,
+            "result_sha256": result_ref["sha256"],
+        })
+    outcomes = build_outcomes(fx.root, run_id=fx.root.name, job_id=JOB_ID, attempt_id="attempt_0001",
+                              target_snapshot=sha256_hex("target"), unit_ids=list(outputs))
+    assert len(report["gap_ids"]) == 1 + distinct_scope
+    assert report["gap_ids"] == fx.gate["gap_ids"] == verified["gap_ids"]
+    limitations = [row for row in fx.gate["limitations"] if row["kind"] == "gap"]
+    assert {row["limitation_id"]: row["count"] for row in limitations} == {
+        "review_degraded": 1 + distinct_scope, "gaps_recorded": 1 + distinct_scope}
+    assert report["limitations"] == fx.gate["limitations"]
+    # Two different summary scopes are not two copies of each ledger gap. Neither counter is summed.
+    assert len(published["gaps"]) == 4  # two gate scopes, one PDF gap, one omitted SARIF record
+    assert published["gaps"] == [*outputs["report.render_pdf"]["gaps"], *sarif_gaps]
+    gate_gaps = [row for row in sarif_gaps if row["scope_id"] is not None]
+    assert {row["scope_id"]: row["reason"] for row in gate_gaps} == {
+        row["limitation_id"]: row["statement"] for row in limitations}
+    assert len({row["gap_id"] for row in sarif_gaps}) == len(sarif_gaps) == 3
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert outcomes["coverage"]["gap_count"] == len(outcomes["gaps"]) == 4
+    assert {row["gap_id"] for row in outcomes["gaps"]} == {row["gap_id"] for row in published["gaps"]}
+
+
 def test_units_execute_clean_and_gapped_flows_and_claim_every_written_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -312,16 +367,17 @@ def test_units_execute_clean_and_gapped_flows_and_claim_every_written_file(
 
     pub_gap = gap_outputs["acceptance.publish_handoff"]
     assert pub_gap["terminal_status"] == "COMPLETED_WITH_GAPS"
-    assert any(gap.startswith("review_degraded:") for gap in pub_gap["gaps"])
-    assert not any("not_run" in gap for gap in pub_gap["gaps"])
+    assert sum(gap["scope_id"] == "review_degraded" for gap in pub_gap["gaps"]) == 1
+    assert not any("not_run" in (gap["scope_id"] or "") for gap in pub_gap["gaps"])
     gap_report = read_bound_json(fx_gap.root, pub_gap["artifact"])
     assert gap_report["provenance"]["configuration_profile"] == {"name": "prod", "sha256": prod_sha}
     # A failed render keeps the LaTeX, the logs and a named gap; no PDF is invented.
     pdf_gap = gap_outputs["report.render_pdf"]
     assert pdf_gap["status"] == "render_failed" and pdf_gap["terminal_status"] == "COMPLETED_WITH_GAPS"
     assert pdf_gap["files"]["pdf"] is None and pdf_gap["pdf_sha256"] is None
-    assert pdf_gap["gaps"] == ["final_report_pdf_render_failed: COMPLETED, exit=1"]
-    assert "final_report_pdf_render_failed: COMPLETED, exit=1" in pub_gap["gaps"]
+    assert [gap["reason"] for gap in pdf_gap["gaps"]] == ["final_report_pdf_render_failed: COMPLETED, exit=1"]
+    assert pdf_gap["gaps"][0]["scope_id"] == "executive_pdf"
+    assert pub_gap["gaps"].count(pdf_gap["gaps"][0]) == 1
     assert pub_gap["pdf"]["state"] == "render_failed" and pub_gap["pdf"]["file"] is None
     gap_dir = fx_gap.root / ATTEMPT / "steps/report/tasks/render_pdf"
     assert not (gap_dir / "final-report.pdf").exists() and (gap_dir / "final-report.tex").is_file()
@@ -448,13 +504,15 @@ def test_render_pdf_disabled_by_policy_keeps_latex_and_names_the_gap(
     outputs = run_units(fx, build_job(executor_factory=lambda *a: pytest.fail("render_pdf = false must not render")))
     pdf = outputs["report.render_pdf"]
     assert pdf["status"] == "not_rendered" and pdf["files"]["pdf"] is None
-    assert pdf["gaps"] == ["final_report_pdf_disabled_by_policy"] and pdf["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert [gap["reason"] for gap in pdf["gaps"]] == ["final_report_pdf_disabled_by_policy"]
+    assert pdf["gaps"][0]["scope_id"] == "executive_pdf"
+    assert pdf["terminal_status"] == "COMPLETED_WITH_GAPS"
     receipt = read_bound_json(fx.root, pdf["files"]["receipt"])
     assert receipt["status"] == "not_rendered" and receipt["execution"] is None and "version" not in receipt["tool"]
     assert (fx.root / pdf["files"]["latex"]["path"]).is_file()
     published = outputs["acceptance.publish_handoff"]
     assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
-    assert published["gaps"] == ["final_report_pdf_disabled_by_policy", *outputs["report.assemble"]["gaps"]]
+    assert published["gaps"] == [*outputs["report.render_pdf"]["gaps"], *outputs["report.assemble"]["gaps"]]
     assert published["pdf"]["state"] == "not_rendered" and "disabled by policy" in published["pdf"]["reason"]
     unit_dir = fx.root / ATTEMPT / "steps/report/tasks/render_pdf"
     assert sorted(p.name for p in unit_dir.iterdir()) == ["final-report.tex", "receipt.json"]

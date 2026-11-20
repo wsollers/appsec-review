@@ -59,8 +59,9 @@ POLICY_STATEMENT = (
     "it is not proof that the weakness can be triggered at runtime. A failed, refused or missing proof of "
     "concept does not contradict a finding, and a build-checked remediation proposal is not a verified fix.")
 VERIFIED_WORDS = (
-    "Confirmed means an independent verifier examined the claim and agreed with it. A finding in the "
-    "verification backlog is supported by evidence but has not been independently confirmed.")
+    "Finding state is copied from the accepted review; verifier independence is reported separately from "
+    "its recorded qualifications. A finding in the verification backlog is supported by evidence but "
+    "has not been independently confirmed.")
 
 SHIP_BLOCK_WORDS = {
     "ship_blocking": "Blocks shipping: under the policy this must be fixed before a release.",
@@ -184,11 +185,14 @@ def _ship_block(block: Mapping[str, Any]) -> str:
 def _verification(item: Mapping[str, Any]) -> str:
     independence = item.get("independence") or {}
     if item.get("state") == "confirmed":
-        text = "Yes: an independent verifier confirmed this finding"
-        if independence.get("independent"):
+        if independence.get("independent") is True:
+            text = "Yes: an independent verifier confirmed this finding"
             text += (f" (separate provider: {_yes(independence.get('provider_distinct'))}; "
-                     f"distinct verifier model: {_yes(independence.get('verifier_model_distinct'))})")
-        text += "."
+                     f"distinct verifier model: {_yes(independence.get('verifier_model_distinct'))}).")
+        elif independence.get("independent") is False:
+            text = "No: the accepted finding is confirmed, but its independence record explicitly says no."
+        else:
+            text = "Unknown: the accepted finding is confirmed, but verifier independence is not recorded."
     else:
         text = f"No: this finding is {words(item.get('label'))} and stays in the verification backlog."
     verdict = item.get("judge_verdict")

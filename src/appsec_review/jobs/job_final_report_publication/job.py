@@ -20,6 +20,7 @@ from typing import Any, Mapping
 
 from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.container_runtime.executor import ContainerExecutor
+from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound, read_bound_json
 from appsec_review.jobs.engineering_contracts import (
     FINAL_REPORT_HANDOFF_SCHEMA, FINAL_REPORT_SCHEMA,
@@ -211,7 +212,9 @@ def build_job(*, repository_root: Path | None = None,
                               duration_ms=max(0, round((time.monotonic() - started) * 1000)))
         return {"status": result["status"], "reason": result["reason"], "files": result["files"],
                 "tex_sha256": result["tex_sha256"], "pdf_sha256": result["pdf_sha256"],
-                "settings": settings.pdf_identity(), "gaps": list(result["gaps"]),
+                "settings": settings.pdf_identity(),
+                "gaps": [producer_gap(GapCode.PRODUCER_REPORTED_GAP, gap, scope_id="executive_pdf")
+                         for gap in result["gaps"]],
                 "terminal_status": "SUCCEEDED" if not result["gaps"] else "COMPLETED_WITH_GAPS"}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
@@ -262,8 +265,9 @@ def build_job(*, repository_root: Path | None = None,
                 raise IntegrityError("final-report.pdf is not a valid PDF")
         elif files["pdf"] is not None or receipt["pdf_sha256"] is not None:
             raise IntegrityError("a PDF is published without a rendered receipt")
-        gaps = [f"{item['limitation_id']}: {item['statement']}"[:300] for item in report["limitations"]
-                if item["kind"] == "gap"] + [gap[:300] for gap in pdf["gaps"]] + list(sarif.gaps)
+        # SARIF already carries every gate gap. Reuse those identities and the PDF unit's records
+        # so publication and runtime outcome aggregation do not count the same gap again.
+        gaps = list(pdf["gaps"]) + list(sarif.gaps)
         counts = report["summary"]["package_counts"]
         posture = report.get("executive_posture") or {}
         unit.job.events.write(

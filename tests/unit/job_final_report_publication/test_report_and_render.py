@@ -22,6 +22,8 @@ from appsec_review.jobs.job_final_report_publication.report import (
     HTML_RENDERER, NOTICES, PDF_REASON, POC_REASON, RENDERER, build_report, report_schema_name,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import SCHEMA_DIRECTORY, SchemaSet
+from appsec_review.reporting.executive_report import executive_document, render_executive_html
+from appsec_review.reporting.latex import escape_latex, render_latex
 from appsec_review.review import ship_block
 from appsec_review.review.claims import normalize_claim
 from appsec_review.review.identity import sha256_hex
@@ -60,7 +62,8 @@ def _gate_and_report(
     return gate, report
 
 
-def _serialized_review(tmp_path: Path, states: tuple[tuple[str, str], ...]) -> dict[str, Any]:
+def _serialized_review(tmp_path: Path, states: tuple[tuple[str, str], ...], *,
+                       independent: bool = True, distinct: bool = True) -> dict[str, Any]:
     """Tiny accepted claims cross the real finding serializer and accepted-field projection."""
     verified = verified_document()
     packages = []
@@ -87,7 +90,7 @@ def _serialized_review(tmp_path: Path, states: tuple[tuple[str, str], ...]) -> d
             [{"claim_id": claim.claim_id, "state": state,
               "adjudication_id": f"adjudication-{sha256_hex(str(index))}", "predicates": [], "gap_ids": []}],
             {"independence": {claim.claim_id: [{
-                "independent": True, "provider_distinct": True, "verifier_model_distinct": True,
+                "independent": independent, "provider_distinct": distinct, "verifier_model_distinct": distinct,
                 "review_id": f"review-{sha256_hex(str(index))}",
             }]}}, [score], manifest_sha256=HASH, out_dir=tmp_path, schemas=schemas,
         )
@@ -114,6 +117,41 @@ def _serialized_review(tmp_path: Path, states: tuple[tuple[str, str], ...]) -> d
 
 def _memory_axis(report: dict[str, Any]) -> dict[str, Any]:
     return next(axis for axis in report["radar_tracker"]["axes"] if axis["key"] == "Mem")
+
+
+@pytest.mark.parametrize("state,independent,distinct", [
+    ("confirmed", False, False), ("confirmed", True, False), ("confirmed", True, True),
+    ("supported", False, False),
+], ids=["conditional-not-independent", "same-model-independent", "distinct-independent", "backlog"])
+def test_executive_verification_preserves_serialized_independence(
+    tmp_path: Path, state: str, independent: bool, distinct: bool,
+) -> None:
+    # The contradictory confirmed/false case is schema-supported, not a claim of R5 reachability.
+    verified = _serialized_review(tmp_path, ((state, "high"),), independent=independent, distinct=distinct)
+    gate, report = _gate_and_report(verified)
+    original = deepcopy(report)
+    package = (report["findings"] or report["verification_backlog"])[0]
+    assert package["state"] == state and package["independence"]["independent"] is independent
+    assert package == gate["packages"][0]
+    html = render_executive_html(report, ())
+    latex = render_latex(executive_document(report, ()), ROOT / "containers" / "report" / "latex" / "template")
+    markdown = render_markdown(report, evidence_ids=8, gap_ids=16)
+    if state == "confirmed" and not independent:
+        expected = "No: the accepted finding is confirmed, but its independence record explicitly says no."
+        assert expected in html and escape_latex(expected) in latex
+        assert "Yes: an independent verifier confirmed this finding" not in html + latex
+        assert "Confirmed means an independent verifier" not in html + latex
+        assert "independent verifier no" in markdown
+    elif state == "confirmed":
+        expected = ("Yes: an independent verifier confirmed this finding "
+                    f"(separate provider: {'yes' if distinct else 'no'}; "
+                    f"distinct verifier model: {'yes' if distinct else 'no'}).")
+        assert expected in html and escape_latex(expected) in latex
+        assert "independent verifier yes" in markdown
+    else:
+        assert not report["findings"] and len(report["verification_backlog"]) == 1
+        assert "Yes: an independent verifier confirmed this finding" not in html + latex
+    assert report == original
 
 
 @pytest.mark.parametrize("state", ["confirmed", "supported"])
