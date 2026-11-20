@@ -354,6 +354,15 @@ Missing/conflicting positions, ambiguous mappings and macro spelling/expansion a
 retain raw metadata and compile-unit scope without normalized locations, with
 `ast_location_unresolved` gaps. No absent position becomes exact TU line 1.
 
+Filename tracking is separate from that coordinate uncertainty. Following LLVM 18.1.3's
+[`JSONNodeDumper`](https://github.com/llvm/llvm-project/blob/llvmorg-18.1.3/clang/lib/AST/JSONNodeDumper.cpp),
+each macro advances filename state through **spelling, then expansion**, in `loc`, range-begin
+and range-end emission order. An omitted nested filename retains the preceding bare location's
+state; `includedFrom` is not filename authority. The macro itself remains unlocated. Subsequent
+file-elided foreign declarations are filtered before the node-detail budget, while accepted
+transitions still require the existing cwd, source-hash, coordinate and custody checks. The
+regressions for this rule are schema-derived fixtures, not claimed compiler recordings.
+
 ### `infer`
 
 1. For a usable project, invoke `tool-infer` using the accepted normalized compile database, not

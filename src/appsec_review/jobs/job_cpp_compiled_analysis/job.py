@@ -39,7 +39,7 @@ AST_CALLABLE_KINDS = frozenset({"FunctionDecl", "CXXMethodDecl", "CXXConversionD
                                "CXXConstructorDecl", "CXXDestructorDecl"})
 AST_ENTITY_KINDS = AST_CALLABLE_KINDS | {"VarDecl", "RecordDecl", "CallExpr", "DeclRefExpr",
                                         "FieldDecl", "ParmVarDecl", "TypedefDecl"}
-BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/4", "ast": "clang-ast/5",
+BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/4", "ast": "clang-ast/6",
                    "ir": "llvm-ir/4",
                    "infer": "infer-cpp-adapter/2",
                    "binary": "elf-symbols/3"}
@@ -755,6 +755,16 @@ class _AstLocations:
             self.cache[path] = result
         return self.cache[path]
 
+    def _advance_ast_file(self, point: Mapping[str, Any]) -> bool:
+        """Track emitted bare filenames without choosing a macro's evidence location."""
+        macro = "spellingLoc" in point or "expansionLoc" in point
+        # JSONNodeDumper writes spelling before expansion; either can elide its filename.
+        emitted = (point.get("spellingLoc"), point.get("expansionLoc")) if macro else (point,)
+        for bare in emitted:
+            if isinstance(bare, Mapping) and isinstance(bare.get("file"), str):
+                self.current_file = bare["file"]
+        return macro
+
     def resolve(self, node: Mapping[str, Any]) -> tuple[SourceLocation | None, str | None]:
         loc = node.get("loc") if isinstance(node.get("loc"), Mapping) else {}
         span = node.get("range") if isinstance(node.get("range"), Mapping) else {}
@@ -765,16 +775,12 @@ class _AstLocations:
         selected_file = None
         macro = False
         for point in points:
-            if "spellingLoc" in point or "expansionLoc" in point:
-                self.current_file = None
-                macro = True
-            elif isinstance(point.get("file"), str):
-                self.current_file = point["file"]
+            point_macro = self._advance_ast_file(point)
+            macro |= point_macro
             if point is selected:
-                selected_file = self.current_file
+                selected_file = None if point_macro else self.current_file
         self.last_file = selected_file
         if macro:
-            self.current_file = None
             return None, "macro spelling/expansion location is ambiguous"
         if not selected or not selected_file:
             return None, "source file or position is absent"

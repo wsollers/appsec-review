@@ -241,6 +241,154 @@ def test_whole_ast_source_admission_precedes_the_detail_limit(tmp_path, monkeypa
     assert any("ast_truncated" in gap for gap in output["gaps"])
 
 
+class _Clang18LocationFixture:
+    """Schema-derived fixtures, NOT compiler recordings.
+
+    llvmorg-18.1.3 clang/lib/AST/JSONNodeDumper.cpp writes bare locations with shared
+    filename/line elision, spelling then expansion, and loc then range begin/end.
+    """
+
+    def __init__(self, sources, foreign, included_from):
+        self.sources, self.foreign, self.included_from = sources, foreign, included_from
+        self.file = self.line = None
+
+    def point(self, path, offset, length):
+        data = self.sources[path]
+        line = data.count(b"\n", 0, offset) + 1
+        point = {"offset": offset}
+        if path != self.file:
+            point.update(file=path, line=line)
+        elif line != self.line:
+            point["line"] = line
+        point.update(col=offset - data.rfind(b"\n", 0, offset), tokLen=length)
+        self.file, self.line = path, line
+        if path == self.foreign:
+            point["includedFrom"] = {"file": self.included_from}
+        return point
+
+    def macro(self, spelling, expansion, *, begin=False, declaration=True):
+        token = b"int" if begin and declaration else b"macro_generated"
+        return {
+            "spellingLoc": self.point(spelling, self.sources[spelling].index(token), len(token)),
+            "expansionLoc": self.point(expansion, self.sources[expansion].rindex(b"DECL"), 4),
+        }
+
+    def declaration(self, path, name):
+        offset = self.sources[path].index(name.encode())
+        return {
+            "id": "0x-" + name, "kind": "VarDecl", "name": name, "type": {"qualType": "int"},
+            "loc": self.point(path, offset, len(name)),
+            "range": {
+                "begin": self.point(path, self.sources[path].rfind(b"int ", 0, offset), 3),
+                "end": self.point(path, offset, len(name)),
+            },
+        }
+
+
+@pytest.mark.parametrize("transition,form,limit,relative,integrity", [
+    ("foreign", "loc", 2, False, "intact"),
+    ("foreign", "range", 2, True, "intact"),
+    ("accepted", "loc", 2, False, "intact"),
+    ("same-file", "loc", 2, False, "intact"),
+    ("foreign", "loc", 1, False, "intact"),
+    ("accepted", "range", 1, True, "intact"),
+    ("accepted", "range", 2, True, "intact"),
+    ("same-file", "loc", 2, False, "changed-bytes"),
+    ("same-file", "loc", 2, False, "symlink"),
+], ids=["foreign-loc", "foreign-range-relative", "accepted-loc", "elided-expansion",
+        "foreign-budget", "accepted-range-budget", "accepted-range-relative",
+        "accepted-hash-mismatch", "accepted-custody"])
+def test_macro_emitter_state_filters_elided_foreign_nodes_without_crowding_accepted_source(
+        tmp_path, monkeypatch, transition, form, limit, relative, integrity):
+    from appsec_review.jobs.job_cpp_compiled_analysis import job
+    from appsec_review.storage import canonical_json
+
+    staged = sc.stage(tmp_path)
+    accepted = "../include/util.h" if relative else "/scratch/source/include/util.h"
+    foreign = "/foreign/vendor.h"
+    declaration = form == "loc"
+    definition = b"#define DECL " + (b"int " if declaration else b"") + b"macro_generated\n"
+    expansion = b"DECL;\n" if declaration else b"int generated = DECL;\n"
+    foreign_decls = b"".join(f"int foreign{i};\n".encode() for i in range(4))
+    sources = {
+        accepted: (definition if transition != "accepted" else b"") +
+                  (expansion if transition != "foreign" else b"") + b"int accepted_after;\n",
+        foreign: (definition if transition == "accepted" else b"") +
+                 (expansion if transition == "foreign" else b"") + foreign_decls,
+    }
+    for path in (staged.target / "proj/include/util.h", staged.case_root / "source/include/util.h"):
+        path.write_bytes(sources[accepted])
+    source = next(row for row in staged.mapping["files"] if row["target_path"] == "proj/include/util.h")
+    source["sha256"] = hashlib.sha256(sources[accepted]).hexdigest()
+    staged.mapping["case_snapshot"] = hashlib.sha256(canonical_json(staged.mapping["files"])).hexdigest()
+    command = next(row for row in staged.rows if row["target_path"] == "proj/src/util.cpp")
+    if relative:
+        command["directory"] = "/scratch/source/src"
+    command["compile_unit_id"] = job._tu_identity(staged.mapping, command)
+    staged.rows[:] = [command]
+    database = staged.case_root / "normalized-compile-commands.json"
+    database.write_text(json.dumps(staged.rows))
+    staged.cataloged["compile_database"] = job._artifact(staged.run_root, database)
+
+    emitter = _Clang18LocationFixture(sources, foreign, accepted)
+    nodes = [emitter.declaration(foreign, "foreign0")]
+    spelling = foreign if transition == "accepted" else accepted
+    expanded = foreign if transition == "foreign" else accepted
+    macro = {"id": "0x-macro", "kind": "VarDecl" if declaration else "DeclRefExpr"}
+    if declaration:
+        macro.update(name="macro_generated", loc=emitter.macro(spelling, expanded))
+    else:
+        macro["referencedDecl"] = {"id": "0x-ref", "kind": "VarDecl", "name": "macro_generated"}
+    macro["range"] = {
+        "begin": emitter.macro(spelling, expanded, begin=True, declaration=declaration),
+        "end": emitter.macro(spelling, expanded, declaration=declaration),
+    }
+    nodes.append(macro)
+    if transition == "foreign":
+        followers = [emitter.declaration(foreign, f"foreign{i}") for i in range(1, 4)]
+        assert all("file" not in node["loc"] for node in followers)
+        nodes.extend(followers)
+        nodes.append(emitter.declaration(accepted, "accepted_after"))
+    else:
+        following = emitter.declaration(accepted, "accepted_after")
+        assert "file" not in following["loc"]
+        if transition == "same-file":
+            assert "file" in macro["loc"]["spellingLoc"]
+            assert "file" not in macro["loc"]["expansionLoc"]
+        nodes.append(following)
+        nodes.extend(emitter.declaration(foreign, f"foreign{i}") for i in range(1, 4))
+    target_file = staged.target / "proj/include/util.h"
+    if integrity == "changed-bytes":
+        target_file.write_bytes(sources[accepted] + b"// changed after admission\n")
+    elif integrity == "symlink":
+        outside = tmp_path / "outside-target.h"
+        target_file.rename(outside)
+        target_file.symlink_to(outside)
+    monkeypatch.setattr(job, "AST_NODE_LIMIT", limit)
+    output, _ = _run(staged, DamagedExecutor(staged, "ast", json.dumps({
+        "kind": "TranslationUnitDecl", "inner": nodes})), "ast", seeded_settings=None)
+    with _indexed(staged, output) as db:
+        rows = {row["name"]: row for row in db.execute(
+            "select e.name, e.payload_json, l.* from entities e left join locations l on e.identity=l.entity_id")}
+    assert set(rows) == ({"macro_generated", "accepted_after"} if limit == 2 else {"macro_generated"})
+    macro_row = rows["macro_generated"]
+    assert macro_row["path"] is None
+    assert "macro spelling/expansion" in json.loads(macro_row["payload_json"])["location_gap"]
+    assert json.loads(macro_row["payload_json"])["clang_location"]["range"] == macro["range"]
+    if limit == 2:
+        location = rows["accepted_after"]
+        if integrity == "intact":
+            assert location["path"] == "proj/include/util.h"
+            assert location["file_sha256"] == hashlib.sha256(sources[accepted]).hexdigest()
+            assert sources[accepted][location["start_byte"]:location["end_byte"]] == b"accepted_after"
+            assert location["confidence"] == 1.0 and not location["ambiguous"]
+        else:
+            assert location["path"] is None
+            assert "accepted bytes changed" in json.loads(location["payload_json"])["location_gap"]
+    assert any("ast_source_filtered" in gap for gap in output["gaps"])
+    assert any("ast_truncated" in gap for gap in output["gaps"]) is (limit == 1)
+
+
 @pytest.mark.parametrize("mode", ["ir", "ast"])
 def test_whole_program_missing_or_malformed_payload_cannot_be_cached(tmp_path, mode):
     staged = sc.stage(tmp_path)
