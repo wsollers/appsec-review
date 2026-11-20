@@ -1,6 +1,6 @@
 """Lead attention ordering and configured worker capacity versus logical review tasks."""
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from dataclasses import replace
 import shutil
 
@@ -89,9 +89,13 @@ def test_team_capacity_does_not_fabricate_logical_tasks(
         {"leads": [{"ref": lead}]}, {"K1": entity, "L1": lead}, {}, frozenset(), (lead,),
         frozenset((entity, lead)))
     ctx.covers = {"generalist": ()}
-    calls, executors = [], []
+    calls, executors, contexts = [], [], []
+    phase_context = ContextVar("cardinality_phase_context", default=None)
+    expected_context = object()
 
-    class ObservedExecutor(ThreadPoolExecutor):
+    executor_type = teams.ThreadPoolExecutor
+
+    class ObservedExecutor(executor_type):
         def __init__(self, max_workers, thread_name_prefix):
             executors.append((thread_name_prefix, max_workers))
             super().__init__(max_workers=max_workers, thread_name_prefix=thread_name_prefix)
@@ -100,6 +104,7 @@ def test_team_capacity_does_not_fabricate_logical_tasks(
 
     def infer(request, **kwargs):
         calls.append(request)
+        contexts.append((request.role, phase_context.get()))
         if request.role == Role.RED_TEAM_ANALYST.value:
             return ScriptedInfer._final({
                 "claims": [{"id": "p1", "leads": ["L1"], "affected": ["K1"],
@@ -120,7 +125,12 @@ def test_team_capacity_does_not_fabricate_logical_tasks(
                                     "reason": "The cited construct supports this side."})
 
     ctx.infer = infer
-    result = teams.run_team(ctx, work, launch=True)
+    token = phase_context.set(expected_context)
+    try:
+        result = teams.run_team(ctx, work, launch=True)
+    finally:
+        phase_context.reset(token)
+    assert contexts and all(value is expected_context for _, value in contexts)
     assert len(result.claims) == 1, (result.triage, result.gaps)
     assert all(cell.status is CellStatus.SUCCEEDED for cell in result.cells)
     assert Counter(request.role for request in calls) == {
