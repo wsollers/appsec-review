@@ -456,7 +456,7 @@ def test_optimized_out_variables_are_not_invented(tmp_path):
     "---\nPdbStream: {Age: 1, Guid: ''}\nDbiStream: []\n...\n",
     "---\nPdbStream: {Age: 1, Guid: '{ABE8BD73-C161-3D95-4C4C-44205044422E}'}\nTpiStream: []\n...\n",
     "---\nPdbStream: {Age: 1, Guid: '{ABE8BD73-C161-3D95-4C4C-44205044422E}'}\nDbiStream: {Modules: [null]}\n...\n",
-])
+], ids=["empty-pdb-stream", "invalid-dbi-stream", "invalid-tpi-stream", "null-module"])
 def test_malformed_pdb_nested_schema_cannot_escape_reader(tmp_path, output):
     result = extract_symbols(FIXTURES / "tiny.exe", FIXTURES / "tiny.pdb", target=CompilerTarget.MSVC,
                             settings=settings(tmp_path, "llvm_pdbutil"), runner=lambda *a, **k: output)

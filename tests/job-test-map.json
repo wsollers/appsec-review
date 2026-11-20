@@ -242,6 +242,11 @@
     },
     "job_debug_symbol_indexing": {
       "unit": [
+        "tests/unit/job_debug_symbol_indexing/test_audit_regressions.py",
+        "tests/unit/job_debug_symbol_indexing/test_payload_admission.py",
+        "tests/test_debug_symbol_readers.py",
+        "tests/test_debug_symbol_retrieval.py",
+        "tests/test_debug_symbol_image_tools.py",
         "tests/unit/job_debug_symbol_indexing/test_contract.py",
         "tests/unit/job_debug_symbol_indexing/test_job_graph.py",
         "tests/unit/job_debug_symbol_indexing/test_workflow.py",

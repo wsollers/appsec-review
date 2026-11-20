@@ -31,15 +31,17 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_debug_symbol_indexing/job.py#L746) |
-| `decide` | `decide.target` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_debug_symbol_indexing/job.py#L739) |
-| `extract` | `extract.clang_dwarf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_debug_symbol_indexing/job.py#L740) |
-| `extract` | `extract.msvc_pdb` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_debug_symbol_indexing/job.py#L743) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_debug_symbol_indexing/job.py#L800) |
+| `decide` | `decide.target` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_debug_symbol_indexing/job.py#L793) |
+| `extract` | `extract.clang_dwarf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_debug_symbol_indexing/job.py#L794) |
+| `extract` | `extract.msvc_pdb` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_debug_symbol_indexing/job.py#L797) |
 
 ### Accepted input declarations
 
 | Producer | Dataset | Schema | Channel | Availability | Missing policy |
 | --- | --- | --- | --- | --- | --- |
+| `job_target_catalog` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_target_catalog` | `source_files` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `artifact_catalog` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `archive_members` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
@@ -76,7 +78,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_debug_symbol_indexing/test_debug_symbol_indexing_graph.py`<br>`tests/integration/job_debug_symbol_indexing/test_debug_symbol_execution.py`<br>`tests/integration/job_debug_symbol_indexing/test_debug_symbol_end_to_end.py`<br>`tests/integration/job_artifact_indexing/test_artifact_indexing_scale.py` |
 | live | None declared |
-| unit | `tests/unit/job_debug_symbol_indexing/test_contract.py`<br>`tests/unit/job_debug_symbol_indexing/test_job_graph.py`<br>`tests/unit/job_debug_symbol_indexing/test_workflow.py`<br>`tests/unit/job_debug_symbol_indexing/test_settings.py`<br>`tests/unit/job_debug_symbol_indexing/test_host_bindings.py`<br>`tests/unit/job_debug_symbol_indexing/test_accepted_inputs.py`<br>`tests/unit/job_debug_symbol_indexing/test_decision.py`<br>`tests/unit/job_debug_symbol_indexing/test_probe_and_privacy.py`<br>`tests/unit/job_debug_symbol_indexing/test_sources.py`<br>`tests/unit/job_debug_symbol_indexing/test_source_bounds.py`<br>`tests/unit/job_debug_symbol_indexing/test_extract.py`<br>`tests/unit/job_debug_symbol_indexing/test_normalize.py`<br>`tests/unit/job_debug_symbol_indexing/test_publish.py`<br>`tests/unit/job_debug_symbol_indexing/test_accepted_loader.py`<br>`tests/unit/job_debug_symbol_indexing/test_metrics.py`<br>`tests/unit/runtime/test_wave1a_contracts.py` |
+| unit | `tests/unit/job_debug_symbol_indexing/test_audit_regressions.py`<br>`tests/unit/job_debug_symbol_indexing/test_payload_admission.py`<br>`tests/test_debug_symbol_readers.py`<br>`tests/test_debug_symbol_retrieval.py`<br>`tests/test_debug_symbol_image_tools.py`<br>`tests/unit/job_debug_symbol_indexing/test_contract.py`<br>`tests/unit/job_debug_symbol_indexing/test_job_graph.py`<br>`tests/unit/job_debug_symbol_indexing/test_workflow.py`<br>`tests/unit/job_debug_symbol_indexing/test_settings.py`<br>`tests/unit/job_debug_symbol_indexing/test_host_bindings.py`<br>`tests/unit/job_debug_symbol_indexing/test_accepted_inputs.py`<br>`tests/unit/job_debug_symbol_indexing/test_decision.py`<br>`tests/unit/job_debug_symbol_indexing/test_probe_and_privacy.py`<br>`tests/unit/job_debug_symbol_indexing/test_sources.py`<br>`tests/unit/job_debug_symbol_indexing/test_source_bounds.py`<br>`tests/unit/job_debug_symbol_indexing/test_extract.py`<br>`tests/unit/job_debug_symbol_indexing/test_normalize.py`<br>`tests/unit/job_debug_symbol_indexing/test_publish.py`<br>`tests/unit/job_debug_symbol_indexing/test_accepted_loader.py`<br>`tests/unit/job_debug_symbol_indexing/test_metrics.py`<br>`tests/unit/runtime/test_wave1a_contracts.py` |
 
 ### Dagster placement
 
@@ -89,61 +91,71 @@ Declared predecessors: `job_artifact_indexing`.
 ```mermaid
 flowchart LR
   job["job_debug_symbol_indexing"]
-  producer0["job_artifact_indexing"]
+  producer0["job_target_catalog"]
   input0["handoff"]
   input_schema0["appsec-review/job-handoff/2"]
   producer0 --> input0 --> job
   input0 -. schema .-> input_schema0
-  producer1["job_artifact_indexing"]
-  input1["artifact_catalog"]
+  producer1["job_target_catalog"]
+  input1["source_files"]
   input_schema1["appsec-review/retrieval-index/2"]
   producer1 --> input1 --> job
   input1 -. schema .-> input_schema1
   producer2["job_artifact_indexing"]
-  input2["archive_members"]
-  input_schema2["appsec-review/retrieval-index/2"]
+  input2["handoff"]
+  input_schema2["appsec-review/job-handoff/2"]
   producer2 --> input2 --> job
   input2 -. schema .-> input_schema2
   producer3["job_artifact_indexing"]
-  input3["artifact_relationships"]
+  input3["artifact_catalog"]
   input_schema3["appsec-review/retrieval-index/2"]
   producer3 --> input3 --> job
   input3 -. schema .-> input_schema3
   producer4["job_artifact_indexing"]
-  input4["artifact_index_summary"]
-  input_schema4["appsec-review/artifact-indexing/1"]
+  input4["archive_members"]
+  input_schema4["appsec-review/retrieval-index/2"]
   producer4 --> input4 --> job
   input4 -. schema .-> input_schema4
-  producer5["job_language_build"]
-  input5["handoff"]
-  input_schema5["appsec-review/job-handoff/2"]
+  producer5["job_artifact_indexing"]
+  input5["artifact_relationships"]
+  input_schema5["appsec-review/retrieval-index/2"]
   producer5 --> input5 --> job
   input5 -. schema .-> input_schema5
-  producer6["job_language_build"]
-  input6["topology_refinement_inputs"]
-  input_schema6["appsec-review/build-topology-refinement/1"]
+  producer6["job_artifact_indexing"]
+  input6["artifact_index_summary"]
+  input_schema6["appsec-review/artifact-indexing/1"]
   producer6 --> input6 --> job
   input6 -. schema .-> input_schema6
   producer7["job_language_build"]
-  input7["build_actions"]
-  input_schema7["appsec-review/retrieval-index/2"]
+  input7["handoff"]
+  input_schema7["appsec-review/job-handoff/2"]
   producer7 --> input7 --> job
   input7 -. schema .-> input_schema7
   producer8["job_language_build"]
-  input8["jvm_build_actions"]
-  input_schema8["appsec-review/retrieval-index/2"]
+  input8["topology_refinement_inputs"]
+  input_schema8["appsec-review/build-topology-refinement/1"]
   producer8 --> input8 --> job
   input8 -. schema .-> input_schema8
   producer9["job_language_build"]
-  input9["language_build_receipts"]
-  input_schema9["appsec-review/language-build-handoff/2"]
+  input9["build_actions"]
+  input_schema9["appsec-review/retrieval-index/2"]
   producer9 --> input9 --> job
   input9 -. schema .-> input_schema9
   producer10["job_language_build"]
-  input10["build_workspaces"]
-  input_schema10["application/octet-stream"]
+  input10["jvm_build_actions"]
+  input_schema10["appsec-review/retrieval-index/2"]
   producer10 --> input10 --> job
   input10 -. schema .-> input_schema10
+  producer11["job_language_build"]
+  input11["language_build_receipts"]
+  input_schema11["appsec-review/language-build-handoff/2"]
+  producer11 --> input11 --> job
+  input11 -. schema .-> input_schema11
+  producer12["job_language_build"]
+  input12["build_workspaces"]
+  input_schema12["application/octet-stream"]
+  producer12 --> input12 --> job
+  input12 -. schema .-> input_schema12
   output0["debug_symbol_summary"]
   output_schema0["appsec-review/debug-symbol-indexing/1"]
   job --> output0

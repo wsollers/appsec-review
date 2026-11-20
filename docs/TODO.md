@@ -356,7 +356,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5122 | [Return scoped CodeQL export timeout outcomes without KeyError](#t-5122-return-scoped-codeql-export-timeout-outcomes-without-keyerror) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
 | T-5123 | [Normalize only selected CPG facts with stable identities and parse gaps](#t-5123-normalize-only-selected-cpg-facts-with-stable-identities-and-parse-gaps) | graph | done (2026-11-20, eadf2c800980733179d5cfbbff8fcb5aa84456e3) |
 | T-5124 | [Do not cache failed CPG exports or retain failed intermediates](#t-5124-do-not-cache-failed-cpg-exports-or-retain-failed-intermediates) | graph | done (2026-11-20, eadf2c800980733179d5cfbbff8fcb5aa84456e3) |
-| T-5125 | [Preserve debug range lookup bounds and public-only PDB symbols](#t-5125-preserve-debug-range-lookup-bounds-and-public-only-pdb-symbols) | binary | open |
+| T-5125 | [Preserve debug range lookup bounds and public-only PDB symbols](#t-5125-preserve-debug-range-lookup-bounds-and-public-only-pdb-symbols) | binary | done (2026-11-20, e9db4656b905f985262ded943a4b2a84d409ae6e) |
 | T-5126 | [Preserve package coordinates across dependency consumers](#t-5126-preserve-package-coordinates-across-dependency-consumers) | evidence | done (2026-11-19, dfe9e91ff22fd14963f1ac126cf4ca671fa5302d) |
 | T-5127 | [Fingerprint dependency reachability and its advisory snapshot](#t-5127-fingerprint-dependency-reachability-and-its-advisory-snapshot) | evidence | done (2026-11-19, 023cb1e007f610c2bca289dd11e15d2020354a60) |
 | T-5128 | [Align dependency input requirements with actual required reads](#t-5128-align-dependency-input-requirements-with-actual-required-reads) | pipeline | done (2026-11-19, 023cb1e007f610c2bca289dd11e15d2020354a60) |
@@ -465,7 +465,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5231 | [Resolve code graph index conditional audit boundaries](#t-5231-resolve-code-graph-index-conditional-audit-boundaries) | pipeline | open |
 | T-5232 | [Resolve cpp compiled analysis conditional audit boundaries](#t-5232-resolve-cpp-compiled-analysis-conditional-audit-boundaries) | pipeline | blocked |
 | T-5233 | [Resolve cpp symbol index conditional audit boundaries](#t-5233-resolve-cpp-symbol-index-conditional-audit-boundaries) | pipeline | open |
-| T-5234 | [Resolve debug symbol indexing conditional audit boundaries](#t-5234-resolve-debug-symbol-indexing-conditional-audit-boundaries) | pipeline | open |
+| T-5234 | [Resolve debug symbol indexing conditional audit boundaries](#t-5234-resolve-debug-symbol-indexing-conditional-audit-boundaries) | pipeline | done (2026-11-20, e9db4656b905f985262ded943a4b2a84d409ae6e) |
 | T-5235 | [Resolve dossier publication conditional audit boundaries](#t-5235-resolve-dossier-publication-conditional-audit-boundaries) | pipeline | open |
 | T-5236 | [Resolve evidence collection conditional audit boundaries](#t-5236-resolve-evidence-collection-conditional-audit-boundaries) | pipeline | open |
 | T-5237 | [Resolve final publication gate conditional audit boundaries](#t-5237-resolve-final-publication-gate-conditional-audit-boundaries) | pipeline | open |
@@ -486,6 +486,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5252 | [Reconcile inherited documentation contract failures](#t-5252-reconcile-inherited-documentation-contract-failures) | testing | done (2026-11-19, f131b7c48ac4623e71cbe1b93cbc6ec393d6ca95) |
 | T-5253 | [Keep documentation fixtures stable across exact file selections](#t-5253-keep-documentation-fixtures-stable-across-exact-file-selections) | testing | done (2026-11-19, 358c93d7a49003342e2f81159a58762a8f954e4e) |
 | T-5254 | [Keep recovery-map selection checks independently bounded](#t-5254-keep-recovery-map-selection-checks-independently-bounded) | testing | done (2026-11-19, d3603a204ab144bc04ec61da441a82c65d6e60dc) |
+| T-5255 | [Preserve exact accepted SARIF paths before workspace aliases](#t-5255-preserve-exact-accepted-sarif-paths-before-workspace-aliases) | codeql | done (2026-11-20, 9e5874a2310c5469706f98638d15c0a67ebd3e78) |
 
 ## Active entries
 
@@ -3450,6 +3451,11 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** `src/appsec_review/jobs/build_outcome.py` separates the receipt's `terminal_status` (any named gap makes it `COMPLETED_WITH_GAPS`) from the typed `build_outcome` (`built`, `failed`, `not_run`). `job_debug_symbol_indexing`, `job_tree_sitter_ast.generated_sources` and the `BuildIterations` controller still decide "did the build run" from `terminal_status == "SUCCEEDED"`, so a built receipt flipped by provenance gaps (run 2026-11-16-0003: 17 `provenance_unavailable` gaps) reads as unbuilt and tree-sitter emits `generated_source_build_unsuccessful`.
 - **Scope:** classify each reader in a code comment as a "products exist" question (switch to `build_outcome` through `build_outcome.build_succeeded`) or a "clean receipt" question (keep `terminal_status`); never widen enforcement, rejected artifacts stay rejected.
 - **Done when:** each reader is classified and tested with a `COMPLETED_WITH_GAPS` / `built` receipt.
+  Debug-symbol image association completed at `e9db4656b905f985262ded943a4b2a84d409ae6e`,
+  within the 416-case main union: admitted built receipts retain exact image/user identity
+  despite provenance gaps, without reading rejected artifacts. Other readers remain open.
+  The upstream artifact-indexing receipt validator still rejects artifact-bearing non-`SUCCEEDED`
+  receipts; this separate consumer must be reconciled before claiming the whole path complete.
 - **Refs:** `src/appsec_review/jobs/build_outcome.py`, `src/appsec_review/jobs/job_debug_symbol_indexing/`, `src/appsec_review/jobs/job_tree_sitter_ast/generated_sources.py`, `src/appsec_review/jobs/build_iterations.py`, commit 7aa16cff.
 
 ### T-5040 — Render the language-build outcome and gap-class counts in the final and telemetry reports
@@ -4444,13 +4450,19 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5125 — Preserve debug range lookup bounds and public-only PDB symbols
 
-- **State:** open
+- **State:** done (2026-11-20, e9db4656b905f985262ded943a4b2a84d409ae6e)
 - **Area:** binary
 - **Why:** Archived audit/feedback cases: DS-F02, DS-F03, DS-F04. Valid source-range queries by function (and DWARF compilation unit) return no existing line records; Valid fragmented records exceed an unhandled index-only bound and abort the entire extraction.
 - **Scope:** `src/appsec_review/jobs/job_debug_symbol_indexing/job.py`,
   `src/appsec_review/debug_symbols/_reader_dwarf.py`, `_reader_pdb.py`, and the corresponding
   `src/appsec_review/retrieval/debug_symbols.py` and `debug_symbol_index.py` boundaries.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 199 passed/10.23 s, 193 passed/7.51 s and 30 passed/14.49 s, two workers,
+  seeds 91260/91263/91264; 416 unique cases including three repeated environment guards.
+  No skips or slow tests. Exact function/CU range queries reach existing line rows; mixed PDBs
+  retain public/private identities. Fragmented or over-bound records produce scoped unavailable
+  coverage without erasing other artifacts. Companion pairing is independent of index eligibility:
+  bounds cannot turn two verified matches into a unique match or hide a sole match's diagnostics.
 - **Refs:** `audit-results/job-audit-job_debug_symbol_indexing.md`; follow-up to closed T-169 (not reopened).
 
 ### T-5126 — Preserve package coordinates across dependency consumers
@@ -5576,6 +5588,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** Archived audit/feedback cases: TA-F04, PB-F04, DS-F01, TS-F09. document consumption is missing from typed input receipts; the accepted-build reader never records consumption of the dispatch dataset.
 - **Scope:** `src/appsec_review/jobs/bound_artifacts.py`, `src/appsec_review/jobs/job_debug_symbol_indexing/job.py`; paired callers/tests identified by those cases.
 - **Done when:** Each named real reader records the exact admitted dataset read; removing that dataset grant fails even with a valid envelope and hash. Preserve pins and bytes, and test every caller independently.
+  Debug DS-F01 completed at `e9db4656b905f985262ded943a4b2a84d409ae6e`, verified in
+  the 416-case main union. Source/catalog shards and artifact/language/debug payloads retain
+  exact typed admitted identity and observed reads; removal of the dataset permission refuses
+  consumption. Target-analysis, project-build and Tree-sitter readers remain separate work.
 - **Refs:** `audit-results/job-audit-job_debug_symbol_indexing.md`, `audit-results/job-audit-job_project_build.md`, `audit-results/job-audit-job_target_analysis_plan.md`, `audit-results/job-audit-job_tree_sitter_ast.md`.
 
 ### T-5218 — Observe exact private analysis payload reads
@@ -5724,6 +5740,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   trace, reuse and configuration behavior. Its required tool-image rollout remains unperformed.
   CPG L198 distinguishes partial usable exports, unavailable failures, disabled omission and
   mounted-source changes without re-enabling the retired tool or claiming native acceptance.
+  Debug L117 now counts companions in candidate bounds and distinguishes the host test seam
+  from production container-bound tooling; current reader/query suites are in the job test map.
 - **Refs:** `audit-results/job-audit-cumulative.md` and the documentation/conditional sections in all 47 linked per-job reports, including the final-gate pinned-input/pointer-stability distinction; follow-up to closed T-168, T-169, T-170, T-171, T-172, T-173, T-176 (not reopened).
 
 ### T-5230 — Resolve clang static analysis conditional audit boundaries
@@ -5774,11 +5792,15 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5234 — Resolve debug symbol indexing conditional audit boundaries
 
-- **State:** open
+- **State:** done (2026-11-20, e9db4656b905f985262ded943a4b2a84d409ae6e)
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: L118. Verify debug array fidelity source-row caps and checksum-bearing declarations.
 - **Scope:** `src/appsec_review/jobs/job_debug_symbol_indexing/job.py`
 - **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+  The 416-case main union verifies repaired array element/constant-dimension fidelity;
+  dynamic/absent dimensions remain unknown. Source inventory caps name gaps and cannot establish
+  checksum uniqueness. Checksum-less declarations remain unverified rather than borrowing line
+  checksums. Pinned fixture bytes are unchanged; native tooling/corpus/scale acceptance was not run.
 - **Refs:** `audit-results/job-audit-job_debug_symbol_indexing.md`.
 
 ### T-5235 — Resolve dossier publication conditional audit boundaries
@@ -6027,6 +6049,25 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   110 passed/16.98 s, two workers, seed 5254, no skips or slow cases.
 - **Refs:** `tests/test_job_test_selection.py`; compiled/seeding metadata verification,
   2026-11-19.
+
+### T-5255 — Preserve exact accepted SARIF paths before workspace aliases
+
+- **State:** done (2026-11-20, 9e5874a2310c5469706f98638d15c0a67ebd3e78)
+- **Area:** codeql
+- **Why:** A bounded review probe after CQ-02 reproduced a false-exact binding: URI
+  `workspace/a.cpp`, with both `workspace/a.cpp` and `a.cpp` admitted, maps to `a.cpp` and
+  its different hash with confidence 1.0 because a relative workspace prefix is stripped first.
+- **Scope:** `src/appsec_review/jobs/job_codeql_analysis/sarif.py` and focused mapping/normalization
+  regressions. Preserve known absolute workspace mapping, traversal/foreign-path refusal and
+  the existing structural-fallback policy; this does not authorize a live CodeQL run.
+- **Done when:** Exact accepted relative identities cannot be replaced by workspace aliases;
+  real normalization preserves their correct path/hash, and existing legitimate mappings and
+  negative controls remain valid in focused offline checks.
+  Main: 60 passed/5.57 s, two workers, seed 9255, no skips or slow cases. Eight exact/rooted
+  collision cases and six compatibility/ambiguity controls exercise mapper and primary/flow
+  normalization. Native actual-URI acceptance and separate seed-origin/accounting feedback
+  are not claimed resolved by this bounded correction.
+- **Refs:** T-5121; user feedback and coordinator `map_location` reproduction, 2026-11-20.
 
 ## Legacy backlog
 
