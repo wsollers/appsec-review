@@ -153,9 +153,16 @@ def _security(node: Node | None) -> tuple[str, list[str]]:
     return ("optional" if any(not value for value in alternatives) else "required"), names
 
 
-def structured_operations(text: str, kind: str, *, max_depth: int, max_nodes: int
+def structured_operations(text: str, kind: str, *, max_depth: int, max_nodes: int,
+                          json_format: bool = False,
                           ) -> tuple[list[dict[str, Any]], list[str]]:
     root = _compose(text, max_depth, max_nodes)
+    document = None
+    if json_format:
+        try:
+            document = json.loads(text)
+        except (ValueError, RecursionError) as exc:
+            raise DocumentParseError("invalid JSON") from exc
     top = _mapping(root)
     operations = []
     gaps = []
@@ -191,6 +198,8 @@ def structured_operations(text: str, kind: str, *, max_depth: int, max_nodes: in
                     request_body="requestBody" in fields, security_state=state,
                     security_schemes=schemes,
                 ))
+                if json_format:
+                    operations[-1]["parameters"] = document["paths"][route][method].get("parameters", [])
     else:
         version = _scalar(_child(root, "asyncapi"))
         if not version.startswith(("2.", "3.")):

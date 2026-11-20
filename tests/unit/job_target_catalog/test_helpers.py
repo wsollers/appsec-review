@@ -70,7 +70,7 @@ def test_fingerprint_binds_every_parser_and_producer_input(tmp_path, monkeypatch
     assert calls == [{
         "name": "source", "target_snapshot": "fixture-snapshot",
         "producer_artifacts": artifacts, "tool_identity": {"producer": "job_target_catalog"},
-        "parser_identity": "catalog-parser/1",
+        "parser_identity": "catalog-parser/2",
         "normalizer_identity": "retrieval-normalizer/1+appsec-review/delivery-propagation/2",
         "mapping_identity": "source-map/1",
     }]

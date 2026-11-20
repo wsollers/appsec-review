@@ -160,8 +160,8 @@ The [retrieval architecture](../architecture/python-and-retrieval.md) defines re
    and sizes to match before retaining immutable target-input objects.
 3. Count languages from accepted files. Discover manifest roots, using build discovery's engine
    results to avoid treating generated Unity projects as independent generic projects.
-4. Publish partition, census and project documents; missing recognized manifests is a legacy
-   payload gap, not proof that there are no components.
+4. Publish partition, census and project documents; missing recognized manifests is a typed
+   `empty_result` gap, not proof that there are no components.
 
 ### `build_discovery`
 
@@ -171,7 +171,9 @@ The [retrieval architecture](../architecture/python-and-retrieval.md) defines re
    relationships, folded roots, demoted markers, source-only scopes and orphaned sources.
 3. List accepted `compile_commands.json` files without claiming their commands ran.
 4. Build descriptor packages and Android/Unity facts for each build target; derive
-   `required_image_profile`. Publish targets with discovery gaps, not inferred compiled outputs.
+   `required_image_profile`. Retain facts from accepted discovery even when the smaller package
+   byte/count bounds omit their descriptors; a partial package cannot override those facts.
+   Publish targets with discovery gaps, not inferred compiled outputs.
 
 ### `component_discovery`
 
@@ -181,19 +183,26 @@ The [retrieval architecture](../architecture/python-and-retrieval.md) defines re
    declaration location. Mark development declarations as build dependencies; ordinary
    declarations alone leave delivery unknown.
 3. Record absent manifests, deferred non-Node parsers and parsing failures in the dependency
-   document. Do not claim a lockfile-resolved or complete dependency inventory.
+   document. Non-object npm roots/sections and non-string constraints produce scoped
+   `parser_error` gaps; retain valid sibling declarations, sections and components.
+   Do not claim a lockfile-resolved or complete dependency inventory.
 
 ### `retrieval_indexes`
 
 1. Build `source` only for source-in-scope files, retaining path/hash/byte locations and bounded
    decodable text. Preserve decode failures and upstream inventory gaps.
 2. Build `analysis` from the bounded declaration regex, not a compiler or AST. Stop at the
-   symbol-count ceiling; name oversize or undecodable symbol sources.
+   symbol-count ceiling; name oversize or undecodable symbol sources. Derive exact byte spans
+   from hash-verified raw UTF-8, preserving CRLF. Upstream inventory omissions keep declaration
+   coverage partial even when every retained file parsed successfully.
 3. Build `components` from catalog component identities.
 4. Select target documents from the accepted inventory; enforce configured file, byte, record,
    chunk and parser bounds. Verify source hashes and line/byte ranges before adding document
    entities and references. Missing document kinds and extraction gaps remain coverage facts;
-   changed or escaping accepted files raise integrity errors.
+   changed or escaping accepted files raise integrity errors. OpenAPI JSON and YAML share bounded
+   structural operation parsing, so compact JSON and route lookalikes in examples cannot redirect
+   operation locations. JSON retains operation parameters, responses and request-body declarations;
+   unresolved references remain gaps, not fetched or inferred definitions.
 
 ### `publish_catalog`
 
@@ -223,15 +232,20 @@ flowchart LR
   deps --> publish
   indexes --> publish
   publish --> outputs["catalog_documents + source_files + declaration_symbols + target_documents + build_units"]
-  discover -. "unsupported / unread / orphaned" .-> gaps["legacy gaps and coverage"]
+  discover -. "unsupported / unread / orphaned" .-> gaps["typed producer gaps and coverage"]
   indexes -. "bounds / absent kinds / decode" .-> gaps
 ```
 
 ## Gaps
 
-This pinned implementation is not strict-gap migrated. Unit `gaps` include strings and
-inventory mappings; canonical outcomes convert legacy values to `producer_reported_gap`
-with `retryable=False`, rather than treating each string as a registered code.
+This job uses `strict_gaps=True`: unit `gaps` are validated `producer-gap/1` records with
+registered codes, deterministic gap IDs, unit/scope identity and retryability. Inventory and document
+collector mappings become `producer_reported_gap` through `path_gap_records`, with the specific
+cause retained in the reason. Explicit handler branches use codes including `parser_error`
+(dependency/symbol decode), `truncated` (symbol bounds) and `empty_result` (missing projects).
+Catalog JSON payloads
+and `IndexIdentity.gaps` retain human-readable reasons (the partition also retains raw inventory
+mappings), while SQLite coverage rows reference the observing unit's gap IDs.
 
 | Observing unit(s) | Causes retained by the implementation | Walk interpretation |
 | --- | --- | --- |
@@ -269,7 +283,8 @@ The job binds the target snapshot, intake admission, configured exclusions/bound
 implementation/schema/validator identities. Source/symbol/component/build index fingerprints
 bind their producer artifact hashes and catalog parser, retrieval normalizer, delivery policy
 and mapping identities. The document fingerprint additionally binds extraction limits and the
-target-document release/parser identity. A changed input therefore selects different shards;
+target-document release/parser identity. The corrected raw-symbol/coverage catalog uses
+`catalog-parser/2`; structural OpenAPI JSON uses `target-documents/4`. A changed input therefore selects different shards;
 an existing path is not a license to accept altered bytes. Whole-job reuse and selective
 downstream invalidation follow [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability);
 artifact-bearing units are not generic portable failed-attempt checkpoints.

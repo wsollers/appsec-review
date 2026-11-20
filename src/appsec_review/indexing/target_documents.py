@@ -21,7 +21,7 @@ from appsec_review.indexing.document_interfaces import (
 )
 
 
-PARSER_IDENTITY = "target-documents/3"
+PARSER_IDENTITY = "target-documents/4"
 ADDITIONAL_INTERFACE_KINDS = frozenset({"asyncapi", "protobuf", "graphql"})
 KINDS = frozenset({"design", "threat_model", "dfd", "openapi", "postman", "unit_test"}) | ADDITIONAL_INTERFACE_KINDS
 _TEXT_SUFFIXES = {".md", ".markdown", ".rst", ".adoc", ".asciidoc", ".org", ".txt"}
@@ -220,12 +220,13 @@ def collect_target_documents(
                 elif text.strip():
                     emit(path, sha, kind, "text_chunk", start, text, end_line=end)
         elif kind in {"asyncapi", "protobuf", "graphql"} or (
-            kind == "openapi" and source.suffix.lower() in {".yaml", ".yml"}
+            kind == "openapi" and source.suffix.lower() in {".json", ".yaml", ".yml"}
         ):
             parser = idl_operations if kind in {"protobuf", "graphql"} else structured_operations
             try:
+                format_options = {"json_format": True} if kind == "openapi" and source.suffix.lower() == ".json" else {}
                 operations, limitations = parser(content, kind, max_depth=max_parse_depth,
-                                                  max_nodes=max_parse_nodes)
+                                                  max_nodes=max_parse_nodes, **format_options)
             except DocumentParseError as exc:
                 gaps.append({"path": path, "reason": "parse_error", "detail": str(exc)})
                 continue
@@ -256,55 +257,7 @@ def collect_target_documents(
             except (ValueError, TypeError):
                 gaps.append({"path": path, "reason": "parse_error", "detail": "invalid JSON"})
                 continue
-            if kind == "openapi":
-                if isinstance(document, dict) and document.get("swagger") == "2.0":
-                    try:
-                        operations, limitations = structured_operations(
-                            content, kind, max_depth=max_parse_depth, max_nodes=max_parse_nodes)
-                    except DocumentParseError as exc:
-                        gaps.append({"path": path, "reason": "parse_error", "detail": str(exc)})
-                        continue
-                    for operation in operations:
-                        emit(path, sha, kind, "operation", operation["start_line"],
-                             f"{operation['method']} {operation['route']}",
-                             {key: value for key, value in operation.items()
-                              if key not in {"start_line", "end_line"}}, end_line=operation["end_line"])
-                    gaps.extend({"path": path, "reason": "interface_coverage", "detail": gap}
-                                for gap in limitations)
-                    continue
-                if not isinstance(document, dict) or not str(document.get("openapi", "")).startswith("3.") \
-                        or not isinstance(document.get("paths"), dict):
-                    gaps.append({"path": path, "reason": "parse_error", "detail": "invalid OpenAPI 3 document"})
-                    continue
-                for route, operations in document["paths"].items():
-                    if not isinstance(operations, dict):
-                        continue
-                    route_line = next((i for i, value in enumerate(lines, 1)
-                                       if value.lstrip().startswith(json.dumps(route) + ":")), None)
-                    for method, operation in operations.items():
-                        if method.upper() not in METHODS or not isinstance(operation, dict):
-                            continue
-                        method_line = None
-                        if route_line is not None:
-                            route_indent = len(lines[route_line - 1]) - len(lines[route_line - 1].lstrip())
-                            for i in range(route_line, len(lines)):
-                                value = lines[i]
-                                indent = len(value) - len(value.lstrip())
-                                if value.strip() and indent <= route_indent:
-                                    break
-                                if value.lstrip().startswith(json.dumps(method) + ":"):
-                                    method_line = i + 1
-                                    break
-                        if method_line is None:
-                            gaps.append({"path": path, "reason": "unresolved_span",
-                                         "detail": f"{method.upper()} {route}"})
-                            continue
-                        emit(path, sha, kind, "operation", method_line, f"{method.upper()} {route}",
-                             {"method": method.upper(), "route": route,
-                              "parameters": operation.get("parameters", []),
-                              "responses": sorted(operation.get("responses", {})),
-                              "request_body": bool(operation.get("requestBody"))})
-            else:
+            if kind == "postman":
                 if not isinstance(document, dict) or not isinstance(document.get("item"), list):
                     gaps.append({"path": path, "reason": "parse_error", "detail": "invalid Postman collection"})
                     continue

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import sqlite3
 from types import SimpleNamespace
 
 import pytest
@@ -14,6 +16,100 @@ from tests.unit.job_target_catalog.support import (
 
 UNIT = INDEX_UNITS[3]
 REQUIRED_KINDS = ("design", "dfd", "openapi", "postman", "threat_model", "unit_test")
+
+
+@pytest.mark.parametrize("layout", ["compact", "pretty", "crlf"])
+def test_openapi_json_structural_operations_survive_catalog_serialization(tmp_path, layout):
+    unit = context(tmp_path, UNIT)
+    operation = {"operationId": "orders", "parameters": [{"name": "q", "in": "query"}],
+                 "responses": {"200": {"description": "ok"}}, "requestBody": {"required": True}}
+    spec = {"openapi": "3.0.3",
+            "components": {"schemas": {"Example": {"example": {"/orders": {"get": operation}}}}},
+            "paths": {"/orders": {"get": operation, "post": {"responses": {}}},
+                      "/other": {"get": {"responses": {}}}}}
+    text = json.dumps(spec, indent=None if layout == "compact" else 2)
+    if layout == "crlf":
+        text = text.replace("\n", "\r\n")
+    raw = text.encode()
+    entry = source(unit, "openapi.json", raw, None)
+    unit.outputs[PARTITION] = partition([entry])
+    result = handler(UNIT)(unit)
+    validate_unit_output(result, unit_id=UNIT, strict_gaps=True)
+    assert not any(gap["code"] == "parser_error" for gap in result["gaps"])
+    with sqlite3.connect(unit.job.run_root / result["artifact"]["path"]) as db:
+        rows = db.execute(
+            "SELECT e.identity, e.payload_json, l.start_line, l.end_line, l.start_byte, l.end_byte, "
+            "l.file_sha256 FROM entities e JOIN locations l ON l.entity_id=e.identity"
+        ).fetchall()
+    assert len(rows) == len({row[0] for row in rows}) == 3
+    for _, payload, start, end, start_byte, end_byte, digest in rows:
+        payload = json.loads(payload)
+        assert payload["authority"] == "declared"
+        assert digest == entry["sha256"]
+        assert raw[start_byte:end_byte] == b"".join(raw.splitlines(keepends=True)[start - 1:end])
+        if layout != "compact":
+            assert start > next(i for i, line in enumerate(text.splitlines(), 1) if '"paths":' in line)
+        fields = payload["fields"]
+        if (fields["route"], fields["method"]) == ("/orders", "GET"):
+            assert fields["parameters"] == operation["parameters"]
+            assert fields["responses"] == ["200"] and fields["request_body"] is True
+
+
+@pytest.mark.parametrize("setting", ["max_parse_depth", "max_parse_nodes"])
+def test_openapi_json_parser_budgets_produce_partial_catalog(tmp_path, setting):
+    from dataclasses import replace
+
+    unit = context(tmp_path, UNIT)
+    spec = {"openapi": "3.0.3", "paths": {"/orders": {"get": {"responses": {}}}}}
+    entry = source(unit, "openapi.json", json.dumps(spec, indent=2).encode(), None)
+    unit.job.config.typed_settings = replace(unit.job.config.typed_settings, **{setting: 1})
+    unit.outputs[PARTITION] = partition([entry])
+    result = handler(UNIT)(unit)
+    validate_unit_output(result, unit_id=UNIT, strict_gaps=True)
+    assert result["item_count"] == 0
+    assert any(gap["code"] == "producer_reported_gap" and gap["scope_id"] == "openapi.json"
+               and "parse_error (specification parsing bound reached)" in gap["reason"]
+               for gap in result["gaps"])
+    with sqlite3.connect(unit.job.run_root / result["artifact"]["path"]) as db:
+        assert db.execute("SELECT status FROM coverage WHERE area='target-documents:openapi'").fetchone() == (
+            "unavailable",)
+        assert db.execute("SELECT status FROM coverage WHERE area='target-documents'").fetchone() == (
+            "partial",)
+
+
+@pytest.mark.parametrize("text", [
+    '{"openapi":"3.0.3","paths":{"/x":{"get":{},"get":{}}}}',
+    '{"openapi":"3.0.3","paths":{"/x":{"get":{"responses":[]}}}}',
+    '{"openapi":"3.0.3","paths":{"/x":{"get":{"parameters":null}}}}',
+    'openapi: 3.0.3\npaths:\n  /x:\n    get: {}\n',
+], ids=["duplicate-operation", "invalid-responses", "invalid-parameters", "yaml-in-json"])
+def test_openapi_unsupported_shapes_remain_gaps_not_facts(tmp_path, text):
+    unit = context(tmp_path, UNIT)
+    entry = source(unit, "openapi.json", text.encode(), None)
+    unit.outputs[PARTITION] = partition([entry])
+    result = handler(UNIT)(unit)
+    assert result["item_count"] == 0
+    assert any(gap["scope_id"] == "openapi.json" and "parse_error" in gap["reason"]
+               for gap in result["gaps"])
+
+
+def test_openapi_record_budget_and_unresolved_references_remain_gaps(tmp_path):
+    from dataclasses import replace
+
+    unit = context(tmp_path, UNIT)
+    spec = {"openapi": "3.0.3", "paths": {
+        "/x": {"get": {"responses": {"200": {"$ref": "https://invalid.example/response"}}}},
+        "/y": {"get": {"responses": {}}},
+    }}
+    entry = source(unit, "openapi.json", json.dumps(spec).encode(), None)
+    unit.job.config.typed_settings = replace(unit.job.config.typed_settings, max_records=1)
+    unit.outputs[PARTITION] = partition([entry])
+    result = handler(UNIT)(unit)
+    validate_unit_output(result, unit_id=UNIT, strict_gaps=True)
+    assert result["item_count"] == 1
+    reasons = [gap["reason"] for gap in result["gaps"]]
+    assert any("record_limit" in reason for reason in reasons)
+    assert any("unresolved specification reference" in reason for reason in reasons)
 
 
 def fixture(tmp_path, monkeypatch, *, kinds=REQUIRED_KINDS, records=None, links=(), gaps=()):

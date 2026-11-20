@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 
 import pytest
 
@@ -94,6 +95,73 @@ def test_symbol_index_matches_declarations_and_utf8_byte_offsets(tmp_path, monke
     assert [(rel.kind, rel.source_id, rel.target_id, rel.exact, rel.confidence) for rel in builder.relations] == [
         (RelationKind.DEFINES, file_id.value, row.identity.value, True, 1.0) for row in builder.entities]
     assert result["artifact"]["path"].startswith("data/indices/analysis/")
+
+
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"], ids=["lf", "crlf"])
+def test_symbol_raw_spans_resolve_in_real_shard(tmp_path, newline):
+    unit = context(tmp_path, INDEX_UNITS[1])
+    raw = newline.join(["# café".encode(), b"  def first():", b"    pass",
+                        b"class Last:", b"    pass", b""])
+    entry = source(unit, raw=raw, generated=True)
+    unit.outputs[PARTITION] = partition([entry])
+    result = handler(unit.unit_id)(unit)
+    validate_unit_output(result, unit_id=unit.unit_id, strict_gaps=True)
+    with sqlite3.connect(unit.job.run_root / result["artifact"]["path"]) as db:
+        rows = db.execute(
+            "SELECT e.name, e.text, l.start_byte, l.end_byte, l.file_sha256, l.start_line "
+            "FROM entities e JOIN locations l ON l.entity_id=e.identity ORDER BY l.start_line"
+        ).fetchall()
+    assert len(rows) == 2 and result["gaps"] == []
+    for row, expected_line, number in zip(rows, [b"  def first():", b"class Last:"], [2, 4]):
+        name, text, start, end, digest, line = row
+        assert raw[start:end] == expected_line + newline
+        assert digest == entry["sha256"] and line == number
+        assert text == expected_line.decode().rstrip() and name in text
+
+
+@pytest.mark.parametrize("bound", ["none", "count", "bytes"])
+def test_declaration_shard_retains_real_inventory_omissions(tmp_path, bound):
+    from appsec_review.jobs.cataloging import Bounds, inventory
+
+    unit = context(tmp_path, INDEX_UNITS[1])
+    source(unit, "a.py", b"def included():\n    pass\n")
+    source(unit, "z.py", b"def omitted():\n    pass\n" + b"# padding\n" * 10)
+    bounds = Bounds(max_files=1) if bound == "count" else Bounds(
+        max_file_bytes=40 if bound == "bytes" else 1024)
+    snapshot = inventory(unit.job.target_root, bounds)
+    unit.outputs[PARTITION] = partition(snapshot["files"], snapshot["gaps"])
+    result = handler(unit.unit_id)(unit)
+    validate_unit_output(result, unit_id=unit.unit_id, strict_gaps=True)
+    with sqlite3.connect(unit.job.run_root / result["artifact"]["path"]) as db:
+        coverage = db.execute("SELECT status, gap FROM coverage WHERE area='declarations'").fetchone()
+        names = {row[0] for row in db.execute("SELECT name FROM entities")}
+    assert "included" in names
+    assert coverage[0] == ("complete" if bound == "none" else "partial")
+    if bound == "none":
+        assert names == {"included", "omitted"} and result["gaps"] == []
+    else:
+        assert names == {"included"}
+        assert result["gaps"][0]["scope_id"] == "z.py"
+        assert coverage[1] == result["gaps"][0]["gap_id"]
+        assert result["index_identity"]["gaps"] == [gap["reason"] for gap in result["gaps"]]
+
+
+@pytest.mark.parametrize("damage", ["hash", "size", "escape"])
+def test_symbol_source_integrity_cannot_become_partial_coverage(tmp_path, damage):
+    unit = context(tmp_path, INDEX_UNITS[1])
+    entry = source(unit, raw=b"def original():\n")
+    if damage == "hash":
+        (unit.job.target_root / entry["path"]).write_bytes(b"def replaced():\n")
+    elif damage == "size":
+        entry["size_bytes"] += 1
+    else:
+        outside = tmp_path / "outside.py"
+        outside.write_bytes(b"def original():\n")
+        entry["path"] = "../outside.py"
+    unit.outputs[PARTITION] = partition([entry])
+    with pytest.raises(catalog.CatalogIntegrityError):
+        handler(unit.unit_id)(unit)
+    assert not list(unit.job.run_root.glob("data/indices/analysis/*.sqlite"))
 
 
 @pytest.mark.parametrize("mode", ["byte-bound", "missing", "unicode"])

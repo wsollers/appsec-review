@@ -139,7 +139,6 @@ def test_each_handler_artifact_name_schema_and_read_write_boundary_is_pinned():
         "descriptor_reader": ["path.read_bytes()"], "read_text": ["path.read_bytes()"],
         "partition": ["path.open('rb')"], "dependencies": ["path.read_text(encoding='utf-8')"],
         "path_index": ["source.read_text(encoding='utf-8')"],
-        "symbol_index": ["source_path.read_text(encoding='utf-8', errors='strict')"],
         "document_index": ["source.read_bytes()"],
     }
     assert index_schemas == {
@@ -159,7 +158,7 @@ def test_each_handler_artifact_name_schema_and_read_write_boundary_is_pinned():
             "source = _target(unit) / item['path']"],
         "symbol_index": [
             "path = unit.job.run_root / 'data' / 'indices' / 'analysis' / f'{fingerprint}.sqlite'",
-            "index_path = builder.path", "source_path = _target(unit) / item['path']"],
+            "index_path = builder.path", "source_path = safe_path(_target(unit), item['path'])"],
         "component_index": [
             "path = unit.job.run_root / 'data' / 'indices' / 'components' / f'{fingerprint}.sqlite'"],
         "document_index": [

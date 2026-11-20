@@ -30,7 +30,16 @@ def _inventory(root: Path, names: dict[str, str] = FILES) -> list[dict[str, str]
 
 def test_northwind_contracts_intent_and_resolving_source_identity() -> None:
     result = collect_target_documents(FIXTURES, SNAPSHOT, _inventory(FIXTURES))
-    assert not result.gaps
+    references = {
+        *(name + suffix for name in ("Category", "Customer", "Employee", "Order", "Product", "Shipper", "Supplier")
+          for suffix in ("", "Input", "Page")),
+        "Error", "OrderDetail", "TokenResponse",
+    }
+    assert result.gaps == tuple(
+        {"path": "openapi.json", "reason": "interface_coverage",
+         "detail": f"unresolved specification reference: #/components/schemas/{name}"}
+        for name in sorted(references)
+    )
     assert {record["kind"] for record in result.records} == set(FILES.values())
     assert all(record["target_snapshot"] == SNAPSHOT and record["line"] >= 1 for record in result.records)
     assert all(record["file_sha256"] == sha256((FIXTURES / record["path"]).read_bytes()).hexdigest()

@@ -300,7 +300,7 @@ def test_components_assign_stable_ids_and_fallback_root(tmp_path, has_projects):
 
 def test_dependency_parser_sorts_sections_and_keeps_delivery_evidence(tmp_path):
     unit = context(tmp_path, DEPENDENCIES)
-    raw = json.dumps({"dependencies": {"z": 2, "a": "^1"}, "devDependencies": {"tool": "3"}}).encode()
+    raw = json.dumps({"dependencies": {"z": "2", "a": "^1"}, "devDependencies": {"tool": "3"}}).encode()
     entry = source(unit, "package.json", raw, None)
     unit.outputs[COMPONENTS] = {"components": [
         {"component_id": "component:0001", "manifest": "package.json", "manifest_sha256": entry["sha256"]}]}
@@ -322,6 +322,62 @@ def test_dependency_parser_sorts_sections_and_keeps_delivery_evidence(tmp_path):
     doc = document(unit, result)
     assert doc["schema"] == "appsec-review/dependency-catalog/1"
     assert doc["gaps"] == expected_reasons
+
+
+@pytest.mark.parametrize("payload", [
+    [], None, {"dependencies": None}, {"dependencies": ["bad"]},
+    {"devDependencies": 2}, {"dependencies": {"bad": {"version": "1"}}},
+], ids=["array", "null", "null-section", "array-section", "number-section", "object-version"])
+def test_dependency_shape_errors_preserve_other_components_and_valid_sections(tmp_path, payload):
+    unit = context(tmp_path, DEPENDENCIES)
+    if isinstance(payload, dict) and "devDependencies" not in payload:
+        payload = {**payload, "devDependencies": {"tool": "2"}}
+    components = []
+    for path, value in [("bad/package.json", payload),
+                        ("good/package.json", {"dependencies": {"good": "^1"}})]:
+        entry = source(unit, path, json.dumps(value).encode(), None)
+        components.append({"component_id": path, "manifest": path,
+                           "manifest_sha256": entry["sha256"]})
+    unit.outputs[COMPONENTS] = {"components": components}
+    result = handler(DEPENDENCIES)(unit)
+    validate_unit_output(result, unit_id=DEPENDENCIES, strict_gaps=True)
+    doc = document(unit, result)
+    expected = (["tool"] if isinstance(payload, dict)
+                and isinstance(payload.get("devDependencies"), dict) else []) + ["good"]
+    assert [row["name"] for row in doc["dependencies"]] == expected
+    errors = [gap for gap in result["gaps"] if gap["code"] == "parser_error"]
+    assert len(errors) == 1 and errors[0]["scope_id"].startswith("bad/package.json")
+    assert errors[0]["reason"] in doc["gaps"]
+
+
+@pytest.mark.parametrize("kind", ["android", "java", "apply-false"])
+def test_packaging_bound_preserves_discovered_android_profile(tmp_path, kind):
+    unit = context(tmp_path, SYSTEMS)
+    plugin = {
+        "android": "id 'com.android.application'",
+        "java": "id 'java'",
+        "apply-false": "id 'com.android.application' version '8.1' apply false",
+    }[kind]
+    raw = (f"plugins {{ {plugin} }}\nandroid {{ compileSdk 35 }}\n"
+           + "// padding\n" * 7000).encode()
+    entry = source(unit, "build.gradle", raw, None)
+    unit.outputs[PARTITION] = partition([entry])
+    discovered = handler(SYSTEMS)(unit)
+    unit.outputs[SYSTEMS] = discovered
+    unit.unit_id = TARGETS
+    result = handler(TARGETS)(unit)
+    validate_unit_output(result, unit_id=TARGETS, strict_gaps=True)
+    [target] = document(unit, result)["targets"]
+    assert target["descriptor_package"]["documents"] == []
+    assert target["descriptor_package"]["gaps"] == [
+        "build.gradle: descriptor content omitted by byte bound"]
+    assert target["required_image_profile"] == ("android" if kind == "android" else "java")
+    if kind == "android":
+        assert target["descriptor_facts"] == discovered["build_units"][0]["descriptor_facts"]
+        assert target["descriptor_facts"]["compile_sdk"] == "35"
+        assert target["project_type"] == "android-gradle-application"
+    else:
+        assert target["descriptor_facts"] == {} and target["project_type"] == "generic"
 
 
 @pytest.mark.parametrize("case", ["missing", "no-manifest", "other", "syntax", "unicode"])

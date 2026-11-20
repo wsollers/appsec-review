@@ -30,6 +30,7 @@ from appsec_review.retrieval import (
     RelationRecord, SourceLocation, index_fingerprint, write_manifest,
 )
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.retrieval.source_resolution import read_source_bytes
 from appsec_review.storage import file_sha256
 from appsec_review.storage.shared import safe_path
 from appsec_review.jobs.job_target_catalog.datasets import CONTRACT, DATASETS
@@ -85,7 +86,7 @@ def _run_artifact(unit: UnitContext, path: Path) -> dict[str, Any]:
 def _fingerprint(unit: UnitContext, name: str, artifacts: list[Mapping[str, Any]]) -> str:
     return index_fingerprint(
         name=name, target_snapshot=unit.job.source_fingerprint, producer_artifacts=artifacts,
-        tool_identity={"producer": "job_target_catalog"}, parser_identity="catalog-parser/1",
+        tool_identity={"producer": "job_target_catalog"}, parser_identity="catalog-parser/2",
         normalizer_identity="retrieval-normalizer/1+" + POLICY_IDENTITY, mapping_identity="source-map/1",
     )
 
@@ -402,7 +403,9 @@ def build_job(*, fail_task: str | None = None) -> Job:
                 facts["configuration_fingerprint"] = fingerprint
             else:
                 package = descriptor_package(_target(unit), item, files)
-                facts = android_descriptor_facts(package)
+                # Packaging may omit descriptors already read by discovery, or retain only a subset.
+                facts = {**(android_descriptor_facts(package) or {}),
+                         **item.get("descriptor_facts", {})}
             target = {**item, "descriptor_package": package,
                       "project_type": facts.get("kind", "unity" if item.get("engine") else "generic") if facts else "generic",
                       "descriptor_facts": facts or {}}
@@ -445,10 +448,30 @@ def build_job(*, fail_task: str | None = None) -> Job:
             try:
                 if path.name == "package.json":
                     value = json.loads(path.read_text(encoding="utf-8"))
+                    if not isinstance(value, dict):
+                        gap_records.append(producer_gap(
+                            GapCode.PARSER_ERROR, f"{manifest}: package manifest must be an object",
+                            unit_id=unit.unit_id, scope_id=str(manifest),
+                        ))
+                        continue
                     for section in ("dependencies", "devDependencies"):
-                        for name, version in sorted(value.get(section, {}).items()):
+                        declarations = value.get(section, {})
+                        if not isinstance(declarations, dict):
+                            gap_records.append(producer_gap(
+                                GapCode.PARSER_ERROR, f"{manifest}#{section}: expected a dependency mapping",
+                                unit_id=unit.unit_id, scope_id=f"{manifest}#{section}",
+                            ))
+                            continue
+                        for name, version in sorted(declarations.items()):
+                            if not isinstance(version, str):
+                                scope_ref = f"{manifest}#{section}.{name}"
+                                gap_records.append(producer_gap(
+                                    GapCode.PARSER_ERROR, f"{scope_ref}: expected a dependency constraint string",
+                                    unit_id=unit.unit_id, scope_id=scope_ref,
+                                ))
+                                continue
                             records.append({"component_id": component["component_id"], "name": name,
-                                            "constraint": str(version), "source": manifest, "location": section})
+                                            "constraint": version, "source": manifest, "location": section})
                             records[-1].update(scope_fields({
                                 "scope_role": "build_dependency" if section == "devDependencies" else "unknown",
                                 "artifact_origin": "target-intake",
@@ -530,8 +553,10 @@ def build_job(*, fail_task: str | None = None) -> Job:
     def symbol_index(unit: UnitContext) -> Mapping[str, Any]:
         maybe_fail(unit)
         symbols = []
-        gap_records: list[dict[str, Any]] = []
         partition_out = unit.output("repository_discovery.partition_repository")
+        gap_records: list[dict[str, Any]] = list(
+            path_gap_records(unit.unit_id, _inventory_gap_items(partition_out))
+        )
         fingerprint = _fingerprint(unit, "analysis", [partition_out["artifact"]])
         path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}.sqlite"
         builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
@@ -546,10 +571,24 @@ def build_job(*, fail_task: str | None = None) -> Job:
                     unit_id=unit.unit_id, scope_id=str(item["path"]),
                 ))
                 continue
-            source_path = _target(unit) / item["path"]
             try:
+                source_path = safe_path(_target(unit), item["path"])
+            except ValueError as error:
+                raise CatalogIntegrityError(str(error)) from error
+            try:
+                if not source_path.is_file():
+                    raise FileNotFoundError(item["path"])
+                try:
+                    raw = read_source_bytes(
+                        unit.job.run_root, _target(unit), target_snapshot=unit.job.source_fingerprint,
+                        path=item["path"], sha256=item["sha256"],
+                    )
+                except ValueError as error:
+                    raise CatalogIntegrityError(str(error)) from error
+                if len(raw) != item["size_bytes"]:
+                    raise CatalogIntegrityError("symbol source size differs from the accepted catalog")
                 offset = 0
-                for number, line in enumerate(source_path.read_text(encoding="utf-8", errors="strict").splitlines(keepends=True), 1):
+                for number, line in enumerate(raw.decode("utf-8", errors="strict").splitlines(keepends=True), 1):
                     match = pattern.match(line)
                     if match:
                         symbol_id = LogicalIdentity.derive(EntityKind.SYMBOL, unit.job.source_fingerprint,
