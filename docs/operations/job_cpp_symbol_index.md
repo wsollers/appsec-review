@@ -29,9 +29,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_symbol_index/job.py#L463) |
-| `index` | `index.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_symbol_index/job.py#L447) |
-| `load` | `load.accepted_cpp` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_symbol_index/job.py#L438) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_symbol_index/job.py#L562) |
+| `index` | `index.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_symbol_index/job.py#L546) |
+| `load` | `load.accepted_cpp` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_symbol_index/job.py#L537) |
 
 ### Accepted input declarations
 
@@ -81,7 +81,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py` |
 | live | None declared |
-| unit | `tests/unit/job_cpp_symbol_index/test_contract.py`<br>`tests/unit/job_cpp_symbol_index/test_clangd_yaml.py`<br>`tests/unit/job_cpp_symbol_index/test_handlers.py`<br>`tests/unit/job_cpp_symbol_index/test_symbol_budget.py` |
+| unit | `tests/unit/job_cpp_symbol_index/test_contract.py`<br>`tests/unit/job_cpp_symbol_index/test_clangd_yaml.py`<br>`tests/unit/job_cpp_symbol_index/test_handlers.py`<br>`tests/unit/job_cpp_symbol_index/test_symbol_budget.py`<br>`tests/test_clangd_indexer_tool.py`<br>`tests/unit/job_code_graph_index/test_graph_truth.py::test_clangd_variable_reference_and_occurrences_survive_real_normalization` |
 
 ### Dagster placement
 

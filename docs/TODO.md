@@ -350,7 +350,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5116 | [Preserve exact CI locations and real job hierarchy](#t-5116-preserve-exact-ci-locations-and-real-job-hierarchy) | scanners | done (2026-11-20, b41d62d0e1be972789eea1bd6500cba1bd095dfc) |
 | T-5117 | [Replay static analysis in the accepted compile working directory](#t-5117-replay-static-analysis-in-the-accepted-compile-working-directory) | graph | done (2026-11-20, 39c905cad22774c00a7dfa35226e52697d3ab9be) |
 | T-5118 | [Preserve bounded resolving Clang diagnostic traces and valid spans](#t-5118-preserve-bounded-resolving-clang-diagnostic-traces-and-valid-spans) | graph | done (2026-11-20, 39c905cad22774c00a7dfa35226e52697d3ab9be) |
-| T-5119 | [Distinguish failed unsupported and missing Clang scopes](#t-5119-distinguish-failed-unsupported-and-missing-clang-scopes) | graph | open |
+| T-5119 | [Distinguish failed unsupported and missing Clang scopes](#t-5119-distinguish-failed-unsupported-and-missing-clang-scopes) | graph | done (2026-11-20, 97da81467f706f82b45d150c2f17d00143595380) |
 | T-5120 | [Retain missing-build and per-scope CodeQL coverage decisions](#t-5120-retain-missing-build-and-per-scope-codeql-coverage-decisions) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
 | T-5121 | [Preserve meaningful leading dots in CodeQL source paths](#t-5121-preserve-meaningful-leading-dots-in-codeql-source-paths) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
 | T-5122 | [Return scoped CodeQL export timeout outcomes without KeyError](#t-5122-return-scoped-codeql-export-timeout-outcomes-without-keyerror) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
@@ -487,6 +487,11 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5253 | [Keep documentation fixtures stable across exact file selections](#t-5253-keep-documentation-fixtures-stable-across-exact-file-selections) | testing | done (2026-11-19, 358c93d7a49003342e2f81159a58762a8f954e4e) |
 | T-5254 | [Keep recovery-map selection checks independently bounded](#t-5254-keep-recovery-map-selection-checks-independently-bounded) | testing | done (2026-11-19, d3603a204ab144bc04ec61da441a82c65d6e60dc) |
 | T-5255 | [Preserve exact accepted SARIF paths before workspace aliases](#t-5255-preserve-exact-accepted-sarif-paths-before-workspace-aliases) | codeql | done (2026-11-20, 9e5874a2310c5469706f98638d15c0a67ebd3e78) |
+| T-5256 | [Separate semantic CPG identity from export-local node numbers](#t-5256-separate-semantic-cpg-identity-from-export-local-node-numbers) | graph | open |
+| T-5257 | [Preserve native Clang plist notes and verify format fidelity](#t-5257-preserve-native-clang-plist-notes-and-verify-format-fidelity) | scanners | open |
+| T-5258 | [Classify unmapped Clang compile rows before execution](#t-5258-classify-unmapped-clang-compile-rows-before-execution) | scanners | open |
+| T-5259 | [Verify CodeQL SARIF base and scope-relative URI semantics](#t-5259-verify-codeql-sarif-base-and-scope-relative-uri-semantics) | codeql | open |
+| T-5260 | [Attribute structural seed origins and scope accounting](#t-5260-attribute-structural-seed-origins-and-scope-accounting) | codeql | open |
 
 ## Active entries
 
@@ -4370,7 +4375,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5119 — Distinguish failed unsupported and missing Clang scopes
 
-- **State:** open
+- **State:** done (2026-11-20, 97da81467f706f82b45d150c2f17d00143595380)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CSA-F06, CSA-F07. Every translation unit can fail while coverage remains partial; Unsupported-only scopes vanish from the summary and look unavailable in coverage.
 - **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`
@@ -4378,9 +4383,13 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   Clang CSA-F06/F07 completed at `39c905cad22774c00a7dfa35226e52697d3ab9be`:
   no successful selected-TU outcomes means unavailable; unsupported-only scopes retain
   applicability/counts without false unavailable-input or complete-analysis coverage.
-  Main's 96-case selection passed/6.43 s. Sibling clangd record CSI-K02 is not established
-  as fixed by this Clang-only change and remains to be verified/repaired; this entry stays open.
-- **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`.
+  Main's 96-case selection passed/6.43 s. Sibling clangd CSI-K02 completed at `97da8146`:
+  real admitted readers and publication preserve unsupported-only, mixed and absent inputs
+  as distinct outcomes/counts; `SKIPPED_NA` is manifest metadata, not SQLite coverage.
+  Main's 139-case selection passed/9.78 s, two workers, seed 3505234, no skips or slow cases,
+  including the paired Clang unsupported-only regression. Native acceptance was not run.
+- **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`,
+  `audit-results/job-audit-job_cpp_symbol_index.md`.
 
 ### T-5120 — Retain missing-build and per-scope CodeQL coverage decisions
 
@@ -5548,7 +5557,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   silently reusing or regenerating it.
   CPG-F06 completed at `eadf2c800980733179d5cfbbff8fcb5aa84456e3`, with main 75 passed/7.80 s:
   generation/export receipts, compile databases, streams and bounded export artifacts are
-  re-verified on reuse. Clangd CSI-K01 and SVF-F03 remain open.
+  re-verified on reuse. Clangd CSI-K01 completed at `97da8146`, with main 139 passed/9.78 s:
+  receipt-linked stdout/stderr are verified even without explicit raw pins; missing, changed
+  or symlinked streams fail closed. New generations preserve prior execution bytes and receipts.
+  SVF-F03 remains open; these caller-specific checks do not establish global closure.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`, `audit-results/job-audit-job_cpg_analysis.md`, `audit-results/job-audit-job_cpp_symbol_index.md`, `audit-results/job-audit-job_svf_alias_analysis.md`; follow-up to closed T-159 (not reopened).
 
 ### T-5215 — Bind seed omission and provenance accounting into native checkpoint reuse
@@ -5742,6 +5754,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   mounted-source changes without re-enabling the retired tool or claiming native acceptance.
   Debug L117 now counts companions in candidate bounds and distinguishes the host test seam
   from production container-bound tooling; current reader/query suites are in the job test map.
+  Clangd L177/L178 now distinguish clean catalog admission from upstream partial build outcomes,
+  name the actual `tool-native-cpp` base and header checks, and describe implemented normalization
+  without claiming pinned native compatibility. The wrapper and graph-normalization regression
+  selectors are included in its unit map.
 - **Refs:** `audit-results/job-audit-cumulative.md` and the documentation/conditional sections in all 47 linked per-job reports, including the final-gate pinned-input/pointer-stability distinction; follow-up to closed T-168, T-169, T-170, T-171, T-172, T-173, T-176 (not reopened).
 
 ### T-5230 — Resolve clang static analysis conditional audit boundaries
@@ -5788,6 +5804,15 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** Archived audit/feedback cases: L179, L180. Verify unknown clangd shapes and duplicate declaration-definition IDs; Verify per-configuration clangd translation-unit coverage.
 - **Scope:** `src/appsec_review/jobs/job_cpp_symbol_index/job.py`
 - **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+  At `97da8146`, main 139 passed/9.78 s: unknown tags, unsupported IDs/reference shapes and
+  differing duplicate declaration/definition records retain supported facts but publish partial
+  coverage. Identical duplicates remain idempotent. Accepted and rebased command/cwd/source
+  identities distinguish same-file configurations; filename-only outcomes cannot certify them.
+  Native clangd 23.1.0 shapes and per-configuration attestation remain unverified; an actual
+  duplicate-fragment merge/conflict policy is not inferred from synthetic fixtures.
+  Before separately authorized integration execution, align the shared `IndexExecutor` receipt
+  fixture with real execution/stream pins and the graph fixture with the current
+  `clangd-uri-utf16-verified-bytes` mapping method. Neither integration nor native tests were run.
 - **Refs:** `audit-results/job-audit-job_cpp_symbol_index.md`.
 
 ### T-5234 — Resolve debug symbol indexing conditional audit boundaries
@@ -6068,6 +6093,88 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   normalization. Native actual-URI acceptance and separate seed-origin/accounting feedback
   are not claimed resolved by this bounded correction.
 - **Refs:** T-5121; user feedback and coordinator `map_location` reproduction, 2026-11-20.
+
+### T-5256 — Separate semantic CPG identity from export-local node numbers
+
+- **State:** open
+- **Area:** graph
+- **Why:** A 2026-11-20 inert export-reader probe changes only a METHOD node's internal ID
+  and changes both its function identity and the derived published logical identity.
+- **Scope:** CPG export normalization, logical identity publication and focused regressions.
+  Preserve full pre-display source identity and collision distinctions; retain export-local
+  provenance without presenting an unprovable identity as stable. Keep the producer retired.
+- **Done when:** Consistent native node/edge renumbering preserves established semantic IDs;
+  genuinely distinct functions remain distinct and ambiguous identity is explicit.
+- **Refs:** T-5123; `src/appsec_review/jobs/job_cpg_analysis/export.py`,
+  `src/appsec_review/jobs/job_cpg_analysis/job.py`; user feedback, 2026-11-20.
+
+### T-5257 — Preserve native Clang plist notes and verify format fidelity
+
+- **State:** open
+- **Area:** scanners
+- **Why:** LLVM 18 emits flattened call events, piece-level ranges and separate diagnostic
+  `notes`. The synthetic nested-call/diagnostic-range fixture is not native-format evidence.
+  An emitter-shaped probe confirms the parser drops top-level notes without reporting omission.
+- **Scope:** Clang plist normalization and bounded note/range publication, schema-faithful
+  regressions and version-attributed plist/tidy fixtures. Synthetic malformed/boundary fixtures
+  remain useful but are not described as captured output.
+- **Done when:** Real-format notes, events and ranges survive the wrapper and admitted reader,
+  with exact omission accounting under existing bounds. Record fixture provenance and distinguish
+  offline parser proof from any separately authorized native capture/acceptance.
+  The wrapper is baked into its tool image: an old image cannot satisfy the new compile-unit
+  outcome contract and will leave scopes incomplete/unavailable. Rebuild, verification, binding
+  refresh and native acceptance remain required before live use, not performed here.
+- **Refs:** T-5117, T-5118, T-5230;
+  `containers/tools/clang-static-analysis/clang-static.py`;
+  LLVM `llvmorg-18.1.8/clang/lib/StaticAnalyzer/Core/PlistDiagnostics.cpp`;
+  user feedback and coordinator inert probe, 2026-11-20.
+
+### T-5258 — Classify unmapped Clang compile rows before execution
+
+- **State:** open
+- **Area:** scanners
+- **Why:** Compile-unit identity construction raises on a row missing from accepted file
+  mappings before the per-engine handling. The error path is confirmed; reachability from
+  legitimate partial input versus a corrupt catalog still needs proof.
+- **Scope:** Establish the actual producer/accepted-scope invariant and cover the Clang caller.
+  Never execute unadmitted source or catch integrity errors as success.
+- **Done when:** Real producer/reader fixtures distinguish invalid admission from permitted
+  partial materialization. Invalid data fails closed; if partial input is valid, retain independent
+  valid TU results and name the omitted-unit gap rather than aborting unrelated work.
+- **Refs:** T-5230; `src/appsec_review/jobs/cpp_index_scopes.py`,
+  `src/appsec_review/jobs/job_clang_static_analysis/job.py`; user feedback, 2026-11-20.
+
+### T-5259 — Verify CodeQL SARIF base and scope-relative URI semantics
+
+- **State:** open
+- **Area:** codeql
+- **Why:** The repaired mapper still relies on workspace conventions rather than `uriBaseId`
+  resolution, and tries bare relative paths before scope-rooted paths. Native output fidelity
+  and whether admitted scope restrictions exclude ambiguity have not been established.
+- **Scope:** Root/base identity resolution and real-format normalization fixtures, preserving
+  unsafe-path refusal, accepted hashes and the exact-relative alias fix.
+- **Done when:** Establish and test scope restrictions and base resolution with ambiguous
+  bare/rooted candidates, known bases and unsupported/foreign bases. Record version-attributed
+  raw SARIF evidence before claiming actual native URI compatibility; no live run is implied.
+- **Refs:** T-5121, T-5255; `src/appsec_review/jobs/job_codeql_analysis/sarif.py`,
+  `containers/tools/codeql/codeql_runner.py`; user feedback, 2026-11-20.
+
+### T-5260 — Attribute structural seed origins and scope accounting
+
+- **State:** open
+- **Area:** codeql
+- **Why:** Structural seeds use scanner-like labels without explicit origin/tier. Global
+  not-in-database counts are repeated in scope exports, and shared manifests are reread per
+  export. Mixed-input/order determinism and hermetic fixture configuration need explicit proof.
+- **Scope:** Bounded seed provenance, scope versus run-wide accounting and shared extraction.
+  Preserve current-scope CodeQL normalization and the user's existing bounded fallback policy;
+  do not introduce a new switch or treat structural query candidates as evidence/authority.
+- **Done when:** Output distinguishes structural origin from observed scanner evidence,
+  labels non-additive global counts, and avoids redundant shared reads without dropping receipts.
+  Mixed-input/scheduling-order and private fixture-root regressions preserve exact selected seeds.
+  Repeated scope counters alone are not proof of final-report overcount; T-5227 owns that check.
+- **Refs:** T-5225, T-5227; `src/appsec_review/seeding/ledger.py`,
+  `src/appsec_review/jobs/job_codeql_analysis/job.py`; user feedback, 2026-11-20.
 
 ## Legacy backlog
 

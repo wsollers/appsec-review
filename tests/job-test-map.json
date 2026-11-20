@@ -232,7 +232,9 @@
         "tests/unit/job_cpp_symbol_index/test_contract.py",
         "tests/unit/job_cpp_symbol_index/test_clangd_yaml.py",
         "tests/unit/job_cpp_symbol_index/test_handlers.py",
-        "tests/unit/job_cpp_symbol_index/test_symbol_budget.py"
+        "tests/unit/job_cpp_symbol_index/test_symbol_budget.py",
+        "tests/test_clangd_indexer_tool.py",
+        "tests/unit/job_code_graph_index/test_graph_truth.py::test_clangd_variable_reference_and_occurrences_survive_real_normalization"
       ],
       "integration": [
         "tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py"
