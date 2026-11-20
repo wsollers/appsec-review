@@ -25,7 +25,7 @@ def test_actual_catalog_offline_feedback_replay(tmp_path, request):
     from appsec_review.config import load_config
     from appsec_review.inference import ModelResult
     from appsec_review.jobs.job_target_analysis_plan import build_job, load_accepted_plan
-    from appsec_review.jobs.job_target_analysis_plan.job import _accepted_catalog
+    from appsec_review.jobs.job_target_catalog.reader import load_accepted_catalog
     from appsec_review.jobs.job_project_build import build_job as project_job
     from appsec_review.jobs.job_project_build.job import load_accepted_builds
     from appsec_review.retrieval import write_manifest
@@ -54,7 +54,7 @@ def test_actual_catalog_offline_feedback_replay(tmp_path, request):
                if getattr(plugin, "__file__", None)}
     assert (repository / "tests/conftest.py").resolve() in plugins, "retain this checkout's unit safety fixtures"
     assert Path(sys.prefix).resolve().parent == repository.resolve(), "use this checkout's separately admitted venv"
-    for symbol in (_accepted_catalog, load_accepted_plan, project_job, GraphRunner):
+    for symbol in (load_accepted_catalog, load_accepted_plan, project_job, GraphRunner):
         assert (repository / "src").resolve() in Path(inspect.getfile(symbol)).resolve().parents
     assert (repository / "tests").resolve() in Path(inspect.getfile(FakeBuildExecutor)).resolve().parents
     capture = Path(capture_name)
@@ -110,7 +110,7 @@ def test_actual_catalog_offline_feedback_replay(tmp_path, request):
         assert {key: handoff["artifacts"][91][key] for key in ("path", "sha256", "size_bytes")} == {
             key: identity[key] for key in ("path", "sha256", "size_bytes")}
         # Exercise the REAL accepted reader with its complete, large original intake.
-        original = _accepted_catalog(capture)
+        original = load_accepted_catalog(capture)
         assert len(original["build_units"]) == len({unit["build_unit_id"] for unit in original["build_units"]}) == 295
         target = tmp_path / "captured-descriptors"
         target.mkdir()

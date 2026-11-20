@@ -26,6 +26,7 @@ from appsec_review.jobs.job_target_analysis_plan import (
     load_accepted_plan,
 )
 from appsec_review.jobs.job_target_analysis_plan.datasets import CONSUMES, CONTRACT, DATASETS
+from appsec_review.jobs.job_target_catalog import reader as catalog_reader
 from appsec_review.jobs.job_target_analysis_plan.planning import (
     PLAN_SCHEMA,
     deterministic_plan,
@@ -188,23 +189,23 @@ def test_artifact_and_read_artifact_enforce_custody_size_and_json_object_bounds(
     attempt = tmp_path / "data/jobs" / JOB / "attempts/attempt_0001"
     unit = SimpleNamespace(job=SimpleNamespace(attempt_root=attempt, run_root=tmp_path))
     ref = planner._artifact(unit, "plan.json", {"ok": True})
-    assert planner._read_artifact(tmp_path, ref) == {"ok": True}
+    assert catalog_reader.read_artifact(tmp_path, ref) == {"ok": True}
 
     with pytest.raises(ValueError, match="exceeds its 32 MiB reader bound"):
         planner._artifact(unit, "huge.json", {"blob": "x" * (32 * 1024 * 1024 + 1)})
 
     with pytest.raises(ValueError, match="unsupported accepted-artifact byte limit"):
-        planner._read_artifact(tmp_path, ref, byte_limit=1024)
+        catalog_reader.read_artifact(tmp_path, ref, byte_limit=1024)
     with pytest.raises(ValueError, match="not run-relative canonical POSIX"):
-        planner._read_artifact(tmp_path, {"path": "../escape.json", "sha256": "0" * 64, "size_bytes": 2})
+        catalog_reader.read_artifact(tmp_path, {"path": "../escape.json", "sha256": "0" * 64, "size_bytes": 2})
     with pytest.raises(ValueError, match="unavailable or outside the run"):
-        planner._read_artifact(tmp_path, {"path": "missing.json", "sha256": "0" * 64, "size_bytes": 2})
+        catalog_reader.read_artifact(tmp_path, {"path": "missing.json", "sha256": "0" * 64, "size_bytes": 2})
 
     arr_path = tmp_path / "array.json"
     raw_arr = b"[1, 2, 3]"
     arr_path.write_bytes(raw_arr)
     with pytest.raises(ValueError, match="must be a JSON object"):
-        planner._read_artifact(tmp_path, {
+        catalog_reader.read_artifact(tmp_path, {
             "path": "array.json",
             "sha256": hashlib.sha256(raw_arr).hexdigest(),
             "size_bytes": len(raw_arr),
@@ -292,7 +293,7 @@ def _publish_catalog(root: Path, *, source: str = SOURCE, partition_source: str 
 def test_accepted_catalog_validates_schemas_source_identities_and_recognized_builds(tmp_path: Path) -> None:
     ok_root = tmp_path / "ok"
     _publish_catalog(ok_root)
-    accepted = planner._accepted_catalog(ok_root)
+    accepted = catalog_reader.load_accepted_catalog(ok_root)
     assert {item["path"] for item in accepted["build_files"]} == {"CMakeLists.txt", "app.csproj"}
     assert [item["path"] for item in accepted["accepted_artifacts"]] == ["bin/app.jar"]
     assert accepted["source_only_scopes"] == ("docs",)
@@ -301,22 +302,22 @@ def test_accepted_catalog_validates_schemas_source_identities_and_recognized_bui
     bad_cat = tmp_path / "bad-cat-schema"
     _publish_catalog(bad_cat, catalog_schema="wrong/1")
     with pytest.raises(ValueError, match="target catalog schema is unsupported"):
-        planner._accepted_catalog(bad_cat)
+        catalog_reader.load_accepted_catalog(bad_cat)
 
     bad_src = tmp_path / "bad-cat-source"
     _publish_catalog(bad_src, catalog_source="other-source")
     with pytest.raises(ValueError, match="accepted catalog and handoff source identities differ"):
-        planner._accepted_catalog(bad_src)
+        catalog_reader.load_accepted_catalog(bad_src)
 
     bad_child = tmp_path / "bad-child-schema"
     _publish_catalog(bad_child, child_schema_override=("partition", "wrong/1"))
     with pytest.raises(ValueError, match="child artifact schema is unsupported"):
-        planner._accepted_catalog(bad_child)
+        catalog_reader.load_accepted_catalog(bad_child)
 
     bad_part = tmp_path / "bad-part-source"
     _publish_catalog(bad_part, partition_source="other-part-source")
     with pytest.raises(ValueError, match="partition source identity differs"):
-        planner._accepted_catalog(bad_part)
+        catalog_reader.load_accepted_catalog(bad_part)
 
 
 def test_verify_source_topology_swift_policy_base_indexes_and_load_accepted_plan(tmp_path: Path) -> None:
@@ -584,7 +585,7 @@ def _handler_context(monkeypatch, root, config, source, launch, pins, *,
         calls.append("history")
         return history_value
 
-    monkeypatch.setattr(planner, "_accepted_catalog", catalog_reader)
+    monkeypatch.setattr(planner, "load_accepted_catalog", catalog_reader)
     monkeypatch.setattr(planner, "load_accepted_history", history_reader)
     events = []
     context = SimpleNamespace(

@@ -10,6 +10,7 @@ import time
 
 from appsec_review.config.loader import BuildEnvironmentSettings, parse_bounded_settings
 from appsec_review.interchange import GapCode, producer_gap
+from appsec_review.jobs.job_target_catalog.reader import load_accepted_catalog
 from appsec_review.runtime.consume import accepted_upstream
 from appsec_review.runtime.inputs import (
     decode_consumed_handoff as decode_handoff,
@@ -392,8 +393,7 @@ def build_job(*, before_reading=None):
         parse_bounded_settings(context.config.settings, BuildEnvironmentSettings)
 
     def analyze(unit):
-        from appsec_review.jobs.job_target_analysis_plan.job import _accepted_catalog
-        catalog = _accepted_catalog(unit.job.run_root)
+        catalog = load_accepted_catalog(unit.job.run_root)
         if catalog["source_fingerprint"] != unit.job.source_fingerprint:
             raise BuildEnvironmentAnalysisFailed("environment catalog source mismatch")
         settings = parse_bounded_settings(unit.job.config.settings, BuildEnvironmentSettings)

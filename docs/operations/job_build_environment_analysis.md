@@ -145,6 +145,13 @@ modes; [input contracts](../architecture/job-input-contracts.md) govern actual a
 2. Load the accepted catalog and require its source fingerprint to match the claim. Require
    target custody; select sorted accepted `.sh`, `.bash`, `.bat` and `.cmd` paths with
    environment/setup/setvars/bootstrap stems.
+   Environment analysis and planning share the public catalog-owned
+   [`load_accepted_catalog`](../../src/appsec_review/jobs/job_target_catalog/reader.py) reader.
+   It resolves typed, supplied pins through `runtime.consume.accepted_upstream`, retaining
+   the handoff read receipt, and validates catalog/child hashes, custody, schemas and source
+   agreement. Handoff, catalog and partition ceilings remain 32 MiB; other child documents
+   remain 16 MiB. This replaces private planner coupling, not previously missing admission
+   enforcement, and does not add dataset-level read receipts for these document reads.
 3. Traverse only bounded literal source references to accepted script paths: shell `source`/`.`
    are case-sensitive; batch `call`/`@call` are case-insensitive. Unsupported cross-dialect
    commands produce statement gaps, not source edges. Enforce

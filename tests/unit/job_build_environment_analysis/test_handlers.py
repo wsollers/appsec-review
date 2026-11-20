@@ -17,7 +17,6 @@ from appsec_review.jobs.job_build_environment_analysis.job import (
     BuildEnvironmentAnalysisFailed,
     build_job,
 )
-from appsec_review.jobs.job_target_analysis_plan import job as plan_job
 
 ROOT = Path(__file__).resolve().parents[3]
 ANALYZE = "environment_analysis.analyze_scripts"
@@ -104,7 +103,7 @@ def test_analyze_and_publish_handlers_succeed_and_translate_failures(tmp_path, m
             },
         ],
     }
-    monkeypatch.setattr(plan_job, "_accepted_catalog", lambda _root: catalog_doc)
+    monkeypatch.setattr(env_job, "load_accepted_catalog", lambda _root: catalog_doc)
 
     # 1. Catalog source mismatch
     with pytest.raises(BuildEnvironmentAnalysisFailed, match="catalog source mismatch"):
@@ -180,7 +179,7 @@ def test_uppercase_script_gaps_preserve_scope_through_publication(tmp_path, monk
     path = "SETUP" + suffix
     payload = b"source missing.sh\n" if suffix in {".SH", ".BASH"} else b"call missing.cmd\n"
     (target / path).write_bytes(payload)
-    monkeypatch.setattr(plan_job, "_accepted_catalog", lambda _root: {
+    monkeypatch.setattr(env_job, "load_accepted_catalog", lambda _root: {
         "source_fingerprint": "fp-1",
         "catalog_handoff_sha256": "c" * 64,
         "files": [{"path": path, "sha256": hashlib.sha256(payload).hexdigest(),

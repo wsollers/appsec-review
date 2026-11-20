@@ -17,7 +17,7 @@ from appsec_review.inference import ModelOutputError, ModelRequest, ModelResult
 from appsec_review.inference.errors import ExecutionLimit, ProviderError
 from appsec_review.jobs.build_discovery import discover_build_units
 from appsec_review.jobs.build_topology import compile_build_topology
-from appsec_review.jobs.job_target_analysis_plan.job import _read_artifact
+from appsec_review.jobs.job_target_catalog.reader import read_artifact
 from appsec_review.jobs.job_target_analysis_plan.planning import (
     PROPOSAL_SCHEMA,
     bounded_feedback,
@@ -537,16 +537,16 @@ def test_catalog_reader_has_explicit_per_kind_bounds_without_losing_hashes(tmp_p
     identity = {"path": path.name, "size_bytes": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest()}
     if accepted:
-        assert len(_read_artifact(tmp_path, identity, byte_limit=limit)["padding"]) == 16777216
+        assert len(read_artifact(tmp_path, identity, byte_limit=limit)["padding"]) == 16777216
         with pytest.raises(ValueError, match="identity changed"):
-            _read_artifact(tmp_path, {**identity, "sha256": "f" * 64}, byte_limit=limit)
+            read_artifact(tmp_path, {**identity, "sha256": "f" * 64}, byte_limit=limit)
         with pytest.raises(ValueError, match="identity changed"):
-            _read_artifact(tmp_path, {**identity, "size_bytes": len(payload) - 1}, byte_limit=limit)
+            read_artifact(tmp_path, {**identity, "size_bytes": len(payload) - 1}, byte_limit=limit)
     else:
         with pytest.raises(ValueError, match="byte bound"):
-            _read_artifact(tmp_path, identity, byte_limit=limit)
+            read_artifact(tmp_path, identity, byte_limit=limit)
     with pytest.raises(ValueError, match="unsupported.*byte limit"):
-        _read_artifact(tmp_path, identity, byte_limit=33554433)
+        read_artifact(tmp_path, identity, byte_limit=33554433)
 
 
 @pytest.mark.parametrize("action", ["need_evidence", "final"])
