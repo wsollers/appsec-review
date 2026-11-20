@@ -490,8 +490,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5256 | [Separate semantic CPG identity from export-local node numbers](#t-5256-separate-semantic-cpg-identity-from-export-local-node-numbers) | graph | done (2026-11-20, ca2b9b0d10e5d428997100159cf498ec2be676e8) |
 | T-5257 | [Preserve native Clang plist notes and verify format fidelity](#t-5257-preserve-native-clang-plist-notes-and-verify-format-fidelity) | scanners | done (2026-11-20, 8d6cd37c0a811060443a52d0d3c2373588596fe0) |
 | T-5258 | [Classify unmapped Clang compile rows before execution](#t-5258-classify-unmapped-clang-compile-rows-before-execution) | scanners | done (2026-11-20, 8d6cd37c0a811060443a52d0d3c2373588596fe0) |
-| T-5259 | [Verify CodeQL SARIF base and scope-relative URI semantics](#t-5259-verify-codeql-sarif-base-and-scope-relative-uri-semantics) | codeql | open |
-| T-5260 | [Attribute structural seed origins and scope accounting](#t-5260-attribute-structural-seed-origins-and-scope-accounting) | codeql | open |
+| T-5259 | [Verify CodeQL SARIF base and scope-relative URI semantics](#t-5259-verify-codeql-sarif-base-and-scope-relative-uri-semantics) | codeql | done (2026-11-20, 7dcd2d60f47dcaafb9747070e447eb57b453dd8d) |
+| T-5260 | [Attribute structural seed origins and scope accounting](#t-5260-attribute-structural-seed-origins-and-scope-accounting) | codeql | done (2026-11-20, 7dcd2d60f47dcaafb9747070e447eb57b453dd8d) |
 
 ## Active entries
 
@@ -6177,7 +6177,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5259 — Verify CodeQL SARIF base and scope-relative URI semantics
 
-- **State:** open
+- **State:** done (2026-11-20, 7dcd2d60f47dcaafb9747070e447eb57b453dd8d)
 - **Area:** codeql
 - **Why:** The repaired mapper still relies on workspace conventions rather than `uriBaseId`
   resolution, and tries bare relative paths before scope-rooted paths. Native output fidelity
@@ -6187,12 +6187,19 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Done when:** Establish and test scope restrictions and base resolution with ambiguous
   bare/rooted candidates, known bases and unsupported/foreign bases. Record version-attributed
   raw SARIF evidence before claiming actual native URI compatibility; no live run is implied.
+  Main: 123 passed/14.63 s and 28 passed/3.91 s, 151 distinct cases, two workers,
+  seeds 152603/152602, no skips or slow cases. Actual planning admits nested-root collisions;
+  unbased competing exact candidates remain ambiguous. Primary and flow normalization resolve
+  declared URI-base chains only through known absolute workspace roots and exact accepted hashes.
+  Components are decoded once; missing, malformed, cyclic, foreign and traversing bases remain gaps.
+  T-5255 exact-relative-before-alias behavior is preserved. No version-attributed native SARIF
+  capture was used, so actual native-URI acceptance is explicitly unverified.
 - **Refs:** T-5121, T-5255; `src/appsec_review/jobs/job_codeql_analysis/sarif.py`,
   `containers/tools/codeql/codeql_runner.py`; user feedback, 2026-11-20.
 
 ### T-5260 — Attribute structural seed origins and scope accounting
 
-- **State:** open
+- **State:** done (2026-11-20, 7dcd2d60f47dcaafb9747070e447eb57b453dd8d)
 - **Area:** codeql
 - **Why:** Structural seeds use scanner-like labels without explicit origin/tier. Global
   not-in-database counts are repeated in scope exports, and shared manifests are reread per
@@ -6204,6 +6211,16 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   labels non-additive global counts, and avoids redundant shared reads without dropping receipts.
   Mixed-input/scheduling-order and private fixture-root regressions preserve exact selected seeds.
   Repeated scope counters alone are not proof of final-report overcount; T-5227 owns that check.
+  Verified within T-5259's 151-case main union. Bounded origin/tier/entity-kind metadata and
+  null structural severity survive ledger, compaction and graph-card projection without
+  changing rank policy or authority. Shared versus additional accounting is explicitly
+  non-additive query-seed accounting, not finding counts.
+  One immutable shared candidate snapshot is prepared per attempt under existing admission;
+  each scope combines only its own normalized CodeQL observations. Exact run/manifest/scope/file
+  pins bind reuse; semantic accounting identity stays stable across equivalent private runs.
+  Contradictory logical shard identities fail instead of depending on manifest order.
+  One observation pass and one structural pass remain, as does per-scope ranking; no measured
+  production speedup or elimination of all repeated computation is claimed.
 - **Refs:** T-5225, T-5227; `src/appsec_review/seeding/ledger.py`,
   `src/appsec_review/jobs/job_codeql_analysis/job.py`; user feedback, 2026-11-20.
 
