@@ -143,6 +143,8 @@ def _diagnostic_rows(shard_set: ShardSet, shards: Sequence[Mapping[str, Any]], s
     for row in rows[:MAX_DIAGNOSTICS]:
         source = row["payload"]
         trace = [step for step in source.get("trace") or () if isinstance(step, Mapping)]
+        omissions = dict(source["trace_omissions"]) if isinstance(source.get("trace_omissions"), Mapping) else {}
+        display_omissions = {"steps": len(trace) - MAX_TRACE_STEPS} if len(trace) > MAX_TRACE_STEPS else {}
         seeded = source.get("seeded") if isinstance(source.get("seeded"), Mapping) else {}
         payload = {**_base(scope, Producer.CLANG_STATIC, "diagnostics"), "scanner": source.get("scanner"),
                    "check": source.get("native_rule_id") or row["name"],
@@ -150,14 +152,21 @@ def _diagnostic_rows(shard_set: ShardSet, shards: Sequence[Mapping[str, Any]], s
                    "fix_it": bool(source.get("fix_it")),
                    "trace_length": int(source.get("trace_length", len(trace)) or 0),
                    "trace": trace[:MAX_TRACE_STEPS], "trace_retained_count": min(len(trace), MAX_TRACE_STEPS),
-                   "trace_truncated": bool(source.get("trace_truncated")) or len(trace) > MAX_TRACE_STEPS,
+                   "trace_truncated": bool(source.get("trace_truncated") or omissions or display_omissions),
+                   "trace_omissions": omissions, "trace_display_omissions": display_omissions,
                    "ranges": source.get("ranges", []),
                    "function": seeded.get("function"), "label": seeded.get("label"),
                    "seeds": list(seeded.get("seeds") or ()), "outside_neighborhood": bool(seeded.get("outside_neighborhood")),
                    "evidence_id": source.get("evidence_id")}
         if payload["trace_truncated"]:
-            out.gaps.append(f"diagnostic_trace_truncated: {row['identity']} retains "
-                            f"{payload['trace_retained_count']} of {payload['trace_length']} steps")
+            reasons = []
+            if omissions:
+                reasons.append("upstream omissions: " + ", ".join(f"{key}={value}" for key, value in sorted(omissions.items())))
+            elif source.get("trace_truncated"):
+                reasons.append("upstream trace truncated; omission counts unavailable")
+            if display_omissions:
+                reasons.append(f"graph display omitted steps={display_omissions['steps']}")
+            out.gaps.append(f"diagnostic_trace_truncated: {row['identity']}: " + "; ".join(reasons))
         out.entities.append(_record(row, snapshot, payload))
     out.counts["diagnostics"] = min(len(rows), MAX_DIAGNOSTICS)
 

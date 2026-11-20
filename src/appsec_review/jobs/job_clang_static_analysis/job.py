@@ -38,7 +38,7 @@ from .datasets import CONTRACT, DATASETS
 JOB_ID = "job_clang_static_analysis"
 TOOL_ID = "tool-clang-static-analysis"
 OUTPUT_SCHEMA = "appsec-review/clang-static-output/1"
-ADAPTER = "clang-static-adapter/8"
+ADAPTER = "clang-static-adapter/9"
 ENGINES = ("clang-tidy", "clang-static-analyzer")
 _CHECKER_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*")
 
@@ -222,7 +222,8 @@ def _retain_output(unit: UnitContext, output_path: Path, execution: Mapping[str,
     return reference.as_dict()
 
 
-def _location(scope: IndexScope, record: Mapping[str, Any]) -> tuple[SourceLocation | None, Mapping[str, Any] | None]:
+def _location(scope: IndexScope, record: Mapping[str, Any], *,
+              end_is_inclusive_byte: bool = False) -> tuple[SourceLocation | None, Mapping[str, Any] | None]:
     accepted = scope.accepted_file(str(record["path"]))
     if accepted is None:
         return None, None
@@ -243,6 +244,13 @@ def _location(scope: IndexScope, record: Mapping[str, Any]) -> tuple[SourceLocat
         if limit > beginning and data[limit - 1:limit] == b"\r":
             limit -= 1
         offset = beginning + column - 1
+        if inclusive_end and end_is_inclusive_byte:
+            # LLVM plist EmitRange subtracts one byte from its exclusive end, not one
+            # character. Validate the boundary after that byte, without relaxing start/point checks.
+            if offset >= limit:
+                return None
+            offset += 1
+            return None if offset < len(data) and data[offset] & 0xC0 == 0x80 else offset
         if offset > limit or (offset < len(data) and data[offset] & 0xC0 == 0x80):
             return None
         if inclusive_end and offset < limit:
@@ -272,7 +280,8 @@ def _resolved_ranges(scope: IndexScope, ranges: list[Any], engine: str) -> list[
         if (all(point.get(key) is not None for point in (start, end) for key in ("path", "line", "column"))
                 and start["path"] == end["path"]):
             location, _ = _location(scope, {**start, "engine": engine,
-                                            "end_line": end.get("line"), "end_column": end.get("column")})
+                                            "end_line": end.get("line"), "end_column": end.get("column")},
+                                    end_is_inclusive_byte=True)
         resolved.append({"reported_start": dict(start), "reported_end": dict(end),
                          "location": {**asdict(location), "producer_location": {}} if location else None,
                          **({} if location else {"gap": "range did not resolve to accepted source bytes"})})

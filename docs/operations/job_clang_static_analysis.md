@@ -279,7 +279,7 @@ variants of a shared source each require exactly one matching outcome. Duplicate
 unexpected or path-mismatched identities block checkpointing and leave the affected seeds unresolved.
 Clang-tidy gets a one-row standard compilation database per selected context (without the adapter's
 extra source-hash field); otherwise it could load all commands for a shared filename on every call.
-Adapter identity `/8` also invalidates pre-native-shape checkpoints; old output is not rewritten or upgraded.
+Adapter identity `/9` also invalidates pre-byte-range checkpoints; old output is not rewritten or upgraded.
 
 LLVM 18 diagnostic-level notes precede flat path events/control/pop-up pieces in the retained
 trace; event depth preserves call nesting. Piece ranges and bounded control-edge spans resolve
@@ -288,6 +288,10 @@ against admitted source hashes and bytes. `trace_length`, `trace_retained_count`
 and 4096-character cuts. Malformed arrays, nested call objects and inconsistent counts are not
 complete output. The fixtures and hard pre-live image/acceptance gap are described in
 [Operating Clang static analysis](clang-static-analysis.md).
+Inclusive plist range endpoints are resolved using the boundary after the reported byte, not
+diagnostic-point validation. Starts/diagnostic points remain strict, so continuation-byte starts
+and split-character or out-of-source ends stay unresolved. Graph projection retains the exact
+upstream omission counters separately from any additional display-step clipping.
 
 Seeded placement retains every compiled-analysis function identity associated with a physical
 seed; repeated header definitions in different translation units are not reduced to one name.

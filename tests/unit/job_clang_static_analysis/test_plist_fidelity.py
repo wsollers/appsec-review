@@ -39,8 +39,13 @@ def _emitter_shape():
     return document
 
 
-def test_emitter_shaped_notes_flat_calls_and_control_ranges_reach_admitted_reader(monkeypatch, tmp_path):
+def _publish_plist(monkeypatch, tmp_path, document, *, main_bytes=None):
     scope, unit = _scope(tmp_path), _unit(tmp_path)
+    if main_bytes is not None:
+        main = scope.case_root / "source/main.cpp"
+        main.write_bytes(main_bytes)
+        accepted_main = {**scope.files[0], "sha256": file_sha256(main)}
+        scope = replace(scope, files=(accepted_main,), _by_relative={"main.cpp": accepted_main})
     header = scope.case_root / "source/header.h"
     header.write_text("abc\n")
     accepted = {"scratch_path": "source/header.h", "target_path": "native/header.h", "sha256": file_sha256(header)}
@@ -49,7 +54,7 @@ def test_emitter_shaped_notes_flat_calls_and_control_ranges_reach_admitted_reade
 
     def compiler(argv, **kwargs):
         if "--analyze" in argv:
-            Path(argv[-1]).write_bytes(plistlib.dumps(_emitter_shape()))
+            Path(argv[-1]).write_bytes(plistlib.dumps(document))
         return 0, "", False
 
     monkeypatch.setattr(driver, "_run", compiler)
@@ -63,9 +68,16 @@ def test_emitter_shaped_notes_flat_calls_and_control_ranges_reach_admitted_reade
             return result
 
     result = job._analyze_scope(unit, scope, lambda _u: Executor(unit.job.run_root))
-    assert result["observation_count"] == 1 and not result["gaps"]
     with sqlite3.connect(unit.job.run_root / result["index_identity"]["relative_path"]) as db:
-        payload = json.loads(db.execute("select payload_json from entities where kind='tool_observation'").fetchone()[0])
+        payloads = [json.loads(row[0]) for row in db.execute("select payload_json from entities where kind='tool_observation'")]
+    return scope, unit, result, payloads
+
+
+def test_emitter_shaped_notes_flat_calls_and_control_ranges_reach_admitted_reader(monkeypatch, tmp_path):
+    scope, _unit_context, result, payloads = _publish_plist(monkeypatch, tmp_path, _emitter_shape())
+    header = scope.case_root / "source/header.h"
+    assert result["observation_count"] == 1 and not result["gaps"]
+    [payload] = payloads
     assert payload["trace_length"] == payload["trace_retained_count"] == 6
     assert not payload["trace_truncated"] and payload["trace_omissions"] == {}
     trace = payload["trace"]
@@ -83,6 +95,92 @@ def test_emitter_shaped_notes_flat_calls_and_control_ranges_reach_admitted_reade
     assert control["edges"][0]["reported_end"]["end_column"] == 2
     assert "<truncated>" not in json.dumps(trace)
     assert payload["fix_it"] is True
+
+
+@pytest.mark.parametrize("start,end,note_column,primary_column,valid_range", [
+    (5, 6, 5, 1, True),
+    (6, 6, 5, 1, False),
+    (5, 5, 5, 1, False),
+    (5, 9, 5, 1, False),
+    (5, 8, 5, 1, False),
+    (5, 6, 6, 1, True),
+    (5, 6, 5, 6, True),
+], ids=["utf8-last-byte", "continuation-start", "split-end", "past-eof", "newline-end",
+        "invalid-note-point", "invalid-diagnostic-point"])
+def test_plist_inclusive_byte_ends_do_not_relax_point_or_start_validation(
+        monkeypatch, tmp_path, start, end, note_column, primary_column, valid_range):
+    document = _emitter_shape()
+    diagnostic = document["diagnostics"][0]
+    diagnostic["location"]["col"] = primary_column
+    pair = [{"file": 0, "line": 1, "col": start}, {"file": 0, "line": 1, "col": end}]
+    diagnostic["notes"] = [{"location": {"file": 0, "line": 1, "col": note_column},
+                           "message": "range note", "ranges": [pair]}]
+    diagnostic["path"] = [{"kind": "control", "edges": [{"start": pair, "end": pair}]}]
+    source = "int é;\n".encode("utf-8")
+    scope, _, result, payloads = _publish_plist(monkeypatch, tmp_path, document, main_bytes=source)
+    if primary_column == 6:
+        assert not payloads and any("diagnostic span" in gap for gap in result["gaps"])
+        return
+    [payload] = payloads
+    note, control = payload["trace"]
+    locations = [note["ranges"][0]["location"], control["edges"][0]["start"], control["edges"][0]["end"]]
+    if valid_range:
+        for location in locations:
+            assert location is not None
+            assert (location["start_byte"], location["end_byte"]) == (4, 6)
+            assert (location["start_column"], location["end_column"]) == (5, 6)
+            assert source[location["start_byte"]:location["end_byte"]].decode("utf-8") == "é"
+            assert location["file_sha256"] == file_sha256(scope.case_root / "source/main.cpp")
+    else:
+        assert locations == [None, None, None] and result["gaps"]
+    if note_column == 6:
+        assert note["location"] is None and "gap" in note
+    else:
+        assert note["location"] is not None
+
+
+@pytest.mark.parametrize("display_cut", [False, True], ids=["one-step-edge-loss", "upstream-and-display-loss"])
+def test_graph_publication_keeps_upstream_detail_omissions_separate_from_display_clipping(
+        monkeypatch, tmp_path, display_cut):
+    from appsec_review.indexing.store import ShardSet
+    from appsec_review.jobs.job_code_graph_index import producers
+    from appsec_review.retrieval import IndexBuilder
+
+    document = _emitter_shape()
+    diagnostic = document["diagnostics"][0]
+    control = deepcopy(diagnostic["path"][2])
+    control["edges"] *= 17
+    if display_cut:
+        diagnostic["notes"][0]["ranges"] *= 17
+        diagnostic["notes"][0]["message"] = diagnostic["notes"][0]["extended_message"] = "x" * 4097
+        diagnostic["path"] = [control] + [deepcopy(diagnostic["path"][0]) for _ in range(255)]
+        expected = {"steps": 1, "ranges": 1, "edges": 1, "message_characters": 1}
+    else:
+        diagnostic["notes"] = []
+        diagnostic["path"] = [control]
+        expected = {"edges": 1}
+    _, unit, result, [source] = _publish_plist(monkeypatch, tmp_path, document)
+    assert source["trace_omissions"] == expected
+    shard = result["index_identity"]
+    out = producers.ProducerRows()
+    producers._diagnostic_rows(ShardSet(unit.job.run_root, [shard]), [shard],
+                               {"scope_id": "scope", "language": "cpp", "build_unit_id": "unit"},
+                               unit.job.source_fingerprint, out)
+    graph_path = unit.job.run_root / "data/indices/graph/clang-omissions.sqlite"
+    builder = IndexBuilder(graph_path, name="graph", fingerprint="a" * 64,
+                           target_snapshot=unit.job.source_fingerprint, shard_id="clang-omissions")
+    for entity in out.entities:
+        builder.add_entity(entity)
+    builder.build()
+    with sqlite3.connect(graph_path) as db:
+        [payload] = [json.loads(row[0]) for row in db.execute("select payload_json from entities")]
+    assert payload["trace_omissions"] == expected
+    assert payload["trace_display_omissions"] == (
+        {"steps": len(source["trace"]) - producers.MAX_TRACE_STEPS} if display_cut else {})
+    assert payload["trace_retained_count"] == len(payload["trace"])
+    assert payload["trace_truncated"]
+    assert any("edges=1" in gap for gap in out.gaps)
+    assert not any("retains 1 of 1 steps" in gap for gap in out.gaps)
 
 
 def test_combined_note_path_and_detail_bounds_report_exact_omissions(tmp_path):

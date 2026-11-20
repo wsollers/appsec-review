@@ -55,6 +55,14 @@ spans. The shared 256-piece bound applies across both collections. Each retained
 16 ranges or control edges and 4096 message characters; `trace_omissions` separately counts omitted
 pieces and omitted details of retained pieces. The reader validates these counts. Span projections
 stay within the existing index payload-depth bound rather than raising it.
+Plist range ends are inclusive **byte** coordinates: resolution validates the UTF-8 boundary
+after the last byte, including a continuation byte at the end of a multibyte character. Diagnostic
+points and range starts still require a code-point boundary; split-character ends, newline/EOF
+sentinels and out-of-source bounds are not accepted as range endpoints.
+
+Graph diagnostics preserve upstream `trace_omissions` (steps, ranges, edges and message characters)
+unchanged. Additional graph display cuts are reported separately in `trace_display_omissions`;
+detail loss in a one-step trace is not misrepresented as merely retaining one of one steps.
 
 Positive plist regressions are **constructed, emitter-schema-faithful LLVM 18.1.8 fixtures**, not
 captured compiler evidence. The only existing checked-in native plists found for this job identify
