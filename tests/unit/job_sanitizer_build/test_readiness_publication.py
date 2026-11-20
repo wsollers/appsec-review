@@ -23,7 +23,7 @@ from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.storage.shared import attempt_artifacts
 from tests.handoff_fixture import write_fixture_handoff
 from tests.sanitizer_support import ASAN_UNDEFINED, ET_REL, UBSAN_UNDEFINED, DockerFake, elf_with_symbols
-from .test_handlers import ROOT, _synthetic_fixture
+from .test_handlers import _synthetic_fixture
 
 
 def _project(context, job_id, datasets, outputs, *, pins=None):
@@ -133,11 +133,14 @@ def publish_sanitizer(base, *, mode="honor_env", receipts_mode="built", max_unit
 
 def readiness_core(base, *, supplied=True, **kwargs):
     case = publish_sanitizer(base, **kwargs)
+    # Resolve unrelated feed discovery against private fixture state, never commissioned host feeds.
+    repository = base / "repository"
+    repository.mkdir()
     attempt = case.root / f"data/jobs/{indexing.JOB_ID}/attempts/attempt_0001"
     cfg = case.config.job(indexing.JOB_ID)
     cfg = replace(cfg, workers=2, settings={**cfg.settings, "fts_image_validation": "disabled"})
     context = JobContext(
-        run_id=case.root.name, attempt_id=attempt.name, trigger="unit", repository_root=ROOT,
+        run_id=case.root.name, attempt_id=attempt.name, trigger="unit", repository_root=repository,
         run_root=case.root, attempt_root=attempt, metadata_root=base / "metadata",
         orchestration={"system": "unit", "run_id": "sanitizer-readiness"}, config=cfg,
         events=EventLog(attempt / "logs/events.jsonl"), target_root=case.target,
@@ -311,7 +314,7 @@ def test_optional_sanitizer_can_be_ready_when_required_evidence_fails(tmp_path):
     ("undefined_truncated", 1, "truncated"),
     ("undefined_manifest_limit", 1, "no manifest"),
     ("undefined_unknown", 100, "unknown"),
-])
+], ids=["catalog-bound", "workspace-bound", "unknown-evidence"])
 def test_optional_evidence_requires_complete_catalog_workspace_and_counts(tmp_path, mode, maximum, reason):
     core, _ = readiness_core(tmp_path, mode=mode, artifact_count_limit=maximum)
     assert not core.query_sanitizer_readiness(sanitizer="ubsan", status="ready")["results"]
@@ -319,3 +322,25 @@ def test_optional_evidence_requires_complete_catalog_workspace_and_counts(tmp_pa
     assert row["payload"]["status"] == "partial"
     assert row["payload"]["instrumented"] is False
     assert any(reason in gap for gap in row["payload"]["gaps"])
+
+
+def test_readiness_fixture_never_discovers_host_feeds(tmp_path, monkeypatch):
+    from appsec_review.jobs.job_third_party_data_sync import publication
+
+    original = publication.verify_current
+    reads = {}
+
+    def private_feed_only(root, feed, **kwargs):
+        assert root.is_relative_to(tmp_path / "repository"), f"host feed read attempted: {root}"
+        reads[feed] = root
+        return original(root, feed, **kwargs)
+
+    monkeypatch.setattr(publication, "verify_current", private_feed_only)
+    core, case = readiness_core(tmp_path)
+    assert set(reads) == set(indexing.FEED_STEPS)
+    loaded = case.indexing_result["outputs"]["load.accepted_inputs"]["artifact"]
+    inputs = json.loads((case.root / loaded["path"]).read_bytes())
+    assert all(value["status"] == "unavailable" for value in inputs["feeds"].values())
+    assert any(read["output_kind"] == "sanitizer_build_summary" for read in case.reads)
+    row, = core.query_sanitizer_readiness(build_unit="unit-1", sanitizer="asan", status="ready")["results"]
+    assert row["payload"]["output_count"] == 2
