@@ -38,6 +38,10 @@ from appsec_review.runtime.contracts import (
 
 CONTRACT = JobContract(
     inputs=(
+        InputRequirement("job_target_catalog", "handoff", "appsec-review/job-handoff/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
+        InputRequirement("job_target_catalog", "source_files", "appsec-review/retrieval-index/2",
+                         authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_artifact_indexing", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE),
         InputRequirement("job_artifact_indexing", "artifact_catalog",

@@ -20,6 +20,7 @@ def _resolver(data: bytes, *, maximum=4096):
     sources.by_sha256 = {digest: [row]}
     sources.line_offsets = {}
     sources.line_offset_bytes = 0
+    sources.gaps = []
 
     class NoInventoryScan:
         def __iter__(self):

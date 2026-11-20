@@ -131,16 +131,19 @@ accepts flat settings:
 | `max_records` | 100000 | Native/parser rows and normalized records |
 | `max_depth` | 128 | DIE/type/YAML/scope nesting; safety ceiling 256 |
 | `timeout_seconds` | 120 | Export and extraction elapsed bound |
-| `tools` | `{}` | Approved executable identities |
+| `tools` | `{}` | Host-runner test seam only; not a production job setting |
 
-`tools.llvm_dwarfdump` and `tools.llvm_pdbutil` each require an absolute
+For the isolated host-runner seam, `tools.llvm_dwarfdump` and `tools.llvm_pdbutil` each require an absolute
 `path` and lowercase executable `sha256`. The reader verifies the pin
 before execution and again before publication. No executable is discovered
 on PATH or downloaded. Missing/unpinned/mismatched tools return named gaps.
 The trusted test-runner seam accepts `(argv, *, timeout_seconds,
-max_output_bytes)` and returns stdout bytes or UTF-8 text. Production uses a
-bounded subprocess with no shell or stdin, discards diagnostics on failures,
-and does not run target code.
+max_output_bytes)` and returns stdout bytes or UTF-8 text. The seam's default
+runner uses a bounded subprocess with no shell or stdin. Production instead
+injects the receipt-bound container exporter: exact accepted build image first,
+then only the explicitly permitted compatibility fallback. It retains protected
+execution/output/diagnostic evidence and requires no host LLVM installation.
+The job rejects host `reader.tools` settings. Neither path runs target code.
 
 Pairing is verified before exporter invocation. ELF uses embedded DWARF,
 matching GNU build IDs, or the explicitly supplied debug file's GNU
@@ -191,7 +194,14 @@ Compilation-unit display names are basenames, not absolute paths.
   and [NativeFunctionSymbol.cpp](https://github.com/llvm/llvm-project/blob/llvmorg-18.1.3/llvm/lib/DebugInfo/PDB/Native/NativeFunctionSymbol.cpp)
   describe the native stream layout, compressed encoding and address-state
   semantics, including the differing cursor effects of the two length opcodes.
-- Public-only PDB names/RVAs do not invent function lengths/signatures.
+- Public-only PDB names/RVAs are also retained in mixed private/public PDBs;
+  exact name/RVA duplicates are collapsed without inventing function lengths/signatures.
+  DWARF line rows retain unique statement-table compilation-unit associations.
+  Unit regressions also use small in-memory export mutations to exercise fragmented
+  ranges, shared line-table ambiguity and array element/constant-dimension fidelity;
+  these are synthetic parser cases, not additional compiler-generated fixtures.
+  PDB dimension counts and dynamic DWARF bounds remain explicitly unavailable.
+  A line-table checksum is not borrowed to assert a checksum-less declaration location.
   Split/supplementary DWARF, unsupported type/member forms, location
   expressions, unavailable checksums and optimized-away data remain named
   gaps. Source-server/SourceLink metadata is never interpreted or retrieved.

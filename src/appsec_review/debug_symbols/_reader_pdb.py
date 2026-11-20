@@ -206,10 +206,19 @@ def parse_pdb(text: str, image: Pe, limits, *, native_pdb: bytes | None = None):
             continue
         if "ForwardReference" in layout.get("Options", []):
             continue
+        metadata = {"type_index": index, "type_kind": kind, "byte_size": layout.get("Size"),
+                    "members": fields(layout.get("FieldList", 0))}
+        if kind == "LF_ARRAY":
+            element = layout.get("ElementType")
+            metadata.update(element_type_index=element,
+                            element_type=typename(element) if element is not None else None,
+                            index_type_index=layout.get("IndexType"), dimensions=None)
+            gaps.add("array_dimensions_unavailable")
+            if element is None:
+                gaps.add("array_element_type_unavailable")
         records.append(SymbolRecord(
             f"pdb:tpi:{index:08x}", RecordKind.TYPE_LAYOUT, layout.get("Name", ""),
-            data={"type_index": index, "type_kind": kind, "byte_size": layout.get("Size"),
-                  "members": fields(layout.get("FieldList", 0))},
+            data=metadata,
         ))
 
     for module_index, module in enumerate(modules):
@@ -268,7 +277,7 @@ def parse_pdb(text: str, image: Pe, limits, *, native_pdb: bytes | None = None):
                     key, RecordKind.SYMBOL, procedure.get("DisplayName", ""), ranges,
                     parent_key=module_key,
                     data={"signature": signature(procedure["FunctionType"], kind.endswith("_ID")),
-                          "address_kind": "rva", "module_index": module_index,
+                          "address_kind": "rva", "rva": start, "module_index": module_index,
                           "native_record_index": symbol_index},
                 ))
                 stack.append((key, "function"))
@@ -370,18 +379,24 @@ def parse_pdb(text: str, image: Pe, limits, *, native_pdb: bytes | None = None):
     publics = document.get("PublicsStream", {}).get("Records", [])
     if publics:
         gaps.add("public_symbols_have_no_lengths_or_signatures")
-    if not any(record.kind is RecordKind.SYMBOL for record in records):
-        # Public-only PDBs retain names and RVAs, without inventing a one-byte range.
-        for index, item in enumerate(publics):
-            value = item.get("PublicSym32", {})
-            if not value:
-                gaps.add("public_symbol_record_unsupported")
-                continue
-            records.append(SymbolRecord(
-                f"pdb:public:{index:08x}", RecordKind.SYMBOL, value.get("Name", ""),
-                data={"rva": image.rva(value["Segment"], value["Offset"], 0),
-                      "address_kind": "rva", "signature": None, "public_only": True},
-            ))
+    private_symbols = [record for record in records if record.kind is RecordKind.SYMBOL]
+    represented = {(record.name, record.data["rva"]) for record in private_symbols}
+    for index, item in enumerate(publics):
+        value = item.get("PublicSym32", {})
+        if not value:
+            gaps.add("public_symbol_record_unsupported")
+            continue
+        name, rva = value.get("Name", ""), image.rva(value["Segment"], value["Offset"], 0)
+        if (name, rva) in represented:
+            continue
+        represented.add((name, rva))
+        records.append(SymbolRecord(
+            f"pdb:public:{index:08x}", RecordKind.SYMBOL, name,
+            data={"rva": rva, "address_kind": "rva", "signature": None, "public_only": True},
+        ))
+        if len(records) > limits["max_records"]:
+            raise ReaderFailure("record_limit")
+    if not private_symbols:
         gaps.add("function_ranges_unavailable")
     for kind, gap in ((RecordKind.COMPILATION_UNIT, "compilation_units_unavailable"),
                       (RecordKind.TYPE_LAYOUT, "type_layouts_unavailable"),

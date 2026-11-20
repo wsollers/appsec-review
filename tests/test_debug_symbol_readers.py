@@ -341,6 +341,99 @@ def test_public_only_pdb_reports_missing_families(tmp_path):
             "compilation_units_unavailable", "function_ranges_unavailable"} <= set(result.gaps)
 
 
+def test_mixed_pdb_retains_public_names_without_inventing_ranges(tmp_path):
+    import yaml
+    from appsec_review.debug_symbols._reader_pdb import _document
+    document = _document((FIXTURES / "msvc-inline.pdb.yaml").read_text(),
+                         {"max_records": 10000, "max_depth": 128})
+    publics = document["PublicsStream"]["Records"]
+    entry = next(item for item in publics if item["PublicSym32"]["Name"] == "entry")
+    alias = {**entry, "PublicSym32": {**entry["PublicSym32"], "Name": "public_function_alias"}}
+    publics.extend([alias, dict(alias)])
+    class NoAliases(yaml.SafeDumper):
+        def ignore_aliases(self, data):
+            return True
+    output = yaml.dump(document, Dumper=NoAliases, explicit_start=True, explicit_end=True)
+    result = extract_symbols(FIXTURES / "msvc-inline.exe", FIXTURES / "msvc-inline.pdb",
+                             target=CompilerTarget.MSVC, settings=settings(tmp_path, "llvm_pdbutil"),
+                             runner=lambda *a, **k: output)
+    assert result.records, result.gaps
+    symbols = [record for record in result.records if record.kind is RecordKind.SYMBOL]
+    assert sorted(record.name for record in symbols) == ["entry", "global_pair", "public_function_alias"]
+    private = next(record for record in symbols if record.name == "entry")
+    assert private.ranges and not private.data.get("public_only")
+    for record in symbols:
+        if record.name != "entry":
+            assert record.data["public_only"] is True
+            assert record.data["signature"] is None and not record.ranges
+            public = next(item["PublicSym32"] for item in publics if item["PublicSym32"]["Name"] == record.name)
+            from appsec_review.debug_symbols._reader_binary import pe
+            image = pe((FIXTURES / "msvc-inline.exe").read_bytes(), 10000)
+            assert record.data["rva"] == image.rva(public["Segment"], public["Offset"], 0)
+    assert "public_symbols_have_no_lengths_or_signatures" in result.gaps
+
+
+@pytest.mark.parametrize("dynamic", [False, True])
+def test_dwarf_array_element_and_dimension_facts_are_not_silently_discarded(tmp_path, dynamic):
+    dimension = "DW_OP_fbreg -8" if dynamic else "3"
+    array = f"""
+0x00001000:   DW_TAG_array_type
+                DW_AT_type (0x00000023 "int")
+                DW_AT_byte_size (12)
+0x00001001:     DW_TAG_subrange_type
+                  DW_AT_lower_bound (1)
+                  DW_AT_count ({dimension})
+0x00001002:     NULL
+"""
+    text = (FIXTURES / "tiny.dwarf.txt").read_text().replace("0x0000007e:   NULL", array)
+    result = extract_symbols(FIXTURES / "tiny.elf", None, target=CompilerTarget.CLANG,
+                             settings=settings(tmp_path), runner=lambda *a, **k: text)
+    record = next(row for row in result.records if row.key == "dwarf:info:0000000000001000")
+    assert record.data["element_type"] == "int" and record.data["element_type_offset"] == 0x23
+    assert record.data["dimensions"] == [{"lower_bound": 1, "upper_bound": None,
+                                          "count": None if dynamic else 3}]
+    assert ("array_dimensions_unavailable" in result.gaps) is dynamic
+
+
+def test_pdb_array_retains_element_index_and_size_without_inventing_dimensions(tmp_path):
+    import yaml
+    from appsec_review.debug_symbols._reader_pdb import _document
+    document = _document((FIXTURES / "tiny.pdb.yaml").read_text(), {"max_records": 10000, "max_depth": 128})
+    index = 0x1000 + len(document["TpiStream"]["Records"])
+    document["TpiStream"]["Records"].append({
+        "Kind": "LF_ARRAY", "Array": {"ElementType": 0x74, "IndexType": 0x75, "Size": 12, "Name": ""}})
+    text = yaml.safe_dump(document, explicit_start=True, explicit_end=True)
+    result = extract_symbols(FIXTURES / "tiny.exe", FIXTURES / "tiny.pdb", target=CompilerTarget.MSVC,
+                             settings=settings(tmp_path, "llvm_pdbutil"), runner=lambda *a, **k: text)
+    record = next(row for row in result.records if row.key == f"pdb:tpi:{index:08x}")
+    assert record.data["element_type_index"] == 0x74 and record.data["element_type"] == "int"
+    assert record.data["index_type_index"] == 0x75 and record.data["byte_size"] == 12
+    assert record.data["dimensions"] is None and "array_dimensions_unavailable" in result.gaps
+
+
+def test_dwarf_declaration_without_checksum_does_not_borrow_line_checksum(tmp_path):
+    result = extract_symbols(FIXTURES / "tiny.elf", None, target=CompilerTarget.CLANG,
+                             settings=settings(tmp_path), runner=fixture_runner("tiny.dwarf.txt"))
+    entry = next(row for row in result.records if row.kind is RecordKind.SYMBOL and row.name == "entry")
+    lines = [row for row in result.records if row.kind is RecordKind.SOURCE_RANGE]
+    assert entry.source and entry.source.checksum is None and entry.source.checksum_kind is None
+    assert lines and all(row.source.checksum for row in lines)
+
+
+def test_dwarf_shared_line_table_does_not_invent_unique_compilation_unit_ownership(tmp_path):
+    text = (FIXTURES / "tiny.dwarf.txt").read_text().replace("0x0000007e:   NULL", """
+0x00001000: DW_TAG_compile_unit
+              DW_AT_name ("other.c")
+              DW_AT_stmt_list (0x00000000)
+""")
+    result = extract_symbols(FIXTURES / "tiny.elf", None, target=CompilerTarget.CLANG,
+                             settings=settings(tmp_path), runner=lambda *a, **k: text)
+    lines = [row for row in result.records if row.kind is RecordKind.SOURCE_RANGE]
+    assert lines and all(row.parent_key is None for row in lines)
+    assert all(row.source.checksum for row in lines)
+    assert "source_range_compilation_unit_ambiguous" in result.gaps
+
+
 def test_unsupported_pdb_subsection_is_named_gap_not_evaluated(tmp_path):
     output = (FIXTURES / "tiny.pdb.yaml").read_text().replace(
         "      Subsections:", "      Subsections:\n        - !Unknown\n          Value: 'https://private/source-server?cmd=do-not-execute'", 1)

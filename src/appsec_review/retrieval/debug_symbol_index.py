@@ -11,6 +11,7 @@ from appsec_review.retrieval.model import EntityKind, EntityRecord, LogicalIdent
 _DIGEST = re.compile(r"[0-9a-f]{64}")
 MAX_PREFIXES_PER_RECORD = 4096
 MAX_LOOKUP_ROWS = 2_000_000
+MAX_RANGES_PER_RECORD = 500
 ARTIFACT_KINDS = frozenset({
     EntityKind.BUILD_ARTIFACT, EntityKind.EXECUTABLE, EntityKind.OBJECT_FILE,
     EntityKind.LIBRARY, EntityKind.EVIDENCE_ARTIFACT,
@@ -36,6 +37,39 @@ def interval_prefixes(start: int, end: int) -> Iterable[str]:
         start += 1 << width
 
 
+class LookupLimitError(ValueError):
+    def __init__(self, gap: str, message: str):
+        super().__init__(message)
+        self.gap = gap
+
+
+def range_prefixes(ranges) -> set[str]:
+    """The producer and builder enforce the same exact, non-truncating address bounds."""
+    if not isinstance(ranges, (tuple, list)) or len(ranges) > MAX_RANGES_PER_RECORD:
+        raise LookupLimitError("address_range_limit",
+                               "debug-symbol address range count exceeds the normalized record bound")
+    prefixes: set[str] = set()
+    for interval in ranges:
+        if not isinstance(interval, dict) or set(interval) != {"start", "end"}:
+            raise ValueError("debug-symbol address range requires start/end only")
+        prefixes.update(interval_prefixes(interval["start"], interval["end"]))
+        if len(prefixes) > MAX_PREFIXES_PER_RECORD:
+            raise LookupLimitError("address_lookup_prefix_limit",
+                                   "debug-symbol per-record address lookup expansion bound exceeded")
+    return prefixes
+
+
+def check_lookup_rows(count: int) -> None:
+    if count > MAX_LOOKUP_ROWS:
+        raise LookupLimitError("address_lookup_row_limit",
+                               "debug-symbol shard address lookup row bound exceeded")
+
+
+def lookup_cost(ranges) -> int:
+    prefixes = range_prefixes(ranges)
+    return max(len(prefixes), len({(value["start"], value["end"]) for value in ranges}))
+
+
 def build_lookup(database: sqlite3.Connection, entities: list[EntityRecord]) -> None:
     # Individual statements: executescript() would implicitly commit the builder's transaction.
     for statement in (
@@ -52,6 +86,11 @@ def build_lookup(database: sqlite3.Connection, entities: list[EntityRecord]) -> 
             artifact_identity TEXT NOT NULL, prefix TEXT NOT NULL, identity TEXT NOT NULL,
             PRIMARY KEY(artifact_identity, prefix, identity)
         ) WITHOUT ROWID""",
+        """CREATE TABLE debug_symbol_intervals(
+            artifact_identity TEXT NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL, identity TEXT NOT NULL,
+            PRIMARY KEY(artifact_identity, start, end, identity)
+        ) WITHOUT ROWID""",
+        "CREATE INDEX debug_symbol_interval_identity ON debug_symbol_intervals(identity)",
     ):
         database.execute(statement)
     lookup_rows = 0
@@ -79,17 +118,12 @@ def build_lookup(database: sqlite3.Connection, entities: list[EntityRecord]) -> 
         database.execute("INSERT INTO debug_symbol_records VALUES (?, ?, ?, ?, ?, ?)", (
             entity.identity.value, artifact.value, kind.value, source, native, parent))
         ranges = data.get("address_ranges", [])
-        if not isinstance(ranges, (tuple, list)) or len(ranges) > 500:
-            raise ValueError("debug-symbol address range count exceeds the normalized record bound")
-        prefixes: set[str] = set()
-        for interval in ranges:
-            if not isinstance(interval, dict) or set(interval) != {"start", "end"}:
-                raise ValueError("debug-symbol address range requires start/end only")
-            prefixes.update(interval_prefixes(interval["start"], interval["end"]))
-            if len(prefixes) > MAX_PREFIXES_PER_RECORD:
-                raise ValueError("debug-symbol per-record address lookup expansion bound exceeded")
-        lookup_rows += len(prefixes)
-        if lookup_rows > MAX_LOOKUP_ROWS:
-            raise ValueError("debug-symbol shard address lookup row bound exceeded")
+        prefixes = range_prefixes(ranges)
+        lookup_rows += max(len(prefixes), len({(value["start"], value["end"]) for value in ranges}))
+        check_lookup_rows(lookup_rows)
         database.executemany("INSERT INTO debug_symbol_addresses VALUES (?, ?, ?)",
                              [(artifact.value, prefix, entity.identity.value) for prefix in sorted(prefixes)])
+        # Fixed-width hexadecimal preserves the full unsigned domain, including the 2**64 end.
+        database.executemany("INSERT OR IGNORE INTO debug_symbol_intervals VALUES (?, ?, ?, ?)",
+                             [(artifact.value, f"{value['start']:017x}", f"{value['end']:017x}",
+                               entity.identity.value) for value in ranges])

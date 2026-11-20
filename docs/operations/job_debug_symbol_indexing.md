@@ -183,8 +183,10 @@ owns the symbol/query contract. This job has no model dispatch.
 
 1. `target`: load the admitted artifact catalog and verify its run, snapshot, manifest and
    artifact identities. If language-build evidence is available, verify the matching handoff
-   and bind each successful build artifact to its recorded build image.
-2. Enumerate bounded native candidates. Record `max_artifacts` or
+   and bind each accepted `build_outcome="built"` artifact to its recorded build image,
+   including provenance-gapped receipts. Never recover `rejected_artifacts`.
+2. Enumerate bounded native candidates, counting debug companions against the same
+   `max_artifacts` budget. Record `max_artifacts` or
    `accepted_artifacts_unavailable` as needed; a corrupt accepted identity fails execution.
 3. Freeze `compiler_target`, the single selected lane, settings, reader identity, input hashes
    and production execution plan in `decision.json`. Both the declaration and readers use
@@ -201,8 +203,13 @@ owns the symbol/query contract. This job has no model dispatch.
    permits the declared compatibility fallback. Parser, timeout, bound and identity failures
    do not select another lane.
 4. Normalize approved records. Bind source locations only to checksum-verified accepted source
-   bytes, including verified generated-source backing. Retain unresolved mappings as coverage
-   reasons rather than trusting recorded paths.
+   bytes from the typed, admitted `job_target_catalog/source_files` input, including verified
+   generated-source backing when present. Source and artifact shard payload reads use the
+   instrumented reader and retain exact read receipts. Manifest propagation is not a read
+   grant. Retain unresolved mappings as coverage reasons rather than trusting recorded paths.
+   A capped source inventory cannot establish checksum uniqueness.
+   Check per-record address-range/prefix and aggregate lookup-row bounds before accepting an
+   artifact; publish scoped unavailable coverage instead of aborting unrelated artifacts.
 5. Write the `debug_symbols` shard, per-artifact coverage, protected raw references/records and
    reader receipts. Return `COMPLETED_WITH_GAPS` for reported reasons, otherwise `SUCCEEDED`.
    Accepted-evidence integrity errors escape as execution failures.
@@ -215,12 +222,23 @@ owns the symbol/query contract. This job has no model dispatch.
 3. Bind the decision, reader evidence, artifact handoff, counts and manifest in
    `accepted-index.json`. Return the selected lane's gaps, not a clean result inferred from the
    existence of a database. The accepted loader re-verifies these bindings and retained receipts.
+   Actual summary, decision and protected reader-evidence reads are observed against their
+   separately declared datasets, not attributed to an envelope-only read.
+
+Function-scoped source-range queries return original, address-intersecting rows with an explicit
+non-exclusive association; they do not manufacture a source line or replace its unit parent.
+Unique DWARF statement-table ownership and PDB module ownership support unit-scoped queries.
+Mixed PDB private/public inventories are merged by exact name and RVA without inferring sizes.
+Array elements and constant DWARF dimension facts are retained; unsupported dynamic bounds and
+PDB dimension counts remain unknown. Checksum-less DWARF declarations remain unverified even
+when line-table rows have checksums.
 
 ## Dataflow
 
 ```mermaid
 flowchart TD
   artifact["Admitted artifact catalog + optional language-build receipts"] --> job_debug_symbol_indexing
+  source["Declared + admitted catalog source_files"] --> selected
   job_debug_symbol_indexing --> decide["decide.target"]
   decide --> decision["target_decision: frozen compiler route"]
   decision --> dwarf["extract.clang_dwarf"]
@@ -253,6 +271,9 @@ publication units can repeat a reason, so compare causes and unit scopes, not ju
 |---|---|
 | `max_artifacts`, `accepted_artifacts_unavailable`, `native_binary_unavailable` | Candidate enumeration was bounded or no native binary was available. An empty index does not establish successful symbol coverage. |
 | `max_input_bytes`, `max_records`, `max_records_total`, `max_output_bytes`, `artifact_integrity_unavailable` | Job-side input/output bounds or unavailable inputs. Inspect each artifact's coverage and the bound reached. Changed accepted hashes are hard integrity failures, not this last unavailable-input reason. |
+| `address_range_limit`, `address_lookup_prefix_limit`, `address_lookup_row_limit` | The artifact would exceed the unchanged normalized address bounds. Its records are withheld as a unit; unrelated admitted artifacts remain indexed. |
+| `source_inventory_limit`, `source_range_compilation_unit_ambiguous`, `source_range_compilation_unit_unavailable` | Incomplete inventory or non-unique native unit association. Do not infer checksum uniqueness or assign a guessed unit. |
+| `array_element_type_unavailable`, `array_dimensions_unavailable` | Missing element reference, dynamic/absent DWARF dimensions or unavailable PDB dimension counts. Retained size/element facts do not imply a complete layout. |
 | `debug_symbol_indexing_disabled`, `debug_symbol_reader_unavailable`, `debug_symbols_unavailable`, `missing_debug_artifact`, `ambiguous_debug_artifact`, `reader_failed: <exception type>` | Disabled/missing infrastructure, no unique companion, no records or a caught reader failure. Compare the selected lane, artifact identities and retained execution evidence before authorizing repair. |
 | `source_mapping_unverified: checksum unavailable`, `source_checksum_invalid`, `source_checksum_algorithm_unsupported`, `source_line_offset_bound`, `source_checksum_ambiguous`, `source_checksum_unverified`, `native_parent_unavailable` | A source binding or parent relationship was not proved. Unmapped records may remain useful, but cannot supply a verified source span or missing relation. |
 | Reader input/execution reasons | `input_limit`, `input_unavailable`, `input_identity_changed`, `output_limit`, `record_limit`, `depth_limit`, `tool_unavailable`, `tool_identity_unpinned`, `tool_identity_mismatch`, `tool_timeout`, `tool_failed`, `tool_oom`, `image_unavailable`, `image_incompatible`, `export_configuration_invalid`, `malformed_tool_output`. Inspect the actual production exporter receipt; host-path tool reasons also exist in the isolated reader seam, not as production PATH discovery. |
@@ -277,7 +298,7 @@ on any other cause not on its confirmed expected-gap list.
 
 Apply the [four walk checks](../processes/walk-charter.md#5-accepting-a-job-the-four-checks):
 
-- **A. Inputs:** verify admitted artifact and language-build pins, snapshot, binary/debug hashes,
+- **A. Inputs:** verify admitted artifact, catalog source and language-build pins, snapshot, binary/debug hashes,
   compiler target, reader image/release and decision fingerprint. Use the actual accepted read
   receipts, not only scheduling ancestry.
 - **B. Independent comparison:** compare representative symbols, addresses, PDB GUID/age or ELF
@@ -302,3 +323,6 @@ Missing declared release identity prevents accepted-job reuse. The runtime still
 accepted publication hashes and repair admission; see [resume](../architecture/jobs-and-runtime.md),
 [input contracts](../architecture/job-input-contracts.md) and
 [retrieval identity](../architecture/python-and-retrieval.md).
+Reader contract `/4` includes the bounded interval lookup and repaired parser associations.
+These offline unit checks do not certify a deployed LLVM package, container export or live corpus;
+those remain separately authorized manual validation.

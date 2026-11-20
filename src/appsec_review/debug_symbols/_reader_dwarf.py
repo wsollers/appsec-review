@@ -1,7 +1,7 @@
 """Parser for LLVM dwarfdump's bounded, resolved DWARF presentation."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import hashlib
 import json
 import re
@@ -191,6 +191,20 @@ def parse_dwarf(text: str, limits) -> tuple[list[SymbolRecord], set[str]]:
     gaps = {"variable_locations_not_indexed", "source_paths_unverified"}
     dies = _dies(text, limits)
     tables, line_records = _line_tables(text, limits, gaps)
+    line_owners: dict[int, list[str]] = {}
+    for die in dies.values():
+        if die.tag in ("compile_unit", "skeleton_unit"):
+            table = _number(die.attrs.get("stmt_list", ""))
+            if table is not None:
+                line_owners.setdefault(table, []).append(die.key)
+    for index, record in enumerate(line_records):
+        table = int(record.key.split(":")[2], 16)
+        owners = line_owners.get(table, [])
+        if len(owners) == 1:
+            line_records[index] = replace(record, parent_key=owners[0])
+        else:
+            gaps.add("source_range_compilation_unit_ambiguous" if owners
+                     else "source_range_compilation_unit_unavailable")
 
     def inherited(die: Die, attribute: str):
         seen = set()
@@ -330,6 +344,31 @@ def parse_dwarf(text: str, limits) -> tuple[list[SymbolRecord], set[str]]:
                 "type_kind": die.tag, "byte_size": _number(die.attrs.get("byte_size", "")),
                 "members": members,
             })
+            if die.tag == "array_type":
+                element = _number(inherited(die, "type"))
+                dimensions = []
+                for child in die.children:
+                    if child.tag != "subrange_type":
+                        continue
+                    dimension = {}
+                    for field in ("lower_bound", "upper_bound", "count"):
+                        raw = child.attrs.get(field, "").strip().removeprefix("(").removesuffix(")").strip()
+                        dimension[field] = (int(raw, 16 if raw.lstrip("-").startswith("0x") else 10)
+                                            if re.fullmatch(r"-?(?:0x[0-9a-fA-F]+|\d+)", raw) else None)
+                    if "count" not in child.attrs and all(
+                            dimension[field] is not None for field in ("lower_bound", "upper_bound")):
+                        dimension["count"] = dimension["upper_bound"] - dimension["lower_bound"] + 1
+                    if dimension["count"] is None or dimension["count"] < 0:
+                        dimension["count"] = None
+                        gaps.add("array_dimensions_unavailable")
+                    dimensions.append(dimension)
+                if not dimensions:
+                    gaps.add("array_dimensions_unavailable")
+                if element is None:
+                    gaps.add("array_element_type_unavailable")
+                metadata.update(element_type_offset=element,
+                                element_type=type_name(element) if element is not None else None,
+                                dimensions=dimensions)
             if metadata["byte_size"] is None:
                 gaps.add("type_size_unavailable")
             records.append(SymbolRecord(die.key, RecordKind.TYPE_LAYOUT, name(die),

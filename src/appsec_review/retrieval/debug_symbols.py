@@ -85,8 +85,13 @@ def row_in_scope(row: Mapping[str, Any], in_scope, graph_scopes=()) -> bool:
         return False
     if artifact_kind not in ARTIFACT_KINDS:
         return False
+    overlap = data.get("source_range_relation", {})
+    overlap_subject = (overlap.get("subject_identity") if isinstance(overlap, Mapping)
+                       and data.get("record_kind") == RecordKind.SOURCE_RANGE.value
+                       and overlap.get("ownership") == "not_established"
+                       and overlap.get("kind") in {"address_overlap", "native_parent"} else None)
     if not any(isinstance(value, str) and in_scope(value) for value in (
-        row["identity"], artifact, data.get("source_identity"), data.get("parent_identity"))):
+        row["identity"], artifact, data.get("source_identity"), data.get("parent_identity"), overlap_subject)):
         return False
     return all(isinstance(link, Mapping) and link.get("exact") is True and
                (in_scope(link.get("graph_identity")) or link.get("graph_scope") in graph_scopes)
@@ -233,6 +238,29 @@ def query_debug_symbols(core, *, mode: str, artifact_identity: str | None = None
                                        "WHERE source_identity=? UNION SELECT identity FROM debug_symbol_records "
                                        "WHERE identity=?)")
                         args.extend([subject, subject])
+                    elif query_mode is QueryMode.SOURCE_RANGES and source_kind is EntityKind.SYMBOL:
+                        source_range_relation = "address_overlap"
+                        if database.execute(
+                                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                                "AND name='debug_symbol_intervals'").fetchone():
+                            clauses.append(
+                                "d.identity IN (SELECT line.identity FROM debug_symbol_intervals function "
+                                "JOIN debug_symbol_intervals line ON line.artifact_identity=function.artifact_identity "
+                                "AND line.start < function.end AND function.start < line.end "
+                                "WHERE function.identity=?)")
+                            args.append(subject)
+                            clauses.append(
+                                "EXISTS (SELECT 1 FROM debug_symbol_records function WHERE function.identity=? "
+                                "AND (d.parent_key=function.parent_key OR d.parent_key=function.native_key "
+                                "OR d.parent_key IS NULL OR function.parent_key IS NULL))")
+                            args.append(subject)
+                        else:
+                            source_range_relation = "native_parent"
+                            clauses.append(
+                                "EXISTS (SELECT 1 FROM debug_symbol_records function WHERE function.identity=? "
+                                "AND d.parent_key=function.native_key AND d.artifact_identity=function.artifact_identity)")
+                            args.append(subject)
+                            gaps.append("source-range interval lookup unavailable; reindex required")
                     elif query_mode in {QueryMode.INLINE_FRAMES, QueryMode.SOURCE_RANGES}:
                         clauses.append("d.identity IN (SELECT identity FROM debug_symbol_records WHERE identity=? "
                                        "UNION SELECT child.identity FROM debug_symbol_records parent "
@@ -262,8 +290,14 @@ def query_debug_symbols(core, *, mode: str, artifact_identity: str | None = None
                     item["artifact_reference"] = {"index": INDEX_NAME, "identity": row["identity"],
                                                   "shard_sha256": shard["sha256"]}
                     item["payload"].pop("parent_identity", None)
+                    item["payload"].pop("source_range_relation", None)
                     if row["parent_identity"]:
                         item["payload"]["parent_identity"] = row["parent_identity"]
+                    if (query_mode is QueryMode.SOURCE_RANGES and subject
+                            and LogicalIdentity.parse(subject).kind is EntityKind.SYMBOL):
+                        item["payload"]["source_range_relation"] = {
+                            "kind": source_range_relation, "subject_identity": subject,
+                            "ownership": "not_established"}
                     target = item["payload"].get("compiler_target")
                     if target in {"clang", "msvc"}:
                         targets.add(target)

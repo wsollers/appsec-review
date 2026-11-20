@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from array import array
 from collections.abc import Mapping
+from contextlib import closing
 from dataclasses import asdict
 import hashlib
 import importlib
@@ -9,7 +10,6 @@ import inspect
 import json
 from pathlib import Path
 import re
-import sqlite3
 import time
 from typing import Any
 
@@ -27,13 +27,17 @@ from appsec_review.jobs.job_artifact_indexing import (
     canonical_artifact_identity, load_accepted_artifact_index,
 )
 from appsec_review.jobs.job_language_build import load_accepted_language_build
+from appsec_review.jobs.build_outcome import build_succeeded
+from appsec_review.indexing.store import open_shard
 from appsec_review.retrieval import (
     INDEX_SCHEMA, EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity,
     RelationKind, RelationRecord, write_manifest,
 )
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.retrieval.model import canonical_json
+from appsec_review.retrieval.debug_symbol_index import LookupLimitError, check_lookup_rows, lookup_cost
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.runtime.inputs import observe_output
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.storage.shared import safe_path
 
@@ -41,7 +45,7 @@ from .datasets import CONTRACT, DATASETS
 
 
 SCHEMA = "appsec-review/debug-symbol-indexing/1"
-READER_IDENTITY = "appsec-review/offline-debug-symbol-readers/3"
+READER_IDENTITY = "appsec-review/offline-debug-symbol-readers/4"
 _TOPOLOGY = {"decide": ("target",), "extract": ("clang_dwarf", "msvc_pdb"),
              "acceptance": ("publish_handoff",)}
 _ARTIFACT_KINDS = {EntityKind.EXECUTABLE, EntityKind.OBJECT_FILE, EntityKind.LIBRARY,
@@ -109,8 +113,24 @@ def _emit(unit: UnitContext, event: str, *, target: str, lane: str, started: flo
                           gap_count=gap_count)
 
 
+def _read_catalog(run_root: Path) -> Mapping[str, Any]:
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, "job_artifact_indexing")
+    reference = accepted.handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
+    observe_output(run_root, "job_artifact_indexing", "artifact_index_summary", reference)
+    return load_accepted_artifact_index(run_root)
+
+
+def _read_language_build(run_root: Path) -> Mapping[str, Any]:
+    from appsec_review.runtime.consume import accepted_upstream
+    accepted = accepted_upstream(run_root, "job_language_build")
+    reference = accepted.handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
+    observe_output(run_root, "job_language_build", "language_build_receipts", reference)
+    return load_accepted_language_build(run_root)
+
+
 def _accepted_inputs(unit: UnitContext, settings: Mapping[str, Any]) -> dict[str, Any]:
-    accepted = load_accepted_artifact_index(unit.job.run_root)
+    accepted = _read_catalog(unit.job.run_root)
     if accepted.get("source_fingerprint") != unit.job.source_fingerprint:
         raise ValueError("accepted artifact catalog belongs to another target snapshot")
     upstream = accepted.get("index_manifest")
@@ -126,13 +146,13 @@ def _accepted_inputs(unit: UnitContext, settings: Mapping[str, Any]) -> dict[str
     build_images = {}
     from appsec_review.runtime.consume import has_accepted_upstream
     if has_accepted_upstream(unit.job.run_root, "job_language_build"):
-        language = load_accepted_language_build(unit.job.run_root)
+        language = _read_language_build(unit.job.run_root)
         language_sha = language["language_build_handoff_sha256"]
         if (language.get("source_fingerprint") != unit.job.source_fingerprint
                 or language_sha != accepted.get("language_build_handoff_sha256")):
             raise ValueError("artifact catalog and accepted language-build metadata differ")
         for receipt in language.get("receipts", ()):
-            if not isinstance(receipt, Mapping) or receipt.get("terminal_status") != "SUCCEEDED":
+            if not isinstance(receipt, Mapping) or not build_succeeded(receipt):
                 continue
             image = (build_image_identity(receipt.get("image")) if receipt.get("artifacts") else None)
             for item in receipt.get("artifacts", ()):
@@ -149,8 +169,7 @@ def _accepted_inputs(unit: UnitContext, settings: Mapping[str, Any]) -> dict[str
     for shard in manifest["indexes"]:
         if shard["name"] != "artifacts" or not shard.get("shard_id", "").startswith("catalog-"):
             continue
-        path = safe_path(unit.job.run_root, shard["relative_path"])
-        with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True) as db:
+        with closing(open_shard(unit.job.run_root, shard)) as db:
             kinds = sorted(kind.value for kind in _ARTIFACT_KINDS)
             rows = db.execute(
                 "SELECT identity, kind, payload_json FROM entities WHERE kind IN ("
@@ -284,21 +303,27 @@ class _Sources:
         self.by_sha256 = {}
         self.line_offsets = {}
         self.line_offset_bytes = 0
+        self.gaps = []
         prior, _ = load_verified_manifest(
             unit.job.run_root, unit.job.run_root / decision["upstream_manifest"]["path"],
             decision["upstream_manifest"]["sha256"])
+        if (prior["run_id"] != unit.job.run_id
+                or prior["target_snapshot"] != unit.job.source_fingerprint):
+            raise FrameworkIntegrityError("accepted source manifest belongs to another run or target")
         seen = set()
         for shard in prior["indexes"]:
             if shard["name"] != "source":
                 continue
-            path = safe_path(unit.job.run_root, shard["relative_path"])
-            with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True) as db:
+            with closing(open_shard(unit.job.run_root, shard)) as db:
                 rows = db.execute(
                     "SELECT e.identity,l.path,l.file_sha256,e.payload_json "
                     "FROM entities e JOIN locations l ON e.identity=l.entity_id "
                     "WHERE e.kind=? ORDER BY e.identity LIMIT ?",
                     (EntityKind.SOURCE_FILE.value, self.limit + 1)).fetchall()
             for identity, source_path, digest, payload in rows:
+                if identity not in seen and len(self.rows) >= self.limit:
+                    self.gaps.append("source_inventory_limit")
+                    break
                 if identity not in seen and len(self.rows) < self.limit:
                     logical = LogicalIdentity.parse(identity)
                     expected = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
@@ -307,9 +332,11 @@ class _Sources:
                         continue
                     seen.add(identity)
                     self.rows.append({"identity": identity, "path": source_path, "sha256": digest,
-                                      "payload": json.loads(payload), "shard": path})
+                                      "payload": json.loads(payload), "shard": shard})
                     self.by_path.setdefault(source_path, []).append(self.rows[-1])
                     self.by_sha256.setdefault(digest, []).append(self.rows[-1])
+            if self.gaps:
+                break
 
     def _bytes(self, row: Mapping[str, Any]) -> bytes:
         digest = row["sha256"]
@@ -331,7 +358,7 @@ class _Sources:
         else:
             # Full source text is run-owned evidence only if its reconstructed bytes match the
             # accepted file checksum. Truncated text or newline conversion cannot establish this.
-            with sqlite3.connect(f"{row['shard'].resolve().as_uri()}?mode=ro&immutable=1", uri=True) as db:
+            with closing(open_shard(root, row["shard"])) as db:
                 text = db.execute("SELECT text FROM entities WHERE identity=?", (row["identity"],)).fetchone()[0]
             data = text.encode("utf-8")
         if len(data) > self.maximum or hashlib.sha256(data).hexdigest() != digest:
@@ -359,6 +386,8 @@ class _Sources:
         return offsets
 
     def resolve(self, span) -> tuple[Mapping[str, Any] | None, str | None]:
+        if self.gaps:
+            return None, self.gaps[0]
         if not span.checksum or not span.checksum_kind:
             return None, "source_mapping_unverified: checksum unavailable"
         if not isinstance(span.checksum, str) or not isinstance(span.checksum_kind, str):
@@ -505,9 +534,11 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
     all_gaps = list(decision["gaps"])
     raw_refs = []
     sources = _Sources(unit, decision)
+    all_gaps.extend(sources.gaps)
     debug_candidates = [item for item in probes if item.get("is_debug")]
     artifact_count = 0
     output_bytes = 0
+    lookup_rows = 0
     reader = extractor
     if reader is None:
         try:
@@ -569,31 +600,38 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
                     if output_bytes + result_bytes > settings["reader"]["max_output_bytes"]:
                         gaps.append("max_output_bytes")
                         continue
+                    result_lookup_rows = 0
+                    for record in result.records:
+                        result_lookup_rows += lookup_cost([asdict(value) for value in record.ranges])
+                        check_lookup_rows(lookup_rows + result_lookup_rows)
                     if result.records:
-                        matches.append((result, candidate, executions))
+                        matches.append((result, candidate, executions, result_lookup_rows))
                         if candidate is None:
                             break
                     else:
                         gaps.extend(_private_text(gap) for gap in result.gaps or ("debug_symbols_unavailable",))
                 except SymbolIntegrityError:
                     raise
+                except LookupLimitError as exc:
+                    gaps.append(exc.gap)
                 except Exception as exc:
                     gaps.append(f"reader_failed: {type(exc).__name__}")
                 finally:
                     if exporter is not None:
                         reader_executions.extend(exporter.attempts)
             distinct = {(candidate["reference"]["sha256"] if candidate else artifact["reference"]["sha256"])
-                        for _, candidate, _ in matches}
+                        for _, candidate, _, _ in matches}
             if len(distinct) > 1:
                 gaps.append("ambiguous_debug_artifact")
             elif matches:
-                extracted, debug, selected_executions = matches[0]
+                extracted, debug, selected_executions, selected_lookup_rows = matches[0]
                 # Failed candidate pairing is not a coverage gap after exactly one match is proved.
                 gaps = list(extracted.gaps)
                 try:
                     gaps = _normalize(builder, artifact, debug, extracted, unit, target.value, sources,
                                       selected_executions)
                     output_bytes += len(canonical_json(asdict(extracted)))
+                    lookup_rows += selected_lookup_rows
                 except (ValueError, KeyError, TypeError):
                     raise ValueError("invalid normalized debug-symbol records") from None
         if extracted is None and not gaps:
@@ -687,8 +725,6 @@ def _validate_config(context, _result) -> None:
 
 
 def load_accepted_debug_symbols(run_root: Path) -> Mapping[str, Any]:
-    from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
-
     from appsec_review.runtime.consume import accepted_upstream
     accepted = accepted_upstream(run_root, JOB_ID)
     handoff = accepted.handoff
@@ -698,10 +734,12 @@ def load_accepted_debug_symbols(run_root: Path) -> Mapping[str, Any]:
     if not any(item.get("path") == artifact.get("path") and item.get("sha256") == artifact.get("sha256")
                for item in handoff.get("artifacts", ())):
         raise ValueError("debug-symbol summary is not bound to accepted handoff")
+    observe_output(run_root, JOB_ID, "debug_symbol_summary", artifact)
     document = json.loads(_verify(run_root, artifact, "accepted debug-symbol summary").read_text())
     if document.get("schema") != SCHEMA:
         raise ValueError("unsupported accepted debug-symbol schema")
     if "reader_evidence" in document:
+        observe_output(run_root, JOB_ID, "raw_artifact_refs", document["reader_evidence"])
         evidence = json.loads(_verify(
             run_root, document["reader_evidence"], "debug-symbol reader evidence").read_text())
         for item in evidence["artifacts"]:
@@ -709,6 +747,7 @@ def load_accepted_debug_symbols(run_root: Path) -> Mapping[str, Any]:
                 for field in ("execution", "output", "diagnostics"):
                     if field in attempt:
                         _verify(run_root, attempt[field], "debug-symbol " + field)
+    observe_output(run_root, JOB_ID, "target_decision", document["decision"])
     decision = json.loads(_verify(run_root, document["decision"], "accepted debug-symbol decision").read_text())
     body = {key: value for key, value in decision.items() if key != "input_fingerprint"}
     if (decision.get("schema") != DECISION_SCHEMA

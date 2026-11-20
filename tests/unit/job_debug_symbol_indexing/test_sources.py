@@ -63,6 +63,10 @@ def test_the_record_limit_bounds_the_inventory_read(tmp_path: Path) -> None:
     shards = [source_shard(run_root, f"int v{index};\n".encode(), path=f"src/{index}.cc") for index in range(3)]
     sources, _ = _sources(tmp_path, shards, max_records=2)
     assert len(sources.rows) == 2
+    assert sources.gaps == ["source_inventory_limit"]
+    row = sources.rows[0]
+    assert sources.resolve(SourceSpan(row["path"], 1, 0, row["sha256"], "sha256")) == (
+        None, "source_inventory_limit"), "unread rows may carry the same checksum; uniqueness is unknown"
 
 
 def test_source_bytes_come_from_the_shared_object_store_then_hash_verified_sqlite_text(tmp_path: Path) -> None:

@@ -357,6 +357,28 @@ def test_source_and_parent_closure_do_not_grant_unrelated_rows(symbols):
     assert _bound("query_debug_symbols", unrelated, capability, granted=granted)[1] == 1
 
 
+def test_function_scoped_line_lookup_does_not_require_an_artifact_wide_grant(symbols):
+    core, ids = symbols
+    query = {"mode": "source_ranges", "subject": ids["symbol"], "limit": 2}
+    capability = _cap(ids, entities=[ids["symbol"]])
+    assert isinstance(capability.authorize({"tool": "query_debug_symbols", "parameters": query}), Authorized)
+    response = core.query_debug_symbols(**query)
+    bounded, withheld = _bound("query_debug_symbols", response, capability, granted=set())
+    assert withheld == 0 and [row["identity"] for row in bounded["results"]] == [ids["source_range"]]
+    package = {"run_id": RUN, "manifest_sha256": core.manifest_sha256, "package_id": "p",
+               "retrieval": {"indexes": ["debug_symbols"], "entity_ids": [ids["symbol"]],
+                             "query_sets": [], "max_page_size": 2, "max_pages": 2, "max_depth": 2,
+                             "max_response_bytes": 100000}}
+    secret = b"s" * 32
+    token = issue_capability(package, role="verifier", round_id="1", secret=secret,
+                             expires_at=int(time.time()) + 300)
+    scoped = ScopedRetrievalMcpAdapter(RetrievalMcpAdapter(core), package, capability=token,
+                                       secret=secret, role="verifier", round_id="1")
+    assert [row["identity"] for row in scoped.call("query_debug_symbols", query)["results"]] == [ids["source_range"]]
+    with pytest.raises(ValueError, match="outside review package"):
+        scoped.call("query_debug_symbols", {"mode": "symbol", "artifact_identity": ids["other_artifact"], "limit": 2})
+
+
 def test_graph_link_scope_needs_graph_grant_and_exact_fact_scope(symbols):
     core, ids = symbols
     response = core.query_debug_symbols(mode="graph_links", subject=ids["symbol"])

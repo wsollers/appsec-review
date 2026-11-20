@@ -87,7 +87,7 @@ def test_validation_refuses_a_changed_topology_task_set_or_invalid_settings() ->
 
 def test_reader_identity_binds_the_production_contract_or_the_injected_reader_source() -> None:
     assert _reader_identity(None) == _digest({"contract": READER_IDENTITY})
-    assert READER_IDENTITY == "appsec-review/offline-debug-symbol-readers/3"
+    assert READER_IDENTITY == "appsec-review/offline-debug-symbol-readers/4"
     first, second = extractor(), extractor()
     assert _reader_identity(first) == _reader_identity(second), "same source, same identity"
 

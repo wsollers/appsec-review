@@ -30,6 +30,11 @@ an MSVC installation.
 No host-local LLVM installation or executable-path configuration is required.
 For build-produced artifacts, extraction starts a fresh instance of the exact
 immutable image recorded in that artifact's accepted language-build receipt.
+An accepted receipt with `build_outcome="built"` remains eligible when its
+`terminal_status` is `COMPLETED_WITH_GAPS`; provenance gaps do not select a
+different image. Only the receipt's accepted `artifacts` participate, never
+`rejected_artifacts`. Older receipts without `build_outcome` retain the
+`SUCCEEDED` fallback.
 It does not resolve a mutable compiler tag, reuse the dirty build container,
 rerun build scripts, or execute the target. Missing or invalid image provenance
 in an accepted build receipt is an integrity failure.
@@ -83,12 +88,26 @@ Basenames are not pairing evidence. Missing or ambiguous companions are gaps.
 Mach-O/dSYM, portable .NET PDB, split/supplementary DWARF and unsupported debug
 records are not silently reinterpreted as supported native evidence.
 
-Default limits are 128 candidate binaries, 512 MiB per input file, 16 MiB per
+Default limits are 128 catalog candidates **including debug companions**, 512 MiB per input file, 16 MiB per
 export/normalized output, 100,000 records, nesting depth 128 and 120 seconds per
 reader. These live under the job's central `settings` / `settings.reader`;
 invalid types and unknown settings are rejected. Raw inputs, source names and
 reader records remain protected run-owned evidence. Public index rows retain
 verified artifact identities and approved normalized facts.
+
+Address indexing also caps each record at 500 ranges and 4,096 dyadic lookup
+prefixes, and the shard at 2,000,000 lookup rows (bounding both prefix and interval
+tables). The producer checks these before normalization: an over-limit artifact
+gets a named unavailable-coverage reason; other admissible artifacts remain
+queryable. It does not truncate a function's ranges or enlarge the bounds.
+
+Source binding reads only the declared, admitted `job_target_catalog/source_files`
+shards through the observed-read boundary. Artifact catalog reads likewise produce
+`artifact_catalog` receipts; a composite manifest alone grants neither read.
+Receipts retain the exact producer handoff, attempt, target snapshot, path and hash.
+Source inventory is capped by `reader.max_records`. A truncated inventory emits
+`source_inventory_limit` and cannot prove checksum uniqueness, even for an
+already encountered row. Source text and line offsets remain byte-bounded.
 
 ## Retrieval and observability
 
@@ -97,6 +116,23 @@ Its closed modes cover symbols, build-relative addresses, verified source
 ranges, layouts, inline frames, compilation units, coverage and existing graph
 links. The same core serves capability-scoped review cells and MCP clients.
 There is no SQL, shell, arbitrary path or debugger-expression surface.
+
+`source_ranges` by compilation unit returns line-table rows with a uniquely
+verified native unit association. By function it returns existing line rows whose
+half-open address ranges intersect that function, excluding known different
+compilation units. Rows retain their own identities, original ranges, locations
+and unit parents; the returned `source_range_relation` explicitly describes address
+overlap, **not exclusive ownership**. Overlapping functions can return the same
+row. Unknown/ambiguous native unit associations remain named gaps. Historical
+shards without the interval lookup report a reindex-required gap and retain only
+their direct-parent lookup, labelled `native_parent`.
+
+Mixed PDBs retain public names/RVAs not already represented by the same private
+name and RVA. Public-only records have no invented range or signature. Array
+records retain element references and available constant DWARF dimensions;
+dynamic/absent dimensions and PDB dimension counts remain explicit unknowns.
+A checksum on a line-table row does not make a checksum-less function declaration
+a verified source location.
 
 Telemetry is unconditional in the default path: target decisions, reader
 executions and compatibility fallbacks, artifact outcomes, index completion

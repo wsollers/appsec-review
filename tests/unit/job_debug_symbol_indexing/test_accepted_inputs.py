@@ -29,11 +29,11 @@ def upstream(tmp_path: Path, monkeypatch):
     state.accepted = None
     state.language = None
     state.calls = []
-    monkeypatch.setattr(job_module, "load_accepted_artifact_index",
+    monkeypatch.setattr(job_module, "_read_catalog",
                         lambda root: state.calls.append(("artifacts", root)) or state.accepted)
     monkeypatch.setattr(consume, "has_accepted_upstream",
                         lambda root, job_id: state.calls.append(("has", job_id)) or state.language is not None)
-    monkeypatch.setattr(job_module, "load_accepted_language_build",
+    monkeypatch.setattr(job_module, "_read_language_build",
                         lambda root: state.calls.append(("language", root)) or state.language)
     return state
 
@@ -71,14 +71,15 @@ def test_catalog_entries_without_an_intake_reference_use_their_own_payload(upstr
     assert entry["reference"] == items[0]["reference"] and entry["build_image"] is None
 
 
-def test_language_build_receipts_bind_produced_artifacts_to_their_build_image(upstream) -> None:
+@pytest.mark.parametrize("status", ["SUCCEEDED", "COMPLETED_WITH_GAPS"])
+def test_language_build_receipts_bind_produced_artifacts_to_their_build_image(upstream, status) -> None:
     run_root = upstream.context.run_root
     produced = artifact(run_root, "build/app", ELF)
     produced["artifact_identity"] = canonical_artifact_identity(SNAPSHOT, "build-unit-1", produced["reference"]).value
     produced["reference"]["canonical_identity"] = produced["artifact_identity"]
     upstream.accepted = _accepted(run_root, [produced], target_artifacts=[], language_sha="f" * 64)
     upstream.language = {"source_fingerprint": SNAPSHOT, "language_build_handoff_sha256": "f" * 64, "receipts": [
-        {"build_unit_id": "build-unit-1", "terminal_status": "SUCCEEDED", "image": IMAGE,
+        {"build_unit_id": "build-unit-1", "terminal_status": status, "build_outcome": "built", "image": IMAGE,
          "artifacts": [produced["reference"]]},
         {"build_unit_id": "build-unit-2", "terminal_status": "FAILED", "image": {}, "artifacts": [produced["reference"]]},
         "not a receipt"]}

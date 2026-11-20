@@ -20,6 +20,7 @@ from appsec_review.jobs.job_debug_symbol_indexing import job as job_module
 from appsec_review.jobs.job_debug_symbol_indexing.datasets import CONSUMES, CONTRACT, DATASETS
 from appsec_review.jobs.job_debug_symbol_indexing.job import _TOPOLOGY, SCHEMA, build_job
 from appsec_review.jobs.job_language_build.datasets import DATASETS as LANGUAGE_DATASETS
+from appsec_review.jobs.job_target_catalog.datasets import DATASETS as CATALOG_DATASETS
 from appsec_review.mcp.schema import TOOLS
 from appsec_review.retrieval import INDEX_SCHEMA
 from appsec_review.retrieval.index import INDEX_NAMES
@@ -36,6 +37,8 @@ from tests.unit.job_debug_symbol_indexing.support import (
 HANDOFF = "appsec-review/job-handoff/2"
 ATTEMPT_GLOB = "data/jobs/job_debug_symbol_indexing/attempts/*/artifacts/debug-symbols/"
 EXPECTED_INPUTS = (
+    ("job_target_catalog", "handoff", HANDOFF),
+    ("job_target_catalog", "source_files", INDEX_SCHEMA),
     ("job_artifact_indexing", "handoff", HANDOFF),
     ("job_artifact_indexing", "artifact_catalog", INDEX_SCHEMA),
     ("job_artifact_indexing", "archive_members", INDEX_SCHEMA),
@@ -77,7 +80,8 @@ def test_inputs_are_pinned_with_their_producer_dataset_and_schema_and_are_all_op
 
 def test_every_dataset_input_names_a_declaration_its_producer_makes_with_the_same_schema() -> None:
     producers = {"job_artifact_indexing": {item.output_kind: item for item in ARTIFACT_DATASETS},
-                 "job_language_build": {item.output_kind: item for item in LANGUAGE_DATASETS}}
+                 "job_language_build": {item.output_kind: item for item in LANGUAGE_DATASETS},
+                 "job_target_catalog": {item.output_kind: item for item in CATALOG_DATASETS}}
     for item in CONTRACT.inputs:
         if item.output_kind == "handoff":
             continue
@@ -85,10 +89,10 @@ def test_every_dataset_input_names_a_declaration_its_producer_makes_with_the_sam
         assert declaration is not None, f"{item.producer} does not declare {item.output_kind}"
         assert declaration.schema == item.schema, item.output_kind
         assert declaration.authority is item.authority, item.output_kind
-    # every dataset the two producers declare is consumed: a new upstream output needs a decision here
     for producer, declarations in producers.items():
         consumed = {item.output_kind for item in CONTRACT.inputs if item.producer == producer}
-        assert consumed == set(declarations) | {"handoff"}, producer
+        expected = {"source_files", "handoff"} if producer == "job_target_catalog" else set(declarations) | {"handoff"}
+        assert consumed == expected, producer
 
 
 def test_the_job_is_a_review_graph_producer_scheduled_after_the_artifact_index() -> None:
@@ -96,7 +100,7 @@ def test_the_job_is_a_review_graph_producer_scheduled_after_the_artifact_index()
     assert CONTRACT.target_access is TargetAccess.CHECKOUT
     assert CONTRACT.schedule_after == ("job_artifact_indexing",)
     assert CONTRACT.always_execute is False and CONTRACT.propagate_handoff is True
-    assert CONTRACT.consumes == CONSUMES == ("job_artifact_indexing", "job_language_build")
+    assert CONTRACT.consumes == CONSUMES == ("job_artifact_indexing", "job_language_build", "job_target_catalog")
 
 
 # --- outputs ---------------------------------------------------------------------------------------
@@ -174,7 +178,7 @@ def test_target_decision_document_matches_its_declared_schema(tmp_path: Path, mo
         calls.append((job_id, run_root))
         return False
 
-    monkeypatch.setattr(job_module, "load_accepted_artifact_index", load_artifacts)
+    monkeypatch.setattr(job_module, "_read_catalog", load_artifacts)
     monkeypatch.setattr(consume, "has_accepted_upstream", has_language_build)
     result = handlers(build_job(extractor=extractor()))["decide.target"](unit(context, "decide.target"))
     assert calls == [("artifact-index", context.run_root), ("job_language_build", context.run_root)]
