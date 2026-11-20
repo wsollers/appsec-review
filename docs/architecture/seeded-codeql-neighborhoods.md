@@ -28,9 +28,9 @@ its findings.
 
 CodeQL is run **from the findings outward**, not over the whole program.
 
-1. Findings already have locations. `job_evidence_collection` (which runs before
-   `job_codeql_analysis`) produces `tool_observation` entities (path, line range, scanner, rule).
-   Those locations are the **seeds**.
+1. Accepted upstream findings and the current scope's own normalized CodeQL observations provide
+   located **seeds** (path, line range, scanner, rule). Bounded structural candidates fill unused
+   capacity after those observations; they are navigation seeds, not findings.
 2. The export is restricted to the **neighborhood** of the seeds: the functions within `seed_depth`
    call-graph steps (callers and callees, direct and virtual-override edges) of the function that
    contains each seed. `seed_depth` (n) is a job setting.
@@ -66,11 +66,23 @@ re-runs the export. The seed set (sorted `path,start_line,end_line`) is part of 
 
 * Source: `tool_observation` entities in the observation shards named by the plan's
   `upstream_manifests` (read with `ShardSet(...).entities(shards, kinds=("tool_observation",))`),
-  excluding observations produced by `job_codeql_analysis` itself (its own results are not seeds).
+  excluding prior seeded-producer observations, including CodeQL, from that upstream pass.
+  The scheduler separately supplies **this scope's own current normalized CodeQL shards** after
+  all its query profiles have normalized. Those observations are seeds; other scopes' current
+  shards are not read opportunistically, so completion order does not change the seed set.
   The observation's location gives the target-relative path and line range; `scanner_of`,
   `rule_of` and `normalize_reported_severity` give the ledger fields.
+* Structural fallback: CodeQL explicitly enables the shared extractor's structural candidates.
+  After observation seeds, remaining slots up to the configured `seed_limit` are filled from
+  admitted priority hotspots, Tree-sitter CFG functions and catalog symbols, in that order.
+  Candidate availability is limited to the admitted manifests, not a new input grant. The typed
+  `CodeQLExportSettings` has no separate structural-fallback policy switch; the shared helper's
+  default argument is not a job configuration setting.
 * Mapping: the path is mapped to the database source root of each scope (scope root plus the
   accepted file list); a seed is assigned to every scope whose accepted files contain the path.
+  Each export retains the **whole plan's** ownership map for `file_not_in_database` accounting,
+  then selects its own scope's seeds. Findings belonging to another planned database are not
+  reported as absent from every database.
   The export CSV carries the database-relative path. C/C++ uses `GraphExport.sourcePath`, which
   excludes paths matching `CMakeFiles/` so configure-time compiler probes do not become accepted
   project-source graph facts; the same path rule governs seed resolution.

@@ -697,10 +697,11 @@ the intended ordering effect.
 
 ```text
 job_codeql_analysis
-  plan.inventory -> database.scopes -> query.scopes -> normalize.scopes
-                                    \-> export.scopes (new) ------------\
-                                                                         \
-job_code_graph_index (new)                                                \
+  plan.inventory -> execution.scopes -> acceptance.publish_handoff
+                      | internal per-scope actions:
+                      database -> query profiles -> normalizations -> export
+
+job_code_graph_index
   load.accepted_inputs -> normalize.scopes -> crosscheck.scopes -> correlate.scopes -> acceptance.publish_handoff
       ^ accepted: codeql (exports + observations), cpp_symbol_index, cpp_compiled_analysis (AST, IR),
         tree_sitter_ast, review_prioritization (flow steps), target_catalog (source hashes)
@@ -710,9 +711,16 @@ job_review_data_indexing
   GRAPH_FOLLOW_UP becomes computed from accepted graph coverage instead of a constant list.
 ```
 
-`export.scopes` depends on `database.scopes` only and runs concurrently with `query.scopes`
-under the job's `concurrency` bound; an export failure is a scope-level gap that never invalidates
-the database or the SARIF profiles (and the reverse). The export action is a new
+The three declared CodeQL units are `plan.inventory`, `execution.scopes` and
+`acceptance.publish_handoff`. Inside `execution.scopes`, a shared pool bounded by
+`settings.concurrency` schedules database, query, normalization and export actions. A database's
+query profiles become ready immediately; its export waits for **all of that scope's
+normalizations**, so it can include that scope's own normalized CodeQL observations as seeds.
+Other scopes progress independently; there is no whole-plan normalization barrier.
+An operational export failure, including resource-admission timeout, is a scoped gap and retains
+usable database/SARIF work when global execution safety is inactive. Active fail-stop,
+cancellation and integrity failures still stop publication; optional export never overrides them.
+The export uses the
 `CodeQLExecutor` action `export` that runs `codeql database run-queries` for the pinned pack and
 `codeql bqrs decode --format=json` per query with an explicit row bound, writes
 `data/codeql/scopes/<scope-id>/exports/<query-id>.json` and an `export-manifest.json` (per-query

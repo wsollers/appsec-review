@@ -279,9 +279,11 @@ class SeededExecutor:
     """Plays the runner: reads the staged CSV files, writes a bounded export with the two report queries."""
 
     def __init__(self, resolved: dict[tuple[str, int, int], list[str]], neighborhood: list[list[Any]],
-                 *, manifest_scope: dict[str, Any] | None = None, reports: bool = True) -> None:
+                 *, manifest_scope: dict[str, Any] | None = None, reports: bool = True,
+                 language: str = "cpp") -> None:
         self.resolved, self.neighborhood = resolved, neighborhood
         self.manifest_scope, self.reports = manifest_scope, reports
+        self.language = language
         self.calls: list[tuple[str, ...]] = []
         self.staged: dict[str, str] = {}
 
@@ -318,10 +320,10 @@ class SeededExecutor:
                             "exported_rows": len(rows), "path": path.name, "query_file": f"{query_id}.ql",
                             "query_id": query_id, "row_count": len(rows), "sha256": file_sha256(path),
                             "truncated": False})
-        profile = _export_profile(_settings(), "cpp")
+        profile = _export_profile(_settings(), self.language)
         scope = self.manifest_scope or {"mode": scope_rows[0][0], "depth": int(scope_rows[0][1]),
                                         "seed_count": len(seed_rows)}
-        manifest = {"export_schema": EXPORT_SCHEMA, "exports": exports, "language": "cpp", "max_bytes": 268435456,
+        manifest = {"export_schema": EXPORT_SCHEMA, "exports": exports, "language": self.language, "max_bytes": 268435456,
                     "pack": {key: profile[key] for key in ("columns_sha256", "file_count", "query_id", "query_pack",
                                                            "query_pack_version", "tree_sha256")},
                     "row_limit": 200000, "schema": EXPORT_MANIFEST_SCHEMA, "scope": scope}

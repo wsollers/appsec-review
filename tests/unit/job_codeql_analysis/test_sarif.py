@@ -21,6 +21,42 @@ FILES = (
 )
 
 
+@pytest.mark.parametrize("prefix", ["", "./", "././", "/workspace/", "file:///scratch/workspace/"])
+@pytest.mark.parametrize("path", [".github/workflows/ci.yml", ".hidden/tool.py", "..hidden/tool.py"])
+def test_leading_dot_locations_keep_exact_source_identity(prefix: str, path: str) -> None:
+    files = ({"path": path, "sha256": "a" * 64},
+             {"path": path.lstrip("."), "sha256": "b" * 64})
+    physical = {"artifactLocation": {"uri": prefix + path}, "region": {"startLine": 2}}
+    observations, gaps = normalize_sarif(
+        {"version": "2.1.0", "runs": [{"results": [{
+            "ruleId": "fixture/hidden", "locations": [{"physicalLocation": physical}],
+            "codeFlows": [{"threadFlows": [{"locations": [{"location": {"physicalLocation": physical}}]}]}],
+        }]}]},
+        files=files, root=".", query_identity="query", result_limit=10,
+    )
+    assert gaps == []
+    assert observations[0]["location"]["path"] == path
+    assert observations[0]["location"]["file_sha256"] == "a" * 64
+    assert observations[0]["flows"][0]["location"]["path"] == path
+    assert observations[0]["flows"][0]["location"]["file_sha256"] == "a" * 64
+
+
+@pytest.mark.parametrize("uri", [
+    "../.hidden/tool.py", "/workspace/../.hidden/tool.py", "%2e%2e/.hidden/tool.py",
+    "/.hidden/tool.py", "file://foreign/workspace/.hidden/tool.py",
+    "https://foreign/.hidden/tool.py", r"C:\workspace\.hidden\tool.py",
+    r"\\foreign\workspace\.hidden\tool.py", "file:///other/.hidden/tool.py",
+])
+def test_traversal_and_foreign_paths_do_not_bind_to_local_hidden_files(uri: str) -> None:
+    mapped = map_location(
+        {"artifactLocation": {"uri": uri}},
+        files=({"path": ".hidden/tool.py", "sha256": "a" * 64},
+               {"path": "hidden/tool.py", "sha256": "b" * 64}), root=".",
+    )
+    assert mapped.path is None and mapped.file_sha256 is None
+    assert mapped.candidates == () and mapped.confidence == 0.0
+
+
 def test_region_and_map_location_cover_missing_rooted_suffix_ambiguous_and_empty_uris() -> None:
     assert _region({"region": {"startLine": "bad"}}) == (1, 1, 1, 1)
     assert _region({"region": {"startLine": 4, "endLine": 2, "startColumn": 5, "endColumn": 1}}) == (4, 4, 5, 5)

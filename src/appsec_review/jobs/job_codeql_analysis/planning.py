@@ -289,15 +289,14 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
                     files=native_files, material=True, capabilities=("codeql-build",),
                     language_modes=modes, configuration_sha256=configuration_sha256)
                 decisions.append(native_decision.as_dict())
+                covered_paths.update(item["path"] for item in native_files)
                 if native_decision.action is ApplicabilityAction.SKIP:
                     non_applicable.append({
                         "language": "cpp", "status": native_decision.disposition.value,
                         "reason": native_decision.reason_code.value,
                     })
-                    covered_paths.update(item["path"] for item in native_files)
                 elif native_decision.action is ApplicabilityAction.GAP:
                     gaps.append(f"{build_unit}/cpp: {native_decision.reason_code.value}")
-                    covered_paths.update(item["path"] for item in native_files)
                 elif "cpp" not in inventory:
                     gaps.append(
                         f"{build_unit}/cpp: pinned runtime did not report the required extractor")
@@ -312,7 +311,6 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
                         language="cpp", source_languages=_source_labels("cpp", native_files),
                         mode="manual", root=root, files=native_files, receipt=receipt,
                         environment_identity=_environment_identity(receipt)))
-                    covered_paths.update(item["path"] for item in native_files)
         decision = _decide(
             project_id=build_unit, language=language, family=family, root=root,
             files=selected, material=True,
@@ -352,6 +350,29 @@ def build_codeql_plan(*, source_fingerprint: str, files: Sequence[Mapping[str, A
         scopes.append(_scope(language=language, source_languages=source_languages, mode=mode,
                              root=root, files=selected, receipt=receipt,
                              environment_identity=_environment_identity(receipt)))
+
+    # A missing receipt is incomplete build inventory, not evidence that compiled inputs are
+    # inapplicable. Record their exact accepted identities without authorizing buildless execution.
+    for family, language in sorted(_COMPILED_FAMILIES.items()):
+        remaining = tuple(item for item in _language_files(normalized_files, ".", language)
+                          if item["path"] not in covered_paths)
+        if not remaining:
+            continue
+        decision = evaluate_applicability(
+            feature=ProcessingFeature.CODEQL, policy=str(modes.get(language, "auto")),
+            facts=ProjectProcessingFacts(
+                FACTS_SCHEMA, f"unbuilt:{language}", language, family, ".", "unmatched-build-receipt",
+                False, (), (), (), (),
+                tuple(SourceArtifactIdentity(str(item["path"]), str(item["sha256"])) for item in remaining)),
+            configuration_sha256=configuration_sha256)
+        decisions.append(decision.as_dict())
+        if decision.action is ApplicabilityAction.SKIP:
+            non_applicable.append({"language": language, "status": decision.disposition.value,
+                                   "reason": decision.reason_code.value})
+        else:
+            gaps.append(f"{language}: {len(remaining)} accepted source file(s) have no matching accepted "
+                        "build receipt; exact replay and materialized environment are unavailable")
+        covered_paths.update(item["path"] for item in remaining)
 
     # Source/no-build languages remain applicable even when language_build had no command-bearing
     # receipt. Prefer accepted project roots; Python and loose source fall back to one repository

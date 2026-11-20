@@ -55,6 +55,60 @@ def _receipt(
     }
 
 
+@pytest.mark.parametrize(
+    ("language", "family", "filename"),
+    [("cpp", "native", "a.cpp"), ("csharp", "dotnet", "Program.cs"),
+     ("go", "go", "main.go"), ("java", "java", "Main.kt")],
+)
+@pytest.mark.parametrize("policy", ["auto", "build", "disabled", "source"])
+def test_compiled_files_without_matching_receipts_have_explicit_decisions(
+    language: str, family: str, filename: str, policy: str,
+) -> None:
+    from appsec_review.applicability import decision_from_mapping
+
+    covered, missing = _file(f"built/{filename}"), _file(f"unbuilt/{filename}", H2)
+    plan = build_codeql_plan(
+        source_fingerprint="fp", files=(missing, covered),
+        receipts=(_receipt("built-unit", family, root="built"),),
+        supported_extractors=(language,), source_image_id=IMAGE,
+        language_modes={language: policy},
+    )
+    decisions = [decision_from_mapping(item) for item in plan.decisions]
+    unmatched = [item for item in decisions if any(source.path == missing["path"] for source in item.sources)]
+    assert len(unmatched) == 1
+    decision, = unmatched
+    assert [(source.path, source.sha256) for source in decision.sources] == [(missing["path"], H2)]
+    assert decision.resolved_policy == policy
+    assert not any(missing["path"] == item["path"] for scope in plan.scopes for item in scope.files)
+    if policy == "disabled":
+        assert decision.disposition.value == "SKIPPED_POLICY"
+        assert not plan.gaps
+    else:
+        assert decision.disposition.value == "GAP"
+        assert any("no matching accepted build receipt" in gap for gap in plan.gaps)
+
+    empty = build_codeql_plan(
+        source_fingerprint="fp", files=(missing,), receipts=(), supported_extractors=(language,),
+        source_image_id=IMAGE, language_modes={language: policy},
+    )
+    assert empty.scopes == ()
+    assert len(empty.decisions) == 1
+    assert empty.decisions[0]["disposition"] == decision.disposition.value
+
+
+def test_failed_native_addon_is_decided_once_and_gradle_scripts_are_not_java_sources() -> None:
+    plan = build_codeql_plan(
+        source_fingerprint="fp",
+        files=(_file("addon/index.js"), _file("addon/binding.cc"), _file("build.gradle.kts")),
+        receipts=(_receipt("node-unit", "node", root="addon", status="FAILED", workspace=None),),
+        supported_extractors=("cpp", "javascript", "java"), source_image_id=IMAGE,
+    )
+    native = [item for item in plan.decisions if item["language"] == "cpp"]
+    assert len(native) == 1 and native[0]["project_id"] == "node-unit"
+    assert not any(item["language"] == "java" for item in plan.decisions)
+    assert not any("no matching accepted build receipt" in gap for gap in plan.gaps)
+
+
 def test_path_files_rust_replay_scope_and_environment_validations() -> None:
     for bad in ("", "/abs/file.py", "../escape.py"):
         with pytest.raises(ValueError, match="invalid target-relative path"):

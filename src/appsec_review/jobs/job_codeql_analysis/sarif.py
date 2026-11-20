@@ -49,12 +49,25 @@ def map_location(physical: Mapping[str, Any], *, files: Sequence[Mapping[str, An
     if not isinstance(artifact, Mapping) or not isinstance(artifact.get("uri"), str):
         return MappedLocation(None, None, *region, 0.0, False, (), producer)
     uri = str(artifact["uri"])
-    raw = unquote(urlparse(uri).path if uri.startswith("file:") else uri).replace("\\", "/")
+    try:
+        parsed = urlparse(uri)
+    except ValueError:
+        return MappedLocation(None, None, *region, 0.0, False, (), producer)
+    if parsed.scheme not in {"", "file"} or parsed.netloc:
+        return MappedLocation(None, None, *region, 0.0, False, (), producer)
+    raw = unquote(parsed.path if parsed.scheme == "file" else uri).replace("\\", "/")
+    if ".." in PurePosixPath(raw).parts or raw.startswith("//"):
+        return MappedLocation(None, None, *region, 0.0, False, (), producer)
+    while raw.startswith("./"):
+        raw = raw[2:]
     for prefix in ("/scratch/workspace/", "scratch/workspace/", "/workspace/", "workspace/"):
         if raw.startswith(prefix):
             raw = raw[len(prefix):]
             break
-    raw = raw.lstrip("./")
+    while raw.startswith("./"):
+        raw = raw[2:]
+    if PurePosixPath(raw).is_absolute():
+        return MappedLocation(None, None, *region, 0.0, False, (), producer)
     accepted = {str(item["path"]): str(item["sha256"]) for item in files}
     candidates: list[str] = []
     confidence = 0.0

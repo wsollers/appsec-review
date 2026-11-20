@@ -27,6 +27,12 @@ rather than separate configured steps:
 3. `acceptance.publish_handoff` composes the accepted retrieval manifest and publishes scope,
    query and export dispositions.
 
+Input admission requires the accepted target-catalog, language-build, artifact-indexing and
+C++-compiled-analysis handoffs, plus the catalog-document and language-build receipt datasets
+that the loaders always read. Missing mandatory inputs are rejected before execution. Other
+declared inputs remain optional and retain gaps when absent; optionality never permits invalid,
+changed or unsupplied bytes to stand in for accepted evidence. Scheduling edges alone grant no reads.
+
 Checkpoint and cache identities bind target and file hashes, accepted handoffs, build receipt and
 protected argv, environment image, dependency identity, declared CodeQL/extractor/runner/query
 releases, limits, query profile, database tree, and normalizer release; supplied platform trees are
@@ -55,9 +61,13 @@ any upstream build gaps into the planned scope) declare
 the build capability; it selects `source` only for a declared source/no-build capability.
 `disabled` records `SKIPPED_POLICY`, unsupported languages with positive accepted evidence record
 `SKIPPED_NA`, and missing extractors, replayable commands, toolchains, databases, SARIF, or required
-evidence remain `GAP`. Any `GAP` decision, or any scope that did not succeed, makes the published
-`acceptance.publish_handoff` `terminal_status` and the job `COMPLETED_WITH_GAPS`; an empty CodeQL
-result is `SUCCEEDED` only when every planned language and project was analyzed.
+evidence remain `GAP`. The planner reconciles all accepted C/C++, Go, Java/Kotlin and C# source
+identities against receipt-backed scopes and decisions. Files without a matching receipt retain
+an explicit missing-build-inventory decision and gap (or `SKIPPED_POLICY` when disabled), never an
+implicit buildless/autobuild scope.
+Any `GAP` decision, retained plan/publication gap, failed scope or incomplete export makes
+`acceptance.publish_handoff` and the job `COMPLETED_WITH_GAPS`, including plan-only Visual Basic,
+F# and Swift coverage gaps. Zero observations or zero runnable scopes do not erase missing coverage.
 
 Auxiliary build evidence such as package-catalog commands is never replayed as compilation. When
 the accepted producer labels commands, CodeQL selects only the ordered `configure` and `build`
@@ -286,7 +296,10 @@ modified. Regression coverage lives in `tests/test_codeql_analysis.py`.
 
 The export action inside `execution.scopes` runs the supplied graph export pack
 on each successful database without fingerprinting supplied pack files. Each database immediately
-makes its queries and export eligible, and query/export failures do not invalidate one another.
+makes its query profiles eligible; its export waits for that scope's query normalizations so it
+can include their observations as seeds. Other scopes need not finish first. With global execution
+safety inactive, an export admission timeout records a scoped failed export and retains usable
+SARIF results. Active fail-stop and cancellation still propagate instead of publishing a fallback.
 The job-level topology is planning, ready-scope execution, then acceptance. Resource admission
 still applies; [current conservative limits](performance-assurance.md#scheduling-and-limits)
 do not permit two ordinary actions to overlap. Its design is
@@ -498,7 +511,12 @@ By default the export is seeded from finding locations instead of running over t
   `0` exports the seed functions only, capped by `max_seed_depth` (8).
 - `seed_limit`: maximum distinct seeds per scope (default 200); the overflow is a named gap.
 
-Seeds are the locations of `tool_observation` entities from `job_evidence_collection`. The job
+Seeds combine accepted upstream observations with the current scope's own normalized CodeQL
+observations; prior seeded-producer observations are excluded from the upstream pass. Structural
+hotspots, CFG functions and catalog symbols from admitted manifests fill remaining `seed_limit`
+slots. This structural fallback is explicitly enabled by the job, not a separate typed policy
+switch. Global missing-database counts use all planned scopes, while each export receives only
+its selected seeds and its own current observation shards. The job
 writes `scope.csv` and `seeds.csv` next to the staged database and the runner binds them with
 `--external`. Mode, depth, limit and the seed set are part of the export identity, so changing any
 reruns the export under the appropriate frozen-run/admission boundary. A scope with no selected
@@ -552,7 +570,10 @@ and code-flow steps are normalized into immutable `observations` shards. Each st
 SARIF `code_flow` index (normalizer `appsec-review/codeql-sarif-normalizer/3`), so alternative paths
 for one result stay separable; `job_review_prioritization` keeps the shortest flow per source and
 sink as a verified semantic path. Exact path matches are
-distinguished from suffix matches; ambiguity and unmapped locations remain gaps. The publisher's
+distinguished from suffix matches; ambiguity and unmapped locations remain gaps. Exact `./` and
+known workspace prefixes are removed without stripping meaningful filename dots, preserving
+`.github` and hidden-source hashes. Parent traversal, foreign authorities and unrecognized
+absolute paths do not bind to accepted source files. The publisher's
 manifest lists this job's own observation shards and references the current accepted manifest and
 the accepted sibling manifests as verified `upstream_manifests`; it does not copy their shards into
 its own list. Later publishers compose onto it, and shards it dropped from the accepted list are

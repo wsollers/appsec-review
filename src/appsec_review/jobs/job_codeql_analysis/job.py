@@ -1507,14 +1507,15 @@ def _validate_scope_assets(scope: CodeQLScope, settings: CodeQLAnalysisSettings,
 
 def publication_status(processing_decisions: Sequence[Mapping[str, Any]],
                        scopes: Sequence[Mapping[str, Any]], *,
-                       exports: Sequence[Mapping[str, Any]] = ()) -> str:
+                       exports: Sequence[Mapping[str, Any]] = (),
+                       gaps: Sequence[str] = ()) -> str:
     """CodeQL's terminal status: missing planned coverage is COMPLETED_WITH_GAPS, never SUCCEEDED.
 
-    A planned language or project whose processing decision is a GAP (for example no extractor in
-    the pinned runtime), a scope that did not succeed, or an incomplete graph export leaves coverage
-    missing, so an empty result must not read as a clean analysis.
+    A retained plan/publication gap, a processing decision GAP, a scope that did not succeed,
+    or an incomplete graph export leaves coverage missing; empty results are not clean analysis.
     """
-    uncovered = (any(item.get("disposition") == ProcessingDisposition.GAP.value for item in processing_decisions)
+    uncovered = (bool(gaps)
+                 or any(item.get("disposition") == ProcessingDisposition.GAP.value for item in processing_decisions)
                  or any(item.get("terminal_status") != "SUCCEEDED" for item in scopes)
                  or any(item.get("export_status") not in {"SUCCEEDED", "NOT_APPLICABLE"} or item.get("gaps")
                         for item in exports))
@@ -1648,7 +1649,7 @@ def build_job() -> Job:
                     if action == "query":
                         base.update(query_profile=dict(args[2]), query_identity=None, query_reused=False)
                 reason = f"CodeQL {action} operational failure ({type(exc).__name__})"
-                failed_scope = _scope_from(base["scope"])
+                failed_scope = _scope_from(args[0]["scope"] if action == "export" else base["scope"])
                 profile = (dict(args[2]) if action == "query" else
                            _export_profile(settings, failed_scope.language) if action == "export" else None)
                 unit.job.events.write("CODEQL_ACTION_FAILED", action=action, reason=reason,
@@ -1680,7 +1681,7 @@ def build_job() -> Job:
                         for item in normalized_by_scope.get(scope.scope_id, ())
                         if isinstance(item.get("index_identity"), Mapping)
                     ]
-                scope_plan = _seed_plan(unit, [scope], extra_observation_shards=extra_shards)
+                scope_plan = _seed_plan(unit, plan_value.scopes, extra_observation_shards=extra_shards)
             return _export_isolated(unit, value, seed_plan=scope_plan)
 
         def export_ready(value):
@@ -1809,7 +1810,7 @@ def build_job() -> Job:
             receipt=artifact, scope_count=len(scopes), gap_count=len(gaps),
             metrics_semantics="appsec-review/review-metrics-semantics/1")
         return {"schema": SCHEMA, "artifact": artifact,
-                "terminal_status": publication_status(processing_decisions, scopes, exports=graph_exports),
+                "terminal_status": publication_status(processing_decisions, scopes, exports=graph_exports, gaps=gaps),
                 "index_manifest": _artifact(unit.job.run_root, destination),
                 "item_count": normalized["observation_count"], "scope_count": len(scopes),
                 "gaps": gaps, "non_applicable": list(plan_value.non_applicable),
