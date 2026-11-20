@@ -258,8 +258,19 @@ Source: [job](../../src/appsec_review/jobs/job_cpg_analysis/job.py),
    and unresolved AST ownership are named gaps, never evidence of a clean empty function.
    Optional labels absent in their entirety are not assumed malformed. AST ownership is bounded
    independently of row order; clipped display names never supply logical function identities.
-   Function identities hash the original method identity before display clipping and remain
-   distinct through the graph-neighborhood consumer.
+   A unique producer-reported method name, full name, signature, filename and source coordinates
+   supply the semantic function identity, hashed before display clipping. Export-local METHOD
+   numbers are retained separately as `export_node_id` provenance, never in a semantic ID.
+   Consistent node/edge renumbering therefore preserves established logical identities and facts.
+   Missing/unresolved fields or an incomplete METHOD table yield `identity_status: unknown`.
+   Multiple METHOD nodes with the same semantic key yield `ambiguous`. Both keep
+   `function_id: null` and distinct
+   export-local records bound to the export artifact and node number, with named gaps rather
+   than guessed cross-export equivalence. A repeated native METHOD ID cannot be addressed
+   uniquely and is omitted with `cpg_export_duplicate_method_id`, not resolved by row order.
+   These identities describe producer-reported data, not proof of source mapping or native
+   frontend fidelity. Overloads and unclipped semantic/source differences remain distinct
+   through the graph-neighborhood consumer.
    Discard the owned raw export tree and staged CPG copy on every outcome, including parser or
    execution failure. Preserve receipts, streams, input CPG, prior attempts and referenced
    native evidence; an overlap with disposable paths fails integrity rather than deleting it.

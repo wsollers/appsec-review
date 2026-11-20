@@ -16,7 +16,7 @@ from appsec_review.jobs.cpp_index_scopes import CheckpointIntegrityError
 from appsec_review.jobs.job_code_graph_index import producers
 from appsec_review.jobs.job_cpg_analysis import export, job, seeded
 from appsec_review.retrieval import EntityKind, IndexBuilder
-from appsec_review.storage import file_sha256
+from appsec_review.storage import atomic_json, file_sha256
 from tests import seeded_clang_support as sc
 from tests.test_seeded_cpg import _run
 from .test_handlers import _fake_execution, _make_scope_and_unit
@@ -34,6 +34,135 @@ def methods(directory, rows=None):
           [":ID", "NAME:string", "FULL_NAME:string", "SIGNATURE:string", "FILENAME:string",
            "LINE_NUMBER:int", "IS_EXTERNAL:boolean", "CODE:string"],
           rows or [["m", "f", "f:int()", "int()", "a.cpp", 1, "false", "int f() {}"]])
+
+
+def _identity_export(directory, variant, offset):
+    native = lambda n: str(n + offset)
+    specs = [["ns::f", "int(int)", 1], ["ns::f", "int(double)", 1]]
+    if variant == "clipped":
+        prefix = "ns::f<" + "T" * 220
+        specs = [[prefix + "A>", "int()", 1], [prefix + "B>", "int()", 1]]
+    elif variant == "location":
+        specs = [["ns::f", "int()", 1], ["ns::f", "int()", 2]]
+    elif variant == "ambiguous":
+        specs = [["ns::f", "int()", 1], ["ns::f", "int()", 1]]
+    elif variant == "unknown":
+        specs = [["ns::f", "", 1], ["ns::g", "", 1]]
+    rows = [[native(i + 1), "f", full, signature, "a.cpp", line, "false", "{}"]
+            for i, (full, signature, line) in enumerate(specs)]
+    methods(directory, list(reversed(rows)) if offset else rows)
+    calls, branches, identifiers, ast, conditions, reaching = [], [], [], [], [], []
+    for i in range(2):
+        method = native(i + 1)
+        call, branch, condition = (native(i * 10 + n) for n in (3, 4, 5))
+        calls.append([call, f"callee{i}", "callee()", 1, "callee:void()"])
+        branches.append([branch, "IF", "if (ok)", 1])
+        identifiers.append([condition, "ok"])
+        ast.extend([[method, call], [method, branch], [branch, condition]])
+        conditions.append([branch, condition])
+        reaching.append([condition, call])
+    tables = [
+        ("nodes", "CALL", [":ID", "NAME:string", "CODE:string", "LINE_NUMBER:int", "METHOD_FULL_NAME:string"], calls),
+        ("nodes", "CONTROL_STRUCTURE", [":ID", "CONTROL_STRUCTURE_TYPE:string", "CODE:string", "LINE_NUMBER:int"], branches),
+        ("nodes", "IDENTIFIER", [":ID", "CODE:string"], identifiers),
+        ("edges", "AST", [":START_ID", ":END_ID"], ast),
+        ("edges", "CONDITION", [":START_ID", ":END_ID"], conditions),
+        ("edges", "REACHING_DEF", [":START_ID", ":END_ID"], reaching),
+    ]
+    for kind, label, columns, values in tables:
+        table(directory, kind, label, columns, list(reversed(values)) if offset else values)
+    return export.read_export(directory)
+
+
+def _identity_shard(base, parsed, monkeypatch):
+    root, scope, unit = _make_scope_and_unit(base)
+    unit.job.repository_root = base / "private-repository"
+    unit.job.repository_root.mkdir()
+    original = Path.read_bytes
+
+    def no_host_feeds(path):
+        assert not path.is_relative_to(Path(__file__).resolve().parents[3] / "data")
+        return original(path)
+
+    monkeypatch.setattr(Path, "read_bytes", no_host_feeds)
+    record = root / "data" / "cpg-export.json"
+    atomic_json(record, parsed.as_dict())
+    reference = job.artifact(root, record)
+    index = job._publish_shard(
+        unit, scope, artifacts=[dict(scope.compile_database), reference], tool={"tool": "inert-fixture"},
+        gaps=parsed.gaps, cpg=None, cpg_manifest=None, resource_limit=None, compact=None,
+        seeded_identity=None, exported={**parsed.as_dict(), "artifact": reference})
+    shards = [asdict(index)]
+    return list(ShardSet(root, shards).entities(shards, kinds=(EntityKind.AST_NODE.value,)))
+
+
+@pytest.mark.parametrize("variant", ["overload", "clipped", "location"])
+def test_semantic_function_identity_survives_consistent_node_edge_renumbering(tmp_path, monkeypatch, variant):
+    first = _identity_export(tmp_path / "first", variant, 0)
+    second = _identity_export(tmp_path / "second", variant, 9000)
+    assert len(first.functions) == len(second.functions) == 2
+    assert {fn.function_id for fn in first.functions} == {fn.function_id for fn in second.functions}
+    assert len({fn.function_id for fn in first.functions}) == 2
+    for parsed in (first, second):
+        assert {fn.identity_status for fn in parsed.functions} == {"semantic"}
+        assert sorted(call.name for fn in parsed.functions for call in fn.calls) == ["callee0", "callee1"]
+        assert all(len(fn.branches) == 1 and fn.branches[0].condition == "ok"
+                   and fn.reaching_def_edges == 1 for fn in parsed.functions)
+    assert {fn.export_node_id for fn in first.functions}.isdisjoint(
+        fn.export_node_id for fn in second.functions)
+    normalize = lambda parsed: {fn.function_id: {k: v for k, v in fn.as_dict().items() if k != "export_node_id"}
+                                for fn in parsed.functions}
+    assert normalize(first) == normalize(second)
+    before = _identity_shard(tmp_path / "run1", first, monkeypatch)
+    after = _identity_shard(tmp_path / "run2", second, monkeypatch)
+    assert {row["identity"] for row in before} == {row["identity"] for row in after}
+
+
+@pytest.mark.parametrize("variant", ["ambiguous", "unknown"])
+def test_unestablished_method_identities_remain_distinct_export_local_records(tmp_path, monkeypatch, variant):
+    identities = []
+    for offset in (0, 9000):
+        parsed = _identity_export(tmp_path / f"export{offset}", variant, offset)
+        assert len(parsed.functions) == 2
+        assert all(fn.function_id is None for fn in parsed.functions)
+        assert {fn.identity_status for fn in parsed.functions} == {variant}
+        assert any(f"cpg_function_identity_{variant}:" in gap for gap in parsed.gaps)
+        rows = _identity_shard(tmp_path / f"run{offset}", parsed, monkeypatch)
+        assert len(rows) == 2 and len({row["identity"] for row in rows}) == 2
+        assert sorted(call["name"] for row in rows for call in row["payload"]["calls"]) == ["callee0", "callee1"]
+        assert all(row["payload"]["function_id"] is None
+                   and row["payload"]["identity_status"] == variant for row in rows)
+        identities.append({row["identity"] for row in rows})
+    assert identities[0].isdisjoint(identities[1])
+
+
+def test_conflicting_native_method_ids_are_not_resolved_by_row_order(tmp_path, monkeypatch):
+    records = [["1", "f", "ns::f", "int()", "a.cpp", 1, "false", "{}"],
+               ["1", "g", "ns::g", "void()", "a.cpp", 2, "false", "{}"],
+               ["2", "valid", "ns::valid", "int()", "a.cpp", 3, "false", "{}"]]
+    results = []
+    for ordinal, rows in enumerate((records, list(reversed(records)))):
+        directory = tmp_path / f"export{ordinal}"
+        methods(directory, rows)
+        parsed = export.read_export(directory)
+        assert [fn.name for fn in parsed.functions] == ["valid"]
+        assert any("cpg_export_duplicate_method_id:" in gap for gap in parsed.gaps)
+        published = _identity_shard(tmp_path / f"publication{ordinal}", parsed, monkeypatch)
+        assert len(published) == 1 and published[0]["name"] == "valid"
+        results.append(parsed.as_dict())
+    assert results[0] == results[1]
+
+
+def test_incomplete_method_table_cannot_establish_unique_semantic_identity(tmp_path, monkeypatch):
+    methods(tmp_path, [["1", "f", "ns::f", "int()", "a.cpp", 1, "false", "{}"],
+                       ["2", "f", "ns::f", "int()", "a.cpp", 1, "false", "{}"]])
+    monkeypatch.setattr(export, "MAX_ROWS", 1)
+    parsed = export.read_export(tmp_path)
+    assert len(parsed.functions) == 1
+    assert parsed.functions[0].function_id is None and parsed.functions[0].identity_status == "unknown"
+    assert any("was cut at 1 rows" in gap for gap in parsed.gaps)
+    rows = _identity_shard(tmp_path / "publication", parsed, monkeypatch)
+    assert len(rows) == 1 and rows[0]["payload"]["function_id"] is None
 
 
 def test_selected_source_predicate_matches_identities_not_suffixes():

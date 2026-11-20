@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -68,7 +69,9 @@ class CpgBranch:
 
 @dataclass(slots=True)
 class CpgFunction:
-    function_id: str
+    function_id: str | None
+    export_node_id: str
+    identity_status: str
     name: str
     full_name: str
     signature: str
@@ -83,7 +86,8 @@ class CpgFunction:
     cut: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
-        return {"function_id": self.function_id,
+        return {"function_id": self.function_id, "export_node_id": self.export_node_id,
+                "identity_status": self.identity_status,
                 "name": self.name, "full_name": self.full_name, "signature": self.signature, "path": self.path,
                 "line": self.line, "line_end": self.line_end, "has_body": self.has_body,
                 "calls": [call.as_dict() for call in self.calls], "branches": [item.as_dict() for item in self.branches],
@@ -110,6 +114,24 @@ def _int(value: str) -> int | None:
 
 def _text(value: str) -> str:
     return " ".join(str(value).split())[:MAX_TEXT]
+
+
+def _semantic_function_id(row: dict[str, str]) -> str | None:
+    """Producer-reported semantic/source key, never the export's node numbering."""
+    fields = {key: row.get(key, "") for key in ("NAME", "FULL_NAME", "SIGNATURE", "FILENAME")}
+    if any(not value or "<unknown" in value.lower() or "<unresolved" in value.lower()
+           for value in fields.values()):
+        return None
+    coordinates = {key: _int(row.get(key, "")) for key in (
+        "LINE_NUMBER", "LINE_NUMBER_END", "COLUMN_NUMBER", "COLUMN_NUMBER_END")}
+    if coordinates["LINE_NUMBER"] is None or coordinates["LINE_NUMBER"] < 1:
+        return None
+    if any(row.get(key) and (value is None or value < 1) for key, value in coordinates.items()):
+        return None
+    if coordinates["LINE_NUMBER_END"] is not None and coordinates["LINE_NUMBER_END"] < coordinates["LINE_NUMBER"]:
+        return None
+    return hashlib.sha256(canonical_json({
+        "schema": "appsec-review/cpg-function-identity/1", **fields, **coordinates})).hexdigest()
 
 
 def _read(directory: Path, kind: str, label: str, gaps: list[str], *,
@@ -168,19 +190,42 @@ def read_export(directory: Path) -> CpgExport:
     out = CpgExport()
     gaps = out.gaps
     methods: dict[str, CpgFunction] = {}
+    duplicate_ids: set[str] = set()
     for row in _read(directory, "nodes", "METHOD", gaps):
         name, path = row.get("NAME", ""), row.get("FILENAME", "")
         if not name or name in PSEUDO_METHODS or path.startswith("<") or row.get("IS_EXTERNAL") == "true":
             continue
+        if row["id"] in duplicate_ids:
+            continue
+        if row["id"] in methods:
+            del methods[row["id"]]
+            duplicate_ids.add(row["id"])
+            continue
         code = row.get("CODE", "")
+        semantic_id = _semantic_function_id(row)
         methods[row["id"]] = CpgFunction(
-            function_id=hashlib.sha256(canonical_json({
-                key: row.get(key) for key in ("id", "NAME", "FULL_NAME", "SIGNATURE", "FILENAME",
-                                              "LINE_NUMBER", "LINE_NUMBER_END")})).hexdigest(),
+            function_id=semantic_id, export_node_id=row["id"],
+            identity_status="semantic" if semantic_id is not None else "unknown",
             name=name[:MAX_TEXT], full_name=row.get("FULL_NAME", name)[:MAX_TEXT],
             signature=row.get("SIGNATURE", "")[:MAX_TEXT],
             path=path, line=_int(row.get("LINE_NUMBER", "")), line_end=_int(row.get("LINE_NUMBER_END", "")),
             has_body="{" in code)
+    if duplicate_ids:
+        gaps.append(f"cpg_export_duplicate_method_id: {len(duplicate_ids)} repeated METHOD IDs "
+                    "cannot be uniquely addressed; their functions were not published")
+    candidates = Counter(fn.function_id for fn in methods.values() if fn.function_id is not None)
+    for function in methods.values():
+        if function.function_id is not None and candidates[function.function_id] > 1:
+            function.function_id = None
+            function.identity_status = "ambiguous"
+        elif gaps:
+            function.function_id = None
+            function.identity_status = "unknown"
+    for status in ("unknown", "ambiguous"):
+        count = sum(fn.identity_status == status for fn in methods.values())
+        if count:
+            gaps.append(f"cpg_function_identity_{status}: {count} method(s) have no unique established "
+                        "semantic/source identity; records are export-local, not merged")
     if not methods:
         gaps.append("cpg_export_no_methods: the export holds no function of the seeded files")
         return out
@@ -252,7 +297,8 @@ def read_export(directory: Path) -> CpgExport:
         function = owner(row["start"])
         if function is not None:
             function.reaching_def_edges += 1
-    out.functions = sorted(methods.values(), key=lambda item: (item.path, item.line or 0, item.name, item.function_id))
+    out.functions = sorted(methods.values(), key=lambda item: (
+        item.path, item.line or 0, item.name, item.function_id or "", item.export_node_id))
     for function in out.functions:
         function.calls.sort(key=lambda item: (item.line or 0, item.name))
         function.branches.sort(key=lambda item: (item.line or 0, item.kind))

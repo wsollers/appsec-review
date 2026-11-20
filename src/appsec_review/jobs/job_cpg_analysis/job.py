@@ -45,7 +45,7 @@ from appsec_review.jobs.job_cpg_analysis.datasets import CONTRACT, DATASETS
 JOB_ID = "job_cpg_analysis"
 SCHEMA = "appsec-review/cpg-analysis/1"
 TOOL_ID = "tool-joern"
-ADAPTER = "joern-c2cpg-adapter/7"
+ADAPTER = "joern-c2cpg-adapter/8"
 CPG_MANIFEST_SCHEMA = "appsec-review/cpg-manifest/1"
 ARGV = ("/opt/joern/joern-cli/c2cpg.sh", "/target/source", "--output", "/scratch/cpg.bin",
         "--compilation-database", "/scratch/compile_commands.json")
@@ -370,9 +370,11 @@ def _publish_shard(unit: UnitContext, scope: IndexScope, *, artifacts: list[Any]
                                      "cpg_manifest": cpg_manifest, "resource_limit": resource_limit,
                                      "project_id": scope.project_id, "shard_id": shard}))
     for function in (exported or {}).get("functions", ()):
+        function_key = {"function_id": function["function_id"]} if function["function_id"] is not None else {
+            "export_sha256": exported["artifact"]["sha256"], "export_node_id": function["export_node_id"]}
         identity = LogicalIdentity.derive(EntityKind.AST_NODE, scope.case_snapshot, {
             "project_id": scope.project_id, "scope_id": scope.scope_id,
-            "producer": "joern-cpg", "function_id": function["function_id"]})
+            "producer": "joern-cpg", **function_key})
         builder.add_entity(EntityRecord(identity, function["full_name"], function["name"], f"cpg {function['name']}",
                                         {"fact": "cpg", "producer": "joern-cpg", "scope_id": scope.scope_id,
                                          "project_id": scope.project_id, "shard_id": shard, **function}))
