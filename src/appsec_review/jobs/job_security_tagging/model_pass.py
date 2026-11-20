@@ -8,10 +8,11 @@ source excerpts (labelled ``path:line``) to the configured model through ``appse
 proposal that validates against the closed ``unit-purpose-proposal/1`` contract: every ``role`` and
 ``asset`` value in the vocabulary, every claim citing a supplied line or a deterministic assignment id,
 a purpose paragraph within its bound. An accepted claim becomes a ``reported`` assignment with the
-cited line (hash-verified span) or the cited assignment as evidence. A rejected proposal or an
-ordinary transport exception records a named gap. Active run admission can instead stop the review;
-its cancellation control flow is never swallowed. Nothing here is evidence of a weakness; tags
-remain routing data.
+cited line (hash-verified span) or the cited assignment as evidence. A rejected proposal records a
+named gap. Permitted transport exceptions become gaps only outside active fail-stop admission.
+An enabled pass remains subject to global provider-failure, cancellation and integrity stops:
+deterministic artifacts survive, but do not authorize continued publication. ReviewStopped is
+never swallowed. Nothing here is evidence of a weakness; tags remain routing data.
 """
 from __future__ import annotations
 
@@ -168,7 +169,7 @@ def run_model_pass(*, repository_root: Path, run_root: Path, indexes: AcceptedIn
                    collation: Mapping[str, Any], facet_records: Iterable[Mapping[str, Any]],
                    infer: Callable[..., Any] | None, limit: int, unit_id: str
                    ) -> tuple[list[dict[str, Any]], list[str], dict[str, Any]]:
-    """``(records, gaps, document)`` of the model pass over the collated components."""
+    """``(records, gaps, document)`` over collated components; global stops always propagate."""
     model_pass = settings.model_pass
     document: dict[str, Any] = {"schema": PURPOSES_SCHEMA, "target_snapshot": scope.target_snapshot,
                                 "mode": "enabled" if model_pass.enabled else "disabled",

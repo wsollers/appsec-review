@@ -1,7 +1,8 @@
 """T-5008 stage 4: the optional, recorded collation model pass with a scripted transport.
 
 Off by default; one bounded call per first-party component; every claim cites a supplied line or a
-deterministic assignment; rejected or failed output leaves the deterministic facets untouched.
+deterministic assignment. Local rejection/failure cases leave deterministic facets untouched;
+the active-admission regressions in test_audit_semantics verify that global stops still propagate.
 """
 from __future__ import annotations
 

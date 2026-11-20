@@ -363,6 +363,14 @@ One bounded, recorded model call per first-party component fills what the determ
 cannot: a `role` or `asset` that only reading the code reveals, and a one-paragraph statement of
 purpose.
 
+**Failure-policy decision (T-5184 / ST-05, 2026-11-20):** the user selected “Keep global
+stop-on-failure and clarify tagging behavior”. Optional means that enrichment can be disabled
+and deterministic facet computation does not require its result. It does **not** exempt an
+enabled enrichment call from active global admission. Provider failures, cancellation and
+integrity/contract failures governed by that guard abort the review and refuse subsequent
+operations. Existing deterministic artifacts are not permission to continue crosswalk or
+publication, and are not a successful accepted job handoff.
+
 - **Runtime skill.** `pipeline/skills/unit-purpose-collation/SKILL.md`
   (`metadata.audience: runtime-worker`), registered in `pipeline/guidance/registry.json` under
   `runtime_skills` with `jobs: ["job_security_tagging"]`, loaded only through
@@ -388,10 +396,13 @@ purpose.
   `collation-model-pass`, evidence the cited line (hash-verified span) or the cited assignment, and
   confidence `medium`. A rejected proposal leaves the deterministic tags untouched and records
   `collation:model_pass_rejected:<component>`. Outside active fail-stop admission, a provider
-  failure records `collation:model_pass_failed:<component>`. Under active
+  failure can record `collation:model_pass_failed:<component>` under the existing local exception
+  policy. This standalone gap behavior neither authorizes disabling admission nor promises that
+  live execution continues. Under active
   `first-error-no-retry` admission, the shared inference boundary instead latches the failure
-  and propagates `ReviewStopped`; tagging must not catch it or bypass cancellation. The optional
-  failure-policy reconciliation remains T-5184; enabling this pass is not a waiver of that guard.
+  and propagates `ReviewStopped`; tagging must not catch it, hide integrity failures or bypass
+  cancellation. A proposal rejected by tagging's closed validator after a successful inference
+  operation remains a bounded rejection gap; that is distinct from a failed or cancelled operation.
 - **Setting.** `model_pass.enabled = false` by default in every shipped profile; when disabled the
   unit publishes an empty proposal set with `mode: disabled` and no gap.
 - **Implementation.** `jobs/job_security_tagging/model_pass.py` (`run_model_pass`), the specialized

@@ -331,7 +331,7 @@ def build_job(*, infer=None) -> Job:
         return result
 
     def model_pass(unit: UnitContext) -> Mapping[str, Any]:
-        """T-5008 stage 4: optional recorded model pass; off by default, never a dependency of the facets."""
+        """Optional enrichment, not a facet-computation prerequisite or an exemption from global stops."""
         vocabulary, rules, _ = _unit_taxonomy(unit)
         _, limit, _ = _settings(unit.job.config.settings)
         settings = _collation_settings(unit.job.config.settings)

@@ -11,7 +11,7 @@ import pytest
 from appsec_review.config.collation import ModelPassSettings
 from appsec_review.graph.crosscheck import SourceFile
 from appsec_review import inference
-from appsec_review.inference.errors import ProviderError
+from appsec_review.inference.errors import ExecutionContractError, ProviderError
 from appsec_review.jobs.job_language_build import job as language_build, jvm
 from appsec_review.jobs.job_security_tagging import job
 from appsec_review.jobs.job_security_tagging.collation import collect_facets
@@ -25,7 +25,7 @@ from appsec_review.storage import file_sha256
 from appsec_review.runtime import execution_safety
 from tests.unit.job_target_catalog.support import context
 
-from .helpers import ROOT, SNAPSHOT, scope, taxonomy
+from .helpers import ROOT, SNAPSHOT, scope, taxonomy, unit_context
 from .test_collation import canned, component_tags, settings
 from .test_model_pass import MODEL, Scripted, run_pass, valid_proposal
 
@@ -221,29 +221,54 @@ def test_malformed_nested_json_is_rejected_by_real_handler(tmp_path, monkeypatch
     assert job._read(unit, outputs[job.COLLATION]["artifact"])["assignments"]
 
 
-@pytest.mark.parametrize("failure", ["provider", "cancelled"])
+@pytest.mark.parametrize("failure", ["provider", "cancelled", "integrity"])
 def test_active_admission_stop_is_never_swallowed_by_optional_tagging(tmp_path, monkeypatch, failure):
-    class Admission:
-        def __init__(self):
-            self.commands = []
+    envelope = execution_safety.policy("00000000-0000-0000-0000-000000000001", {
+        "source_commit": "a" * 40, "target_commit": "b" * 40, "configuration": {}})
+    guardian = execution_safety.AdmissionGuardian(envelope, tmp_path / "admission",
+                                                  resolved_config_sha256="c" * 64)
+    guardian.root.mkdir(parents=True)
 
-        def request(self, command, **fields):
-            self.commands.append(command)
-            return {"ok": True, "permit": "offline-permit"}
+    def exchange(client, command, **fields):
+        # Only the socket transport is replaced; admission, stop latching and its journal are real.
+        response = guardian._dispatch({"policy_sha256": client.digest, "command": command, **fields})
+        if response.get("ok") is not True:
+            raise execution_safety.ReviewStopped(response["reason"])
+        return response
 
-    admission = Admission()
-    error = (ProviderError("offline provider unavailable", code="unavailable") if failure == "provider"
-             else execution_safety.ReviewStopped("already cancelled"))
-    transport = Scripted(error=error)
+    monkeypatch.setattr(execution_safety.SafetyClient, "request", exchange)
+
+    def cancelled(request):
+        guardian.fail("offline cancellation", action="cancel")
+        return valid_proposal(request)
+
+    if failure == "cancelled":
+        transport = Scripted(cancelled)
+    else:
+        error = (ProviderError("offline provider unavailable", code="unavailable") if failure == "provider"
+                 else ExecutionContractError("offline integrity mismatch"))
+        transport = Scripted(error=error)
     monkeypatch.setitem(inference.PROVIDERS, "offline", transport)
-    token = execution_safety._ACTIVE.set(admission)
-    try:
+    with execution_safety.safety_scope(envelope):
         with pytest.raises(execution_safety.ReviewStopped):
             run_pass(tmp_path, monkeypatch, inference.infer)
-    finally:
-        execution_safety._ACTIVE.reset(token)
+        first_error = dict(guardian.state["first_error"])
+        with pytest.raises(execution_safety.ReviewStopped, match="permanently stopped"):
+            with execution_safety.operation("must-not-start"):
+                pytest.fail("tagging failure allowed another operation")
+    assert guardian.stopped.is_set() and guardian.state["status"] == "STOPPED"
+    assert guardian.state["first_error"] == first_error
+    assert json.loads(guardian.path.read_text())["first_error"] == first_error
+    assert first_error["action"] == ("cancel" if failure == "cancelled" else "inference.offline.fixture")
+    assert {"provider": "provider unavailable", "cancelled": "cancellation",
+            "integrity": "integrity mismatch"}[failure] in first_error["reason"]
     assert len(transport.calls) == 1
-    assert admission.commands == (["admit", "failure", "finish"] if failure == "provider" else ["admit", "finish"])
+    assert len(guardian.state["active"]) == 1
+    assert next(iter(guardian.state["active"].values()))["status"] == "CLEANUP_UNCONFIRMED"
+    artifacts = unit_context(tmp_path, job.MODEL_PASS).job.attempt_root / "artifacts" / "security-tagging"
+    assert json.loads((artifacts / "facet-facts.json").read_text())["assignments"]
+    assert not (artifacts / "model-pass.json").exists()
+    assert not (artifacts / "unit-purposes.json").exists()
 
 
 def test_component_budget_is_spent_only_on_eligible_components(tmp_path):
