@@ -29,11 +29,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_indexing/job.py#L1046) |
-| `index` | `index.catalogs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_indexing/job.py#L631) |
-| `index` | `index.members` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_indexing/job.py#L824) |
-| `index` | `index.relationships` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_indexing/job.py#L948) |
-| `load` | `load.accepted_builds` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_indexing/job.py#L1022) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_indexing/job.py#L1085) |
+| `index` | `index.catalogs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_indexing/job.py#L670) |
+| `index` | `index.members` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_indexing/job.py#L863) |
+| `index` | `index.relationships` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_indexing/job.py#L987) |
+| `load` | `load.accepted_builds` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_indexing/job.py#L1061) |
 
 ### Accepted input declarations
 
@@ -76,7 +76,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | `tests/acceptance/job_artifact_indexing/test_artifact_index_shard_layout.py`<br>`tests/acceptance/test_dependency_output_bounds.py::test_artifact_index_count_is_bounded_by_the_classified_catalog` |
 | integration | `tests/integration/job_artifact_indexing/test_artifact_indexing_graph.py`<br>`tests/integration/job_artifact_indexing/test_artifact_indexing_throughput.py`<br>`tests/integration/job_artifact_indexing/test_artifact_input_contracts.py`<br>`tests/integration/job_artifact_indexing/test_artifact_indexing_scale.py` |
 | live | None declared |
-| unit | `tests/unit/job_artifact_indexing/test_contract.py`<br>`tests/unit/job_artifact_indexing/test_handler_wiring.py`<br>`tests/unit/job_artifact_indexing/test_job_graph.py`<br>`tests/unit/job_artifact_indexing/test_identities.py`<br>`tests/unit/job_artifact_indexing/test_receipt_validation.py`<br>`tests/unit/job_artifact_indexing/test_target_artifacts.py`<br>`tests/unit/job_artifact_indexing/test_catalogs.py`<br>`tests/unit/job_artifact_indexing/test_members.py`<br>`tests/unit/job_artifact_indexing/test_relationships.py`<br>`tests/unit/job_artifact_indexing/test_shards.py` |
+| unit | `tests/unit/job_artifact_indexing/test_contract.py`<br>`tests/unit/job_artifact_indexing/test_handler_wiring.py`<br>`tests/unit/job_artifact_indexing/test_job_graph.py`<br>`tests/unit/job_artifact_indexing/test_identities.py`<br>`tests/unit/job_artifact_indexing/test_receipt_validation.py`<br>`tests/unit/job_artifact_indexing/test_native_product_closure.py`<br>`tests/unit/job_artifact_indexing/test_target_artifacts.py`<br>`tests/unit/job_artifact_indexing/test_catalogs.py`<br>`tests/unit/job_artifact_indexing/test_members.py`<br>`tests/unit/job_artifact_indexing/test_relationships.py`<br>`tests/unit/job_artifact_indexing/test_shards.py` |
 
 ### Dagster placement
 

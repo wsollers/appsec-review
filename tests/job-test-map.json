@@ -8,6 +8,7 @@
         "tests/unit/job_artifact_indexing/test_job_graph.py",
         "tests/unit/job_artifact_indexing/test_identities.py",
         "tests/unit/job_artifact_indexing/test_receipt_validation.py",
+        "tests/unit/job_artifact_indexing/test_native_product_closure.py",
         "tests/unit/job_artifact_indexing/test_target_artifacts.py",
         "tests/unit/job_artifact_indexing/test_catalogs.py",
         "tests/unit/job_artifact_indexing/test_members.py",

@@ -236,7 +236,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5036 | [Retain a bounded redacted copy of an unparseable model reply and find why blue cells produce them](#t-5036-retain-a-bounded-redacted-copy-of-an-unparseable-model-reply-and-find-why-blue-cells-produce-them) | review | open |
 | T-5037 | [Route a lead package to a specialist persona through the rule-to-CWE crosswalk when its leads carry no CWE](#t-5037-route-a-lead-package-to-a-specialist-persona-through-the-rule-to-cwe-crosswalk-when-its-leads-carry-no-cwe) | review | open |
 | T-5038 | [Find why a shared feed snapshot manifest no longer verifies after a run and keep replays of accepted reviews possible](#t-5038-find-why-a-shared-feed-snapshot-manifest-no-longer-verifies-after-a-run-and-keep-replays-of-accepted-reviews-possible) | pipeline | open |
-| T-5039 | [Read build_outcome in the remaining language-build receipt consumers](#t-5039-read-build_outcome-in-the-remaining-language-build-receipt-consumers) | build | open |
+| T-5039 | [Read build_outcome in the remaining language-build receipt consumers](#t-5039-read-build_outcome-in-the-remaining-language-build-receipt-consumers) | build | done (2026-11-20, 96ede4dfd80380b697efd3d57ce0444cc4dfbd67) |
 | T-5040 | [Render the language-build outcome and gap-class counts in the final and telemetry reports](#t-5040-render-the-language-build-outcome-and-gap-class-counts-in-the-final-and-telemetry-reports) | pipeline | open |
 | T-5041 | [Attribute attack-chain cell telemetry to its own step](#t-5041-attribute-attack-chain-cell-telemetry-to-its-own-step) | review | open |
 | T-5042 | [Cover the attack-chain analyst in the guidance vocabulary parity tests](#t-5042-cover-the-attack-chain-analyst-in-the-guidance-vocabulary-parity-tests) | testing | open |
@@ -487,7 +487,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5253 | [Keep documentation fixtures stable across exact file selections](#t-5253-keep-documentation-fixtures-stable-across-exact-file-selections) | testing | done (2026-11-19, 358c93d7a49003342e2f81159a58762a8f954e4e) |
 | T-5254 | [Keep recovery-map selection checks independently bounded](#t-5254-keep-recovery-map-selection-checks-independently-bounded) | testing | done (2026-11-19, d3603a204ab144bc04ec61da441a82c65d6e60dc) |
 | T-5255 | [Preserve exact accepted SARIF paths before workspace aliases](#t-5255-preserve-exact-accepted-sarif-paths-before-workspace-aliases) | codeql | done (2026-11-20, 9e5874a2310c5469706f98638d15c0a67ebd3e78) |
-| T-5256 | [Separate semantic CPG identity from export-local node numbers](#t-5256-separate-semantic-cpg-identity-from-export-local-node-numbers) | graph | open |
+| T-5256 | [Separate semantic CPG identity from export-local node numbers](#t-5256-separate-semantic-cpg-identity-from-export-local-node-numbers) | graph | done (2026-11-20, ca2b9b0d10e5d428997100159cf498ec2be676e8) |
 | T-5257 | [Preserve native Clang plist notes and verify format fidelity](#t-5257-preserve-native-clang-plist-notes-and-verify-format-fidelity) | scanners | open |
 | T-5258 | [Classify unmapped Clang compile rows before execution](#t-5258-classify-unmapped-clang-compile-rows-before-execution) | scanners | open |
 | T-5259 | [Verify CodeQL SARIF base and scope-relative URI semantics](#t-5259-verify-codeql-sarif-base-and-scope-relative-uri-semantics) | codeql | open |
@@ -3451,16 +3451,24 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5039 — Read build_outcome in the remaining language-build receipt consumers
 
-- **State:** open
+- **State:** done (2026-11-20, 96ede4dfd80380b697efd3d57ce0444cc4dfbd67)
 - **Area:** build
 - **Why:** `src/appsec_review/jobs/build_outcome.py` separates the receipt's `terminal_status` (any named gap makes it `COMPLETED_WITH_GAPS`) from the typed `build_outcome` (`built`, `failed`, `not_run`). `job_debug_symbol_indexing`, `job_tree_sitter_ast.generated_sources` and the `BuildIterations` controller still decide "did the build run" from `terminal_status == "SUCCEEDED"`, so a built receipt flipped by provenance gaps (run 2026-11-16-0003: 17 `provenance_unavailable` gaps) reads as unbuilt and tree-sitter emits `generated_source_build_unsuccessful`.
 - **Scope:** classify each reader in a code comment as a "products exist" question (switch to `build_outcome` through `build_outcome.build_succeeded`) or a "clean receipt" question (keep `terminal_status`); never widen enforcement, rejected artifacts stay rejected.
 - **Done when:** each reader is classified and tested with a `COMPLETED_WITH_GAPS` / `built` receipt.
   Debug-symbol image association completed at `e9db4656b905f985262ded943a4b2a84d409ae6e`,
   within the 416-case main union: admitted built receipts retain exact image/user identity
-  despite provenance gaps, without reading rejected artifacts. Other readers remain open.
-  The upstream artifact-indexing receipt validator still rejects artifact-bearing non-`SUCCEEDED`
-  receipts; this separate consumer must be reconciled before claiming the whole path complete.
+  despite provenance gaps, without reading rejected artifacts.
+  Remaining consumers introduced at `bc694c09`, with native closure enforcement completed and
+  verified at `96ede4df`: main 165 passed/8.93 s and 79 passed/14.67 s, two workers,
+  seeds 15043/15044, 244 distinct cases, no skips or slow cases.
+  Artifact-indexing, project-build acceptance, post-build assessment, generated sources and
+  build-iteration diagnosis distinguish built products from clean evidence. Reuse/recovery
+  remain intentionally clean-only and partial receipts preserve original gaps and rejected data.
+  The real artifact-index to debug-reader path verifies partial native products against exact
+  non-rejected closure path/hash/role entries. Missing, changed or conflicting entries refuse
+  publication; unrelated generated/source-only artifacts need no native closure.
+  No native, integration, acceptance or live validation was performed.
 - **Refs:** `src/appsec_review/jobs/build_outcome.py`, `src/appsec_review/jobs/job_debug_symbol_indexing/`, `src/appsec_review/jobs/job_tree_sitter_ast/generated_sources.py`, `src/appsec_review/jobs/build_iterations.py`, commit 7aa16cff.
 
 ### T-5040 — Render the language-build outcome and gap-class counts in the final and telemetry reports
@@ -6096,7 +6104,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5256 — Separate semantic CPG identity from export-local node numbers
 
-- **State:** open
+- **State:** done (2026-11-20, ca2b9b0d10e5d428997100159cf498ec2be676e8)
 - **Area:** graph
 - **Why:** A 2026-11-20 inert export-reader probe changes only a METHOD node's internal ID
   and changes both its function identity and the derived published logical identity.
@@ -6105,6 +6113,13 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   provenance without presenting an unprovable identity as stable. Keep the producer retired.
 - **Done when:** Consistent native node/edge renumbering preserves established semantic IDs;
   genuinely distinct functions remain distinct and ambiguous identity is explicit.
+  Main: 80 passed/8.24 s, two workers, seed 15257, no skips or slow cases.
+  Unclipped producer names/signature/path and normalized coordinates establish semantic keys;
+  native numbering remains provenance. Unknown or colliding keys publish null function IDs,
+  explicit gaps and distinct export-local logical records. Duplicate native METHOD IDs are
+  omitted with a gap rather than resolved by row order. Adapter /8 invalidates older checkpoints.
+  These offline regressions cover actual CSV normalization, publication and graph reads, not
+  native Joern/source fidelity. The producer remains retired and disabled.
 - **Refs:** T-5123; `src/appsec_review/jobs/job_cpg_analysis/export.py`,
   `src/appsec_review/jobs/job_cpg_analysis/job.py`; user feedback, 2026-11-20.
 
