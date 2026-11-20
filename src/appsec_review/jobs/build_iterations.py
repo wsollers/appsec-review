@@ -20,6 +20,7 @@ from appsec_review.jobs.build_workspace import (
 )
 from appsec_review.config.build_workspaces import BuildWorkspacePolicy
 from appsec_review.jobs.build_recipe_commands import normalize_recipe_command, prepare_recipe_command
+from appsec_review.jobs.build_outcome import build_succeeded
 from appsec_review.storage import FileLock, atomic_json, canonical_json
 from appsec_review.storage.shared import immutable_bytes, put_file, reference, verify_reference
 
@@ -27,6 +28,13 @@ from appsec_review.storage.shared import immutable_bytes, put_file, reference, v
 SCHEMA = "appsec-review/build-iterations/1"
 REQUEST_SCHEMA = "appsec-review/build-iteration-request/1"
 LANGUAGE_RECEIPT_SCHEMA = "appsec-review/language-build-receipt/1"
+
+
+def _clean_build_receipt(receipt: Mapping[str, Any]) -> bool:
+    # Clean-receipt question: committing, recovering and reusing a checkpoint authorizes later
+    # execution. Unlike analysis of retained products, a gap-status receipt cannot authorize reuse.
+    return (build_succeeded(receipt) and receipt.get("terminal_status") == "SUCCEEDED"
+            and not receipt.get("rejected_artifacts"))
 
 
 def digest(value: Any) -> str:
@@ -234,7 +242,10 @@ class BuildIterations:
                 })
                 atomic_json(self.run_root / "data/build/iterations/prepared" / f"{request['attempt_id']}.json",
                             {"prepared": prepared})
-                if receipt.get("terminal_status") != "SUCCEEDED":
+                # Products-exist question: diagnose build failure, not receipt provenance gaps.
+                built = build_succeeded(receipt) and receipt.get("terminal_status") in {
+                    "SUCCEEDED", "COMPLETED_WITH_GAPS"}
+                if not built:
                     from appsec_review.jobs.job_project_build.repair import diagnose_failure
                     from appsec_review.jobs.job_project_build.enforcement import gap_text
                     evidence = [reference(
@@ -273,7 +284,9 @@ class BuildIterations:
                                 {"failure": failure, "request": dict(request_ref)})
                 if outcome.cleanup_complete is not True:
                     raise WorkspaceError("iteration worker/container cleanup is unconfirmed")
-                if receipt.get("terminal_status") != "SUCCEEDED":
+                if built and receipt.get("terminal_status") == "COMPLETED_WITH_GAPS":
+                    raise WorkspaceError("iteration checkpoint requires a clean build receipt")
+                if not _clean_build_receipt(receipt):
                     raise WorkspaceError("iteration build did not succeed")
                 from appsec_review.jobs.build_topology import refinement_unit, verify_product_contract
                 verify_product_contract(
@@ -327,7 +340,7 @@ class BuildIterations:
                         raise ReconstructionMiss("retained product differs from its admitted producer")
                     verify_product_contract(bound, product["products"])
                     receipt = read_reference(self.run_root, entry["receipt"])
-                    if receipt.get("terminal_status") != "SUCCEEDED" or receipt.get("build_unit_id") != uid:
+                    if not _clean_build_receipt(receipt) or receipt.get("build_unit_id") != uid:
                         raise ReconstructionMiss("retained producer lacks its successful immutable receipt")
                     if self.validate_receipt is not None:
                         self.validate_receipt(receipt)
@@ -483,7 +496,7 @@ class BuildIterations:
             elif binding.node_id not in ledger["nodes"]:
                 writer.verify_product(ref, binding)
                 receipt = read_reference(self.run_root, prepared["receipt"])
-                if receipt.get("terminal_status") != "SUCCEEDED":
+                if not _clean_build_receipt(receipt):
                     raise WorkspaceError("committed product has no successful immutable receipt")
                 completed = retain(self.run_root, "completed", {
                     "request": pending["request"], "receipt": prepared["receipt"], "prepared": prepared_ref,
@@ -616,9 +629,21 @@ class BuildIterations:
                 with self.workspace.writer() as writer:
                     writer.restore(before)
                 self.workspace.set_hold(hold, held=False)
-                states[uid] = "FAILED"
                 failed_receipt = read_reference(self.run_root, prepared["receipt"])
-                if failed_receipt.get("terminal_status") == "SUCCEEDED":
+                if (build_succeeded(failed_receipt) and
+                        failed_receipt.get("terminal_status") == "COMPLETED_WITH_GAPS"):
+                    # Rollback is a checkpoint refusal, not a failed build or a repair diagnosis.
+                    # Read the durable receipt: remote invokers wrap the original exception.
+                    states[uid] = "BLOCKED"
+                    receipts[uid] = failed_receipt
+                    if not failed_receipt.get("gaps"):
+                        receipts[uid] = {**failed_receipt, "gaps": [
+                            "iteration checkpoint requires a clean build receipt"]}
+                    (self.run_root / "data/build/iterations/failures" / f"{uid}.json").unlink(missing_ok=True)
+                    (self.run_root / "data/build/iterations/pending.json").unlink()
+                    continue
+                states[uid] = "FAILED"
+                if _clean_build_receipt(failed_receipt):
                     from appsec_review.jobs.job_project_build.repair import FailureKind
                     prepared_ref = json.loads(prepared_path.read_bytes())["prepared"]
                     failure = retain(self.run_root, "failures", {
@@ -765,7 +790,8 @@ def durable_artifacts(run_root: Path, receipt: Mapping[str, Any]) -> dict[str, A
         for artifact in proof["closure_manifest"].get("native_artifacts", ()):
             retain_identity(artifact)
         proof["enforcement_id"] = digest({key: item for key, item in proof.items() if key != "enforcement_id"})
-    if value.get("family") == "native" and value.get("terminal_status") != "SUCCEEDED":
+    # Clean-receipt question: only a checkpointable native tree survives transaction rollback.
+    if value.get("family") == "native" and not _clean_build_receipt(value):
         value["workspace"] = None  # The uncommitted tree will be rolled back; evidence above survives.
     return value
 

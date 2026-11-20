@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 from appsec_review.jobs.job_language_build import load_accepted_language_build
+from appsec_review.jobs.build_outcome import build_succeeded
 from appsec_review.observability.spans import count_work, expect_work, operation_phase
 from appsec_review.retrieval import (
     INDEX_SCHEMA,
@@ -448,13 +449,29 @@ def _validate_receipts(run_root: Path, source_fingerprint: str,
         artifacts = receipt.get("artifacts", ())
         if not isinstance(artifacts, list):
             raise ArtifactIndexIntegrityError("language-build artifact list is invalid")
-        if status != "SUCCEEDED":
+        # Products-exist question, not receipt cleanliness. A typed outcome does not override
+        # a failed receipt, native enforcement, or the workspace/byte checks below.
+        built = build_succeeded(receipt) and status in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
+        if not built or (not artifacts and status != "SUCCEEDED"):
             gaps.extend(f"{unit_id}: {gap_text(gap)}" for gap in receipt.get("gaps", ()))
             if artifacts:
                 raise ArtifactIndexIntegrityError("non-successful build receipt publishes artifacts")
             receipt["validated_artifacts"] = []
             validated.append(receipt)
             continue
+        if artifacts and receipt.get("rejected_artifacts"):
+            raise ArtifactIndexIntegrityError("build receipt publishes enforcement-rejected artifacts")
+        if artifacts and status != "SUCCEEDED" and receipt.get("family", receipt.get("source_family")) == "native":
+            from jsonschema.exceptions import ValidationError
+            from appsec_review.jobs.job_project_build.enforcement import validate_enforcement
+            proofs = receipt.get("enforcement")
+            if not isinstance(proofs, list) or len(proofs) != 1 or any(
+                    not isinstance(proof, Mapping) or proof.get("status") != "proven" for proof in proofs):
+                raise ArtifactIndexIntegrityError("native build artifacts lack proven target enforcement")
+            try:
+                validate_enforcement(proofs[0], dispatch=receipt)
+            except (ValidationError, KeyError, TypeError, ValueError) as exc:
+                raise ArtifactIndexIntegrityError("native build artifact enforcement identity is invalid") from exc
         workspace = normalize_relative_path(str(receipt.get("workspace", "")))
         manifest_files = _load_workspace_manifest(run_root, receipt)
         package_integrity: dict[str, Mapping[str, Any]] = {}

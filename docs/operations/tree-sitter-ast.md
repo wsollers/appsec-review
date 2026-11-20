@@ -28,6 +28,12 @@ and placement declarations. CodeQL waits for its accepted handoff before composi
 view. Dagster maps accepted scopes concurrently; application receipts, immutable shards, the
 accepted handoff, and the central run log remain authoritative.
 
+Generated-source intake reads `build_outcome` for product existence. A built receipt with
+provenance gaps does not become `generated_source_build_unsuccessful` just because it contains
+no eligible generated sources. Admitted sources from such receipts still pass artifact-indexing
+manifest, identity and byte checks before detached publication. Receipt gaps remain visible;
+rejected artifacts are never generated-source inputs.
+
 For recovery, inspect scope dispositions in the accepted Tree-sitter artifact and central pipeline
 log. Rerunning a partial attempt reuses hash-verified successful scope shards and retries failed or
 invalidated scopes. Reuse also requires the same CFG builder algorithm and actual node bound;

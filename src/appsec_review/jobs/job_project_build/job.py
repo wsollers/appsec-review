@@ -42,6 +42,7 @@ from appsec_review.jobs.build_discovery import (
 )
 from appsec_review.jobs.build_output_scope import BuildOutputDispositions
 from appsec_review.jobs.build_iterations import selected_graph
+from appsec_review.jobs.build_outcome import build_succeeded
 from appsec_review.jobs.cataloging import source_fingerprint, write_json
 from appsec_review.inference import Infer, ModelRequest
 from appsec_review.jobs.job_target_analysis_plan import load_accepted_plan
@@ -1491,10 +1492,12 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
         for decision in planned_decisions:
             receipt = receipts_by_unit.get(decision.project_id)
             if decision.action is ApplicabilityAction.RUN and receipt is not None:
-                successful = bool(receipt and receipt.get("terminal_status") == "SUCCEEDED")
+                # Products-exist question; receipt cleanliness remains the separate evidence check.
+                successful = build_succeeded(receipt) and receipt.get("terminal_status") in {
+                    "SUCCEEDED", "COMPLETED_WITH_GAPS"}
                 decision = finalize_processing(
                     decision, succeeded=successful,
-                    evidence_complete=bool(receipt and not receipt.get("gaps")),
+                    evidence_complete=receipt.get("terminal_status") == "SUCCEEDED" and not receipt.get("gaps"),
                     toolchain_available=bool(receipt and receipt.get("terminal_status") != "BLOCKED"))
             processing_decisions.append(decision.as_dict())
         processing_gaps = [f"{item['project_id']}: {item['reason_code']}"

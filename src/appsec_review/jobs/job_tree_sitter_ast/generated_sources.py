@@ -7,9 +7,11 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from appsec_review.jobs.cataloging import LANGUAGES
+from appsec_review.jobs.build_outcome import build_succeeded
 from appsec_review.jobs.delivery_scope import delivery_gap, scope_fields, source_in_scope
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.jobs.job_artifact_indexing.job import _validate_receipts
+from appsec_review.jobs.job_project_build.enforcement import gap_text
 from appsec_review.retrieval.source_resolution import generated_path, publish_source
 from appsec_review.storage.shared import safe_path
 from appsec_review.runtime.scope import supplied_run_path
@@ -36,7 +38,7 @@ def load_generated_sources(run_root: Path, *, target_snapshot: str, relevant: bo
         raise ValueError("generated source producer target snapshot differs")
     rows: list[dict[str, Any]] = []
     gaps: list[dict[str, str]] = [
-        {"path": "@generated", "reason": f"generated_source_producer_gap: {gap}"}
+        {"path": "@generated", "reason": f"generated_source_producer_gap: {gap_text(gap)}"}
         for gap in list(accepted.get("gaps", ()))[:1000]]
     selected_count = total = examined = 0
     max_files, max_total_bytes = min(max_files, 10000), min(max_total_bytes, 128 * 1024 * 1024)
@@ -47,6 +49,9 @@ def load_generated_sources(run_root: Path, *, target_snapshot: str, relevant: bo
             break
         if not isinstance(receipt, Mapping):
             raise ValueError("generated source receipt is invalid")
+        gaps.extend({"path": str(receipt.get("build_unit_id", "@generated")),
+                     "reason": f"generated_source_producer_gap: {gap_text(gap)}"}
+                    for gap in list(receipt.get("gaps", ()))[:1000])
         selected = []
         exhausted = False
         for raw in receipt.get("artifacts", ()):
@@ -82,7 +87,9 @@ def load_generated_sources(run_root: Path, *, target_snapshot: str, relevant: bo
             total += size
             selected.append(dict(raw))
         if not selected:
-            if receipt.get("terminal_status") != "SUCCEEDED":
+            # Products-exist question: no selected sources is not evidence of a failed build.
+            if not build_succeeded(receipt) or receipt.get("terminal_status") not in {
+                    "SUCCEEDED", "COMPLETED_WITH_GAPS"}:
                 gaps.append({"path": str(receipt.get("build_unit_id", "@generated")),
                              "reason": "generated_source_build_unsuccessful"})
             if exhausted:

@@ -16,6 +16,8 @@ import zipfile
 
 from appsec_review.jobs.cpp_index_scopes import load_accepted_cpp
 from appsec_review.jobs.job_language_build import load_accepted_language_build
+from appsec_review.jobs.build_outcome import build_succeeded
+from appsec_review.jobs.job_project_build.enforcement import gap_text
 from appsec_review.inference import Infer, ModelRequest
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
@@ -202,9 +204,16 @@ def family_build_cases(language: Mapping[str, Any], run_root: Path) -> dict[str,
     for receipt in language.get("receipts", ()):
         family = str(receipt.get("family") or receipt.get("source_family") or "")
         database = receipt.get("native_compile_database")
-        if (receipt.get("terminal_status") != "SUCCEEDED" or family in {"", "native"} or
+        # Products-exist question. Provenance gaps do not remove admitted binaries from inspection.
+        if (not build_succeeded(receipt) or receipt.get("terminal_status") not in {
+                "SUCCEEDED", "COMPLETED_WITH_GAPS"} or family in {"", "native"} or
                 (isinstance(database, Mapping) and int(database.get("entry_count", 0)) > 0)):
             continue
+        if receipt.get("terminal_status") != "SUCCEEDED" and receipt.get("artifacts"):
+            from appsec_review.jobs.job_artifact_indexing.job import _validate_receipts
+            # Newly admitted partial receipts must satisfy the same manifest/custody boundary
+            # as artifact indexing; rejected_artifacts are never candidate inputs.
+            _validate_receipts(run_root, str(language.get("source_fingerprint", "")), [receipt])
         artifacts = []
         for item in receipt.get("artifacts", ()):
             path = (run_root / str(item.get("path", ""))).resolve()
@@ -215,16 +224,17 @@ def family_build_cases(language: Mapping[str, Any], run_root: Path) -> dict[str,
                                   if key in item})
         if artifacts:
             case_id = f"family-{receipt['build_unit_id']}"
-            cases[case_id] = {"terminal_status": "SUCCEEDED", "source": "language-build",
+            cases[case_id] = {"terminal_status": receipt["terminal_status"], "source": "language-build",
                               "family": family, "build_unit_id": receipt["build_unit_id"],
                               "root": receipt.get("root"), "artifacts": artifacts,
+                              "gaps": [gap_text(gap) for gap in receipt.get("gaps", ())],
                               "image_id": str(receipt.get("image", {}).get("image_id", "unknown"))}
     return cases
 
 
 def _family_provenance(unit: UnitContext, case_id: str, catalog: Mapping[str, Any]) -> dict[str, Any]:
     """Artifacts of a family build: verified receipt binaries plus binary members of wheels."""
-    artifacts, gaps = [], []
+    artifacts, gaps = [], [gap_text(gap) for gap in catalog.get("gaps", ())]
     for item in catalog.get("artifacts", ()):
         path = (unit.job.run_root / str(item["path"])).resolve()
         if (unit.job.run_root.resolve() not in path.parents or not path.is_file() or path.is_symlink() or
@@ -323,8 +333,11 @@ def build_job(*, infer: Infer | None = None) -> Job:
         load_gaps: list[str] = []
         from appsec_review.runtime.consume import has_accepted_upstream
         if has_accepted_upstream(unit.job.run_root, "job_language_build"):
-            cases.update(family_build_cases(load_accepted_language_build(unit.job.run_root),
-                                            unit.job.run_root))
+            language = load_accepted_language_build(unit.job.run_root)
+            cases.update(family_build_cases(language, unit.job.run_root))
+            load_gaps.extend(gap_text(gap) for gap in language.get("gaps", ()))
+            load_gaps.extend(gap_text(gap) for receipt in language.get("receipts", ())
+                             for gap in receipt.get("gaps", ()))
         else:
             load_gaps.append("accepted language-build handoff is unavailable; non-native family binaries "
                              "were not inspected")

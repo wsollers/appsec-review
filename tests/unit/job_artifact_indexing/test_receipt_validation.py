@@ -89,6 +89,68 @@ def test_an_empty_receipt_list_validates_to_nothing(run_root: Path) -> None:
     assert _validate_receipts(run_root, SNAPSHOT, []) == ([], [])
 
 
+@pytest.mark.parametrize("family", ["go", "native"])
+def test_built_gap_receipt_preserves_verified_products_and_provenance(run_root, family):
+    from appsec_review.jobs.build_outcome import with_build_outcome
+    from appsec_review.jobs.job_project_build.enforcement import scoped_gaps
+    from tests.unit.job_artifact_indexing.support import proven_native_receipt
+
+    receipt = (proven_native_receipt(run_root) if family == "native" else
+               with_build_outcome(recorded_receipt(run_root, family=family)))
+    reason = "build/app: delivery status is unknown (delivery_fact_unavailable)"
+    receipt.update(terminal_status="COMPLETED_WITH_GAPS", gaps=scoped_gaps(
+        [reason], "execute." + family, receipt["build_unit_id"]))
+    validated, gaps = _validate_receipts(run_root, SNAPSHOT, [receipt])
+    assert len(validated[0]["validated_artifacts"]) == 2
+    assert validated[0]["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert validated[0]["gaps"] == receipt["gaps"]
+    assert gaps == [f"{receipt['build_unit_id']}: {reason}"]
+    artifact = receipt["artifacts"][0]
+    (run_root / artifact["path"]).write_bytes(b"changed")
+    with pytest.raises(ArtifactIndexIntegrityError, match="hash mismatch"):
+        _validate_receipts(run_root, SNAPSHOT, [receipt])
+
+
+@pytest.mark.parametrize("mutation", [
+    "failed", "not-run", "bad-status", "unknown", "unproven", "rejected", "foreign-proof", "forged-proof"])
+def test_typed_outcome_never_admits_inconsistent_or_rejected_products(run_root, mutation):
+    from tests.unit.job_artifact_indexing.support import proven_native_receipt
+
+    receipt = proven_native_receipt(run_root)
+    receipt.update(terminal_status="COMPLETED_WITH_GAPS")
+    if mutation in {"failed", "not-run", "unknown"}:
+        receipt["build_outcome"] = {"not-run": "not_run", "unknown": "green"}.get(mutation, mutation)
+    elif mutation == "bad-status":
+        receipt["terminal_status"] = "FAILED"
+    elif mutation == "unproven":
+        receipt["enforcement"] = [{"status": "unknown"}]
+    elif mutation == "foreign-proof":
+        receipt["recipe"]["source_dir"] = "other"
+    elif mutation == "forged-proof":
+        receipt["enforcement"][0]["proven_axes"]["isa"] = "arm64"
+    else:
+        receipt["rejected_artifacts"] = receipt["artifacts"]
+    with pytest.raises(ValueError):
+        _validate_receipts(run_root, SNAPSHOT, [receipt])
+
+
+def test_enforcement_rejected_built_receipt_needs_no_rolled_back_workspace(run_root):
+    from appsec_review.jobs.build_outcome import with_build_outcome
+    from appsec_review.jobs.job_language_build.job import apply_target_enforcement
+    from appsec_review.jobs.job_project_build.enforcement import enforcement_gaps
+
+    receipt = with_build_outcome(recorded_receipt(run_root))
+    apply_target_enforcement(receipt, unit_id="execute.native",
+                             proof={"status": "unknown", "unresolved_inputs": ["capture_empty"]},
+                             target_gaps=enforcement_gaps(["capture_empty"], receipt["build_unit_id"]))
+    receipt["workspace"] = None
+    receipt.pop("workspace_manifest")
+    validated, gaps = _validate_receipts(run_root, SNAPSHOT, [receipt])
+    assert validated[0]["validated_artifacts"] == []
+    assert validated[0]["rejected_artifacts"] == receipt["rejected_artifacts"]
+    assert gaps == [f"{receipt['build_unit_id']}: capture_empty"]
+
+
 # --- rejections: the receipt ------------------------------------------------------------------------
 
 def _mutate(run_root: Path, receipts: list[dict], mutation: str, tmp_path: Path) -> None:

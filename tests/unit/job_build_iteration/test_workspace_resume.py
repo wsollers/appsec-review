@@ -67,6 +67,114 @@ def _invoke(request, _label, execute):
     return execute(request, "synthetic-dagster-run")
 
 
+@pytest.mark.parametrize("rejected", [False, True], ids=["provenance", "rejected"])
+@pytest.mark.parametrize("prior_failure", [False, True], ids=["fresh", "after-failure"])
+@pytest.mark.parametrize("wrapped", [False, True], ids=["direct", "wrapped"])
+def test_built_gap_receipt_is_not_a_build_failure_or_a_clean_checkpoint(tmp_path, rejected, prior_failure, wrapped):
+    from dataclasses import replace
+    from appsec_review.jobs.job_project_build.enforcement import scoped_gaps
+    from appsec_review.jobs.build_iterations import durable_artifacts
+    from appsec_review.jobs.build_workspace import BuildWorkspace
+    from appsec_review.storage.shared import reference
+
+    runner, root, graph, action = accepted_native(tmp_path)
+    scheduler = _iterations(runner, root, graph, action)
+    gaps = scoped_gaps(["capture_empty"], "execute.native", action["build_unit_id"])
+    prior_evidence = {}
+    if prior_failure:
+        assert scheduler.run(_failing_worker(root), invoke=_invoke)["states"] == {
+            action["build_unit_id"]: "FAILED"}
+        prior_evidence = {p: p.read_bytes() for p in (root / "artifacts/build/iterations/failures").glob("*.json")}
+        assert prior_evidence
+
+    def worker(request, run_id):
+        outcome = _succeeding_worker(root, graph, action)(request, run_id)
+        product = BuildWorkspace(root).paths.target / "build/control"
+        artifacts = [{**reference(root, product), "workspace_path": "build/control", "kind": "executable"}]
+        receipt = {**outcome.receipt, "family": "native", "build_outcome": "built",
+                   "terminal_status": "COMPLETED_WITH_GAPS", "gaps": gaps,
+                   "workspace": BuildWorkspace(root).paths.target.relative_to(root).as_posix(),
+                   "artifacts": [] if rejected else artifacts,
+                   "rejected_artifacts": artifacts if rejected else []}
+        return replace(outcome, receipt=durable_artifacts(root, receipt))
+
+    def invoke(request, label, execute):
+        try:
+            return _invoke(request, label, execute)
+        except RuntimeError:
+            if not wrapped:
+                raise
+            raise RuntimeError("build iteration invocation failed") from None
+
+    result = scheduler.run(worker, invoke=invoke)
+    assert result["states"] == {action["build_unit_id"]: "BLOCKED"}
+    assert result["receipts"][0]["build_outcome"] == "built"
+    assert result["receipts"][0]["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert result["receipts"][0]["gaps"] == gaps
+    assert result["gaps"] == [*gaps, *(
+        f"topology:{gap['code']}: {gap['reason']}" for gap in graph["coverage_gaps"])]
+    assert result["receipts"][0]["workspace"] is None
+    assert not scheduler.ledger_path.exists()
+    assert not (root / "data/build/iterations/failures" / f"{action['build_unit_id']}.json").exists()
+    assert {p: p.read_bytes() for p in prior_evidence} == prior_evidence
+    with scheduler.workspace.writer() as writer:
+        assert not writer.committed_generation()["accepted"]
+    assert not (scheduler.workspace.paths.target / "build/control").exists()
+
+
+@pytest.mark.parametrize("outcome", ["failed", "not_run"])
+def test_clean_status_cannot_checkpoint_an_unbuilt_receipt(tmp_path, outcome):
+    from dataclasses import replace
+
+    runner, root, graph, action = accepted_native(tmp_path)
+    scheduler = _iterations(runner, root, graph, action)
+
+    def worker(request, run_id):
+        result = _succeeding_worker(root, graph, action)(request, run_id)
+        return replace(result, receipt={**result.receipt, "build_outcome": outcome})
+
+    result = scheduler.run(worker, invoke=_invoke)
+    assert result["states"] == {action["build_unit_id"]: "FAILED"}
+    assert result["receipts"][0]["artifacts"] == []
+    assert not scheduler.ledger_path.exists()
+
+
+@pytest.mark.parametrize("reader", ["reuse", "recovery"])
+def test_committed_gap_receipt_cannot_gain_clean_checkpoint_authority(tmp_path, reader):
+    from appsec_review.jobs.build_iterations import read_reference, retain
+    from appsec_review.jobs.build_workspace import WorkspaceError
+
+    runner, root, graph, action = accepted_native(tmp_path)
+    scheduler = _iterations(runner, root, graph, action)
+    scheduler.run(_succeeding_worker(root, graph, action), invoke=_invoke)
+    ledger = json.loads(scheduler.ledger_path.read_bytes())
+    entry = ledger["nodes"][action["build_unit_id"]]
+    completion = read_reference(root, entry["completion"])
+    receipt = read_reference(root, entry["receipt"])
+    receipt.update(terminal_status="COMPLETED_WITH_GAPS", build_outcome="built", gaps=["capture_empty"])
+    receipt_ref = retain(root, "receipts", receipt)
+    before = (root / scheduler.workspace.state_relative).read_bytes()
+    if reader == "reuse":
+        entry["receipt"] = receipt_ref
+        entry["completion"] = retain(root, "completed", {**completion, "receipt": receipt_ref})
+        atomic_json(scheduler.ledger_path, ledger)
+        result = scheduler.run(lambda *_: pytest.fail("gap checkpoint must not dispatch"), invoke=_invoke)
+        assert result["terminal_status"] == "BLOCKED"
+        assert any("successful immutable receipt" in gap for gap in result["gaps"])
+    else:
+        prepared = read_reference(root, completion["prepared"])
+        request = read_reference(root, completion["request"])
+        atomic_json(root / "data/build/iterations/prepared" / f"{request['attempt_id']}.json",
+                    {"prepared": retain(root, "prepared", {**prepared, "receipt": receipt_ref})})
+        scheduler.ledger_path.unlink()
+        atomic_json(root / "data/build/iterations/pending.json", {
+            "request": completion["request"], "before_generation": entry["before_generation"]})
+        with pytest.raises(WorkspaceError, match="successful immutable receipt"):
+            scheduler._recover()
+        assert not scheduler.ledger_path.exists()
+    assert (root / scheduler.workspace.state_relative).read_bytes() == before
+
+
 def test_workspace_resume_after_failed_iteration_rollback_needs_no_ledger(tmp_path):
     from appsec_review.jobs.build_iterations import resume_build_workspace
     from appsec_review.jobs.build_workspace import BuildWorkspace

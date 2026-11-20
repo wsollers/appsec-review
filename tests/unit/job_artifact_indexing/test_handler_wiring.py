@@ -15,6 +15,73 @@ from tests.unit.job_artifact_indexing.support import (
 )
 
 
+@pytest.mark.parametrize("rejected", [False, True], ids=["permitted", "rejected"])
+def test_built_gap_receipt_reaches_debug_consumer_only_through_verified_catalog(tmp_path, rejected):
+    from appsec_review.jobs.job_debug_symbol_indexing import job as debug
+    from appsec_review.jobs.job_language_build.job import _publish_build_index, apply_target_enforcement
+    from appsec_review.jobs.job_project_build.enforcement import enforcement_gaps, scoped_gaps
+    from appsec_review.retrieval import write_manifest
+    from appsec_review.runtime.consume import upstream_scope
+    from appsec_review.storage import file_sha256
+    from appsec_review.storage.shared import reference
+    from tests.handoff_fixture import write_fixture_handoff
+    from tests.unit.job_artifact_indexing.support import RUN_ID, proven_native_receipt
+
+    root = tmp_path / RUN_ID
+    root.mkdir()
+    receipt = proven_native_receipt(root)
+    receipt["image"]["user"] = "10001:10001"
+    reason = "build/app: delivery status is unknown (delivery_fact_unavailable)"
+    receipt.update(terminal_status="COMPLETED_WITH_GAPS", gaps=scoped_gaps(
+        [reason], "execute.native", receipt["build_unit_id"]))
+    if rejected:
+        apply_target_enforcement(
+            receipt, unit_id="execute.native",
+            proof={"status": "unknown", "unresolved_inputs": ["capture_empty"]},
+            target_gaps=enforcement_gaps(["capture_empty"], receipt["build_unit_id"]))
+        receipt["workspace"] = None
+
+    def admit(job_id, output):
+        path = root / "data/jobs" / job_id / "attempts/fixture/handoff.json"
+        write_fixture_handoff(root, path, {
+            "job_id": job_id, "status": "ACCEPTED", "source_fingerprint": SNAPSHOT,
+            "outputs": {"acceptance.publish_handoff": output},
+            "artifacts": [output["artifact"], output["index_manifest"]]})
+        atomic_json(root / "data/jobs" / job_id / "latest.json",
+                    {"handoff_path": path.relative_to(root).as_posix(), "handoff_sha256": file_sha256(path)})
+        return file_sha256(path)
+
+    manifest = root / "data/indices/manifests/language.json"
+    write_manifest(manifest, run_id=root.name, target_snapshot=SNAPSHOT, target_root=root, indexes=[])
+    producer = unit_context(root, "acceptance.publish_handoff", target_root=root)
+    producer.job.input_manifest_path = manifest
+    producer.job.input_manifest_sha256 = file_sha256(manifest)
+    build_index = _publish_build_index(producer, [receipt])
+    language = root / "language.json"
+    atomic_json(language, {"schema": "appsec-review/language-build-handoff/2",
+                          "source_fingerprint": SNAPSHOT, "receipts": [receipt], "gaps": receipt["gaps"]})
+    pins = {"job_language_build": admit("job_language_build", {
+        "artifact": reference(root, language), "index_manifest": build_index})}
+    outputs = {}
+    with upstream_scope(root, "job_artifact_indexing", pins, contract=indexing.CONTRACT):
+        for node in indexing.build_job().units:
+            outputs[node.unit_id] = node.handler(unit_context(root, node.unit_id, outputs))
+    published = outputs["acceptance.publish_handoff"]
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any(reason in gap for gap in published["gaps"])
+    pins["job_artifact_indexing"] = admit("job_artifact_indexing", published)
+    with upstream_scope(root, "job_debug_symbol_indexing", pins, contract=debug.CONTRACT):
+        result = debug._accepted_inputs(unit_context(root, "decide.target"), {"max_artifacts": 5})
+    assert len(result["artifacts"]) == (0 if rejected else 2)
+    assert result["language_build_handoff_sha256"] == pins["job_language_build"]
+    assert any(reason in gap for gap in result["gaps"])
+    if not rejected:
+        assert {a["reference"]["sha256"] for a in result["artifacts"]} == {
+            a["sha256"] for a in receipt["artifacts"]}
+        assert all(a["build_image"] == {"image_id": receipt["image"]["image_id"], "user": "10001:10001"}
+                   for a in result["artifacts"])
+
+
 def _handler(name):
     return next(unit.handler for unit in indexing.build_job().units if unit.unit_id == name)
 

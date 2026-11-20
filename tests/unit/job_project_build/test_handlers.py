@@ -115,6 +115,54 @@ def _unit_context(tmp_path: Path, *, unit_id: str = "probe.python", reusable: bo
 
 # --- workspace copying, layout adaptation, streams, and output classification --------------------
 
+@pytest.mark.parametrize(("outcome", "status", "reason"), [
+    ("built", "COMPLETED_WITH_GAPS", "EVIDENCE_INCOMPLETE"),
+    ("failed", "FAILED", "PROCESSING_FAILED"),
+    ("not_run", "BLOCKED", "TOOLCHAIN_UNAVAILABLE"),
+    ("failed", "SUCCEEDED", "PROCESSING_FAILED"),
+], ids=["provenance", "failed", "blocked", "inconsistent"])
+def test_acceptance_distinguishes_build_outcome_from_provenance(tmp_path, outcome, status, reason):
+    from appsec_review.applicability import ProcessingFeature, evaluate_applicability, facts_from_build_unit
+    from appsec_review.jobs.build_outcome import with_build_outcome
+    from appsec_review.jobs.job_language_build.job import apply_target_enforcement
+    from appsec_review.jobs.job_project_build.enforcement import enforcement_gaps
+    from tests.unit.job_artifact_indexing.support import recorded_receipt
+
+    ctx = _unit_context(tmp_path, unit_id="acceptance.publish_handoff")
+    receipt = with_build_outcome(recorded_receipt(ctx.job.run_root, snapshot=ctx.job.source_fingerprint))
+    apply_target_enforcement(receipt, unit_id="probe.native",
+                             proof={"status": "unknown", "unresolved_inputs": ["capture_empty"]},
+                             target_gaps=enforcement_gaps(["capture_empty"], receipt["build_unit_id"]))
+    receipt.update(build_outcome=outcome, terminal_status=status)
+    facts = facts_from_build_unit({"build_unit_id": receipt["build_unit_id"], "family": "native",
+                                  "root": ".", "build_system": "cmake",
+                                  "descriptor_package": {"documents": [
+                                      {"path": "CMakeLists.txt", "sha256": "b" * 64,
+                                       "content": "project(example)\nadd_executable(example main.c)\n"}
+                                  ], "gaps": []}})
+    decision = evaluate_applicability(feature=ProcessingFeature.BUILD_CAPTURE, facts=facts, policy="required",
+                                     configuration_sha256="a" * 64)
+    assert decision.action.value == "RUN"
+    ctx.outputs["plan.load_recipes"] = {
+        "processing_decisions": [decision.as_dict()], "execution_graph": {"edges": []}, "actions": []}
+    for family in BUILD_FAMILIES:
+        ctx.outputs[f"image.{family}"] = {"entries": [], "gaps": []}
+        ctx.outputs[f"probe.{family}"] = {"receipts": [], "gaps": []}
+        ctx.outputs[f"build_dispatch.{family}"] = {"dispatches": [], "gaps": []}
+    for lane in STATIC_LANES:
+        ctx.outputs[f"static_dispatch.{lane}"] = {"dispatches": [], "gaps": []}
+    ctx.outputs["probe.native"] = {"receipts": [receipt], "gaps": receipt["gaps"]}
+    publish = next(u.handler for u in build_job().units if u.unit_id == ctx.unit_id)
+    result = publish(ctx)
+    document = json.loads((ctx.job.run_root / result["artifact"]["path"]).read_bytes())
+    assert document["processing_decisions"][0]["reason_code"] == reason
+    assert document["probe_receipts"] == [receipt]
+    assert document["probe_artifact_count"] == 0
+    assert any(g["code"] == "provenance_unavailable" and g["reason"] == "capture_empty"
+               for g in document["gaps"])
+    if outcome == "built":
+        assert not any("PROCESSING_FAILED" in g["reason"] for g in document["gaps"])
+
 def test_copy_source_guards_workspace_symlinks_and_parent_dependencies(tmp_path: Path) -> None:
     ctx = _unit_context(tmp_path)
     target = ctx.job.target_root

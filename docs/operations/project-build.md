@@ -340,6 +340,11 @@ The accepted dispatch is published beneath the attempt's `artifacts/project-buil
 Failed preparation yields an explicit omitted-unit/upstream gap, not an absent family or a
 successful build. Static dispatch remains available independently.
 
+Acceptance classifies processing from the typed build outcome separately from evidence
+completeness. A built receipt with provenance gaps yields `EVIDENCE_INCOMPLETE`, not an invented
+`PROCESSING_FAILED`; its original provenance records and rejected-artifact separation remain
+unchanged. Image preparation and reusable probe checks still require their existing clean status.
+
 Project-build owns its isolated native and Unity execution receipts; language-build consumes
 those without rebuilding and publishes them with controller-owned production receipts,
 captured command/tool provenance, typed artifacts and `[build_outputs]` classifications.

@@ -89,6 +89,13 @@ every statement in a model claim.
   - WebAssembly modules are not ELF/PE/Mach-O and are not inspected here.
   - A missing language-build handoff is a named load gap.
 
+Family selection reads the typed build outcome rather than requiring a clean receipt:
+`built` / `COMPLETED_WITH_GAPS` products remain eligible after workspace-manifest and artifact
+integrity validation. Original receipt gaps flow through load and family provenance; a case is
+not relabeled clean, nor given exact command relationships. Failed/not-run and inconsistent
+receipts remain excluded, and rejected artifacts never become inspection candidates. The
+C/C++ catalog status checks remain catalog-readiness checks, not language-build outcome tests.
+
 Family cases have no captured C flags. Their checks follow the typed table in
 `job_post_build_security_assessment/hardening.py` (`build-security-family-expectations/1`). Each
 entry is one of three values:

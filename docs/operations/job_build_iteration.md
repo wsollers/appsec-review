@@ -250,9 +250,14 @@ owns shared workspace/recovery semantics.
 5. Execute only the selected generic/JVM/Wasm production adapter, using language-build settings,
    the shared target/install paths and bounded executor leases. Retain a receipt and immutable
    prepared record before deciding whether products can commit.
-6. Require `cleanup_complete=True`, receipt status `SUCCEEDED` and verified product contracts.
-   On failure retain diagnosis/evidence where a failed receipt exists, mark the workspace
-   attempt failed and raise; do not return a successful partial transaction.
+6. Require `cleanup_complete=True`, a built outcome, receipt status `SUCCEEDED`, no rejected
+   artifacts and verified product contracts. This is intentionally a **clean-receipt**
+   checkpoint requirement: a gap-status receipt cannot authorize later execution or reuse.
+   A built `COMPLETED_WITH_GAPS` receipt causes rollback and a blocked controller state while
+   retaining the original build outcome/gaps; it does not create a build-failure diagnosis.
+   An older mutable failure pointer is withdrawn, not its immutable diagnostic evidence.
+   Actual build and transaction failures still retain diagnosis/evidence and fail the attempt.
+   Recovery and reuse enforce the same clean-receipt rule.
 7. Commit the product generation and retain a completion record linking request, receipt,
    prepared state, binding and orchestration run ID. Return its reference to the parent
    controller; protected transaction/workspace datasets are not a top-level review result.

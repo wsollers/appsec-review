@@ -146,6 +146,33 @@ def rewrite_manifest(run_root: Path, receipt: dict[str, Any], files: dict[str, s
     receipt["workspace_manifest"] = identity(run_root, manifest_path)
 
 
+def proven_native_receipt(run_root: Path) -> dict[str, Any]:
+    """Produce native target evidence from synthetic capture events and actual fixture ELF bytes."""
+    from appsec_review.jobs.build_outcome import with_build_outcome
+    from appsec_review.jobs.job_language_build.job import apply_target_enforcement
+    from appsec_review.jobs.job_project_build.enforcement import captured_enforcement
+    from tests.unit.job_project_build.test_enforcement import (
+        _compiler_profile_set, _dispatch_and_bound, _elf_bytes, _fake_capture,
+    )
+
+    receipt = with_build_outcome(recorded_receipt(run_root, artifacts=(
+        ("build/main.o", "object", _elf_bytes("main", e_type=1)),
+        ("build/app", "executable", _elf_bytes("app")))))
+    dispatch, bound = _dispatch_and_bound()
+    receipt.update(recipe=dispatch["recipe"], build_variant=dispatch["build_variant"])
+    image_id = receipt["image"]["image_id"]
+    capture = _fake_capture([{
+        "ordinal": 1, "pid": 11, "kind": "process_exec", "result": 0,
+        "executable": "/usr/lib/llvm-18/bin/clang", "argv": ["clang", "-c", "main.c", "-o", "main.o"],
+    }], image_id=image_id)
+    proof, gaps = captured_enforcement(
+        captures=[(1, capture)], dispatch=receipt, bound=bound, profiles=_compiler_profile_set(image_id),
+        policy=None, run_root=run_root, artifacts=receipt["artifacts"])
+    assert proof["status"] == "proven" and gaps == []
+    apply_target_enforcement(receipt, unit_id="execute.native", proof=proof, target_gaps=gaps)
+    return receipt
+
+
 def unit_context(run_root: Path, unit_id: str, outputs: dict[str, Any] | None = None, *,
                  snapshot: str = SNAPSHOT, settings: dict[str, str] = SETTINGS,
                  attempt_id: str = "attempt_0001", target_root: Path | None = None) -> SimpleNamespace:

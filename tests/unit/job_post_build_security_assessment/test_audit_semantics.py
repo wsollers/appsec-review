@@ -27,6 +27,55 @@ def _action(argv, action_id="compile"):
     )
 
 
+@pytest.mark.parametrize("state", ["built", "failed", "not-run", "rejected", "inconsistent"])
+def test_family_load_and_provenance_use_admitted_build_products(tmp_path, state):
+    from appsec_review.jobs.build_outcome import with_build_outcome
+    from appsec_review.jobs.job_project_build.enforcement import scoped_gaps
+    from appsec_review.runtime.consume import upstream_scope
+    from tests.unit.job_artifact_indexing.support import recorded_receipt
+    from tests.unit.job_post_build_security_assessment.test_handlers import (
+        _publish_cpp_handoff, _publish_language_build_handoff,
+    )
+
+    root = tmp_path / "run"
+    target = tmp_path / "target"
+    target.mkdir()
+    receipt = with_build_outcome(recorded_receipt(root, family="go", snapshot="snapshot"))
+    receipt.update(terminal_status="COMPLETED_WITH_GAPS", gaps=scoped_gaps(
+        ["capture_empty"], "execute.go", receipt["build_unit_id"]))
+    if state in {"failed", "not-run"}:
+        receipt.update(build_outcome="failed" if state == "failed" else "not_run",
+                       terminal_status="FAILED" if state == "failed" else "BLOCKED", artifacts=[])
+    elif state == "rejected":
+        receipt["rejected_artifacts"], receipt["artifacts"] = receipt["artifacts"], []
+    elif state == "inconsistent":
+        receipt["build_outcome"] = "failed"
+    pins = {"job_cpp_compiled_analysis": _publish_cpp_handoff(root, target, {}),
+            "job_language_build": _publish_language_build_handoff(root, [receipt])}
+    context = replace(_make_ctx(root, target, pins), repository_root=tmp_path)
+    handlers = {u.unit_id: u.handler for u in build_job().units}
+    unit_root = context.attempt_root / "load"
+    unit_root.mkdir()
+    with upstream_scope(root, "job_post_build_security_assessment", pins, contract=context.contract):
+        loaded = handlers["load.accepted_cpp_build"](
+            UnitContext(context, "load.accepted_cpp_build", "load", "accepted_cpp_build", unit_root, {}))
+    assert len(loaded["cases"]) == (1 if state == "built" else 0)
+    if state != "built":
+        return
+    case = next(iter(loaded["cases"].values()))
+    assert case["terminal_status"] == "COMPLETED_WITH_GAPS"
+    unit_id = "provenance.native_units"
+    assert unit_id in handlers
+    result = handlers[unit_id](UnitContext(
+        context, unit_id, "provenance", "native_units", unit_root,
+        {"load.accepted_cpp_build": loaded}))
+    provenance = next(iter(result["projects"].values()))
+    assert len(provenance["artifacts"]) == 1
+    assert provenance["relationships_exact"] is False
+    assert provenance["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any("capture_empty" in gap for gap in provenance["gaps"])
+
+
 @pytest.mark.parametrize("compiler", ["cc", "c++", "cl", "ccache", "sccache"])
 def test_compiler_aliases_keep_compile_checks(compiler):
     argv = ([compiler, "cc"] if compiler in {"ccache", "sccache"} else [compiler])

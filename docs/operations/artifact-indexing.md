@@ -15,6 +15,14 @@ intake. It never discovers authority by scanning the target tree.
 The catalog reader uses `intake_target_root=False`: indexing needs the catalog's retained
 artifact references, not the separate review-intake target-path lookup or its authority.
 
+Receipt eligibility asks whether products exist (`build_outcome = "built"`, with the legacy
+`SUCCEEDED` fallback), not whether provenance is complete. `COMPLETED_WITH_GAPS` receipts can
+contribute admitted artifacts while retaining their original gaps. Workspace manifests, target
+identity, paths, hashes and sizes still verify; native partial receipts also need proven target
+enforcement. Failed/not-run or inconsistent receipts cannot publish artifacts, and
+`rejected_artifacts` never enter the catalog. An enforcement-rejected receipt with no admitted
+artifacts needs no rolled-back workspace and contributes only its existing gaps.
+
 Bounded NUL-containing target files are retained separately from the text inventory as
 `appsec-review/target-artifact-intake/1` records. They share the inventory's file/byte bounds,
 retain their target-relative paths and run-owned byte references, and have `target-intake` origin,

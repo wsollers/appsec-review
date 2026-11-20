@@ -226,6 +226,7 @@ def _publish_language_build_handoff(run_root: Path, receipts: list[dict[str, Any
         doc_path,
         {
             "schema": "appsec-review/language-build-handoff/2",
+            "source_fingerprint": "snapshot",
             "receipts": receipts,
         },
     )

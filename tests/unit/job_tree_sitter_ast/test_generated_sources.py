@@ -72,6 +72,37 @@ def _owner(run: Path) -> SharedArtifacts:
     return SharedArtifacts(run, attempt_root, {**actor, "claim": reference(run, attempt_root / "claim.json")})
 
 
+@pytest.mark.parametrize("products", ["source", "empty", "rejected"])
+def test_built_provenance_gap_is_not_an_unsuccessful_generated_build(tmp_path, products):
+    from appsec_review.jobs.build_outcome import with_build_outcome
+    from appsec_review.jobs.job_project_build.enforcement import scoped_gaps
+    from tests.unit.job_artifact_indexing.support import recorded_receipt
+
+    run = tmp_path / "run"
+    receipt = with_build_outcome(recorded_receipt(
+        run, family="node", snapshot=SNAPSHOT,
+        artifacts=(("dist/generated.js", "generated-code", b"export const x = 1;\n"),)))
+    receipt["artifacts"][0].update(artifact_origin="build-output", scope_role="deliverable")
+    receipt.update(terminal_status="COMPLETED_WITH_GAPS", gaps=scoped_gaps(
+        ["capture_empty"], "execute.node", receipt["build_unit_id"]))
+    if products != "source":
+        receipt["rejected_artifacts"] = receipt["artifacts"] if products == "rejected" else []
+        receipt["artifacts"] = []
+        receipt["workspace"] = None
+    pinned = _seed_language_build(run, receipts=[receipt], gaps=receipt["gaps"])
+    with publication_scope_for_owner(_owner(run)):
+        rows, gaps, sha = load_generated_sources(
+            run, target_snapshot=SNAPSHOT, relevant=True,
+            max_files=5, max_file_bytes=100, max_total_bytes=1000)
+    assert sha == pinned["sha256"]
+    assert len(rows) == (1 if products == "source" else 0)
+    assert not any(gap["reason"] == "generated_source_build_unsuccessful" for gap in gaps)
+    assert any("capture_empty" in gap["reason"] for gap in gaps)
+    if rows:
+        assert rows[0]["workspace_path"] == "dist/generated.js"
+        assert rows[0]["source_domain"] == "generated"
+
+
 def test_load_generated_sources_validates_bounds_and_missing_producer(tmp_path: Path) -> None:
     run = tmp_path / "run-empty"
     run.mkdir()
