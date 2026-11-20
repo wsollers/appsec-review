@@ -203,7 +203,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | `tests/acceptance/job_security_tagging/test_behavioral_tags.py` |
 | integration | `tests/integration/job_security_tagging/test_behavioral_tags.py`<br>`tests/integration/job_security_tagging/test_security_tagging_jobrunner.py` |
 | live | None declared |
-| unit | `tests/unit/job_security_tagging/test_behavioral_tags.py`<br>`tests/unit/job_security_tagging/test_collation.py`<br>`tests/unit/job_security_tagging/test_contract.py`<br>`tests/unit/job_security_tagging/test_handler.py`<br>`tests/unit/job_security_tagging/test_model_pass.py`<br>`tests/unit/job_security_tagging/test_native_language_aliases.py`<br>`tests/unit/job_security_tagging/test_reader.py`<br>`tests/unit/job_security_tagging/test_rules_and_roles.py`<br>`tests/orchestration/dagster/test_security_tagging.py`<br>`tests/test_security_tagging.py` |
+| unit | `tests/unit/job_security_tagging/test_audit_semantics.py`<br>`tests/unit/job_security_tagging/test_behavioral_tags.py`<br>`tests/unit/job_security_tagging/test_collation.py`<br>`tests/unit/job_security_tagging/test_contract.py`<br>`tests/unit/job_security_tagging/test_handler.py`<br>`tests/unit/job_security_tagging/test_model_pass.py`<br>`tests/unit/job_security_tagging/test_native_language_aliases.py`<br>`tests/unit/job_security_tagging/test_reader.py`<br>`tests/unit/job_security_tagging/test_rules_and_roles.py`<br>`tests/orchestration/dagster/test_security_tagging.py`<br>`tests/test_security_tagging.py` |
 
 ### Dagster placement
 
@@ -1035,5 +1035,8 @@ facet tags with assignment IDs, first-party paths, closed `role`/`asset` vocabul
 bounded `path:line` excerpts (`max_excerpt_lines`). Replies must satisfy `unit-purpose-proposal/1`
 and cite supplied `path:line` spans or deterministic assignment IDs; accepted claims emit
 `reported` facet assignments (`producer = collation-model-pass`) and record the bounded component
-purpose in `unit-purposes.json`, while any invalid reply or provider failure leaves deterministic
-facets untouched and records a named gap.
+purpose in `unit-purposes.json`. Local proposal rejection and standalone failure handling retain
+deterministic facets with named gaps. Under active execution admission, provider failure,
+cancellation and integrity/contract failure instead preserve the global stop; optional enrichment
+does not authorize continued execution or publication. Retained deterministic artifacts do not
+constitute a successful handoff. See the [failure policy](../architecture/collation-pass.md).

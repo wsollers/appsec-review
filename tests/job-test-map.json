@@ -652,6 +652,9 @@
     },
     "job_remediation_validation": {
       "unit": [
+        "tests/unit/job_remediation_validation/test_source_context.py",
+        "tests/unit/job_remediation_validation/test_patch_lexical_edges.py",
+        "tests/test_cpp_memory_safety_rules.py",
         "tests/test_remediation_compiler.py",
         "tests/test_remediation_models.py",
         "tests/test_remediation_patches.py",
@@ -665,6 +668,8 @@
     "job_review_data_indexing": {
       "unit": [
         "tests/unit/test_t172_indexing_and_retrieval.py::test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards",
+        "tests/unit/job_review_data_indexing/test_audit_semantics.py",
+        "tests/unit/job_review_data_indexing/test_codeql_scope_binding.py",
         "tests/unit/job_review_data_indexing/test_contract.py",
         "tests/unit/job_review_data_indexing/test_handlers.py",
         "tests/test_review_data_indexing.py",
@@ -704,9 +709,9 @@
     },
     "job_review_prioritization": {
       "unit": [
-        "tests/unit/job_remediation_validation/test_source_context.py",
-        "tests/unit/job_remediation_validation/test_patch_lexical_edges.py",
-        "tests/test_cpp_memory_safety_rules.py",
+        "tests/unit/job_review_prioritization/test_audit_delivery.py",
+        "tests/unit/job_review_prioritization/test_semantic_attribution.py",
+        "tests/unit/job_review_prioritization/test_review_followup.py",
         "tests/test_review_prioritization.py",
         "tests/test_syntax_metrics_streaming.py",
         "tests/unit/job_review_prioritization/test_contract.py",
@@ -734,6 +739,7 @@
     },
     "job_security_tagging": {
       "unit": [
+        "tests/unit/job_security_tagging/test_audit_semantics.py",
         "tests/unit/job_security_tagging/test_behavioral_tags.py",
         "tests/unit/job_security_tagging/test_collation.py",
         "tests/unit/job_security_tagging/test_contract.py",

@@ -243,9 +243,11 @@ Generated task/tool bindings remain [T-147](../TODO.md); the following follows e
    classification, delivery policy, scanner/tool releases and settings. Reuse only eligible
    checkpoints with verified raw and native references.
 4. Run inventory/native/JVM/package/Wasm built-ins as bounded byte readers. Archive inspection
-   enforces member, expanded-byte, member-byte, ratio, path and depth policy without executing
-   members. Native/JVM header facts do not substitute for scanner rules; Wasm parsing does not
-   supply a feature-policy verdict.
+   enforces member, expanded-byte, member-byte, ratio and path policy without executing members.
+   The helper checks an explicitly supplied depth, but current callers use depth zero and do
+   not recurse into nested archives; the depth setting does not establish nested coverage.
+   Native/JVM header facts do not substitute for scanner rules; Wasm parsing does not supply a
+   feature-policy verdict.
 5. Otherwise invoke the pinned SpotBugs, blint, Syft, Grype or OSV adapter. Resolve the executed
    tool identity before fingerprinting and reject identity disagreement afterward. Preserve
    timeout, exit, precondition and parser failures; OSV's documented unsupported-input result is

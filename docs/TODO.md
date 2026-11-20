@@ -404,19 +404,19 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5170 | [Retain discovered source gaps when remediation writing fails](#t-5170-retain-discovered-source-gaps-when-remediation-writing-fails) | review | done (2026-11-19, 3dce5c2ff5b907536058dcbd90394fc36e9dae24) |
 | T-5171 | [Preserve bounded validation source and exact build working-directory context](#t-5171-preserve-bounded-validation-source-and-exact-build-working-directory-context) | review | done (2026-11-19, 6bb90ba113133bf67f484ba76c621ab10c3315ba) |
 | T-5172 | [Apply valid C++ patches and unified diffs without lexical misclassification](#t-5172-apply-valid-c-patches-and-unified-diffs-without-lexical-misclassification) | review | done (2026-11-19, 6bb90ba113133bf67f484ba76c621ab10c3315ba) |
-| T-5173 | [Preserve failed CodeQL language coverage in review indexes](#t-5173-preserve-failed-codeql-language-coverage-in-review-indexes) | evidence | open |
-| T-5174 | [Bound review-index relations facts and threat retrieval without corrupting totals](#t-5174-bound-review-index-relations-facts-and-threat-retrieval-without-corrupting-totals) | evidence | open |
-| T-5175 | [Build OWASP inventory from the admitted publication rather than a floating pointer](#t-5175-build-owasp-inventory-from-the-admitted-publication-rather-than-a-floating-pointer) | evidence | open |
+| T-5173 | [Preserve failed CodeQL language coverage in review indexes](#t-5173-preserve-failed-codeql-language-coverage-in-review-indexes) | evidence | done (2026-11-20, 177965e7ff284390dbc620bc05ecdf683b5e3b43) |
+| T-5174 | [Bound review-index relations facts and threat retrieval without corrupting totals](#t-5174-bound-review-index-relations-facts-and-threat-retrieval-without-corrupting-totals) | evidence | done (2026-11-20, 177965e7ff284390dbc620bc05ecdf683b5e3b43) |
+| T-5175 | [Build OWASP inventory from the admitted publication rather than a floating pointer](#t-5175-build-owasp-inventory-from-the-admitted-publication-rather-than-a-floating-pointer) | evidence | done (2026-11-20, 177965e7ff284390dbc620bc05ecdf683b5e3b43) |
 | T-5176 | [Retain package gaps qualifications and scoped artifact grants](#t-5176-retain-package-gaps-qualifications-and-scoped-artifact-grants) | review | done (2026-11-19, 119476b93aa8812648dc2db983f6f301a4d03644) |
-| T-5177 | [Deliver promoted leads and the bounded hunt queue to real consumers](#t-5177-deliver-promoted-leads-and-the-bounded-hunt-queue-to-real-consumers) | review | open |
-| T-5178 | [Preserve prioritization coverage and omitted-context qualifications](#t-5178-preserve-prioritization-coverage-and-omitted-context-qualifications) | review | open |
-| T-5179 | [Assign semantic evidence to the exact function rather than shared lines](#t-5179-assign-semantic-evidence-to-the-exact-function-rather-than-shared-lines) | review | open |
+| T-5177 | [Deliver promoted leads and the bounded hunt queue to real consumers](#t-5177-deliver-promoted-leads-and-the-bounded-hunt-queue-to-real-consumers) | review | done (2026-11-20, 5efafe0ef48610ad5ef9ab07d28f9fd65d4cf2ee) |
+| T-5178 | [Preserve prioritization coverage and omitted-context qualifications](#t-5178-preserve-prioritization-coverage-and-omitted-context-qualifications) | review | done (2026-11-20, 5efafe0ef48610ad5ef9ab07d28f9fd65d4cf2ee) |
+| T-5179 | [Assign semantic evidence to the exact function rather than shared lines](#t-5179-assign-semantic-evidence-to-the-exact-function-rather-than-shared-lines) | review | done (2026-11-20, 5efafe0ef48610ad5ef9ab07d28f9fd65d4cf2ee) |
 | T-5180 | [Keep sanitizer attempts immutable with clean accepted-source copies](#t-5180-keep-sanitizer-attempts-immutable-with-clean-accepted-source-copies) | build | done (2026-11-19, 9c69e8b8b0c03d002ed8b28ae1c888de2a0761e4) |
 | T-5181 | [Distinguish sanitizer limit equality and split CMake flag masking](#t-5181-distinguish-sanitizer-limit-equality-and-split-cmake-flag-masking) | build | done (2026-11-19, 9c69e8b8b0c03d002ed8b28ae1c888de2a0761e4) |
 | T-5182 | [Publish per-unit sanitizer readiness through its advertised query](#t-5182-publish-per-unit-sanitizer-readiness-through-its-advertised-query) | evidence | open |
-| T-5183 | [Classify only eligible first-party components from real producer shapes](#t-5183-classify-only-eligible-first-party-components-from-real-producer-shapes) | review | open |
-| T-5184 | [Contain malformed and optional security-tagging inference failures](#t-5184-contain-malformed-and-optional-security-tagging-inference-failures) | review | open |
-| T-5185 | [Express tagging evidence columns in the required UTF-16 units](#t-5185-express-tagging-evidence-columns-in-the-required-utf-16-units) | evidence | open |
+| T-5183 | [Classify only eligible first-party components from real producer shapes](#t-5183-classify-only-eligible-first-party-components-from-real-producer-shapes) | review | done (2026-11-20, 64d99abfc069aeb63138d81170c0acbbe4228176) |
+| T-5184 | [Contain malformed and optional security-tagging inference failures](#t-5184-contain-malformed-and-optional-security-tagging-inference-failures) | review | done (2026-11-20, 64d99abfc069aeb63138d81170c0acbbe4228176) |
+| T-5185 | [Express tagging evidence columns in the required UTF-16 units](#t-5185-express-tagging-evidence-columns-in-the-required-utf-16-units) | evidence | done (2026-11-20, 64d99abfc069aeb63138d81170c0acbbe4228176) |
 | T-5186 | [Preserve history boundaries rename identities and empty-ranking precedence](#t-5186-preserve-history-boundaries-rename-identities-and-empty-ranking-precedence) | history | done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170) |
 | T-5187 | [Contain optional GitHub enrichment transport failures](#t-5187-contain-optional-github-enrichment-transport-failures) | history | done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170) |
 | T-5188 | [Publish schema-consistent proportional hotspot counts](#t-5188-publish-schema-consistent-proportional-hotspot-counts) | history | done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170) |
@@ -2002,8 +2002,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **State:** blocked
 - **Area:** binary
 - **Blocked by:** T-099
-- **Why:** a statically linked or bundled library leaves no manifest; its version is only in the binary. cve-bin-tool is built nightly but its scanner is still catalogued as deferred.
+- **Why:** a statically linked or bundled library leaves no manifest; its version is only in the binary. The cve-bin-tool scanner is already enabled in the catalog and shipped configuration; the remaining work is integration into the dependency-finder registry.
 - **Scope:** a built-binary component finder (cve-bin-tool version-string checkers, Syft binary classifiers, ELF `NEEDED`/SONAME, Go build info) behind the registry, and a cve-bin-tool scan adapter. User decisions of 2026-11-12 on `dependency-finder-plan.md` (shared session notes): (2) the scan adapter runs cve-bin-tool as a separate executable (execute only), and the nightly builder `tools/cve-bin-tool/build_db.py` importing the package in-process inside its own container is accepted as internal use. The catalog entry moves from `deferred` to `enabled` with that decision recorded. Sequencing (user, 2026-11-12): the dependency redesign is worked after the Freeciv walk is through the build and topology jobs, because build and topology come first.
+  The adapter and catalog transition are implemented; this blocked entry does not disable them.
+  Registry integration and the stated binary acceptance check remain separate, unclaimed work.
 - **Done when:** a fixture binary with a statically linked library of known version yields the component and its CVEs offline.
 - **Refs:** `tools/cve-bin-tool/build_db.py`, `containers/catalog.toml`, T-099.
 
@@ -5025,29 +5027,43 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5173 — Preserve failed CodeQL language coverage in review indexes
 
-- **State:** open
+- **State:** done (2026-11-20, 177965e7ff284390dbc620bc05ecdf683b5e3b43)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: RDI-F02. Failed CodeQL coverage is published as a complete language lane.
-- **Scope:** `src/appsec_review/indexing/products.py`, `src/appsec_review/jobs/job_review_data_indexing/job.py`
+- **Scope:** `src/appsec_review/indexing/matrix.py`,
+  `src/appsec_review/jobs/job_review_data_indexing/job.py` and the
+  `job_codeql_analysis/job.py` execution-result publication boundary.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 174 combined indexing/prioritization cases passed in 26.62 s, two workers, seed 9173,
+  no skips or cases over 10 s. The actual publisher, normalizer, runner control projection
+  and admitted reader preserve failed/successful scope coverage and exact build-unit identity.
+  Scope bindings travel in an immutable attempt-owned domain artifact with verified read
+  receipts, not private task fields or guessed scope names. No engine or live run was executed.
 - **Refs:** `audit-results/job-audit-job_review_data_indexing.md`; follow-up to closed T-172 (not reopened).
 
 ### T-5174 — Bound review-index relations facts and threat retrieval without corrupting totals
 
-- **State:** open
+- **State:** done (2026-11-20, 177965e7ff284390dbc620bc05ecdf683b5e3b43)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: RDI-F03, RDI-F05, RDI-F06, RDI-F07. `max_links_per_rule` does not bound emitted relationships; Threat-boundary nested caps corrupt totals without a truncation gap.
 - **Scope:** `src/appsec_review/indexing/products.py`, `src/appsec_review/jobs/job_review_data_indexing/job.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5173's 174-case selection, including the restored ten-query fixture.
+  Link budgets count emitted edges and atomic provenance bundles; composed facts retain
+  deterministic bounds and omitted counts. Threat detail totals survive bounded samples.
+  Filtered keyset reads enforce row/deadline/response bounds without losing withheld results.
 - **Refs:** `audit-results/job-audit-job_review_data_indexing.md`; follow-up to closed T-172, T-173 (not reopened).
 
 ### T-5175 — Build OWASP inventory from the admitted publication rather than a floating pointer
 
-- **State:** open
+- **State:** done (2026-11-20, 177965e7ff284390dbc620bc05ecdf683b5e3b43)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: RDI-F04. Inventory trusts the floating OWASP pointer rather than the admitted publication.
 - **Scope:** `src/appsec_review/jobs/job_review_data_indexing/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5173's 174-case selection. Inventory and products select the same admitted
+  publication, validate manifest/member custody and counts, and retain actual read receipts.
+  Invalid or unsupplied publications cannot become indexed rows.
 - **Refs:** `audit-results/job-audit-job_review_data_indexing.md`.
 
 ### T-5176 — Retain package gaps qualifications and scoped artifact grants
@@ -5066,29 +5082,38 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5177 — Deliver promoted leads and the bounded hunt queue to real consumers
 
-- **State:** open
+- **State:** done (2026-11-20, 5efafe0ef48610ad5ef9ab07d28f9fd65d4cf2ee)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RP-02. Promoted leads and the full hunt queue stop at artifact publication.
 - **Scope:** `src/appsec_review/jobs/job_review_prioritization/job.py`, `src/appsec_review/review/packages.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main's 174-case combined selection passed in 26.62 s without skips or slow cases.
+  Full routing populations reach the existing indexed review-signal and accepted package
+  paths with original pins and bounded omission gaps; no new worker grants or scanner authority.
 - **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-170, T-171, T-172 (not reopened).
 
 ### T-5178 — Preserve prioritization coverage and omitted-context qualifications
 
-- **State:** open
+- **State:** done (2026-11-20, 5efafe0ef48610ad5ef9ab07d28f9fd65d4cf2ee)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RP-03, RP-04, RP-07, RP-09. One successful CodeQL scope hides failed scopes and imputes zero coverage; Reusing an existing priority shard drops its local context-bound gap.
 - **Scope:** `src/appsec_review/jobs/job_review_prioritization/composite.py`, `src/appsec_review/jobs/job_review_prioritization/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5177's verification. Scope failures, local reuse gaps, suppressed observations and
+  omitted imports remain qualified. Unknown counts and incomplete instability are null;
+  positive observed counts retain lower-bound qualifications and the existing score scale.
 - **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-171 (not reopened).
 
 ### T-5179 — Assign semantic evidence to the exact function rather than shared lines
 
-- **State:** open
+- **State:** done (2026-11-20, 5efafe0ef48610ad5ef9ab07d28f9fd65d4cf2ee)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: RP-06. Same-line functions receive another function's semantic evidence.
 - **Scope:** `src/appsec_review/jobs/job_review_prioritization/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5177's verification. Real SARIF coordinate-presence provenance distinguishes display
+  defaults from explicit columns. Exact byte containment excludes disjoint same-line siblings;
+  ambiguous function ownership qualifies scoring rather than inventing a zero.
 - **Refs:** `audit-results/job-audit-job_review_prioritization.md`; follow-up to closed T-171 (not reopened).
 
 ### T-5180 — Keep sanitizer attempts immutable with clean accepted-source copies
@@ -5128,30 +5153,41 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5183 — Classify only eligible first-party components from real producer shapes
 
-- **State:** open
+- **State:** done (2026-11-20, 64d99abfc069aeb63138d81170c0acbbe4228176)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: ST-01, ST-02, ST-03, ST-06. the declared mobile target rule cannot see its inputs; build classification reads a payload shape the actual producers never publish.
 - **Scope:** `src/appsec_review/jobs/job_security_tagging/collation.py`, `model_pass.py` and
   their `job.py` dispatch.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 87 affected cases passed in 5.78 s, two workers, seed 9183, no skips or slow cases.
+  Mobile, build and document facets consume real eligible first-party producer shapes.
+  Dependency/foreign/excluded inputs do not classify components; eligibility precedes the
+  model component budget. Independent review found no significant issue.
 - **Refs:** `audit-results/job-audit-job_security_tagging.md`.
 
 ### T-5184 — Contain malformed and optional security-tagging inference failures
 
-- **State:** open
+- **State:** done (2026-11-20, 64d99abfc069aeb63138d81170c0acbbe4228176)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: ST-04, ST-05. malformed JSON values escape model rejection and fail the job; actual inference failure policy contradicts the optional-pass gap behavior.
 - **Scope:** `src/appsec_review/jobs/job_security_tagging/model_pass.py` and its `job.py` caller.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5183's 87-case selection. Nested malformed proposals become bounded rejection gaps.
+  For ST-05 the user chose to preserve global stop-on-failure, not introduce an optional-provider
+  exception. Real admission/stop-latch regressions with a fake provider cover failure,
+  cancellation and integrity stops and refusal of subsequent operations. Core inference and
+  execution-safety behavior is unchanged; retained deterministic artifacts are not success.
 - **Refs:** `audit-results/job-audit-job_security_tagging.md`.
 
 ### T-5185 — Express tagging evidence columns in the required UTF-16 units
 
-- **State:** open
+- **State:** done (2026-11-20, 64d99abfc069aeb63138d81170c0acbbe4228176)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: ST-07. lexical/model evidence columns count code points rather than UTF-16 units.
-- **Scope:** `src/appsec_review/jobs/job_security_tagging/job.py`
+- **Scope:** `src/appsec_review/jobs/job_security_tagging/collation.py` and `model_pass.py`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5183's verification. Lexical/model citations retain raw-byte line boundaries and
+  UTF-16 columns; undecodable UTF-8 is rejected rather than normalized or guessed.
 - **Refs:** `audit-results/job-audit-job_security_tagging.md`.
 
 ### T-5186 — Preserve history boundaries rename identities and empty-ranking precedence
@@ -5584,6 +5620,11 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** Archived audit/feedback cases: BE-D01, CI-D1, IP-D01, MC-D01, MC-D02, POC-D01, PB-D01, RMP-D01, SVF-D01, TA-D01, TC-D01, TC-D1, TC-D2, TS-D01, L302, L131, L153, L193, L266, L198, L177, L178, L117, L175, L154, L134, L163, L208, L147, C15-F16, L222, L138, L180, L130, L160, CQ-D01. Documentation overstates the job-specific failure type for invalid catalogs; `docs/operations/job_ci_configuration_analysis.md:16-18,265-267` says the handoff's security-findings list remains empty. `job.py:786` now publishes the `lead_candidate` subset, consumed by prioritization. T-170 is done (`docs/TODO.md:2799-2806`) and intentionally introduc.
 - **Scope:** `containers/tools/clangd-indexer/README.md`, `containers/tools/joern/README.md`; paired callers/tests identified by those cases.
 - **Done when:** Every listed prose discrepancy is reconciled against implemented behavior; documentation checks pass and generated pages/maps are regenerated by their designated owner. No capability, bound, signature policy or completed TODO state changes merely to match prose.
+  Scoped reconciliation on 2026-11-20 addresses BE-D01 and artifact-security L302:
+  accepted-catalog loader exceptions retain their shared type; the CVE scanner is already
+  enabled while T-102's registry work remains blocked; builtin archive inspection does not
+  recurse into nested archives. The lead-promotion test map and task label were already
+  corrected by earlier repairs. Other records in this entry remain open.
 - **Refs:** `audit-results/job-audit-cumulative.md` and the documentation/conditional sections in all 47 linked per-job reports, including the final-gate pinned-input/pointer-stability distinction; follow-up to closed T-168, T-169, T-170, T-171, T-172, T-173, T-176 (not reopened).
 
 ### T-5230 — Resolve clang static analysis conditional audit boundaries

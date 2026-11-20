@@ -165,8 +165,10 @@ modes; [input contracts](../architecture/job-input-contracts.md) govern actual a
 6. Validate the environment document's closed schema and coverage invariants. Write bounded
    `build-environment.json`; convert its deduplicated reason strings to strict
    `producer_reported_gap` records and return `COMPLETED_WITH_GAPS` when any remain.
-7. Missing/changed accepted files, a reader violating its byte contract, invalid catalog
-   binding or oversized publication raise `BuildEnvironmentAnalysisFailed`, not partial success.
+7. Missing/changed accepted files, a reader violating its byte contract, a catalog source
+   mismatch or oversized publication raise `BuildEnvironmentAnalysisFailed`, not partial success.
+   Earlier accepted-catalog loader failures retain their shared `ValueError` or integrity
+   exception; they are not translated into the job-specific class.
 
 ## Dataflow
 

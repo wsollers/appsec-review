@@ -30,9 +30,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L426) |
-| `build` | `build.units` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L408) |
-| `load` | `load.accepted_native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L387) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L454) |
+| `build` | `build.units` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L436) |
+| `load` | `load.accepted_native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L415) |
 
 ### Accepted input declarations
 
@@ -65,7 +65,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_sanitizer_build/test_sanitizer_build_graph.py` |
 | live | `tests/live/test_sanitizer_live.py` |
-| unit | `tests/unit/job_sanitizer_build/test_contract.py`<br>`tests/unit/job_sanitizer_build/test_handlers.py`<br>`tests/unit/job_sanitizer_build/test_settings_and_evidence.py` |
+| unit | `tests/unit/job_sanitizer_build/test_attempt_regressions.py`<br>`tests/unit/job_sanitizer_build/test_contract.py`<br>`tests/unit/job_sanitizer_build/test_handlers.py`<br>`tests/unit/job_sanitizer_build/test_settings_and_evidence.py` |
 
 ### Dagster placement
 
