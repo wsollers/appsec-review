@@ -17,11 +17,20 @@ consumer is the independent `job_cpg_analysis`, shipped disabled
 (`jobs.job_cpg_analysis.settings.enabled = false`) and absent from the default review graph.
 When explicitly enabled, whole-program scopes still publish `BLOCKED` observations with
 unavailable coverage. Seeded scopes can export bounded per-function calls, branches and
-reaching-definition counts with partial coverage; failed or cut exports remain unavailable.
+reaching-definition counts with partial coverage. Failed/empty exports remain unavailable;
+nonempty bounded subsets retain explicit gaps and partial coverage. Neither is complete CPG/PDG
+coverage. Normal disabled scheduling emits no attempt or structured skip summary.
 CodeQL is the default code-graph producer. See the historical decision in
 [`code-graph-precomputation.md`](../../../docs/architecture/code-graph-precomputation.md) and
 the [current CPG job page](../../../docs/operations/job_cpg_analysis.md).
 A successful build or version probe is not CPG coverage.
+
+The bounded CSV reader, source-identity predicate, checkpoint and cleanup policy live in the
+mounted application under `jobs/job_cpg_analysis`, not this image. They preserve generation and
+export receipts/streams and prior evidence, while discarding only each invocation's disposable
+export tree and staged input copy. Repairing those adapters does not require rebuilding this
+image, recompiling queries, or re-enabling the retired job. Native validation and any later
+source reload remain separately authorized operations.
 
 ## Files
 

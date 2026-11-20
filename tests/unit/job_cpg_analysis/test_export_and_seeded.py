@@ -178,7 +178,7 @@ def test_seeded_helpers_cover_selected_files_regex_argv_and_failure_reasons() ->
         ),
         total=2,
     )
-    ident = seeded.identity_values(settings, scope_seeds)
+    ident = seeded.identity_values(settings, scope_seeds, seeding.SeedPlan(scopes={"case-native": scope_seeds}))
     assert ident["seeded"]["impl"] == seeded.SEEDED_IMPL
     assert ident["seeded"]["seeds"] == [["src/a.c", 1, 1], ["src/b.cpp", 10, 12]]
     assert ident["seeded"]["export_argv"] == list(seeded.EXPORT_ARGV)

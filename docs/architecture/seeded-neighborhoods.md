@@ -116,9 +116,12 @@ translation units that were not replayed), `export_truncated` (a row-bounded exp
 producer-specific `producer_not_run`, `symbols_unlinked`, `outside_precomputed_neighborhood` (section 9),
 the CPG export gaps `cpg_calls_name_matched` (no call edges: a callee is matched by name, and
 `callee_resolved` says whether Joern itself resolved it), `cpg_no_cfg_edges`, `cpg_export_partial`,
-`cpg_export_unavailable` and `cpg_export_limit`, the analyzer gaps `analyzer_only`, `analyzer_checks_unmapped`,
+`cpg_export_unavailable`, `cpg_export_limit`, `cpg_export_invalid`, `cpg_export_incomplete`,
+`cpg_ast_depth_limit`, `cpg_ast_cycle` and `cpg_ast_orphan`, the analyzer gaps `analyzer_only`, `analyzer_checks_unmapped`,
 `analyzer_diagnostics_unlocated` and `analyzer_sinks_limit`, the source CFG gaps of section 5, and the zero-seed text `seeded export skipped: no finding locations map into this
 database`. Every named bound produces a gap; none widens the selection.
+The CPG messages are legacy producer text wrapped by interchange as `producer_reported_gap`,
+not additions to the closed control-layer gap vocabulary.
 
 ## 7. Failure, not-applicable and zero-seed semantics
 
@@ -133,6 +136,11 @@ database`. Every named bound produces a gap; none widens the selection.
   verified successful file outcome, Clang coverage is unavailable rather than partial.
 * **Not applicable** (a unit the tool does not support): the seeds are `not_applicable`, neither failed
   nor clean.
+* **Seeded CPG export failure**: a retained binary alone resolves only generation, not exported
+  function coverage. Failed or empty exports are not checkpointed; retry preserves the prior
+  invocation's evidence. Nonempty bounded exports remain partial with their parsing/limit gaps.
+  Whole-program scopes containing only unsupported units launch no Joern and retain applicability,
+  not a fabricated tooling gap.
 * Neither a failure nor a not-applicable seed ever raises coverage.
 
 ## 8. Identity, resume and determinism
@@ -149,9 +157,14 @@ Compile-database producers also bind each seed location's priority rank in their
 A rank-only change can change the selected TU when `unit_limit` is reached and therefore cannot reuse
 the old selection. Reordering the same locations/ranks does not invalidate it. Existing compile-unit,
 neighborhood membership/depth, tool and setting identities remain part of the checkpoint.
-Clang additionally binds source-observation provenance and total/omitted, outside-database and
+Clang and CPG additionally bind source-observation provenance and total/omitted, outside-database and
 unlocated seed counts, so the ledger cannot silently reuse stale omissions. A reordered input that
 changes its observation identities is new provenance, not an equivalent seed iteration order.
+CPG reuse re-verifies generation/export receipts, compile databases, streams and the bounded
+record along with the binary and ledger. Each new execution owns a fresh evidence directory;
+only its disposable CSV tree and staged input copy are cleaned. Function identities hash
+unclipped method identities; the graph consumer carries the producer's logical identity rather
+than re-deriving one from clipped display names.
 
 ## 9. Publication and exposure
 
@@ -276,6 +289,7 @@ Still open (details and entry points in `docs/TODO.md`):
 
 - review-side consumers: prioritization, hunt-unit construction, scoring and package flow context;
 - the `JOERN_CPG` call-site input to the graph cross-check (`graph/crosscheck.py` `SECONDARY_KINDS`);
-- measurement on a 20k-100k LOC project, then tuning `seeded_bounds` and `seed_depth`;
-- the seeded CPG shard still carries the generic `JOERN_GAP` text (`jobs/job_cpg_analysis/job.py`), which
-  says no whole-program CPG coverage is claimed; that remains true, but the wording predates the export.
+- measurement on a 20k-100k LOC project, then tuning `seeded_bounds` and `seed_depth`.
+
+The CPG standing gap now distinguishes partial seeded exports from missing general CPG/PDG
+coverage without claiming an execution occurred. Retirement and disabled dispatch are unchanged.

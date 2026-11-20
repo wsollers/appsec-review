@@ -18,10 +18,14 @@ any cut is reported in ``CpgExport.gaps``. Nothing here executes the export or r
 from __future__ import annotations
 
 import csv
+import hashlib
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import RLock
 from typing import Any
+
+from appsec_review.storage import canonical_json
 
 EXPORT_SCHEMA = "appsec-review/cpg-export/1"
 MAX_FILE_BYTES = 64 * 1024 * 1024
@@ -34,6 +38,7 @@ OPERATOR_PREFIX = "<operator>"
 UNRESOLVED_PREFIX = "<unresolved"
 PSEUDO_METHODS = frozenset({"<global>", "<includes>"})
 _SPECIAL = {":ID": "id", ":LABEL": "label", ":START_ID": "start", ":END_ID": "end", ":TYPE": "type"}
+_CSV_LOCK = RLock()
 NO_CALL_EDGES_GAP = ("cpg_calls_name_matched: c2cpg exports no call-graph edges, so a callee is identified by "
                      "name; 'callee_resolved' is true only where Joern itself resolved the target")
 NO_CFG_GAP = "cpg_no_cfg_edges: c2cpg exports no control-flow edges; branches are listed, successors are not"
@@ -63,6 +68,7 @@ class CpgBranch:
 
 @dataclass(slots=True)
 class CpgFunction:
+    function_id: str
     name: str
     full_name: str
     signature: str
@@ -77,7 +83,8 @@ class CpgFunction:
     cut: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
-        return {"name": self.name, "full_name": self.full_name, "signature": self.signature, "path": self.path,
+        return {"function_id": self.function_id,
+                "name": self.name, "full_name": self.full_name, "signature": self.signature, "path": self.path,
                 "line": self.line, "line_end": self.line_end, "has_body": self.has_body,
                 "calls": [call.as_dict() for call in self.calls], "branches": [item.as_dict() for item in self.branches],
                 "operator_calls": self.operator_calls, "reaching_def_edges": self.reaching_def_edges,
@@ -105,23 +112,55 @@ def _text(value: str) -> str:
     return " ".join(str(value).split())[:MAX_TEXT]
 
 
-def _read(directory: Path, kind: str, label: str, gaps: list[str]) -> Iterator[dict[str, str]]:
-    """Rows of ``<kind>_<label>`` keyed by header name (type suffix stripped); a missing pair is no rows."""
+def _read(directory: Path, kind: str, label: str, gaps: list[str], *,
+          required: bool = False) -> Iterator[dict[str, str]]:
+    """Read bounded, shape-checked tables; absent optional labels differ from broken pairs."""
     header, data = directory / f"{kind}_{label}_header.csv", directory / f"{kind}_{label}_data.csv"
-    if not (header.is_file() and data.is_file()) or header.is_symlink() or data.is_symlink():
+    if not any(path.exists() or path.is_symlink() for path in (header, data)) and not required:
         return
-    if data.stat().st_size > MAX_FILE_BYTES:
-        gaps.append(f"cpg_export_limit: {data.name} exceeds {MAX_FILE_BYTES} bytes and was not read")
+    if not all(path.is_file() and not path.is_symlink() for path in (header, data)):
+        gaps.append(f"cpg_export_incomplete: {kind}_{label} lacks a regular header/data pair")
         return
-    names = next(csv.reader(header.read_text(encoding="utf-8", errors="replace").splitlines()), [])
-    columns = [_SPECIAL.get(name, name.split(":")[0]) for name in names]
-    csv.field_size_limit(1 << 20)
-    with data.open(newline="", encoding="utf-8", errors="replace") as stream:
-        for index, row in enumerate(csv.reader(stream)):
-            if index >= MAX_ROWS:
-                gaps.append(f"cpg_export_limit: {data.name} was cut at {MAX_ROWS} rows")
-                return
-            yield dict(zip(columns, row))
+    for path in (header, data):
+        if path.stat().st_size > MAX_FILE_BYTES:
+            gaps.append(f"cpg_export_limit: {path.name} exceeds {MAX_FILE_BYTES} bytes and was not read")
+            return
+    needed = {"start", "end"} if kind == "edges" else {"id"}
+    if label == "METHOD":
+        needed |= {"NAME", "FILENAME"}
+    elif label == "CALL":
+        needed.add("NAME")
+    elif label == "CONTROL_STRUCTURE":
+        needed.add("CONTROL_STRUCTURE_TYPE")
+    # csv's field cap is process-global. Serialize our readers and restore the caller's cap,
+    # including malformed/short-circuit reads, rather than changing subsequent consumers.
+    with _CSV_LOCK:
+        previous = csv.field_size_limit(1 << 20)
+        try:
+            with header.open(newline="", encoding="utf-8") as stream:
+                reader = csv.reader(stream, strict=True)
+                names = next(reader, [])
+                if next(reader, None) is not None:
+                    raise ValueError("header contains more than one row")
+            columns = [_SPECIAL.get(name, name.split(":")[0]) for name in names]
+            if not needed <= set(columns) or len(set(columns)) != len(columns) or "" in columns:
+                raise ValueError("header lacks required or unique columns")
+            with data.open(newline="", encoding="utf-8") as stream:
+                for index, row in enumerate(csv.reader(stream, strict=True)):
+                    if index >= MAX_ROWS:
+                        gaps.append(f"cpg_export_limit: {data.name} was cut at {MAX_ROWS} rows")
+                        return
+                    if len(row) != len(columns):
+                        raise ValueError(f"row {index + 1} does not match header width")
+                    record = dict(zip(columns, row))
+                    if any(not record[key] for key in ("start", "end") if kind == "edges") \
+                            or (kind == "nodes" and not record["id"]):
+                        raise ValueError(f"row {index + 1} lacks node identity")
+                    yield record
+        except (csv.Error, UnicodeError, OSError, ValueError) as exc:
+            gaps.append(f"cpg_export_invalid: {kind}_{label}: {type(exc).__name__}: {exc}")
+        finally:
+            csv.field_size_limit(previous)
 
 
 def read_export(directory: Path) -> CpgExport:
@@ -135,36 +174,45 @@ def read_export(directory: Path) -> CpgExport:
             continue
         code = row.get("CODE", "")
         methods[row["id"]] = CpgFunction(
-            name=name, full_name=row.get("FULL_NAME", name)[:MAX_TEXT], signature=row.get("SIGNATURE", "")[:MAX_TEXT],
+            function_id=hashlib.sha256(canonical_json({
+                key: row.get(key) for key in ("id", "NAME", "FULL_NAME", "SIGNATURE", "FILENAME",
+                                              "LINE_NUMBER", "LINE_NUMBER_END")})).hexdigest(),
+            name=name[:MAX_TEXT], full_name=row.get("FULL_NAME", name)[:MAX_TEXT],
+            signature=row.get("SIGNATURE", "")[:MAX_TEXT],
             path=path, line=_int(row.get("LINE_NUMBER", "")), line_end=_int(row.get("LINE_NUMBER_END", "")),
             has_body="{" in code)
     if not methods:
         gaps.append("cpg_export_no_methods: the export holds no function of the seeded files")
         return out
     parents: dict[str, str] = {}
-    for row in _read(directory, "edges", "AST", gaps):
+    for row in _read(directory, "edges", "AST", gaps, required=any(fn.has_body for fn in methods.values())):
         parents[row["end"]] = row["start"]
 
     owners: dict[str, CpgFunction | None] = {}
+    ownership_gaps: set[str] = set()
 
     def owner(node: str) -> CpgFunction | None:
-        path, current = [], node
-        for _ in range(MAX_AST_DEPTH):
-            if current in owners:
-                found = owners[current]
-                break
-            path.append(current)
+        if node in owners:
+            return owners[node]
+        seen, current = set(), node
+        found = None
+        for depth in range(MAX_AST_DEPTH + 1):
             if current in methods:
                 found = methods[current]
                 break
-            current = parents.get(current)  # type: ignore[assignment]
-            if current is None:
-                found = None
+            if current in seen:
+                ownership_gaps.add("cpg_ast_cycle: facts on cyclic AST paths have no resolved owner")
                 break
-        else:
-            found = None
-        for item in path:
-            owners[item] = found
+            seen.add(current)
+            if current not in parents:
+                ownership_gaps.add("cpg_ast_orphan: facts outside parsed methods have no resolved owner")
+                break
+            if depth == MAX_AST_DEPTH:
+                ownership_gaps.add(f"cpg_ast_depth_limit: facts beyond {MAX_AST_DEPTH} AST hops have no resolved owner")
+                break
+            current = parents[current]
+        # Cache only this query, never its ancestors: a cut is not proof of their ownership.
+        owners[node] = found
         return found
 
     codes: dict[str, str] = {}
@@ -204,7 +252,7 @@ def read_export(directory: Path) -> CpgExport:
         function = owner(row["start"])
         if function is not None:
             function.reaching_def_edges += 1
-    out.functions = sorted(methods.values(), key=lambda item: (item.path, item.line or 0, item.name))
+    out.functions = sorted(methods.values(), key=lambda item: (item.path, item.line or 0, item.name, item.function_id))
     for function in out.functions:
         function.calls.sort(key=lambda item: (item.line or 0, item.name))
         function.branches.sort(key=lambda item: (item.line or 0, item.kind))
@@ -212,6 +260,6 @@ def read_export(directory: Path) -> CpgExport:
     for function in out.functions:
         if function.cut:
             gaps.append(f"cpg_export_limit: {function.name} lists a bounded subset of its {'/'.join(function.cut)}")
-    out.gaps = list(dict.fromkeys(gaps))
+    out.gaps = sorted(set(gaps) | ownership_gaps)
     return out
 

@@ -107,7 +107,8 @@ def test_priority_only_change_invalidates_seeded_cache_without_changing_seed_loc
     assert len(executor.calls) == 1
 
     changed = [observations[0], {**observations[1], "severity": "CRITICAL"}]
-    for name, items in (("reprioritized", changed), ("reordered", list(reversed(changed)))):
+    for expected_calls, (name, items) in enumerate(
+            (("reprioritized", changed), ("reordered", list(reversed(changed)))), start=2):
         shard = sc._observation_shard(staged.run_root, "evidence", items)
         manifest = staged.manifest_path.with_name(name + ".json")
         sc.write_manifest(manifest, run_id="run", target_snapshot=sc.SNAPSHOT, target_root=staged.target,
@@ -115,8 +116,12 @@ def test_priority_only_change_invalidates_seeded_cache_without_changing_seed_loc
         staged.manifest_path, staged.manifest_sha = manifest, sc.file_sha256(manifest)
         result, _ = _run(staged, executor, seeded_settings=settings)
         assert result["analyzed_files"] == ["src/util.cpp"]
-        assert len(executor.calls) == 2
+        # This fixture assigns observation IDs by ordinal; reversing observations changes
+        # provenance as well as iteration order and must refresh the seed ledger.
+        assert len(executor.calls) == expected_calls
         assert result["index_identity"]["sha256"] != first["index_identity"]["sha256"]
+        reused, _ = _run(staged, executor, seeded_settings=settings)
+        assert reused["checkpoint_reused"] and len(executor.calls) == expected_calls
     assert (staged.manifest_path.parent / "upstream.json").read_bytes() == original_manifest
 
 

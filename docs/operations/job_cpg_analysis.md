@@ -16,6 +16,11 @@ per-function export that was actually produced. A retained CPG binary is not usa
 coverage, a security observation, or a finding. The producer deliberately publishes a blocked
 evidence marker and zero security observations even when a CPG exists.
 
+Joern remains retired by policy, disabled and omitted from normal execution plans. Omission
+produces no skip attempt or handoff. The structured retirement metadata below is emitted only
+if acceptance is reached; it is not evidence that the retired tool ran, and this repair does
+not authorize enabling it.
+
 <!-- generated:begin job=job_cpg_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract
@@ -237,25 +242,39 @@ Source: [job](../../src/appsec_review/jobs/job_cpg_analysis/job.py),
    coverage for existing scopes. This describes the handler if dispatched; scheduling enablement
    is separate from the in-job flag.
 2. If enabled, plan optional seeds and run bounded scope workers. No seeds, or no supported selected
-   rows, yields a seeded ledger and blocked shard without running a container.
+   rows, yields a seeded ledger and blocked shard without running a container. A whole-program
+   scope with no supported compile units instead records not-applicable inputs and an empty
+   applicability shard, without launching Joern or inventing missing-tool gaps.
 3. Verify a matching checkpoint or invoke `tool-joern` c2cpg on the accepted source root and
    rewritten compile database. Enforce `max_cpg_bytes` with `RLIMIT_FSIZE` at limit plus one;
    discard partial, oversized, empty or non-regular output. Record timeout, OOM and nonzero exits.
 4. Retain a valid CPG and its manifest, accepted database, receipt and resource-limit disposition.
-   Always carry `JOERN_GAP`: generation alone is not the missing general CPG/PDG export pipeline.
+   Carry `JOERN_GAP` on analysis scopes: it describes missing general CPG/PDG coverage, not whether
+   a binary was generated. Exact selected source identities (relative or under the known source
+   mounts), not path suffixes, determine the seeded exclusion predicate.
 5. In seeded mode with a valid CPG, run the separate export command with per-file limits. Reject
    failed/missing export output; parse bounded CSV into `cpg-export.json`, retaining per-function
-   facts and gaps, then discard raw export intermediates.
+   facts and gaps. Missing table halves, malformed columns/rows/encoding, field/file/row limits
+   and unresolved AST ownership are named gaps, never evidence of a clean empty function.
+   Optional labels absent in their entirety are not assumed malformed. AST ownership is bounded
+   independently of row order; clipped display names never supply logical function identities.
+   Function identities hash the original method identity before display clipping and remain
+   distinct through the graph-neighborhood consumer.
+   Discard the owned raw export tree and staged CPG copy on every outcome, including parser or
+   execution failure. Preserve receipts, streams, input CPG, prior attempts and referenced
+   native evidence; an overlap with disposable paths fails integrity rather than deleting it.
 6. Publish a blocked evidence entity with zero observations. Exported functions add AST-node
    facts and partial coverage; otherwise coverage is unavailable. Attach seeded ledger/selection
-   reasons. Do not checkpoint a failed seeded build; ordinary generated results can be checkpointed.
+   reasons. A nonempty bounded export with gaps remains partial; a failed/empty export stays
+   unavailable. Do not checkpoint a failed seeded build or export. Retry uses a fresh evidence
+   generation, retaining earlier evidence bytes; a successful bounded subset can be checkpointed.
 
 ### `acceptance`
 
 1. Compose scope shards and disabled/unavailable coverage; verify the full manifest.
 2. Publish `cpg-analysis-summary.json` with scope, disabled and generated-CPG counts. Observation
-   and item counts remain zero. Existing scopes always finish with gaps; no scopes/cases is
-   not-applicable.
+   and item counts remain zero. An analyzed scope finishes with gaps; no scopes/cases, or only
+   unsupported whole-program scopes without upstream failures, is not-applicable.
 
 ## Dataflow
 
@@ -268,8 +287,11 @@ flowchart LR
   export --> shard["observations shard: blocked marker + optional function facts"]
   cpg --> shard
   enabled -. "disabled / no seeds" .-> gaps["unavailable coverage + ledger"]
+  enabled -. "unsupported whole-program inputs" .-> na["not-applicable inputs + empty shard"]
   cpg -. "failed / too large / no general export" .-> gaps
-  export -. "failed / malformed / bounded" .-> gaps
+  export -. "failed / no usable functions" .-> gaps
+  export -. "bounded usable subset + parser gaps" .-> shard
+  na --> publish
   gaps --> publish["acceptance.publish_handoff"]
   shard --> publish
 ```
@@ -307,11 +329,20 @@ The permanent-looking limitation is still a cost that a specific walk must expli
 ## Resume and invalidation
 
 The scope checkpoint binds accepted scope/database, container database hash, adapter/argv,
-tool identity, CPG byte ceiling and seeded identities. Reuse validates receipt, database and CPG
-manifest agreement, the retained file boundary and indexed artifacts. Failed seeded builds are
-not reused; unseeded gap-bearing results may be. Disabled work must not reuse enabled success as
+tool identity, CPG byte ceiling and seeded identities, including selected observation provenance,
+priorities and total/omitted/outside-scope/unlocated accounting. Reuse validates generation and
+export receipts, compile databases, retained streams, parsed export, ledger, CPG manifest and
+indexed artifacts by their run-owned identities. Missing or changed evidence fails integrity;
+it is not a cache miss. Failed seeded builds and exports are not reused; unseeded gap-bearing
+results may be. Disabled work must not reuse enabled success as
 coverage. [Image pins](image-pin-verification.md) and [signing](signing.md) are shared gates.
 The [source](../../src/appsec_review/jobs/job_cpg_analysis/job.py) is authoritative where legacy
 operations prose says all export is absent: seeded per-function export exists, general CPG/PDG
 coverage does not. Generated bindings remain
 [T-147](../TODO.md).
+
+The CSV reader and job adapters are mounted application sources, not Joern image assets.
+These changes require no Joern image rebuild or query compilation. Any later authorized
+deployment must follow the source-measurement/reload policy without changing disabled dispatch.
+Offline inert-fixture checks do not establish native exclusion behavior, image readiness,
+integration, acceptance or live review results.

@@ -178,9 +178,10 @@ def _cpg_rows(shard_set: ShardSet, shards: Sequence[Mapping[str, Any]], scope: M
     for row in rows[:MAX_CPG_FUNCTIONS]:
         source = row["payload"]
         identity = LogicalIdentity.derive(EntityKind.TOOL_OBSERVATION, snapshot, {
-            "producer": Producer.JOERN_CPG.value, "scope_id": scope["scope_id"], "function": source.get("full_name"),
-            "path": source.get("path"), "line": source.get("line")})
+            "producer": Producer.JOERN_CPG.value, "scope_id": scope["scope_id"],
+            "source_identity": row["identity"]})
         payload = {**_base(scope, Producer.JOERN_CPG, "cpg"), "function": row["name"],
+                   "source_identity": row["identity"], "function_id": source.get("function_id"),
                    "names": _names(row["name"], source.get("full_name")), "full_name": source.get("full_name"),
                    "signature": source.get("signature"), "path": source.get("path"), "line": source.get("line"),
                    "line_end": source.get("line_end"), "has_body": bool(source.get("has_body")),

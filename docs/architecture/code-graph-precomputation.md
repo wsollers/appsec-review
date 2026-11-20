@@ -51,7 +51,7 @@ in the last column establishes each fact.
 |---|---|---|---|
 | `job_codeql_analysis` | One immutable database per accepted scope and language, one SARIF per query profile, normalized `observations` shards with ordered `code_flow`/`thread_flow` steps. Executor actions are `inventory`, `database`, `query` and, since C1/C2, `export`: the ready coordinator `execution.scopes` runs the declared `rules/codeql-graph-export/<language>` pack as each successful database of a pinned export language becomes eligible, under shared resource admission. Supplied pack/runner payloads are not fingerprinted. Bounded JSON exports plus `export-manifest.json` remain under `data/codeql/scopes/<scope-id>/exports` (dataset `codeql_graph_export`, `artifact_only`). Languages without a configured export pack record `NOT_APPLICABLE`. Its publication writes a manifest of its own shards only and references sibling manifests as verified upstream manifests (it does not compose their shards). Live acceptance before this plan: C/C++ 2/2, Java/Kotlin 7/7, JavaScript/TypeScript 12/12, Python 8/8, Actions 1/1; Go 0/7; C# and Rust planning gaps; PHP `NOT_APPLICABLE`. | Export packs are pinned for C/C++, C#, Go, Java/Kotlin, JavaScript/TypeScript, Python, Ruby and Rust and have run in the pinned image built from this repository; Swift is deferred (Linux cannot extract it). The C/C++ native and Rust synthetic recordings are live; the other synthetic recordings are hand-authored and checked by per-language live tests. | `jobs/job_codeql_analysis/job.py` (`_export_one`, `_verify_export_sources`), `codeql/runtime.py`, `containers/tools/codeql/codeql_runner.py`, `docs/operations/codeql-analysis.md` |
 | `job_code_graph_index` (new, C5) | One `graph` shard per `(CodeQL scope, family)` with a coverage row each; normalized (C3), cross-checked against clangd/IR/AST (C4) and SARIF-correlated (C4) facts; `unavailable` coverage-only shards for scopes without a usable export. Restores clangd/IR/AST shards the CodeQL manifest rewrite dropped from their producers' accepted handoffs (C9). | Facts for languages without an export pack; anything CodeQL's models do not cover. | `jobs/job_code_graph_index/`, `docs/operations/code-graph-index.md` |
-| `job_cpg_analysis` (Joern) | Deprecated and disabled by default (`jobs.job_cpg_analysis.settings.enabled = false`): it is omitted from execution plans and produces no run artifacts. When enabled it retains `cpg.bin` and publishes a `BLOCKED` shard with zero observations, as before. | Nothing retrievable. | `jobs/job_cpg_analysis/job.py` (`JOERN_GAP`), `runtime/selection.py`, `indexing/matrix.py` (`cpg_graph` lane always `unavailable`) |
+| `job_cpg_analysis` (Joern) | Retired and disabled by default (`jobs.job_cpg_analysis.settings.enabled = false`): omitted from execution plans, with no attempt or skip artifact. The retained implementation can publish `cpg.bin`, a blocked marker and zero security observations. | Seeded bounded function exports are retrievable as partial producer-neighborhood facts, not general CPG/PDG coverage. Failed/empty exports are unavailable; nonempty bounded subsets keep their gaps. | `jobs/job_cpg_analysis/job.py`, `export.py`, `job_code_graph_index/producers.py`, `runtime/selection.py` |
 | `job_cpp_compiled_analysis` LLVM IR branch | Unchanged: `define` lines as `ir_entity`, uniquely resolvable direct `call @name` as exact `CALLS`; TU-level ambiguous locations. Used as a C4 cross-check input (`ir-name-same-tu`). | CFG, def-use, dominators, guards, ranges, source-exact locations (section 12, K1/K3). | `jobs/job_cpp_compiled_analysis/job.py::_ir_index` |
 | `job_cpp_compiled_analysis` Clang AST branch | Unchanged: bounded JSON AST walk; `CallExpr` nodes are a C4 cross-check input. | Resolved callee identity, CFG, dataflow, macro spelling ranges (section 12, K2). | `jobs/job_cpp_compiled_analysis/job.py::_ast_index` |
 | `job_svf_alias_analysis` (SVF, opt-in) | `points_to_set` and `indirect_call_targets` records with exact `DILocation` points per linked module, each marked closed- or open-world; consumed by `graph/svf_crosscheck.py` after the clangd/IR/AST cross-check (`svf-cross-check/1`). | A primary fact of any family; may-alias never contradicts, and open-world modules never contradict. | `jobs/job_svf_alias_analysis/`, `graph/svf_crosscheck.py`, [`svf-alias-producer.md`](svf-alias-producer.md) |
@@ -94,7 +94,8 @@ Reasons grounded in section 1:
    with dispatch resolution (`Call.getTarget()`, `VirtualDispatch`), global taint tracking with
    path graphs, `GuardCondition` dominance, `SimpleRangeAnalysis`, and modeled remote/local flow
    sources and sinks. None of that must be invented.
-2. Joern has no exporter, no source mapping and no fixtures; building them is a separate project
+2. Joern has no general source-mapped CPG/PDG exporter or security acceptance. Its later seeded
+   function export and recorded fixtures do not supply that missing capability
    (`docs/TODO.md`). LLVM IR indexing is a regex over `.ll` text with TU-level locations; a real
    CFG/dominator/range extraction needs an `opt` pass plus debug-location decoding and would still
    only cover C/C++ at `-O0`. Neither can give source-resolved guard or range facts in this
@@ -161,24 +162,29 @@ are unchanged until the rest of section 12 lands; only K4 (the standalone
 
 Joern was meant to supply a code property graph (AST, CFG and PDG in one graph). It is deprecated
 because nothing in the review depends on it, and finishing it would duplicate CodeQL:
-1. **It produces nothing usable today.** `job_cpg_analysis` runs `c2cpg` and keeps `cpg.bin` as a
-   hash-identified artifact, but there is no exporter, source mapping, slicing, fixtures or security
-   acceptance. Every scope publishes a `BLOCKED` shard with zero observations.
+1. **It does not supply general source-mapped CPG/PDG coverage.** The retained implementation
+   can keep `cpg.bin` and, for seeded scopes, export bounded calls, branches and reaching-definition
+   counts. Those function rows and recorded fixtures do not establish general graph slicing or
+   security acceptance. Analysis scopes keep a blocked marker and zero security observations;
+   bounded usable exports are partial, never complete.
 2. **CodeQL already covers the same ground.** The CodeQL database holds the AST, CFG, SSA and data
    dependence in relational form, with taint tracking and source/sink models that Joern's C/C++
    frontend would need us to build.
 3. **The independent second opinion comes from Clang/LLVM instead.** The compiler of record is
    more authoritative for C/C++ than a second third-party parser.
-4. **Running it costs resources for no evidence.** Joern needs far more than 1 GiB per scope at
-   scale, and the image carries license-attribution work for bundled JARs.
+4. **Its resource cost motivated retirement.** The retirement decision records OOM/resource
+   pressure, and the image carries license-attribution work for bundled JARs. Offline adapter
+   tests do not establish current native resource behavior.
 
 So `jobs.job_cpg_analysis.settings.enabled` defaults to `false`. When disabled, the job is absent
 from direct and Dagster execution plans, cannot be dispatched explicitly, and produces no attempt,
 handoff, manifest, index or coverage artifact. Run inventory excludes it as a producer.
 
-Setting it to `true` restores the previous behaviour: the CPG is retained as evidence and the shard
-is still `BLOCKED`. Removing the job and image entirely is a later clean-up once no run depends on
-a retained CPG.
+The dormant enabled path retains the binary and optional partial seeded functions, with separate
+generation/export receipts and hash-checked checkpoint evidence. Unsupported whole-program
+inputs are not-applicable without dispatch. This describes retained code, not authorization to
+enable it. Removing the job and image entirely is a later clean-up once no run depends on a
+retained CPG.
 
 ### D2 Retrieval surface: one new typed tool, `query_code_graph`; graph families leave `query_precomputed`
 
@@ -1180,7 +1186,8 @@ The six questions this plan raised were answered by accepting the plan's recomme
 
 ### Deliberately not done
 
-- No Joern exporter; `job_cpg_analysis` is deprecated and disabled by default (D1, "Why Joern is deprecated").
+- No general source-mapped Joern graph exporter; the later seeded per-function export is narrower.
+  `job_cpg_analysis` remains retired and disabled by default (D1, "Why Joern is deprecated").
 - No LLVM pass in this batch; the IR shard remains a cross-check input only. The Clang second
   producer phase (section 12) adds it after C9.
 - No `aliases` mode, no points-to facts.

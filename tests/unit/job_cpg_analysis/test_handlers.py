@@ -158,6 +158,9 @@ def _fake_execution(
     cdb.write_text("[]", encoding="utf-8")
     rec = scratch / "execution.json"
     rec.write_text('{"tool_id":"tool-joern"}', encoding="utf-8")
+    (scratch / "raw").mkdir(exist_ok=True)
+    for name in ("stdout.bin", "stderr.bin"):
+        (scratch / "raw" / name).write_bytes(b"")
     cpg_path = scratch / "cpg.bin"
     if cpg_symlink_to is not None:
         cpg_path.symlink_to(cpg_symlink_to)
@@ -166,6 +169,8 @@ def _fake_execution(
     return {
         "receipt": run_artifact(run_root, rec),
         "compile_database": run_artifact(run_root, cdb),
+        "stdout_path": (scratch / "raw/stdout.bin").relative_to(run_root).as_posix(),
+        "stderr_path": (scratch / "raw/stderr.bin").relative_to(run_root).as_posix(),
         "image_id": "appsec-review/tool-joern:4.0.630",
         "image_digest": "sha256:" + "c" * 64,
         "argv_identity": "argv-sha",
@@ -216,7 +221,8 @@ def test_generate_handles_all_c2cpg_failure_and_limit_dispositions(
     assert result["resource_limit"]["disposition"] == expected_disposition
     assert any(expected_gap in g for g in result["gaps"])
     assert JOERN_GAP in result["gaps"]
-    assert not (run_root / "data" / "code-index" / "joern" / scope.scope_id / "run" / "cpg.bin").exists()
+    discarded = (run_root / result["execution"]["receipt"]["path"]).parent / "cpg.bin"
+    assert not discarded.exists() and not discarded.is_symlink()
 
 
 def test_generate_unlinks_symlinked_cpg_and_reuses_checkpoint_plus_detects_manifest_tamper(
@@ -237,6 +243,7 @@ def test_generate_unlinks_symlinked_cpg_and_reuses_checkpoint_plus_detects_manif
     first = _generate(unit, scope, lambda _u: object())
     assert first["cpg"] is None
     assert calls == 1
+    assert outside.read_bytes() == b"secret"
     reused_none = _generate(unit, scope, lambda _u: object())
     assert reused_none["checkpoint_reused"] is True and calls == 1
 
@@ -269,7 +276,7 @@ def test_generate_unlinks_symlinked_cpg_and_reuses_checkpoint_plus_detects_manif
     with pytest.raises(CheckpointIntegrityError, match="CPG manifest does not match its checkpoint"):
         _reuse(unit2, root2, identity, scope2)
 
-    # Escape CPG path outside `<root>/run/` while keeping valid artifact hash + matching manifest
+    # Escape the invocation's run directory while keeping valid artifact hash + matching manifest.
     escaped_cpg = root2 / "outside-run.bin"
     escaped_cpg.write_bytes(b"escaped")
     escaped_art = run_artifact(run_root2, escaped_cpg)
@@ -326,7 +333,7 @@ def test_export_covers_all_failure_and_empty_method_branches(
     monkeypatch.setattr(job_mod, "execute_scope_tool", _fake_export_exec)
     record, artifacts, gaps = _export(unit, scope, root, cpg_path, lambda _u: object())
     assert record is None
-    assert len(artifacts) == 2
+    assert len(artifacts) == 4
     assert any(expected_gap in g for g in gaps)
     assert not (root / "export-run" / "cpg.bin").exists()
 
