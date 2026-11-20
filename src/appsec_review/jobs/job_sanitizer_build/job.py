@@ -278,11 +278,13 @@ def _build_unit(unit: UnitContext, receipt: Mapping[str, Any], settings: Sanitiz
         "network_required": recipe.get("network_required"), "flags": list(settings.flags),
         "workspace": None, "commands": [], "outputs": [], "excluded_bookkeeping": None,
         "build_output_dispositions": None,
+        "build_completed": False, "catalog_complete": None, "readiness_blockers": [],
         "instrumented": False, "gaps": [], "terminal_status": "COMPLETED_WITH_GAPS",
     }
 
     def gap(reason: str, status: str = "COMPLETED_WITH_GAPS") -> dict[str, Any]:
         result["gaps"] = _bounded([*result["gaps"], reason])
+        result["readiness_blockers"] = _bounded([*result["readiness_blockers"], reason])
         result["terminal_status"] = status
         return result
 
@@ -370,11 +372,13 @@ def _build_unit(unit: UnitContext, receipt: Mapping[str, Any], settings: Sanitiz
     if source_fingerprint(unit.job.target_root or Path()) != unit.job.source_fingerprint:
         raise FrameworkIntegrityError("target changed during the sanitizer build")
     if result["terminal_status"] != "FAILED":
+        result["build_completed"] = True
         outputs, dispositions, catalog_gaps = _catalog(run_root, workspace, before, receipt, settings,
                                                        build_unit_id, _build_output_policy(unit))
         verdict_gaps = _judge(outputs, settings)
         result.update(outputs=outputs, excluded_bookkeeping=dispositions.bookkeeping.document(),
                       build_output_dispositions=dispositions.document(),
+                      catalog_complete=not catalog_gaps, readiness_blockers=_bounded(catalog_gaps),
                       outputs_sha256=hashlib.sha256(canonical_json(
                           [[item["workspace_path"], item["sha256"]] for item in outputs])).hexdigest())
         result["gaps"] = _bounded([*catalog_gaps, *verdict_gaps])

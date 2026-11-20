@@ -137,10 +137,21 @@ def sanitizer_readiness(snapshot: str, accepted: Mapping[str, Any], max_facts: i
         unit_id = unit["build_unit_id"]
         catalogued = disposition == "built" and "outputs_sha256" in unit
         outputs = unit.get("outputs", ()) if catalogued else ()
+        unit_gaps = list(unit.get("gaps", ()))
+        for gap in unit_gaps:
+            derived.gap(f"{unit_id}: {gap}")
+        blockers = list(unit.get("readiness_blockers", ()))
+        if disposition == "built":
+            if unit.get("build_completed") is not True:
+                blockers.append("successful build replay completion is unproven")
+            if catalogued and unit.get("catalog_complete") is not True:
+                blockers.append("output catalog completeness is unproven")
+            if catalogued and not unit.get("workspace_manifest"):
+                blockers.append("a complete workspace manifest is unavailable")
         for sanitizer in sanitizers:
             if len(derived.entities) >= max_facts:
                 continue
-            gaps = list(unit.get("gaps", ()))
+            gaps = list(blockers)
             resolved = [output for output in outputs if output["evidence"]["evidence_status"] == "resolved"]
             referenced = [output for output in resolved
                           if output["evidence"]["sanitizers"][sanitizer]["runtime_referenced"]]
@@ -155,12 +166,14 @@ def sanitizer_readiness(snapshot: str, accepted: Mapping[str, Any], max_facts: i
                 gaps.append("native build unit was not rebuilt because the configured unit bound was reached")
             elif not catalogued:
                 status = "unavailable"
-            elif unit["instrumented"] and proven:
+            elif not blockers and proven and len(resolved) == len(outputs):
                 status = "ready"
             else:
                 status = "partial"
                 if not proven:
                     gaps.append(f"{sanitizer} runtime references do not establish instrumentation for this unit")
+                if len(resolved) != len(outputs):
+                    gaps.append("runtime-reference counts are unknown for one or more catalogued outputs")
             if status in {"partial", "unavailable"} and not gaps:
                 gaps.append("sanitizer build evidence is incomplete")
             identity = LogicalIdentity.derive(EntityKind.COVERAGE_CELL, snapshot, {
@@ -171,6 +184,7 @@ def sanitizer_readiness(snapshot: str, accepted: Mapping[str, Any], max_facts: i
                 "build_unit_id": unit_id, "sanitizer": sanitizer, "required": sanitizer in required,
                 "status": status, "terminal_status": unit.get("terminal_status"),
                 "instrumented": unit.get("instrumented"), "runtime_verification": "not_performed",
+                "build_completed": unit.get("build_completed"), "catalog_complete": unit.get("catalog_complete"),
                 "output_count": len(outputs) if catalogued else None,
                 "runtime_referenced_output_count": len(referenced) if catalogued and len(resolved) == len(outputs)
                 else None,
@@ -178,7 +192,7 @@ def sanitizer_readiness(snapshot: str, accepted: Mapping[str, Any], max_facts: i
                 "outputs_sha256": unit.get("outputs_sha256"), "receipt_fingerprint": unit.get("receipt_fingerprint"),
                 "recipe_identity": unit.get("recipe_identity"), "family": unit.get("family"),
                 "image_id": (unit.get("image") or {}).get("image_id"),
-                "reason": unit.get("reason"), "gaps": bounded_gaps(gaps),
+                "reason": unit.get("reason"), "gaps": bounded_gaps(gaps), "unit_gaps": bounded_gaps(unit_gaps),
                 **{key: accepted[key] for key in ("run_id", "attempt_id", "source_fingerprint", "handoff_sha256",
                                                   "summary_reference", "language_build_handoff_sha256")},
             }

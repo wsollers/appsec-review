@@ -167,6 +167,11 @@ identity), `gaps`, and:
 - `not_applicable_units[]`: accepted units of other families (`SKIPPED_NA`, not gaps);
 - `omitted_units[]`: native units beyond `max_units`.
 
+Unit summaries separately record `build_completed`, `catalog_complete` and `readiness_blockers`.
+These facts describe replay/catalog completeness independently of the required-evidence verdict;
+the complete workspace is bound by `workspace_manifest`. Missing required runtime references do
+not become a shared readiness blocker for a different sanitizer.
+
 The summary also records the application `run_id`, `attempt_id` and `source_fingerprint`.
 `job_review_data_indexing` reads this artifact through its admitted handoff and records the
 `sanitizer_build_summary` input receipt. It projects bounded per-unit, per-sanitizer readiness into
@@ -179,8 +184,13 @@ Readiness `ready` means the build's runtime-reference evidence meets that saniti
 not that the binary ran or passed a sanitizer test. Rows explicitly say
 `runtime_verification: not_performed`. The `instrumented` boolean retains the original unit
 verdict against `required_evidence`; `status` and reference counts are per sanitizer, so an
-optional sanitizer can remain partial even when the unit qualifies. `partial` and `unavailable`
-retain their reasons; omitted
+optional sanitizer can remain partial even when the unit qualifies, or be ready even when a
+required sanitizer fails. `unit_gaps` retains the aggregate reasons; `gaps` names this sanitizer's
+readiness limitations. The aggregate verdict and its coverage gaps are never erased.
+Readiness still requires a completed build replay, a complete output catalog and workspace
+manifest, and known reference counts. Failed builds, truncation, unavailable manifests and
+unknown evidence cannot become ready. Older summaries lacking completeness facts remain
+conservatively incomplete. `partial` and `unavailable` retain their reasons; omitted
 native units and nonnative `not_applicable` units remain visible. Unknown counts are `null`;
 a catalogued empty output set or measured absence of references is `0`. Disabled or unadmitted
 builds produce no per-unit rows and a named coverage gap, not a clean result. The indexing fact

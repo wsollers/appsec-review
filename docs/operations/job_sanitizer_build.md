@@ -174,6 +174,8 @@ reads follow the [input contract](../architecture/job-input-contracts.md).
    no useful outputs, catalog truncation or missing complete manifest prevents a successful
    instrumented-unit verdict. Aggregate omissions and unit reasons without losing failed
    unit status inside the summary.
+   Record build completion, catalog completeness and common readiness blockers separately
+   from the required-sanitizer verdict, so another sanitizer's proven references are not hidden.
 
 ### `acceptance`
 
@@ -187,7 +189,10 @@ reads follow the [input contract](../architecture/job-input-contracts.md).
    or proof of a runtime test. Framework publication failure is not partial acceptance.
 4. The admitted indexing consumer projects only sanitized per-unit/per-sanitizer readiness into
    its existing inventory dataset. It preserves receipt/hash identities, unknown versus zero
-   counts, omitted/nonnative units and named gaps; protected binaries remain private.
+   counts, omitted/nonnative units and named gaps; protected binaries remain private. Each
+   sanitizer's readiness is independent of the aggregate `instrumented` verdict, while requiring
+   complete build/catalog/workspace evidence and known counts. Aggregate failures remain visible
+   in `instrumented`, `terminal_status` and `unit_gaps`, even when another sanitizer is ready.
 
 ## Dataflow
 

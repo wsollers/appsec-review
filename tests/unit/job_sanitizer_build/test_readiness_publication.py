@@ -22,7 +22,7 @@ from appsec_review.runtime.runner import JobRunner
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 from appsec_review.storage.shared import attempt_artifacts
 from tests.handoff_fixture import write_fixture_handoff
-from tests.sanitizer_support import ASAN_UNDEFINED, DockerFake, elf_with_symbols
+from tests.sanitizer_support import ASAN_UNDEFINED, ET_REL, UBSAN_UNDEFINED, DockerFake, elf_with_symbols
 from .test_handlers import ROOT, _synthetic_fixture
 
 
@@ -55,9 +55,10 @@ def _project(context, job_id, datasets, outputs, *, pins=None):
     return path, projected
 
 
-def publish_sanitizer(base, *, mode="honor_env", receipts_mode="built", max_units=4, mutate_summary=None):
+def publish_sanitizer(base, *, mode="honor_env", receipts_mode="built", max_units=4,
+                      artifact_count_limit=100, mutate_summary=None):
     config, target, snapshot, root, receipt, ctx = _synthetic_fixture(
-        base, settings_override={"max_units": max_units})
+        base, settings_override={"max_units": max_units, "artifact_count_limit": artifact_count_limit})
     root = root.rename(base / "2026-11-20-5182")
     ctx.job.run_root = root
     JobRunner(config)._bind_configuration(root)
@@ -89,11 +90,19 @@ def publish_sanitizer(base, *, mode="honor_env", receipts_mode="built", max_unit
     upstream, _ = _project(ctx.job, "job_language_build", LANGUAGE_DATASETS, {
         "acceptance.publish_handoff": {"artifact": sanitizer._artifact(root, document),
                                        "index_manifest": sanitizer._artifact(root, manifest)}})
-    class AddressOnlyBuild(DockerFake):
+    class SingleSanitizerBuild(DockerFake):
         def _build(self, root, environment):
-            (root / "address-only").write_bytes(elf_with_symbols(undefined=ASAN_UNDEFINED))
+            symbols = ASAN_UNDEFINED if mode == "address_only" else UBSAN_UNDEFINED
+            (root / "single-sanitizer").write_bytes(elf_with_symbols(undefined=symbols))
+            if mode == "undefined_truncated":
+                (root / "second-output").write_bytes(elf_with_symbols(undefined=symbols))
+            elif mode == "undefined_unknown":
+                (root / "unknown.o").write_bytes(elf_with_symbols(ET_REL, symbol_tables=False))
+            elif mode == "undefined_manifest_limit":
+                for number in range(12):
+                    (root / f"build-metadata-{number}.txt").write_text("inert build metadata\n")
 
-    build_fake = AddressOnlyBuild if mode == "address_only" else DockerFake
+    build_fake = SingleSanitizerBuild if mode == "address_only" or mode.startswith("undefined_") else DockerFake
     job = sanitizer.build_job(executor_factory=lambda _u, p: build_fake(
         p, mode=mode, fail_ordinal=1 if mode == "missing_runtime" else None).executor())
     ctx.job.config.job_id = sanitizer.JOB_ID
@@ -276,3 +285,37 @@ def test_optional_sanitizer_is_not_ready_merely_because_required_evidence_succee
     assert undefined["payload"]["status"] == "partial" and undefined["payload"]["required"] is False
     assert undefined["payload"]["runtime_referenced_output_count"] == 0
     assert undefined["payload"]["gaps"]
+
+
+def test_optional_sanitizer_can_be_ready_when_required_evidence_fails(tmp_path):
+    core, case = readiness_core(tmp_path, mode="undefined_only")
+    assert case.outputs["acceptance.publish_handoff"]["terminal_status"] == "COMPLETED_WITH_GAPS"
+    address, = core.query_sanitizer_readiness(sanitizer="asan")["results"]
+    assert address["payload"]["status"] == "partial" and address["payload"]["required"] is True
+    assert address["payload"]["runtime_referenced_output_count"] == 0
+    response = core.query_sanitizer_readiness(build_unit="unit-1", sanitizer="ubsan", status="ready")
+    undefined, = response["results"]
+    payload = undefined["payload"]
+    assert payload["required"] is False
+    assert payload["runtime_referenced_output_count"] == payload["output_count"] == 1
+    assert payload["instrumented"] is False
+    assert payload["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert payload["gaps"] == []
+    assert any("no address sanitizer runtime reference" in gap for gap in payload["unit_gaps"])
+    assert response["coverage_gaps"]
+    assert {row["payload"]["sanitizer"] for row in core.query_sanitizer_readiness(status="ready")["results"]} == {
+        "undefined"}
+
+
+@pytest.mark.parametrize("mode,maximum,reason", [
+    ("undefined_truncated", 1, "truncated"),
+    ("undefined_manifest_limit", 1, "no manifest"),
+    ("undefined_unknown", 100, "unknown"),
+])
+def test_optional_evidence_requires_complete_catalog_workspace_and_counts(tmp_path, mode, maximum, reason):
+    core, _ = readiness_core(tmp_path, mode=mode, artifact_count_limit=maximum)
+    assert not core.query_sanitizer_readiness(sanitizer="ubsan", status="ready")["results"]
+    row, = core.query_sanitizer_readiness(sanitizer="ubsan")["results"]
+    assert row["payload"]["status"] == "partial"
+    assert row["payload"]["instrumented"] is False
+    assert any(reason in gap for gap in row["payload"]["gaps"])

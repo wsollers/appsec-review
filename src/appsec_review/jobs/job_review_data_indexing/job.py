@@ -699,7 +699,7 @@ def build_job(*, providers: Providers = registry_providers,
             rule="dataset_inventory", rule_version=INVENTORY_RULE, snapshot=snapshot,
             inputs={"inventory": digest(rows), "audit": digest(inventory["audit"]), "matrices": digest(matrices),
                     "fts": digest(fts_summary), "sanitizer": digest(document.get("sanitizer")),
-                    "sanitizer_projection": "per-unit-readiness/1",
+                    "sanitizer_projection": "per-unit-readiness/2",
                     "max_readiness_facts": int(settings_of(unit)["max_facts_per_product"])},
             build=build, shared=SharedArtifacts.for_job(unit.job))
         manifest_reference = document["accepted_manifest"]

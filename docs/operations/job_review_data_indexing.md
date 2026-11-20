@@ -1210,6 +1210,10 @@ See the [handler](../../src/appsec_review/jobs/job_review_data_indexing/job.py),
    Add sanitized per-unit/per-sanitizer readiness from the accepted sanitizer summary, bounded by
    `max_facts_per_product`. Preserve unknown counts as null, measured zeros, nonnative/omitted
    dispositions and named gaps. Readiness is runtime-reference build evidence, not a runtime test.
+   Evaluate each sanitizer independently using explicit build/catalog completeness, the workspace
+   manifest and known reference counts. Retain the aggregate required-evidence verdict and
+   `unit_gaps` separately; a required-sanitizer failure does not hide a different sanitizer's
+   otherwise complete evidence.
 2. Fingerprint inventory/audit/matrix/FTS content, publish the immutable inventory shard, and
    assemble a combined manifest from accepted, restored, link and product shards.
    The sanitizer summary identity, projection version and fact bound also enter that fingerprint.
