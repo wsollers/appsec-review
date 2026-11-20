@@ -137,12 +137,16 @@ def _default_runner(argv: Sequence[str], timeout: int, *, output_bytes: int | No
         capture = PipeCapture(process, output_bytes)
         try:
             capture.wait(timeout)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as timeout_error:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            capture.wait(5)
+            try:
+                capture.wait(5)
+            except subprocess.TimeoutExpired as drain_error:
+                timeout_error.output, timeout_error.stderr = drain_error.output, drain_error.stderr
+                raise timeout_error from drain_error
             return CommandOutcome(None, *capture.output(), timed_out=True)
         return CommandOutcome(process.returncode, *capture.output(),
                               oom_killed=process.returncode == 137)
@@ -341,15 +345,38 @@ class ContainerExecutor:
                     outcome = (_default_runner(command, tool.timeout_seconds, output_bytes=tool.output_bytes)
                                if self.runner is _default_runner else self.runner(command, tool.timeout_seconds))
                 except BaseException as exc:
+                    timeout_error = (exc if isinstance(exc, subprocess.TimeoutExpired)
+                                     else exc.__cause__ if isinstance(exc, safety.ReviewStopped)
+                                     and isinstance(exc.__cause__, subprocess.TimeoutExpired) else None)
+                    partial = {
+                        "schema": "appsec-review/container-execution-partial/1",
+                        "tool_id": tool.tool_id, "image_id": image_id, "container_name": name,
+                        "started_at": started, "completed_at": _stamp(), "error_type": type(exc).__name__,
+                        "exit_code": None, "cleanup": "PENDING",
+                    }
+                    failed_outcome = None
+                    if timeout_error is not None:
+                        stdout, stderr = timeout_error.output or b"", timeout_error.stderr or b""
+                        stdout_path.write_bytes(stdout[:tool.output_bytes])
+                        stderr_path.write_bytes(stderr[:tool.output_bytes])
+                        partial.update(
+                            cleanup="UNCONFIRMED", capture_complete=False,
+                            stdout_path=stdout_path.relative_to(self.run_root).as_posix(),
+                            stderr_path=stderr_path.relative_to(self.run_root).as_posix(),
+                            stdout_sha256=file_sha256(stdout_path), stderr_sha256=file_sha256(stderr_path),
+                            stdout_truncated=len(stdout) > tool.output_bytes,
+                            stderr_truncated=len(stderr) > tool.output_bytes)
+                        if exc is timeout_error:
+                            partial.update(timed_out=True, timeout_seconds=timeout_error.timeout)
+                            failed_outcome = CommandOutcome(None, stdout, stderr, timed_out=True)
+                        else:
+                            # A safety stop can be external cancellation, not the execution deadline.
+                            partial.update(timed_out=None, capture_timeout_seconds=timeout_error.timeout)
+                        atomic_json(receipt_path, partial)
                     if measurement is not None:
                         termination = terminate_measured()
-                        reference = measurement.finish(error=exc, cleanup=termination)
-                        atomic_json(receipt_path, {
-                            "schema": "appsec-review/container-execution-partial/1",
-                            "tool_id": tool.tool_id, "image_id": image_id, "container_name": name,
-                            "started_at": started, "completed_at": _stamp(), "error_type": type(exc).__name__,
-                            "exit_code": None, "cleanup": "PENDING", "metrics_receipt": reference,
-                        })
+                        reference = measurement.finish(failed_outcome, error=exc, cleanup=termination)
+                        atomic_json(receipt_path, {**partial, "metrics_receipt": reference})
                     raise
                 if measurement is not None:
                     termination = terminate_measured() if outcome.timed_out else None

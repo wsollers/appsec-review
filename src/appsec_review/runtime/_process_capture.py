@@ -26,22 +26,27 @@ class PipeCapture:
             raise
 
     def wait(self, timeout: float) -> None:
+        """Drain until EOF and exit, preserving captured prefixes on timeout errors."""
         deadline = time.monotonic() + timeout
-        while self.selector.get_map():
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise subprocess.TimeoutExpired(self.process.args, timeout)
-            for key, _ in self.selector.select(remaining):
-                chunk = os.read(key.fd, 65536)
-                if not chunk:
-                    self.selector.unregister(key.fileobj)
-                    continue
-                buffer = key.data
-                if self.limit is None:
-                    buffer.extend(chunk)
-                else:
-                    buffer.extend(chunk[:max(0, self.limit - len(buffer))])
-        self.process.wait(timeout=max(0, deadline - time.monotonic()))
+        try:
+            while self.selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(self.process.args, timeout)
+                for key, _ in self.selector.select(remaining):
+                    chunk = os.read(key.fd, 65536)
+                    if not chunk:
+                        self.selector.unregister(key.fileobj)
+                        continue
+                    buffer = key.data
+                    if self.limit is None:
+                        buffer.extend(chunk)
+                    else:
+                        buffer.extend(chunk[:max(0, self.limit - len(buffer))])
+            self.process.wait(timeout=max(0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired as exc:
+            exc.output, exc.stderr = self.output()
+            raise
 
     def output(self) -> tuple[bytes, bytes]:
         return bytes(self.buffers[0]), bytes(self.buffers[1])
