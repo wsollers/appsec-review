@@ -354,8 +354,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5120 | [Retain missing-build and per-scope CodeQL coverage decisions](#t-5120-retain-missing-build-and-per-scope-codeql-coverage-decisions) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
 | T-5121 | [Preserve meaningful leading dots in CodeQL source paths](#t-5121-preserve-meaningful-leading-dots-in-codeql-source-paths) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
 | T-5122 | [Return scoped CodeQL export timeout outcomes without KeyError](#t-5122-return-scoped-codeql-export-timeout-outcomes-without-keyerror) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
-| T-5123 | [Normalize only selected CPG facts with stable identities and parse gaps](#t-5123-normalize-only-selected-cpg-facts-with-stable-identities-and-parse-gaps) | graph | open |
-| T-5124 | [Do not cache failed CPG exports or retain failed intermediates](#t-5124-do-not-cache-failed-cpg-exports-or-retain-failed-intermediates) | graph | open |
+| T-5123 | [Normalize only selected CPG facts with stable identities and parse gaps](#t-5123-normalize-only-selected-cpg-facts-with-stable-identities-and-parse-gaps) | graph | done (2026-11-20, eadf2c800980733179d5cfbbff8fcb5aa84456e3) |
+| T-5124 | [Do not cache failed CPG exports or retain failed intermediates](#t-5124-do-not-cache-failed-cpg-exports-or-retain-failed-intermediates) | graph | done (2026-11-20, eadf2c800980733179d5cfbbff8fcb5aa84456e3) |
 | T-5125 | [Preserve debug range lookup bounds and public-only PDB symbols](#t-5125-preserve-debug-range-lookup-bounds-and-public-only-pdb-symbols) | binary | open |
 | T-5126 | [Preserve package coordinates across dependency consumers](#t-5126-preserve-package-coordinates-across-dependency-consumers) | evidence | done (2026-11-19, dfe9e91ff22fd14963f1ac126cf4ca671fa5302d) |
 | T-5127 | [Fingerprint dependency reachability and its advisory snapshot](#t-5127-fingerprint-dependency-reachability-and-its-advisory-snapshot) | evidence | done (2026-11-19, 023cb1e007f610c2bca289dd11e15d2020354a60) |
@@ -446,7 +446,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5212 | [Bind CFG cache semantics and apply bounds before materialization](#t-5212-bind-cfg-cache-semantics-and-apply-bounds-before-materialization) | graph | done (2026-11-19, 5b92dae8befb957b3413595eaeb9af0ea28d507e) |
 | T-5213 | [Align optional intake declarations and Tree-sitter loader behavior](#t-5213-align-optional-intake-declarations-and-tree-sitter-loader-behavior) | pipeline | open |
 | T-5214 | [Verify every native scope checkpoint evidence artifact](#t-5214-verify-every-native-scope-checkpoint-evidence-artifact) | graph | open |
-| T-5215 | [Bind seed omission and provenance accounting into native checkpoint reuse](#t-5215-bind-seed-omission-and-provenance-accounting-into-native-checkpoint-reuse) | graph | open |
+| T-5215 | [Bind seed omission and provenance accounting into native checkpoint reuse](#t-5215-bind-seed-omission-and-provenance-accounting-into-native-checkpoint-reuse) | graph | done (2026-11-20, eadf2c800980733179d5cfbbff8fcb5aa84456e3) |
 | T-5216 | [Bind dossier Markdown and HTML through publication and the gate](#t-5216-bind-dossier-markdown-and-html-through-publication-and-the-gate) | evidence | done (2026-11-19, d945d9a698f1d107e2d3ffcb6b81d5e5a9a40e9b) |
 | T-5217 | [Observe exact accepted build payload reads](#t-5217-observe-exact-accepted-build-payload-reads) | evidence | open |
 | T-5218 | [Observe exact private analysis payload reads](#t-5218-observe-exact-private-analysis-payload-reads) | evidence | open |
@@ -4417,20 +4417,29 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5123 — Normalize only selected CPG facts with stable identities and parse gaps
 
-- **State:** open
+- **State:** done (2026-11-20, eadf2c800980733179d5cfbbff8fcb5aa84456e3)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CPG-F01, CPG-F02, CPG-F03, CPG-F04, CPG-F08. The seeded allowlist accepts unselected suffix-matching paths; AST depth caching silently drops valid facts and makes output row-order dependent.
-- **Scope:** `src/appsec_review/jobs/job_cpg_analysis/job.py`
+- **Scope:** `src/appsec_review/jobs/job_cpg_analysis/` and its CPG graph-consumer projection.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 75 cases passed/7.80 s, two workers, seed 9123, no skips or slow tests.
+  Selected paths match exact identities, AST ownership is row-order independent, and malformed
+  or incomplete bounded CSV produces scoped gaps. Full method identities are hashed before
+  display clipping. Directory-shaped CPG output follows the invalid-output gap path without
+  following target symlinks. Retirement/default-disabled policy remains unchanged.
 - **Refs:** `audit-results/job-audit-job_cpg_analysis.md`.
 
 ### T-5124 — Do not cache failed CPG exports or retain failed intermediates
 
-- **State:** open
+- **State:** done (2026-11-20, eadf2c800980733179d5cfbbff8fcb5aa84456e3)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CPG-F05, CPG-F09, CPG-F10. A failed seeded export is checkpointed and never retried; Whole-program mode runs Joern for an unsupported-only scope.
 - **Scope:** `src/appsec_review/jobs/job_cpg_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5123's 75-case selection. Failed/empty seeded exports do not checkpoint; retries
+  use a new immutable evidence generation. Unsupported-only scopes do not dispatch.
+  Cleanup removes only own disposable paths, preserving native references and prior evidence;
+  foreign or symlinked roots fail integrity. No Joern, image or live validation was executed.
 - **Refs:** `audit-results/job-audit-job_cpg_analysis.md`.
 
 ### T-5125 — Preserve debug range lookup bounds and public-only PDB symbols
@@ -5524,12 +5533,15 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   Clang CSA-F04 completed at `39c905cad22774c00a7dfa35226e52697d3ab9be`, verified in
   main's 96-case selection. Raw wrapper documents/streams and detached native references bind
   the checkpoint; missing or changed evidence raises `CheckpointIntegrityError` rather than
-  silently reusing or regenerating it. CPG, clangd and SVF callers remain open.
+  silently reusing or regenerating it.
+  CPG-F06 completed at `eadf2c800980733179d5cfbbff8fcb5aa84456e3`, with main 75 passed/7.80 s:
+  generation/export receipts, compile databases, streams and bounded export artifacts are
+  re-verified on reuse. Clangd CSI-K01 and SVF-F03 remain open.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`, `audit-results/job-audit-job_cpg_analysis.md`, `audit-results/job-audit-job_cpp_symbol_index.md`, `audit-results/job-audit-job_svf_alias_analysis.md`; follow-up to closed T-159 (not reopened).
 
 ### T-5215 — Bind seed omission and provenance accounting into native checkpoint reuse
 
-- **State:** open
+- **State:** done (2026-11-20, eadf2c800980733179d5cfbbff8fcb5aa84456e3)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CSA-F05, CPG-F07. Unchanged selected seed keys hide changed omitted-seed counts on resume; Same selected seed keys reuse stale omission/provenance metadata.
 - **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`; paired callers/tests identified by those cases.
@@ -5537,7 +5549,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   Clang CSA-F05 completed at `39c905cad22774c00a7dfa35226e52697d3ab9be`, verified in
   main's 96-case selection. Seed provenance and total/dropped/shared omitted populations
   participate in identity; identical reordered identities reuse while changed accounting
-  refreshes the ledger without overwriting prior evidence. The CPG caller remains open.
+  refreshes the ledger without overwriting prior evidence.
+  CPG-F07 completed at `eadf2c800980733179d5cfbbff8fcb5aa84456e3`, with main 75 passed/7.80 s.
+  Selected provenance and total/dropped/outside-database/unlocated accounting bind reuse;
+  equivalent ordering reuses. Both callers named in this entry are now independently covered.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`, `audit-results/job-audit-job_cpg_analysis.md`.
 
 ### T-5216 — Bind dossier Markdown and HTML through publication and the gate
@@ -5707,6 +5722,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   resolving the scoped history L131 navigation record without closing broader T-113 work.
   Clang L193 now names current unit selectors and accurately describes its wrapper/outcome,
   trace, reuse and configuration behavior. Its required tool-image rollout remains unperformed.
+  CPG L198 distinguishes partial usable exports, unavailable failures, disabled omission and
+  mounted-source changes without re-enabling the retired tool or claiming native acceptance.
 - **Refs:** `audit-results/job-audit-cumulative.md` and the documentation/conditional sections in all 47 linked per-job reports, including the final-gate pinned-input/pointer-stability distinction; follow-up to closed T-168, T-169, T-170, T-171, T-172, T-173, T-176 (not reopened).
 
 ### T-5230 — Resolve clang static analysis conditional audit boundaries

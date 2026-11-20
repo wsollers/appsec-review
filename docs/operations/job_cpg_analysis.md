@@ -34,9 +34,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpg_analysis/job.py#L367) |
-| `generate` | `generate.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpg_analysis/job.py#L339) |
-| `load` | `load.accepted_cpp` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpg_analysis/job.py#L330) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpg_analysis/job.py#L455) |
+| `generate` | `generate.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpg_analysis/job.py#L426) |
+| `load` | `load.accepted_cpp` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpg_analysis/job.py#L417) |
 
 ### Accepted input declarations
 
@@ -86,7 +86,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_cpg_analysis/test_cpg_analysis_graph.py` |
 | live | None declared |
-| unit | `tests/unit/job_cpg_analysis/test_contract.py`<br>`tests/unit/job_cpg_analysis/test_export_and_seeded.py`<br>`tests/unit/job_cpg_analysis/test_handlers.py`<br>`tests/test_cpg_export.py`<br>`tests/test_seeded_cpg.py` |
+| unit | `tests/unit/job_cpg_analysis/test_audit_closure.py`<br>`tests/unit/job_cpg_analysis/test_contract.py`<br>`tests/unit/job_cpg_analysis/test_export_and_seeded.py`<br>`tests/unit/job_cpg_analysis/test_handlers.py`<br>`tests/test_cpg_export.py`<br>`tests/test_seeded_cpg.py` |
 
 ### Dagster placement
 

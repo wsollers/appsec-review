@@ -196,6 +196,7 @@
     },
     "job_cpg_analysis": {
       "unit": [
+        "tests/unit/job_cpg_analysis/test_audit_closure.py",
         "tests/unit/job_cpg_analysis/test_contract.py",
         "tests/unit/job_cpg_analysis/test_export_and_seeded.py",
         "tests/unit/job_cpg_analysis/test_handlers.py",
