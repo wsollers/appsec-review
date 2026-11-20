@@ -8,7 +8,7 @@ from types import MappingProxyType, SimpleNamespace
 from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.jobs.cpp_index_scopes import IndexScope
 from appsec_review.jobs.job_clang_static_analysis import JOB_ID, TOOL_ID
-from appsec_review.jobs.job_clang_static_analysis.job import OUTPUT_SCHEMA
+from appsec_review.jobs.job_clang_static_analysis.job import OUTPUT_SCHEMA, _compile_unit_identity
 from appsec_review.runtime import UnitContext
 from appsec_review.storage import file_sha256
 
@@ -89,7 +89,8 @@ class FakeExecutor:
             count = 21 if engine == self.too_many else 2 if engine == self.duplicate else 1
             output.write_text(json.dumps({
                 "schema": OUTPUT_SCHEMA, "engine": engine, "truncated": False,
-                "units": [{"file": row["file"], "exit_code": 7 if engine == self.fail else 0,
+                "units": [{"file": row["file"], "compile_unit_id": _compile_unit_identity(row),
+                           "exit_code": 7 if engine == self.fail else 0,
                            "message": "fixture failure" if engine == self.fail else ""}
                           for row in json.loads((scratch / "compile_commands.json").read_text())],
                 "diagnostics": [{"rule_id": "bugprone-use-after-move" if action == "tidy" else "core.NullDereference",

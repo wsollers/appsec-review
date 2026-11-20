@@ -9,7 +9,7 @@ retained as scope-specific coverage gaps.
 from __future__ import annotations
 
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import asdict
 import re
 import hashlib
@@ -38,7 +38,7 @@ from .datasets import CONTRACT, DATASETS
 JOB_ID = "job_clang_static_analysis"
 TOOL_ID = "tool-clang-static-analysis"
 OUTPUT_SCHEMA = "appsec-review/clang-static-output/1"
-ADAPTER = "clang-static-adapter/6"
+ADAPTER = "clang-static-adapter/7"
 ENGINES = ("clang-tidy", "clang-static-analyzer")
 _CHECKER_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*")
 
@@ -305,9 +305,19 @@ def _read_units(path: Path, *, max_bytes: int) -> list[dict[str, Any]] | None:
             for item in units):
         return None
     return [{"file": item["file"],
+             "compile_unit_id": item.get("compile_unit_id") if isinstance(item.get("compile_unit_id"), str)
+             and re.fullmatch(r"[0-9a-f]{64}", item["compile_unit_id"]) else None,
              "exit_code": item.get("exit_code") if type(item.get("exit_code")) is int else None,
              "message": str(item.get("message") or "")[:512]}
             for item in units]
+
+
+def _compile_unit_identity(row: Mapping[str, Any]) -> str:
+    """Canonical wire identity also derived by the standalone wrapper from its selected row."""
+    return checkpoint_identity({
+        "schema": "appsec-review/clang-compile-unit/1",
+        **{key: row[key] for key in ("directory", "file", "arguments", "source_sha256")},
+    })
 
 
 def _source_of(container_path: str) -> str:
@@ -364,7 +374,15 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
     incomplete_units: set[tuple[str, str]] = set()
     incomplete_engines: set[str] = set()
     successful_units: dict[str, set[str]] = {}
-    expected_units = Counter(row["file"] for row in (rows if rows is not None else scope.container_compile_database()))
+    expected_units: dict[str, dict[str, Any]] = {}
+    selected_rows = (rows if rows is not None else scope.container_compile_database()) if engines else []
+    for row in selected_rows:
+        accepted = scope.accepted_file(row["file"])
+        if accepted is None:
+            raise ValueError(f"Clang compile unit did not resolve to accepted source: {row['file']}")
+        row = {**row, "source_sha256": accepted["sha256"]}
+        expected_units.setdefault(_compile_unit_identity(row), row)
+    rows = list(expected_units.values())
     retained: dict[str, dict[str, Any]] = {}
     for engine in engines:
         scratch = evidence_root / ("tidy" if engine == "clang-tidy" else "analyze")
@@ -411,29 +429,37 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
             gaps.append(f"{engine} exited with status {execution['exit_code']}")
             engine_failed.add(engine)
             continue
-        by_file: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        by_identity: dict[str | None, list[dict[str, Any]]] = defaultdict(list)
         for item in units or ():
-            by_file[item["file"]].append(item)
+            by_identity[item["compile_unit_id"]].append(item)
         successful_units[engine] = set()
-        for path, count in sorted(expected_units.items()):
-            outcomes = by_file.get(path, [])
-            if len(outcomes) != count or any(item["exit_code"] is None for item in outcomes):
+        for compile_id, row in sorted(expected_units.items()):
+            path = row["file"]
+            outcomes = by_identity.get(compile_id, [])
+            if len(outcomes) != 1 or outcomes[0]["exit_code"] is None or outcomes[0]["file"] != path:
                 incomplete_units.add((engine, _source_of(path)))
-                gaps.append(f"{engine} incomplete per-file outcomes for {path}: expected {count} valid records, "
-                            f"got {sum(item['exit_code'] is not None for item in outcomes)}")
-            elif all(item["exit_code"] == 0 for item in outcomes):
-                successful_units[engine].add(path)
-        if set(by_file) - set(expected_units):
-            gaps.append(f"{engine} per-file outcomes included unselected files")
+                gaps.append(f"{engine} incomplete compile-unit outcomes for {path} ({compile_id}): "
+                            f"expected exactly one matching valid record, got {len(outcomes)}")
+            elif outcomes[0]["exit_code"] == 0:
+                successful_units[engine].add(compile_id)
+            else:
+                rel = _source_of(path)
+                item = outcomes[0]
+                failed_units[(engine, rel)] = item["message"] or f"exit {item['exit_code']}"
+                gaps.append(f"{engine} failed on {project_prefix(scope.root)}{rel}: {failed_units[(engine, rel)]}")
+        unexpected = set(by_identity) - set(expected_units)
+        if unexpected:
+            gaps.append(f"{engine} compile-unit outcomes included missing or unselected identities")
             incomplete_engines.add(engine)
+            expected_files = {row["file"] for row in expected_units.values()}
+            for compile_id in unexpected:
+                for item in by_identity[compile_id]:
+                    if item["file"] in expected_files:
+                        incomplete_units.add((engine, _source_of(item["file"])))
         if units is None or any(item[0] == engine for item in incomplete_units):
             incomplete_engines.add(engine)
         if engine in incomplete_engines:
-            safety.fail(f"{engine} per-file outcomes were incomplete or malformed", action="clang.output")
-        for item in bad:
-            rel = _source_of(item["file"])
-            failed_units[(engine, rel)] = item["message"] or f"exit {item['exit_code']}"
-            gaps.append(f"{engine} failed on {project_prefix(scope.root)}{rel}: {failed_units[(engine, rel)]}")
+            safety.fail(f"{engine} compile-unit outcomes were incomplete or malformed", action="clang.output")
         parsed, parse_gaps = _read_output(output_path, engine=engine,
                                           max_bytes=settings["max_output_bytes"],
                                           max_diagnostics=settings["max_diagnostics_per_scope"])

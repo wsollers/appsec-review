@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import io
+import hashlib
 from pathlib import Path
 import posixpath
 import plistlib
@@ -39,7 +40,9 @@ def _database(path: Path) -> list[dict[str, Any]]:
         if not isinstance(row, dict) or not isinstance(row.get("file"), str) \
                 or not isinstance(row.get("directory"), str) or not row["directory"].startswith("/target/") \
                 or not isinstance(row.get("arguments"), list) or not row["arguments"] \
-                or len(row["arguments"]) > 2048:
+                or len(row["arguments"]) > 2048 \
+                or not isinstance(row.get("source_sha256"), str) \
+                or not re.fullmatch(r"[0-9a-f]{64}", row["source_sha256"]):
             raise ValueError("invalid compilation database row")
     return value
 
@@ -129,7 +132,11 @@ def _text_diagnostics(text: str, *, engine: str, default_rule: str,
 def _unit(row: dict[str, Any], code: int, output: str) -> dict[str, Any]:
     """Per-translation-unit outcome, so a seeded run can name the seeds a failed unit carried."""
     failure = next((line for line in output.splitlines() if " error: " in line or "fatal error" in line), "")
-    return {"file": row["file"], "exit_code": code, "message": failure[:512] if code else ""}
+    identity = {"schema": "appsec-review/clang-compile-unit/1",
+                **{key: row[key] for key in ("directory", "file", "arguments", "source_sha256")}}
+    wire = (json.dumps(identity, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode("utf-8")
+    return {"file": row["file"], "compile_unit_id": hashlib.sha256(wire).hexdigest(),
+            "exit_code": code, "message": failure[:512] if code else ""}
 
 
 def tidy(database: Path, checks: str, units: list[dict[str, Any]], *,
@@ -138,16 +145,20 @@ def tidy(database: Path, checks: str, units: list[dict[str, Any]], *,
     diagnostics = Diagnostics(max_diagnostics)
     truncated = False
     exit_code = 0
-    for row in rows:
-        code, output, limited = _run(["clang-tidy-18", "-p", str(database.parent),
-                                      f"--checks=-*,{checks}", '--config={"InheritParentConfig":false}', "--quiet",
-                                      "--extra-arg=-fdiagnostics-parseable-fixits", row["file"]],
-                                     cwd=row["directory"])
-        units.append(_unit(row, code, output))
-        exit_code = exit_code or code
-        truncated = truncated or limited
-        _text_diagnostics(output, engine="clang-tidy", default_rule="clang-tidy-driver",
-                          values=diagnostics, cwd=row["directory"])
+    # clang-tidy otherwise loads every command for the same file from the full database.
+    with tempfile.TemporaryDirectory(dir=database.parent) as selected:
+        for row in rows:
+            command = {key: row[key] for key in ("directory", "file", "arguments")}
+            (Path(selected) / "compile_commands.json").write_text(json.dumps([command]), encoding="utf-8")
+            code, output, limited = _run(["clang-tidy-18", "-p", selected,
+                                          f"--checks=-*,{checks}", '--config={"InheritParentConfig":false}', "--quiet",
+                                          "--extra-arg=-fdiagnostics-parseable-fixits", row["file"]],
+                                         cwd=row["directory"])
+            units.append(_unit(row, code, output))
+            exit_code = exit_code or code
+            truncated = truncated or limited
+            _text_diagnostics(output, engine="clang-tidy", default_rule="clang-tidy-driver",
+                              values=diagnostics, cwd=row["directory"])
     return diagnostics, truncated or diagnostics.truncated, exit_code
 
 

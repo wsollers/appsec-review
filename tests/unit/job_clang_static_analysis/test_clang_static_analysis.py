@@ -45,7 +45,7 @@ def test_adapter_version_invalidates_a_pre_fix_scope_checkpoint(
     scope, unit = _scope(tmp_path), _unit(tmp_path)
     executor = FakeExecutor(unit.job.run_root)
 
-    monkeypatch.setattr(module, "ADAPTER", "clang-static-adapter/1")
+    monkeypatch.setattr(module, "ADAPTER", "clang-static-adapter/6")
     first = module._analyze_scope(unit, scope, lambda _unit: executor)
     assert first.get("checkpoint_reused", False) is False
 
@@ -431,7 +431,7 @@ def test_clang_common_record_cites_the_retained_wrapper_output_inside_an_attempt
     for payload in payloads:
         refs = payload["common"]["evidence_refs"]
         assert len(refs) == 1 and refs[0]["selector"] == {"kind": "json_pointer", "value": "/diagnostics/0"}
-        assert refs[0]["parser_identity"] == "clang-static-adapter/6"
+        assert refs[0]["parser_identity"] == "clang-static-adapter/7"
         assert payload["common"]["gap_ids"] == []
         assert payload["common"]["reported_severity"]["value"] == "medium"
 

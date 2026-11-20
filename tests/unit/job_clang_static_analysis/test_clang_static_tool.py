@@ -47,9 +47,11 @@ def test_clang_tidy_fix_it_hint_is_a_boolean_only() -> None:
 
 def test_unit_outcome_names_the_compiler_failure() -> None:
     driver = _driver()
-    unit = driver._unit({"file": "/target/source/a.cpp"}, 1, "x\n/target/source/a.cpp:1:1: error: boom\n")
+    row = {"file": "/target/source/a.cpp", "directory": "/target/source",
+           "arguments": ["clang++", "/target/source/a.cpp"], "source_sha256": "a" * 64}
+    unit = driver._unit(row, 1, "x\n/target/source/a.cpp:1:1: error: boom\n")
     assert unit["exit_code"] == 1 and "boom" in unit["message"]
-    assert driver._unit({"file": "/target/source/a.cpp"}, 0, "")["message"] == ""
+    assert driver._unit(row, 0, "")["message"] == ""
 
 
 def test_static_analyzer_plist_retains_path_notes(tmp_path: Path) -> None:
@@ -73,6 +75,7 @@ def _database(tmp_path, rows=1):
     database = tmp_path / "compile_commands.json"
     database.write_text(json.dumps([
         {"file": f"/target/source/unit{index}.cpp", "directory": "/target/build/nested",
+         "source_sha256": "a" * 64,
          "arguments": ["clang++", "-I../../source/include", f"/target/source/unit{index}.cpp"]}
         for index in range(rows)
     ]))
@@ -88,6 +91,7 @@ def test_analyzer_runs_in_the_accepted_rebased_compile_directory(monkeypatch, tm
         "arguments": ["clang++", "-I../../source/include", "/scratch/source/main.cpp"],
     }])
     database = tmp_path / "compile_commands.json"
+    rows = [{**row, "source_sha256": "a" * 64} for row in rows]
     database.write_text(json.dumps(rows))
     calls = []
 

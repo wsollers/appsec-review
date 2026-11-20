@@ -207,6 +207,8 @@ class StaticExecutor:
         self.calls: list[tuple[str, tuple[str, ...]]] = []
 
     def execute(self, request):
+        from appsec_review.jobs.job_clang_static_analysis.job import _compile_unit_identity
+
         root, action = request.scratch_root, request.argv[1]
         rows = json.loads((root / "compile_commands.json").read_text())
         engine = "clang-tidy" if action == "tidy" else "clang-static-analyzer"
@@ -214,7 +216,8 @@ class StaticExecutor:
         for row in rows:
             stem = Path(row["file"]).stem
             failed = (action, stem) in self.fail
-            units.append({"file": row["file"], "exit_code": 1 if failed else 0,
+            units.append({"file": row["file"], "compile_unit_id": _compile_unit_identity(row),
+                          "exit_code": 1 if failed else 0,
                           "message": f"{row['file']}:1:1: error: fixture failure" if failed else ""})
             if failed:
                 continue

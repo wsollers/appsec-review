@@ -1,5 +1,6 @@
 """Clang per-file coverage and evidence-bound scope reuse."""
 from dataclasses import replace
+from copy import deepcopy
 import json
 import sqlite3
 
@@ -11,6 +12,7 @@ from appsec_review.jobs.job_clang_static_analysis import job, seeded
 from appsec_review.storage import canonical_json
 from tests import seeded_clang_support as sc
 from .test_seeded_clang_static import _run, _unit
+from .test_clang_static_tool import _driver
 
 
 def _coverage(staged, result):
@@ -64,6 +66,99 @@ def test_one_failed_unit_preserves_positive_evidence_and_unaffected_seed(tmp_pat
     result, _ = _run(staged, sc.StaticExecutor(staged.run_root, fail=(("tidy", "net"),)))
     assert result["observation_count"] > 0 and _coverage(staged, result) == "partial"
     assert result["seeded"]["status_counts"] == {"resolved": 1, "unresolved": 1}
+
+
+@pytest.mark.parametrize("outcomes", [
+    "duplicate-a", "extra", "unknown", "missing-id", "wrong-file",
+    "cwd-substitution", "source-substitution", "valid", "reordered", "valid-distinct-cwd",
+])
+def test_real_wrapper_outcomes_bind_same_file_compile_variants(monkeypatch, tmp_path, outcomes):
+    staged = sc.stage(tmp_path)
+    original = next(row for row in staged.rows if row["file"].endswith("/net.cpp"))
+    variants = [{**original, "arguments": [*original["arguments"], f"-DMODE={mode}"]}
+                for mode in ("A", "B")]
+    if outcomes == "valid-distinct-cwd":
+        variants[1] = {**variants[0], "directory": "/scratch/source/src"}
+    staged.rows = [row for row in staged.rows if row is not original] + variants
+    database = staged.case_root / "normalized-compile-commands.json"
+    database.write_text(json.dumps(staged.rows))
+    staged.cataloged["compile_commands"] = staged.rows
+    staged.cataloged["compile_database"].update(sha256=sc.file_sha256(database),
+                                               size_bytes=database.stat().st_size)
+    driver = _driver()
+    tidy_contexts = []
+
+    def compiler(argv, **kwargs):
+        if argv[0] == "clang-tidy-18":
+            from pathlib import Path
+            context = json.loads((Path(argv[argv.index("-p") + 1]) / "compile_commands.json").read_text())
+            tidy_contexts.append(context)
+            source = argv[-1]
+        else:
+            source = next(value for value in argv if value.startswith("/target/source/") and value.endswith(".cpp"))
+        line = 6 if source.endswith("/net.cpp") else 14
+        return 0, f"{source}:{line}:3: warning: fixture [bugprone-test]\n", False
+
+    monkeypatch.setattr(driver, "_run", compiler)
+
+    class Executor(sc.StaticExecutor):
+        def execute(self, request):
+            receipt = super().execute(request)
+            output = request.scratch_root / f"{request.argv[1]}.json"
+            assert driver.main([request.argv[1], str(request.scratch_root / "compile_commands.json"),
+                                str(output), request.argv[4], request.argv[5]]) == 0
+            document = json.loads(output.read_text())
+            positions = [index for index, row in enumerate(document["units"]) if row["file"].endswith("/net.cpp")]
+            assert len(positions) == 2
+            a, b = positions
+            if outcomes == "duplicate-a":
+                document["units"][b] = deepcopy(document["units"][a])
+            elif outcomes == "extra":
+                document["units"].append(deepcopy(document["units"][a]))
+            elif outcomes == "unknown":
+                document["units"][b]["compile_unit_id"] = "0" * 64
+            elif outcomes == "missing-id":
+                document["units"][b].pop("compile_unit_id", None)
+            elif outcomes == "wrong-file":
+                document["units"][b]["file"] = "/target/source/util.cpp"
+            elif outcomes in {"cwd-substitution", "source-substitution"}:
+                context = json.loads((request.scratch_root / "compile_commands.json").read_text())
+                row = [item for item in context if item["file"].endswith("/net.cpp")][1]
+                changed = ({**row, "directory": "/target/source/elsewhere"} if outcomes == "cwd-substitution"
+                           else {**row, "source_sha256": "0" * 64})
+                document["units"][b] = driver._unit(changed, 0, "")
+            elif outcomes == "reordered":
+                document["units"].reverse()
+            output.write_text(json.dumps(document))
+            return receipt
+
+    executor = Executor(staged.run_root)
+    result, _ = _run(staged, executor)
+    checkpoint = staged.run_root / "data/clang-static/cpp-scope-seeded/checkpoint.json"
+    assert result["observation_count"] > 0
+    if outcomes in {"valid", "reordered", "valid-distinct-cwd"}:
+        assert result["seeded"]["status_counts"] == {"resolved": 2}
+        assert checkpoint.is_file()
+        second, _ = _run(staged, executor)
+        assert second["checkpoint_reused"] and len(executor.calls) == 2
+    else:
+        assert result["seeded"]["status_counts"] == {"resolved": 1, "unresolved": 1}
+        assert any("outcome" in gap for gap in result["gaps"])
+        assert not checkpoint.exists()
+    for engine in ("tidy", "analyze"):
+        output = next(item for item in result["evidence_artifacts"] if item["path"].endswith(f"/{engine}/{engine}.json"))
+        units = json.loads((staged.run_root / output["path"]).read_text())["units"]
+        if outcomes in {"valid", "reordered", "valid-distinct-cwd"}:
+            ids = [row["compile_unit_id"] for row in units if row["file"].endswith("/net.cpp")]
+            assert len(set(ids)) == 2
+    assert all(len(context) == 1 for context in tidy_contexts)
+    assert all(set(context[0]) == {"directory", "file", "arguments"} for context in tidy_contexts)
+    if outcomes == "valid-distinct-cwd":
+        assert {row["directory"] for context in tidy_contexts for row in context
+                if row["file"].endswith("/net.cpp")} == {"/target/source", "/target/source/src"}
+    else:
+        assert {row["arguments"][-1] for context in tidy_contexts for row in context
+                if row["file"].endswith("/net.cpp")} == {"-DMODE=A", "-DMODE=B"}
 
 
 def test_retry_of_missing_outcomes_preserves_original_evidence_bytes(tmp_path):

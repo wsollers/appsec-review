@@ -81,6 +81,11 @@ success: affected seeds stay unresolved (`not_run`) and no checkpoint is saved. 
 other files/engines remains available. When no selected file has a verified successful outcome from
 either engine, coverage is unavailable, including all-unit failures. Unsupported-only scopes remain
 `SKIPPED_NA` in summary counts and manifest metadata, without fabricated measured coverage.
+Outcomes identify the exact selected compilation context, not merely a filename: the identity binds
+the rebased working directory, ordered compiler arguments, source path and accepted source SHA-256.
+Each expected identity must appear exactly once with its matching source path; missing, duplicate
+or unexpected identities remain incomplete. Clang-tidy reads a one-command compilation database for
+each action, so two flag/cwd variants of one file cannot masquerade as repeated success for one variant.
 In the code-graph index, checks in the reviewed table `graph/analyzers.py` can corroborate a
 CodeQL `sink_site` or add an inexact analyzer-only one (`docs/architecture/seeded-neighborhoods.md`
 section 9). The `clang-static.py` change alters the `tool-clang-static-analysis` image

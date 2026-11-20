@@ -260,6 +260,18 @@ Source: [handler and diagnostic adapter](../../src/appsec_review/jobs/job_clang_
    Successful outcomes and positive diagnostics from unaffected files remain usable. With no
    verified successful file outcome across the executed engines, coverage is unavailable.
 
+Per-unit outcome `compile_unit_id` is the SHA-256 of canonical UTF-8 JSON (sorted keys, compact
+separators, unescaped Unicode, trailing newline) containing `schema` with value
+`appsec-review/clang-compile-unit/1`, `directory`, `file`, `arguments` and `source_sha256`.
+The selected row supplies the rebased directory/arguments and the admitted source mapping supplies
+the source hash. The reader and standalone wrapper derive the same identity; it is not an ordinal
+or a filename/count approximation. Identical contexts execute once, but distinct command or cwd
+variants of a shared source each require exactly one matching outcome. Duplicate, missing,
+unexpected or path-mismatched identities block checkpointing and leave the affected seeds unresolved.
+Clang-tidy gets a one-row standard compilation database per selected context (without the adapter's
+extra source-hash field); otherwise it could load all commands for a shared filename on every call.
+Adapter identity `/7` invalidates pre-identity checkpoints; old output is not rewritten or upgraded.
+
 Seeded placement retains every compiled-analysis function identity associated with a physical
 seed; repeated header definitions in different translation units are not reduced to one name.
 Range-width selection is per reported compile-unit identity, never a way to select a TU.
