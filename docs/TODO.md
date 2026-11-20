@@ -456,7 +456,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5222 | [Reconcile actual payload shapes declarations and schema versions](#t-5222-reconcile-actual-payload-shapes-declarations-and-schema-versions) | evidence | blocked |
 | T-5223 | [Repair the four audited stale unit cases against current contracts](#t-5223-repair-the-four-audited-stale-unit-cases-against-current-contracts) | testing | done (2026-11-19, 100dfd75fdeb5e0b0cb4f34341691e970cac7454) |
 | T-5224 | [Grant querying capabilities only for admitted evidence](#t-5224-grant-querying-capabilities-only-for-admitted-evidence) | review | open |
-| T-5225 | [Honor the resolved structural fallback policy](#t-5225-honor-the-resolved-structural-fallback-policy) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
+| T-5225 | [Honor the resolved structural fallback policy](#t-5225-honor-the-resolved-structural-fallback-policy) | codeql | done (2026-11-20, 28c1cd829d5380883a98b59d97a3d0f1ff7d7b72) |
 | T-5226 | [Emit dependency gaps only for applicable required evidence](#t-5226-emit-dependency-gaps-only-for-applicable-required-evidence) | evidence | open |
 | T-5227 | [Count canonical report gaps once without erasing distinct scopes](#t-5227-count-canonical-report-gaps-once-without-erasing-distinct-scopes) | review | open |
 | T-5228 | [Read build environment inputs through the public admitted boundary](#t-5228-read-build-environment-inputs-through-the-public-admitted-boundary) | pipeline | done (2026-11-20, ca5ad85f953d2ceccbb12db11811ecb772cc6517) |
@@ -5634,7 +5634,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5225 — Honor the resolved structural fallback policy
 
-- **State:** done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359)
+- **State:** done (2026-11-20, 28c1cd829d5380883a98b59d97a3d0f1ff7d7b72)
 - **Area:** codeql
 - **Why:** Archived audit/feedback cases: FB-STRUCTURAL-FALLBACK. Honor the configured CodeQL structural fallback policy.
 - **Scope:** `src/appsec_review/jobs/job_codeql_analysis/job.py`
@@ -5645,6 +5645,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   not evidence or authority, and remain bounded by typed `seed_limit`, `seed_depth` and
   `max_seed_depth`. No new switch or default change is introduced. Existing structural seed
   behavior passes in T-5120's main selection. The separate query-grant issue remains T-5224.
+  The cited commit records the policy decision and documentation; `583b2528` did not change
+  structural fallback behavior.
 - **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory).
 
 ### T-5226 — Emit dependency gaps only for applicable required evidence
