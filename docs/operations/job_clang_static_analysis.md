@@ -231,6 +231,15 @@ Source: [handler and diagnostic adapter](../../src/appsec_review/jobs/job_clang_
    mappings and target snapshot. Preserve failed or commandless projects as unavailable cases.
 2. Freeze planned scope identities; no build is repeated by this job.
 
+Every normalized compile command already requires exactly one source entry in the compiled
+producer's accepted mapping (`normalize_compile_db`). `prepare.projects` constructs that mapping
+from materialized files; a missing command source makes `catalog.projects` report
+`INVALID_COMPILE_DATABASE`, which `accepted_cpp_scopes` excludes as unavailable. After a successful
+catalog, scope loading re-verifies mapped source bytes. Thus a compile row without an accepted
+source is not a supported partial Clang input: the pre-execution guard remains fail-closed, with
+no unadmitted-source execution or blanket integrity catch. Focused units exercise real prepare,
+catalog and scope functions; they do not claim a live end-to-end acceptance run.
+
 ### `analyze`
 
 1. Re-read and compare scope sets. Partition supported compile commands; do not launch scopes
@@ -270,7 +279,15 @@ variants of a shared source each require exactly one matching outcome. Duplicate
 unexpected or path-mismatched identities block checkpointing and leave the affected seeds unresolved.
 Clang-tidy gets a one-row standard compilation database per selected context (without the adapter's
 extra source-hash field); otherwise it could load all commands for a shared filename on every call.
-Adapter identity `/7` invalidates pre-identity checkpoints; old output is not rewritten or upgraded.
+Adapter identity `/8` also invalidates pre-native-shape checkpoints; old output is not rewritten or upgraded.
+
+LLVM 18 diagnostic-level notes precede flat path events/control/pop-up pieces in the retained
+trace; event depth preserves call nesting. Piece ranges and bounded control-edge spans resolve
+against admitted source hashes and bytes. `trace_length`, `trace_retained_count` and
+`trace_omissions` distinguish the shared 256-piece cut from the per-retained-piece 16-range/edge
+and 4096-character cuts. Malformed arrays, nested call objects and inconsistent counts are not
+complete output. The fixtures and hard pre-live image/acceptance gap are described in
+[Operating Clang static analysis](clang-static-analysis.md).
 
 Seeded placement retains every compiled-analysis function identity associated with a physical
 seed; repeated header definitions in different translation units are not reduced to one name.

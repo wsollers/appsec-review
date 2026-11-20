@@ -48,6 +48,23 @@ with a gap, never clamped to EOF. Unresolving trace points/ranges remain explici
 Each trace carries reported/retained counts and a truncation flag, which the graph consumer preserves
 when applying its own smaller display limit.
 
+The plist adapter follows the LLVM 18 emitter's two collections: diagnostic-level `notes` followed
+by flat `path` pieces. Calls are events with `depth`, not nested call objects. Standalone notes,
+events, pop-ups and control edges preserve their origin, piece ranges and resolving accepted-source
+spans. The shared 256-piece bound applies across both collections. Each retained piece has at most
+16 ranges or control edges and 4096 message characters; `trace_omissions` separately counts omitted
+pieces and omitted details of retained pieces. The reader validates these counts. Span projections
+stay within the existing index payload-depth bound rather than raising it.
+
+Positive plist regressions are **constructed, emitter-schema-faithful LLVM 18.1.8 fixtures**, not
+captured compiler evidence. The only existing checked-in native plists found for this job identify
+Ubuntu Clang 18.1.3 and contain no diagnostics. They validate the empty format, not positive note,
+call, range or control-edge fidelity. The earlier synthetic nested-call/diagnostic-range example
+is not native-format positive evidence; nested calls are now a malformed-output regression.
+The inspected format authority is
+[LLVM 18.1.8 PlistDiagnostics.cpp](https://github.com/llvm/llvm-project/blob/llvmorg-18.1.8/clang/lib/StaticAnalyzer/Core/PlistDiagnostics.cpp);
+`PlistSupport.h` defines the emitted inclusive range endpoint convention.
+
 Retries reuse a scope checkpoint only when its identity (accepted scope, tool identity, checker
 selection, bounds, and adapter) matches and every referenced run artifact still verifies. A changed
 checker set or compile database produces a new immutable shard. Wrapper documents, raw streams and
@@ -94,6 +111,13 @@ host binding before use. `Dockerfile` copies the wrapper into `/opt/appsec`; rel
 alone does not update it. The package asset lock is unchanged. Application-source changes separately
 require the normal signed-source reload. These are manual rollout/acceptance steps, not unit-test
 gates. Contract: `docs/architecture/seeded-neighborhoods.md`.
+
+**Hard pre-live gap:** old baked wrappers do not satisfy the current note/path or exactly-once
+compile-context outcome contract. Before any live use, rebuild the affected tooling image, verify
+its source/release and observed image identity, update the host binding under the configured signing
+policy, and complete authorized native acceptance using non-empty reports. A Python reload or
+passing synthetic units does not satisfy this requirement. No such rollout or positive native
+acceptance is claimed by these offline regressions.
 
 The [canonical job page](job_clang_static_analysis.md) distinguishes full-mode partial-result
 reuse from seeded failure retry and records the independent acceptance checks.

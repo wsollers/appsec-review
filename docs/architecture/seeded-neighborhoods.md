@@ -246,6 +246,10 @@ neighborhood exists; labels never change coverage.
   `tests/unit/job_clang_static_analysis/test_clang_static_tool.py`,
   `tests/unit/job_clang_static_analysis/test_diagnostic_fidelity.py`,
   `tests/unit/job_clang_static_analysis/test_outcomes_and_reuse.py`,
+  `tests/unit/job_clang_static_analysis/test_plist_fidelity.py` (constructed LLVM 18.1.8 emitter
+  shape, not captured positive compiler output),
+  `tests/unit/job_clang_static_analysis/test_source_admission.py` (real prepare/catalog/scope
+  source-admission boundary without compiler execution),
   `tests/test_seeded_cpg.py`, `tests/test_cpg_export.py`,
   `tests/graph/test_analyzers.py` (12-unit fixture
   `tests/fixtures/seeded_clang/`, fake executors that record the replayed units).

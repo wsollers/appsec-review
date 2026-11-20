@@ -55,6 +55,7 @@ def test_unit_outcome_names_the_compiler_failure() -> None:
 
 
 def test_static_analyzer_plist_retains_path_notes(tmp_path: Path) -> None:
+    """Synthetic location-missing boundary, not native-format positive evidence."""
     driver = _driver()
     report = tmp_path / "result.plist"
     report.write_bytes(plistlib.dumps({
@@ -68,7 +69,8 @@ def test_static_analyzer_plist_retains_path_notes(tmp_path: Path) -> None:
     records = driver._plist_diagnostics(report)
     assert records[0]["rule_id"] == "core.NullDereference"
     assert records[0]["path"] == "/target/source/main.cpp"
-    assert records[0]["notes"] == [{"message": "Null assigned here", "line": 3, "column": 5}]
+    assert records[0]["notes"] == [{"message": "Null assigned here", "line": 3, "column": 5,
+                                   "kind": "event", "origin": "path"}]
 
 
 def _database(tmp_path, rows=1):
@@ -152,7 +154,8 @@ def test_tidy_notes_keep_cross_file_points_and_explicit_trace_cuts():
     assert records[0]["trace_truncated"] is True
 
 
-def test_plist_preserves_cross_file_ranges_nested_notes_and_trace_cuts(tmp_path):
+def test_synthetic_nested_plist_is_rejected_instead_of_claiming_native_trace(tmp_path):
+    """LLVM 18 emits flat call events; this former positive fixture is deliberately non-native."""
     driver = _driver()
     report = tmp_path / "result.plist"
     point = {"file": 1, "line": 2, "col": 3}
@@ -167,12 +170,8 @@ def test_plist_preserves_cross_file_ranges_nested_notes_and_trace_cuts(tmp_path)
             ]}],
         }],
     }))
-    record = driver._plist_diagnostics(report)[0]
-    assert len(record["notes"]) == 256 and record["trace_length"] == 257
-    assert record["trace_truncated"] is True
-    assert record["notes"][0]["path"] == "/target/source/header.h"
-    assert record["ranges"][0][1]["column"] == 4
-    assert record["notes"][0]["ranges"][0][0]["path"] == "/target/source/header.h"
+    with pytest.raises(ValueError, match="nested"):
+        driver._plist_diagnostics(report)
 
 
 @pytest.mark.parametrize("action", ["analyze", "tidy"])

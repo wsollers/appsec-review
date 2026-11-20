@@ -172,60 +172,94 @@ def _plist_diagnostics(path: Path, values: Diagnostics | None = None, *, cwd: st
         result.truncated = True
         return result
     document = plistlib.loads(data)
+    if not isinstance(document, dict):
+        raise ValueError("invalid plist document")
     files = document.get("files", [])
+    if not isinstance(files, list) or not all(isinstance(file, str) for file in files):
+        raise ValueError("invalid plist file table")
 
     def point(value):
+        if not isinstance(value, dict):
+            raise ValueError("invalid plist point")
         output = {"line": value.get("line"), "column": value.get("col")}
         index = value.get("file")
         if type(index) is int and 0 <= index < len(files):
             output["path"] = _source_path(str(files[index]), cwd)
         return output
 
+    def array(value):
+        if not isinstance(value, list):
+            raise ValueError("invalid plist array")
+        return value
+
+    def source_range(value):
+        if not isinstance(value, list) or len(value) != 2:
+            raise ValueError("invalid plist range")
+        return [point(value[0]), point(value[1])]
+
     def ranges(value):
-        raw = value.get("ranges", [])
-        if len(raw) > MAX_RANGES:
-            result.truncated = True
-        return [[point(start), point(end)] for start, end in raw[:MAX_RANGES]]
+        return [source_range(pair) for pair in array(value)[:MAX_RANGES]]
 
-    def pieces(path):
-        pending = [iter(path)]
-        while pending:
-            piece = next(pending[-1], None)
-            if piece is None:
-                pending.pop()
-                continue
-            yield piece
-            if isinstance(piece.get("path"), list):
-                pending.append(iter(piece["path"]))
-
-    for diagnostic in document.get("diagnostics", []):
+    for diagnostic in array(document.get("diagnostics", [])):
+        if not isinstance(diagnostic, dict) or not isinstance(diagnostic.get("location"), dict):
+            raise ValueError("invalid plist diagnostic")
         location = diagnostic.get("location", {})
         file_index = location.get("file")
-        if not isinstance(file_index, int) or not 0 <= file_index < len(files):
-            continue
+        if type(file_index) is not int or not 0 <= file_index < len(files):
+            raise ValueError("plist diagnostic lacks a resolving file")
         rule = diagnostic.get("check_name") or diagnostic.get("category") or "clang-static-analyzer"
         notes = []
         trace_length = 0
         fix_it = False
-        for piece in pieces(diagnostic.get("path", [])):
-            fix_it |= bool(piece.get("fixits"))
-            message = piece.get("extended_message") or piece.get("message")
-            if message:
+        omissions = {"steps": 0, "ranges": 0, "edges": 0, "message_characters": 0}
+        # LLVM 18 emits standalone notes separately, then flat path pieces. Calls are events
+        # with depth, not nested dictionaries. Both collections share the same retention bound.
+        for origin in ("notes", "path"):
+            for piece in array(diagnostic.get(origin, [])):
+                if not isinstance(piece, dict) or "path" in piece:
+                    raise ValueError("invalid or nested plist path piece")
+                kind = piece.get("kind", "note" if origin == "notes" else "event")
+                if not isinstance(kind, str) or kind not in {"note", "event", "control", "pop-up"}:
+                    raise ValueError("unsupported plist path piece kind")
                 trace_length += 1
-                if len(notes) < MAX_TRACE:
-                    note = {"message": str(message)[:4096], **point(piece.get("location", {}))}
-                    if "ranges" in piece:
-                        note["ranges"] = ranges(piece)
-                    notes.append(note)
-                result.truncated |= len(str(message)) > 4096
+                fix_it |= bool(piece.get("fixits"))
+                if len(notes) >= MAX_TRACE:
+                    omissions["steps"] += 1
+                    continue
+                message = piece.get("extended_message") or piece.get("message") or piece.get("alternate") or ""
+                if not isinstance(message, str):
+                    raise ValueError("invalid plist message")
+                note = {"message": message[:4096], "kind": kind, "origin": origin,
+                        **point(piece.get("location", {}))}
+                omissions["message_characters"] += max(0, len(message) - 4096)
+                if len(message) > 4096:
+                    note["message_length"] = len(message)
+                for key in ("depth", "key_event"):
+                    if key in piece:
+                        note[key] = piece[key]
+                if "ranges" in piece:
+                    raw = array(piece["ranges"])
+                    note.update(ranges=ranges(raw), ranges_length=len(raw))
+                    omissions["ranges"] += max(0, len(raw) - MAX_RANGES)
+                if kind == "control":
+                    raw = array(piece.get("edges", []))
+                    edges = []
+                    for edge in raw[:MAX_RANGES]:
+                        if not isinstance(edge, dict):
+                            raise ValueError("invalid plist control edge")
+                        edges.append({"start": source_range(edge.get("start")), "end": source_range(edge.get("end"))})
+                    note.update(edges=edges, edges_length=len(raw))
+                    omissions["edges"] += max(0, len(raw) - MAX_RANGES)
+                notes.append(note)
         description = str(diagnostic.get("description", rule))
         record = {"rule_id": str(rule)[:512], "message": description[:16384],
                        "severity": "warning", "path": _source_path(str(files[file_index]), cwd),
                        "line": int(location.get("line", 1)), "column": int(location.get("col", 1)),
-                       "notes": notes, "trace_length": trace_length, "trace_truncated": trace_length > len(notes),
+                       "notes": notes, "trace_length": trace_length, "trace_truncated": any(omissions.values()),
+                       "trace_omissions": {key: count for key, count in omissions.items() if count},
                        "fix_it": fix_it}
         if "ranges" in diagnostic:
-            record["ranges"] = ranges(diagnostic)
+            record["ranges"] = ranges(diagnostic["ranges"])
             record["ranges_truncated"] = len(diagnostic["ranges"]) > MAX_RANGES
         result.truncated |= len(description) > 16384 or len(str(rule)) > 512
         result.add(record)

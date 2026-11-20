@@ -38,7 +38,7 @@ from .datasets import CONTRACT, DATASETS
 JOB_ID = "job_clang_static_analysis"
 TOOL_ID = "tool-clang-static-analysis"
 OUTPUT_SCHEMA = "appsec-review/clang-static-output/1"
-ADAPTER = "clang-static-adapter/7"
+ADAPTER = "clang-static-adapter/8"
 ENGINES = ("clang-tidy", "clang-static-analyzer")
 _CHECKER_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*")
 
@@ -86,6 +86,28 @@ def _valid_ranges(value: Any) -> bool:
     return isinstance(value, list) and len(value) <= 16 and all(
         isinstance(pair, list) and len(pair) == 2 and all(_valid_point(point) for point in pair)
         for pair in value)
+
+
+def _valid_trace_piece(note: Any) -> bool:
+    if not (_valid_point(note) and isinstance(note.get("message"), str) and len(note["message"]) <= 4096
+            and _valid_ranges(note.get("ranges", []))):
+        return False
+    edges = note.get("edges", [])
+    if not isinstance(edges, list) or len(edges) > 16 or not all(
+            isinstance(edge, Mapping) and _valid_ranges([edge.get("start"), edge.get("end")]) for edge in edges):
+        return False
+    if "depth" in note and (type(note["depth"]) is not int or note["depth"] < 0):
+        return False
+    if "key_event" in note and type(note["key_event"]) is not bool:
+        return False
+    if "kind" in note and (not isinstance(note["kind"], str) or
+                           note["kind"] not in {"note", "event", "control", "pop-up"}):
+        return False
+    if "origin" in note and (not isinstance(note["origin"], str) or note["origin"] not in {"notes", "path"}):
+        return False
+    return all(type(note.get(f"{key}_length", len(note.get(key, [])))) is int
+               and note.get(f"{key}_length", len(note.get(key, []))) >= len(note.get(key, []))
+               for key in ("message", "ranges", "edges"))
 
 
 def _read_output(path: Path, *, engine: str, max_bytes: int, max_diagnostics: int) -> tuple[list[dict[str, Any]], list[str]]:
@@ -140,9 +162,7 @@ def _read_output(path: Path, *, engine: str, max_bytes: int, max_diagnostics: in
         if not isinstance(notes, list) or len(notes) > 256:
             safety.fail(f"{engine} returned an invalid trace", action="clang.output")
             return [], [f"{engine} diagnostic {index} had an unbounded trace"]
-        if not all(_valid_point(note) and isinstance(note.get("message"), str)
-                   and len(note["message"]) <= 4096 and _valid_ranges(note.get("ranges", []))
-                   for note in notes) or not _valid_ranges(item.get("ranges", [])):
+        if not all(_valid_trace_piece(note) for note in notes) or not _valid_ranges(item.get("ranges", [])):
             safety.fail(f"{engine} returned malformed trace coordinates", action="clang.output")
             return [], [f"{engine} diagnostic {index} had malformed trace/range fields"]
         trace_length = item.get("trace_length", len(notes))
@@ -150,7 +170,21 @@ def _read_output(path: Path, *, engine: str, max_bytes: int, max_diagnostics: in
                 "trace_truncated" in item and type(item["trace_truncated"]) is not bool):
             safety.fail(f"{engine} returned malformed trace counts", action="clang.output")
             return [], [f"{engine} diagnostic {index} had malformed trace counts"]
-        trace_truncated = item.get("trace_truncated") is True or trace_length > len(notes)
+        omissions = item.get("trace_omissions", {})
+        expected_omissions = {
+            "steps": trace_length - len(notes),
+            **{name: sum(note.get(f"{key}_length", len(note.get(key, []))) - len(note.get(key, []))
+                         for note in notes)
+               for key, name in (("ranges", "ranges"), ("edges", "edges"), ("message", "message_characters"))},
+        }
+        if "trace_omissions" in item and (
+                not isinstance(omissions, Mapping) or any(
+                    key not in expected_omissions or type(count) is not int or count < 0
+                    for key, count in omissions.items())
+                or any(omissions.get(key, 0) != count for key, count in expected_omissions.items())):
+            safety.fail(f"{engine} returned malformed trace omissions", action="clang.output")
+            return [], [f"{engine} diagnostic {index} had malformed trace omissions"]
+        trace_truncated = item.get("trace_truncated") is True or any(expected_omissions.values())
         if trace_truncated:
             safety.fail(f"{engine} trace was truncated", action="clang.output", expected=True)
             gaps.append(f"{engine} diagnostic {index} trace truncated: retained {len(notes)} of {trace_length} steps")
@@ -161,6 +195,7 @@ def _read_output(path: Path, *, engine: str, max_bytes: int, max_diagnostics: in
             "end_line": end_line, "end_column": end_column,
             "notes": notes, "fix_it": item.get("fix_it") is True,
             "trace_length": trace_length, "trace_truncated": trace_truncated,
+            "trace_omissions": {key: count for key, count in expected_omissions.items() if count},
             "ranges": item.get("ranges", []),
             # Underscore keys address the retained native output and never enter the evidence identity.
             "_native_selector": json_selector("diagnostics", index).as_dict(),
@@ -238,7 +273,8 @@ def _resolved_ranges(scope: IndexScope, ranges: list[Any], engine: str) -> list[
                 and start["path"] == end["path"]):
             location, _ = _location(scope, {**start, "engine": engine,
                                             "end_line": end.get("line"), "end_column": end.get("column")})
-        resolved.append({"reported": [dict(start), dict(end)], "location": asdict(location) if location else None,
+        resolved.append({"reported_start": dict(start), "reported_end": dict(end),
+                         "location": {**asdict(location), "producer_location": {}} if location else None,
                          **({} if location else {"gap": "range did not resolve to accepted source bytes"})})
     return resolved
 
@@ -251,11 +287,28 @@ def _resolved_trace(scope: IndexScope, record: Mapping[str, Any], gaps: list[str
             location, _ = _location(scope, {**note, "engine": record["engine"],
                                             "end_line": note["line"], "end_column": note["column"]})
         resolved = {**note, "location": asdict(location) if location else None}
-        if location is None:
+        if location is None and not (note.get("kind") == "control" and note.get("edges")):
             resolved["gap"] = "trace point did not resolve to accepted source bytes"
             gaps.append(f"{record['engine']} {resolved['gap']}")
         if "ranges" in note:
             resolved["ranges"] = _resolved_ranges(scope, note["ranges"], record["engine"])
+        if "edges" in note:
+            resolved["edges"] = []
+            for edge in note["edges"]:
+                projected = {}
+                for key in ("start", "end"):
+                    span = _resolved_ranges(scope, [edge[key]], record["engine"])[0]
+                    # Keep edge spans within the existing payload-depth bound; original coordinates
+                    # live beside the span instead of one extra nested producer_location object.
+                    projected[key] = ({**span["location"], "producer_location": {}} if span["location"] else None)
+                    projected[f"reported_{key}"] = {
+                        f"{position}_{field}": point.get(field)
+                        for position, point in (("start", span["reported_start"]), ("end", span["reported_end"]))
+                        for field in ("path", "line", "column")}
+                    if span.get("gap"):
+                        projected[f"{key}_gap"] = span["gap"]
+                        gaps.append(f"{record['engine']} control edge did not resolve to accepted source bytes")
+                resolved["edges"].append(projected)
         notes.append(resolved)
     ranges = _resolved_ranges(scope, record["ranges"], record["engine"])
     if any(item.get("gap") for item in ranges) or any(
@@ -551,7 +604,8 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
                    "reported_severity": record["severity"],
                    "project_id": scope.project_id, "trace": trace, "ranges": ranges, "evidence_id": evidence_id,
                    "trace_length": record["trace_length"], "trace_retained_count": len(trace),
-                   "trace_truncated": record["trace_truncated"], "fix_it": bool(record.get("fix_it"))}
+                   "trace_truncated": record["trace_truncated"], "trace_omissions": record["trace_omissions"],
+                   "fix_it": bool(record.get("fix_it"))}
         native_output = retained.get(record["engine"])
         payload["common"] = common_metadata(
             payload,

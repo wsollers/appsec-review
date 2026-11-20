@@ -61,6 +61,7 @@ def test_diagnostic_limit_matches_wrapper_admission():
 
 
 def test_resolving_trace_ranges_and_cuts_survive_real_shard_projection(tmp_path):
+    """Synthetic normalized-envelope boundary; not a captured/native plist fixture."""
     from appsec_review.indexing.store import ShardSet
     from appsec_review.jobs.job_code_graph_index.producers import ProducerRows, _diagnostic_rows
 
