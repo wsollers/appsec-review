@@ -232,10 +232,11 @@ the executed tool is resolved in the handler, not inferred from that table.
 
 1. Read the accepted compiled-analysis result and manifest through the
    [input contract](../architecture/job-input-contracts.md). Require this snapshot.
-2. Verify each usable catalog's compile database and materialized source mapping (`SUCCEEDED` or
-   `COMPLETED_WITH_GAPS` builds under `_USABLE_BUILD_STATUSES`, [T-5016](../TODO.md)). Retain
-   failed/blocked catalogs without usable compile outputs or catalogs without commands as
-   unavailable cases, not empty scopes.
+2. Require a `SUCCEEDED` catalog with commands; verify the compile database bytes, equality to
+   the catalog's command array, and materialized source/build mapping. The compiled producer,
+   not this job, applies `_USABLE_BUILD_STATUSES` to builds and can turn a usable
+   `COMPLETED_WITH_GAPS` build into a `SUCCEEDED` catalog. Other catalog statuses and catalogs
+   without commands are unavailable cases, not empty scopes.
 
 ### `index`
 
@@ -251,6 +252,13 @@ the executed tool is resolved in the handler, not inferred from that table.
    complete accepted filenames, not whitespace-delimited prefixes. Truncated stderr emits an
    incomplete-diagnostics gap and certifies zero processed units, even if all processing markers
    survived; omitted units still count only absent markers.
+   Translation-unit counts deduplicate only identical accepted command, source-hash and rebased
+   file/working-directory/argument identities. Accepted driver differences survive identity even
+   when replay rewrites both drivers to `clang`/`clang++`.
+   `compile_contexts` records those hashes and marker/ambiguity/processed flags.
+   Distinct commands or working directories for one file cannot be distinguished by these
+   diagnostics: all such contexts are unprocessed with a named gap and
+   `ambiguous_translation_units` count. Markers are not per-configuration exit receipts.
 4. Accept unique clangd IDs with an accepted definition or canonical declaration, preferring the
    definition. Map zero-based UTF-16 positions to half-open byte spans in the same bytes whose
    accepted hash was verified, preserving CRLF and non-ASCII text. Reject out-of-range, reversed,
@@ -260,6 +268,13 @@ the executed tool is resolved in the handler, not inferred from that table.
    symbols separately; admit symbols `first_party` first under `max_symbols_per_scope` using the
    frozen disposition table (`config/first_party.py`), recording `symbols_by_disposition` and
    `excluded_symbols_by_disposition` where only a first-party exclusion emits the symbol-limit gap.
+   Identical repeated symbol documents are idempotent. A repeated ID with different contents
+   retains the existing first-record behavior but emits an unmerged-record gap; the producer does
+   not guess how conflicting definitions or declaration fragments should merge.
+   Unknown document tags, invalid symbol IDs and unsupported reference-document shapes are
+   counted in `unaccounted_documents` with partial coverage, not silently counted as fully indexed.
+   Additional fields within supported records are tolerated; this is not a complete semantic
+   YAML schema validator.
 5. Link retained reference containers and targets: call-bit references become `CALLS`, others
    `REFERENCES`. Retain recursive calls; resolved non-call self-references do not create edges
    or inflate the unresolved count. Aggregate repeated edges with occurrence counts and bounded,
@@ -278,9 +293,13 @@ preserves the typed symbol-index bounds.
 
 ### `acceptance`
 
-1. Compose scope shards plus unavailable-scope coverage with the upstream manifest.
+1. Compose scope shards plus unavailable-scope coverage with the upstream manifest. Known
+   unsupported-only scopes receive empty shards with `SKIPPED_NA` producer metadata, not a
+   fabricated SQLite coverage status. Only absent accepted scopes receive the generic
+   `unavailable: no accepted C/C++ project scopes` row.
 2. Write `cpp-symbol-index-summary.json`, retaining upstream identity, per-scope results, counts
-   and reasons. Item count is accepted symbols; external symbols are not included.
+   and reasons, including `not_applicable_scopes` and separate `scopes`, `indexed_scopes` and
+   `not_applicable_scopes` counts. Item count is accepted symbols; external symbols are not included.
 
 ## Dataflow
 
@@ -294,10 +313,12 @@ flowchart LR
   positions --> facts["analysis: symbols + recursive CALLS / REFERENCES"]
   facts --> publish["acceptance.publish_handoff"]
   run -. "failed / stdout or stderr truncated / missing units" .-> gaps["scope coverage reasons"]
-  yaml -. "malformed / capped" .-> gaps
+  run -. "ambiguous compile contexts" .-> gaps
+  yaml -. "malformed / capped / unsupported or unmerged records" .-> gaps
   positions -. "unresolvable coordinates" .-> gaps
   facts -. "new-edge cap; retain later occurrences" .-> gaps
   gaps --> publish
+  scopes -. "unsupported-only: identity + SKIPPED_NA metadata" .-> publish
   scopes -. "changed accepted bytes" .-> stop["integrity exception"]
 ```
 
@@ -311,7 +332,8 @@ wraps them as `producer_reported_gap`, normally non-retryable; this does not mak
 - Tooling failure: clangd timeout, OOM or nonzero exit; malformed YAML and an incomplete final
   document also prevent trustworthy full coverage.
 - Coverage missing: processed/expected translation-unit mismatch, truncated stdout or stderr,
-  unresolved accepted-source positions, document, symbol and relation limits.
+  ambiguous compile contexts, unsupported/unmerged documents, unresolved accepted-source positions,
+  document, symbol and relation limits.
   External symbols and unresolved references are separate counters,
   not automatically gap records or evidence of complete resolution.
 - Changed source/database/manifest or a matching checkpoint with missing/changed evidence is an
@@ -323,8 +345,9 @@ Check each cause and its affected scope against the walk's user-approved expecte
 
 1. **A. Inputs:** Match compiled handoff/result/manifest identities, source-map hashes and normalized
    compile database to admitted inputs; account for supported versus skipped commands.
-2. **B. Independent comparison:** Compare clangd stderr's processed-file set with supported command
-   files. Count accepted versus external YAML symbols independently; resolve sampled declaration
+2. **B. Independent comparison:** Compare clangd stderr's processed-file set with exact supported
+   compile contexts, retaining the ambiguity gap for a multiply configured filename. Count accepted
+   versus external YAML symbols independently; resolve sampled declaration
    spans against source bytes and compare call-bit references to stored edges and occurrence counts.
 3. **C. Gaps:** Group verified outcome records and compare each missing unit, parse failure or
    truncation to raw stdout/stderr and configured bounds; record unsupported inputs separately and
@@ -333,11 +356,26 @@ Check each cause and its affected scope against the walk's user-approved expecte
    baseline with symbol/edge counts and translation-unit sets. This documentation is not live
    clangd acceptance.
 
+The native triggers in [T-5233](../TODO.md) remain unverified by offline units. An authorized
+acceptance must capture the pinned 23.1.0 YAML/diagnostics for declarations and definitions of the
+same symbol and for one filename under distinct arguments and working directories. Does that
+release emit duplicate symbol fragments or a different Refs shape, and can it attest each exact
+selected configuration? If duplicate fragments occur, the desired merge/conflict policy must be
+decided from that evidence before changing first-record semantics. Until then, no merged-symbol
+or per-configuration native assurance is claimed. This repair changes no native tool, image,
+asset lock or launch grant; build, smoke, integration and live acceptance were not run.
+
 ## Resume and invalidation
 
 The scope checkpoint binds schema, scope/source/compile identities, normalizer, tool pin and all
-index limits except worker count. Reuse verifies its shard, execution receipt and rewritten
-database as well as accepted inputs; a matching but damaged checkpoint fails closed.
+index limits except worker count. Reuse verifies its shard, rewritten database and execution
+receipt as well as accepted inputs. The receipt's original stdout/stderr paths and hashes are
+checked through the public run-artifact verifier even if the checkpoint omits explicit raw pins.
+Execution/image/command identities must agree with the receipt; missing, changed or symlinked
+streams fail closed without rerunning or replacing evidence. Clangd's native YAML is this pinned
+stdout stream, not a detached `NativeResultReference` product.
+New executions use fresh identity/generation directories and retain their own checkpoint copy;
+changing a normalizer or limit never deletes prior raw streams, receipts, databases or shards.
 Partial outputs can be checkpointed by this producer: unchanged inputs do not promise a retry.
 A tool/source/compile/normalizer/limit change invalidates that scope, while other scopes remain
 independent. Composition follows [accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).

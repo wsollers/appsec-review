@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import asdict
 from pathlib import Path
 import sqlite3
 from types import MappingProxyType, SimpleNamespace
@@ -130,6 +131,8 @@ def _make_scope_and_unit(
         consumable_handoffs={},
     )
     outputs: dict[str, Any] = {}
+    job_ctx.repository_root = base / "repository"
+    job_ctx.repository_root.mkdir(parents=True)
     unit = UnitContext(
         job=job_ctx,
         unit_id="index.scopes",
@@ -183,13 +186,9 @@ class FakeClangdExecutor:
         (raw / "stdout.bin").write_text(self.yaml_text, encoding="utf-8")
         (raw / "stderr.bin").write_text(stderr, encoding="utf-8")
         receipt = scratch / "execution.json"
-        receipt.write_text(
-            json.dumps({"tool_id": request.tool_id, "argv": list(request.argv)}),
-            encoding="utf-8",
-        )
         rel = lambda p: p.relative_to(self.run_root).as_posix()
         digest = "sha256:" + "c" * 64
-        return ExecutionResult(
+        result = ExecutionResult(
             "appsec-review/container-execution/1",
             request.tool_id,
             "fixture-clangd",
@@ -209,6 +208,11 @@ class FakeClangdExecutor:
             rel(raw / "stderr.bin"),
             rel(receipt),
         )
+        receipt.write_text(json.dumps({
+            **asdict(result), "stdout_sha256": file_sha256(raw / "stdout.bin"),
+            "stderr_sha256": file_sha256(raw / "stderr.bin"),
+        }), encoding="utf-8")
+        return result
 
 
 SAMPLE_YAML = """--- !Symbol
@@ -385,7 +389,8 @@ def test_normalize_scope_edges_limits_and_error_surfaces(tmp_path: Path) -> None
     assert counts["external_symbols"] == 1
     assert counts["relations"] == 2
     assert counts["unresolved_references"] == 2  # bad container + non-mapping ref; self-ref resolves
-    assert counts["coverage"] == "complete"
+    assert counts["coverage"] == "partial"
+    assert counts["unaccounted_documents"] == 3
     edges = {rel.kind: rel for rel in builder.relations}
     assert set(edges) == {RelationKind.CALLS, RelationKind.REFERENCES}
     assert edges[RelationKind.CALLS].payload["occurrences"] == 2
@@ -563,7 +568,7 @@ def test_index_scope_checkpoint_reuse_and_default_tool_identity_branch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     run_root, _, scope, unit = _make_scope_and_unit(tmp_path / "ckpt")
-    executor = FakeClangdExecutor(run_root, yaml_text=SAMPLE_YAML)
+    executor = FakeClangdExecutor(run_root, yaml_text=_valid_sample_yaml())
     first = _index_scope(unit, scope, lambda _u: executor)
     assert first["terminal_status"] == "SUCCEEDED"
     assert len(executor.calls) == 1
@@ -575,7 +580,7 @@ def test_index_scope_checkpoint_reuse_and_default_tool_identity_branch(
 
     # Exercise executor_factory=None branch using monkeypatched tool_identity and execute_scope_tool
     run_root2, _, scope2, unit2 = _make_scope_and_unit(tmp_path / "default_exec")
-    fake2 = FakeClangdExecutor(run_root2, yaml_text=SAMPLE_YAML)
+    fake2 = FakeClangdExecutor(run_root2, yaml_text=_valid_sample_yaml())
     orig_exec = job_mod.execute_scope_tool
     monkeypatch.setattr(job_mod, "tool_identity", lambda _repo, tid: {"tool_id": tid, "pinned": True})
     monkeypatch.setattr(
@@ -618,7 +623,7 @@ def test_build_job_units_skipped_na_unavailable_and_inventory_claims(
     )
     assert _not_applicable_scope(asm_scope)["terminal_status"] == "SKIPPED_NA"
 
-    executor = FakeClangdExecutor(run_root, yaml_text=SAMPLE_YAML)
+    executor = FakeClangdExecutor(run_root, yaml_text=_valid_sample_yaml())
     job = build_job(executor_factory=lambda _u: executor)
     load_fn, index_fn, publish_fn = (u.handler for u in job.units)
 
@@ -714,11 +719,195 @@ def _reference_document(target: str, sources: list[str], *, kind: int = 28,
     ) + "...\n"
 
 
+def _valid_sample_yaml() -> str:
+    return (_symbol_document("1111111111111111") +
+            _symbol_document("2222222222222222", name="main", start=(1, 4), end=(1, 8)))
+
+
 def _published_rows(run_root: Path, result: dict, table: str) -> list[sqlite3.Row]:
     assert table in {"locations", "relations", "coverage", "entities"}
     with sqlite3.connect(run_root / result["index_identity"]["relative_path"]) as db:
         db.row_factory = sqlite3.Row
         return db.execute(f"SELECT * FROM {table}").fetchall()
+
+
+@pytest.mark.parametrize("stream", ("stdout", "stderr"))
+@pytest.mark.parametrize("damage", ("missing", "changed", "symlink"))
+def test_checkpoint_rechecks_receipt_streams_without_rerunning(
+    tmp_path: Path, stream: str, damage: str,
+) -> None:
+    from appsec_review.jobs.cpp_index_scopes import CheckpointIntegrityError
+
+    run_root, _, scope, unit = _make_scope_and_unit(tmp_path)
+    executor = FakeClangdExecutor(run_root, yaml_text=_symbol_document("1111111111111111"))
+    first = _index_scope(unit, scope, lambda _u: executor)
+    receipt = run_root / first["execution"]["receipt"]["path"]
+    receipt_bytes = receipt.read_bytes()
+    checkpoint = run_root / "data" / "code-index" / "clangd" / scope.scope_id / "checkpoint.json"
+    cached = json.loads(checkpoint.read_bytes())
+    cached["result"]["execution"].pop("raw_artifacts", None)
+    checkpoint.write_text(json.dumps(cached), encoding="utf-8")
+    stream_path = run_root / json.loads(receipt_bytes)[f"{stream}_path"]
+    if damage == "missing":
+        stream_path.unlink()
+    elif damage == "changed":
+        stream_path.write_bytes(b"changed evidence")
+    else:
+        original = stream_path.with_suffix(".original")
+        stream_path.rename(original)
+        stream_path.symlink_to(original)
+    with pytest.raises(CheckpointIntegrityError):
+        _index_scope(unit, scope, lambda _u: executor)
+    assert len(executor.calls) == 1
+    assert receipt.read_bytes() == receipt_bytes
+    assert len(_published_rows(run_root, first, "entities")) == 1
+
+
+def test_new_checkpoint_identity_preserves_prior_execution_bytes(tmp_path: Path) -> None:
+    run_root, _, scope, unit = _make_scope_and_unit(tmp_path)
+    executor = FakeClangdExecutor(run_root, yaml_text=_symbol_document("1111111111111111"))
+    first = _index_scope(unit, scope, lambda _u: executor)
+    receipt = run_root / first["execution"]["receipt"]["path"]
+    refs = [receipt, run_root / first["execution"]["compile_database"]["path"]]
+    refs += [run_root / json.loads(receipt.read_bytes())[f"{stream}_path"] for stream in ("stdout", "stderr")]
+    originals = {path: path.read_bytes() for path in refs}
+    executor.yaml_text = _symbol_document("2222222222222222")
+    unit.job.config.settings = {**unit.job.config.settings, "max_symbols_per_scope": 99}
+    second = _index_scope(unit, scope, lambda _u: executor)
+    assert second["execution"]["receipt"]["path"] != first["execution"]["receipt"]["path"]
+    assert {path: path.read_bytes() for path in refs} == originals
+    assert _published_rows(run_root, first, "entities")[0]["native_id"] == "1111111111111111"
+    assert _published_rows(run_root, second, "entities")[0]["native_id"] == "2222222222222222"
+
+
+@pytest.mark.parametrize("mode", ("unsupported", "mixed", "absent"))
+def test_published_applicability_retains_known_scopes(
+    tmp_path: Path, mode: str,
+) -> None:
+    from appsec_review.jobs.cpp_index_scopes import _scope
+    from appsec_review.retrieval.index import load_verified_manifest
+    from appsec_review.runtime.consume import upstream_scope
+    from appsec_review.storage import atomic_json
+    from tests.handoff_fixture import write_fixture_handoff
+
+    run_root, target_root, scope, unit = _make_scope_and_unit(tmp_path)
+    unit.job.run_id = run_root.name
+    asm_database = run_root / "data" / "cpp" / "projects" / "case-assembly" / "compile_commands.json"
+    asm_database.parent.mkdir(parents=True)
+    commands = [{"target_path": "native/boot.S", "arguments": ["clang", "/scratch/source/boot.S"]}]
+    asm_database.write_text(json.dumps(commands), encoding="utf-8")
+    asm_scope = _scope(run_root, "case-assembly", {
+        "mapping": {"project_id": "cpp:assembly", "root": "native", "case_snapshot": scope.case_snapshot,
+                    "files": []},
+        "compile_database": run_artifact(run_root, asm_database), "compile_commands": commands,
+    })
+    upstream_path = run_root / "data" / "indices" / "manifests" / "upstream.json"
+    write_manifest(upstream_path, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
+                   target_root=target_root, indexes=())
+    unit.job.input_manifest_path = upstream_path
+    unit.job.input_manifest_sha256 = file_sha256(upstream_path)
+    scopes = [] if mode == "absent" else [asm_scope] + ([scope] if mode == "mixed" else [])
+    catalogs = {item.case_id: {
+        "terminal_status": "SUCCEEDED",
+        "mapping": {"project_id": item.project_id, "root": item.root,
+                    "case_snapshot": item.case_snapshot, "files": list(item.files)},
+        "compile_commands": list(item.compile_commands), "compile_database": dict(item.compile_database),
+    } for item in scopes}
+    outputs = {"catalog.projects": {"projects": catalogs},
+               "acceptance.publish_handoff": {"index_manifest": run_artifact(run_root, upstream_path)}}
+    producer = "job_cpp_compiled_analysis"
+    attempt = run_root / "data" / "jobs" / producer / "attempts" / "attempt_0001"
+    atomic_json(attempt / "result.json", {"schema": "appsec-review/unit-execution/1", "outputs": outputs})
+    handoff = write_fixture_handoff(run_root, attempt / "handoff.json", {
+        "job_id": producer, "source_fingerprint": unit.job.source_fingerprint, "outputs": outputs})
+    executor = FakeClangdExecutor(run_root, yaml_text=_symbol_document("1111111111111111"))
+    job = build_job(executor_factory=lambda _u: executor)
+    with upstream_scope(run_root, JOB_ID, {producer: file_sha256(handoff)}, contract=job.contract):
+        for step in job.units:
+            unit.outputs[step.unit_id] = step.handler(unit)
+    published = unit.outputs["acceptance.publish_handoff"]
+    summary = json.loads((run_root / published["artifact"]["path"]).read_bytes())
+    skipped = summary["not_applicable_scopes"]
+    assert summary["counts"]["scopes"] == len(scopes)
+    assert summary["counts"]["not_applicable_scopes"] == len(skipped) == int(mode != "absent")
+    assert summary["counts"]["indexed_scopes"] == len(executor.calls) == int(mode == "mixed")
+    manifest, _ = load_verified_manifest(
+        run_root, run_root / published["index_manifest"]["path"], published["index_manifest"]["sha256"])
+    coverage = []
+    for index in manifest["indexes"]:
+        with sqlite3.connect(run_root / index["relative_path"]) as db:
+            coverage.extend(db.execute("SELECT status, gap FROM coverage").fetchall())
+    if mode == "absent":
+        assert coverage == [("unavailable", "no accepted C/C++ project scopes")]
+    else:
+        assert skipped[0]["scope_id"] == asm_scope.scope_id
+        assert skipped[0]["not_applicable_inputs"]["count"] == 1
+        metadata = next(index["producer"] for index in manifest["indexes"]
+                        if index["producer"].get("scope_id") == asm_scope.scope_id)
+        assert metadata["terminal_status"] == "SKIPPED_NA"
+        assert metadata["not_applicable_inputs"] == skipped[0]["not_applicable_inputs"]
+        assert not any(status == "unavailable" for status, _ in coverage)
+        assert published["terminal_status"] == ("SUCCEEDED" if mode == "mixed" else "NOT_APPLICABLE")
+
+
+@pytest.mark.parametrize("variant", ("arguments", "directory", "driver", "identical"))
+def test_compile_contexts_are_not_certified_by_filename_only(tmp_path: Path, variant: str) -> None:
+    first = {"target_path": "native/a.cpp", "directory": "/scratch/source",
+             "arguments": ["clang++", "-DONE=1", "/scratch/source/a.cpp"]}
+    second = {**first}
+    if variant == "arguments":
+        second["arguments"] = ["clang++", "-DONE=2", "/scratch/source/a.cpp"]
+    elif variant == "directory":
+        second["directory"] = "/scratch/build"
+    elif variant == "driver":
+        second["arguments"] = ["g++", *first["arguments"][1:]]
+    run_root, _, scope, unit = _make_scope_and_unit(tmp_path, compile_commands=[first, second])
+    executor = FakeClangdExecutor(run_root, yaml_text=_symbol_document("1111111111111111"))
+    result = _index_scope(unit, scope, lambda _u: executor)
+    expected = 1 if variant == "identical" else 2
+    assert result["counts"]["translation_units"] == expected
+    assert result["counts"]["processed_translation_units"] == int(variant == "identical")
+    outcomes = result["counts"]["compile_contexts"]
+    assert len(outcomes) == expected
+    assert all(row["source_sha256"] == scope.files[0]["sha256"] for row in outcomes)
+    assert all(len(row["compile_unit_id"]) == 64 for row in outcomes)
+    assert result["counts"]["omitted_translation_units"] == 0
+    assert result["terminal_status"] == ("SUCCEEDED" if variant == "identical" else "COMPLETED_WITH_GAPS")
+    assert len(_published_rows(run_root, result, "entities")) == 1
+    if variant != "identical":
+        assert result["counts"]["ambiguous_translation_units"] == 2
+        assert "clangd processing markers cannot distinguish 2 selected compile contexts" in result["gaps"]
+        assert {row["compile_unit_id"] for row in outcomes} == {
+            job_mod.checkpoint_identity({
+                "schema": "appsec-review/clangd-compile-unit/1", **row,
+                "source_sha256": scope.files[0]["sha256"],
+                "accepted_command": command,
+            }) for command, row in zip((first, second), scope.container_compile_database(), strict=True)
+        }
+
+
+@pytest.mark.parametrize("shape", ("unknown-tag", "symbol-id", "refs-list", "duplicate", "identical"))
+def test_unaccounted_yaml_shapes_are_partial_not_empty_success(tmp_path: Path, shape: str) -> None:
+    run_root, _, scope, unit = _make_scope_and_unit(tmp_path)
+    known = _symbol_document("1111111111111111")
+    extra = {
+        "unknown-tag": "--- !FutureIndex\nID: 1111111111111111\n...\n",
+        "symbol-id": "--- !Symbol\nID: invalid\nName: ignored\n...\n",
+        "refs-list": "--- !Refs\nID: 1111111111111111\nReferences: not-a-list\n...\n",
+        "duplicate": known,
+        "identical": known,
+    }[shape]
+    first = known.replace("Definition:", "CanonicalDeclaration:") if shape == "duplicate" else known
+    result = _index_scope(unit, scope, lambda _u: FakeClangdExecutor(run_root, yaml_text=first + extra))
+    assert len(_published_rows(run_root, result, "entities")) == 1
+    assert result["terminal_status"] == ("SUCCEEDED" if shape == "identical" else "COMPLETED_WITH_GAPS")
+    assert result["counts"]["unaccounted_documents"] == int(shape != "identical")
+    if shape != "identical":
+        assert result["gaps"]
+    if shape == "duplicate":
+        payload = json.loads(_published_rows(run_root, result, "entities")[0]["payload_json"])
+        assert payload["definition"] is None
+        assert payload["declaration"]["path"] == "native/a.cpp"
 
 
 def test_recursive_calls_survive_serialization_but_self_declarations_do_not(tmp_path: Path) -> None:
@@ -919,7 +1108,8 @@ def test_truncated_diagnostics_never_certify_processed_coverage(tmp_path: Path) 
     unit.job.input_manifest_sha256 = file_sha256(upstream)
     unit.outputs["load.accepted_cpp"] = {"upstream": {}, "unavailable": {}}
     unit.outputs["index.scopes"] = {
-        "scopes": [result], "gaps": result["gaps"], "terminal_status": result["terminal_status"],
+        "scopes": [result], "not_applicable_scopes": [],
+        "gaps": result["gaps"], "terminal_status": result["terminal_status"],
     }
     published = build_job().units[-1].handler(unit)
     summary = json.loads((run_root / published["artifact"]["path"]).read_text())

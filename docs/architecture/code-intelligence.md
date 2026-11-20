@@ -48,11 +48,23 @@ found during review. The [compiled producer](../../src/appsec_review/jobs/job_cp
 verifies materialized workspaces/source maps, normalizes compile/link data, and runs its separate
 compiled, AST, IR, Infer and binary branches. The
 [scope helper](../../src/appsec_review/jobs/cpp_index_scopes.py) is the common input boundary for
-clangd, Clang static analysis, Joern and SVF; `job_cpp_symbol_index` treats `COMPLETED_WITH_GAPS`
-compiled catalogs as usable (`_USABLE_BUILD_STATUSES`) and admits symbols `first_party` first under
-`max_symbols_per_scope`. Unsupported compile inputs are separate skip decisions, not failed
+clangd, Clang static analysis, Joern and SVF. It requires a `SUCCEEDED` catalog with nonempty
+compile commands, and verifies that the catalog's commands equal its hash-bound database.
+`_USABLE_BUILD_STATUSES` belongs to the compiled producer's build handling: a usable
+`COMPLETED_WITH_GAPS` build can yield a `SUCCEEDED` catalog; the symbol job does not accept
+arbitrary partial catalogs. `job_cpp_symbol_index` admits symbols `first_party` first under
+`max_symbols_per_scope`. Unsupported compile inputs retain `SKIPPED_NA` scope identity and counts
+in the summary and manifest metadata, not unavailable or measured-complete coverage. They are not failed
 supported translation units. Infer and Clang diagnostics stay scanner observations even when their
 traces help graph analysis.
+
+Clangd processing diagnostics name files, not compile configurations. Its summary counts exact
+source/working-directory/argument identities; distinct selected commands for one filename remain
+ambiguous and unprocessed, even with repeated processing markers. Unknown YAML document tags,
+unsupported symbol IDs/reference-document shapes and differing duplicate symbol records make
+coverage partial while retaining supported facts. This is bounded accounting, not validation of
+every native output shape or a declaration/definition merge policy. See the
+[symbol operation and manual acceptance boundary](../operations/job_cpp_symbol_index.md).
 
 The [CodeQL handler](../../src/appsec_review/jobs/job_codeql_analysis/job.py) has configured
 `plan`, `execution` and `acceptance` steps. Inside execution, ready scopes independently advance

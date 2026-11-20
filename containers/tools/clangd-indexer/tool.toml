@@ -25,7 +25,7 @@ version_expect = "LLVM version {version}"
 dependency = "appsec-review/tool-native-cpp:1.0.0"
 inventory = "containers/tools/clangd-indexer/inventory.json"
 review = "containers/tools/clangd-indexer/LICENSE.md"
-coverage = "none: runtime closure only; index normalization and job integration are pending"
+coverage = "none: runtime closure alone is not index coverage; job_cpp_symbol_index integration and bounded YAML normalization are implemented; native format and per-configuration acceptance remain separate"
 update = "Select an immutable clangd release, record the clangd_indexing_tools-linux archive by exact size, SHA-256 and SHA-512, regenerate inventory.json with containers/tools/shared/safe_extract.py, re-review LICENSE.md, then validate, build offline, smoke (including --functional), and security-test."
 
 # The reviewed installation closure. The archive is verified whole; only the indexer, its

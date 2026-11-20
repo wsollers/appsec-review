@@ -9,8 +9,10 @@ normalizes declarations, definitions, and call/reference edges between accepted 
 from __future__ import annotations
 
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
+from collections import Counter
 from dataclasses import asdict, dataclass
 import hashlib
+import json
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Mapping
@@ -19,15 +21,15 @@ from urllib.parse import unquote, urlparse
 from appsec_review.config.first_party import job_dispositions
 from appsec_review.review.dispositions import FIRST_PARTY, SourceDispositions
 from appsec_review.jobs.cpp_index_scopes import (
-    SOURCE_MOUNT, IndexScope, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
-    publish_scope_indexes, save_scope_checkpoint, scope_checkpoint, tool_identity,
+    SOURCE_MOUNT, CheckpointIntegrityError, IndexScope, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
+    partition_compile_commands, publish_scope_indexes, save_scope_checkpoint, scope_checkpoint, tool_identity,
 )
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint,
 )
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import atomic_json
+from appsec_review.storage import atomic_json, verify_run_artifact
 
 from .clangd_yaml import iter_tagged, parse_documents
 from .settings import CppSymbolIndexSettings
@@ -37,7 +39,7 @@ from appsec_review.jobs.job_cpp_symbol_index.datasets import CONTRACT, DATASETS
 JOB_ID = "job_cpp_symbol_index"
 SCHEMA = "appsec-review/cpp-symbol-index/1"
 TOOL_ID = "tool-clangd-indexer"
-NORMALIZER = "clangd-yaml-normalizer/3"
+NORMALIZER = "clangd-yaml-normalizer/4"
 CALL_BIT = 16  # clangd RefKind::Call
 # clangd's all-TUs executor writes these lines from parallel threads, so they interleave by line
 # and may carry another thread's fragment as a prefix; none requires a leading line boundary.
@@ -206,6 +208,26 @@ def _symbol_identity(scope: IndexScope, clangd_id: str) -> LogicalIdentity:
                                    "clangd_id": clangd_id})
 
 
+def _compile_contexts(scope: IndexScope) -> list[dict[str, Any]]:
+    contexts = {}
+    commands, _ = partition_compile_commands(scope.compile_commands)
+    for command, row in zip(commands, scope.container_compile_database(), strict=True):
+        accepted = scope.accepted_file(row["file"])
+        if accepted is None:
+            raise ValueError(f"clangd compile unit has no accepted source: {row['file']}")
+        identity = checkpoint_identity({
+            "schema": "appsec-review/clangd-compile-unit/1",
+            **{key: row[key] for key in ("directory", "file", "arguments")},
+            "accepted_command": {
+                "directory": str(command.get("directory", "/scratch/source")),
+                "target_path": str(command["target_path"]),
+                "arguments": [str(value) for value in command["arguments"]]},
+            "source_sha256": accepted["sha256"]})
+        contexts[identity] = {"compile_unit_id": identity, "file": row["file"],
+                              "source_sha256": accepted["sha256"]}
+    return [contexts[key] for key in sorted(contexts)]
+
+
 def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str, Any],
                     limits: Mapping[str, int], builder: IndexBuilder, shard: str,
                     dispositions: SourceDispositions | None = None) -> dict[str, Any]:
@@ -236,7 +258,13 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
         gaps.append("clangd diagnostics exceeded the tool output bound and were truncated")
     stderr = (run_root / execution["stderr_path"]).read_text(encoding="utf-8", errors="replace")
     processed = {match.group(1) for match in _PROCESSED.finditer(stderr)}
-    expected = {row["file"] for row in scope.container_compile_database()}
+    contexts = _compile_contexts(scope)
+    context_counts = Counter(row["file"] for row in contexts)
+    expected = set(context_counts)
+    ambiguous = {path for path, count in context_counts.items() if count > 1}
+    ambiguous_count = sum(context_counts[path] for path in ambiguous)
+    if ambiguous:
+        gaps.append(f"clangd processing markers cannot distinguish {ambiguous_count} selected compile contexts")
     missing = sorted(expected - processed)
     if missing:
         safety.fail("clangd omitted required translation units", action="cpp.symbols")
@@ -244,14 +272,20 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
     # not processed: its index lacks every declaration behind the failing include.
     unresolved_headers, unresolved_units = unresolved_system_headers(stderr, expected)
     errored = {match.group(1) for match in _ERROR_PROCESSING.finditer(stderr)} & expected
-    not_processed = sorted(expected if diagnostics_truncated else set(missing) | set(unresolved_units) | errored)
+    not_processed = expected if diagnostics_truncated else set(missing) | set(unresolved_units) | errored | ambiguous
+    processed_count = sum(row["file"] not in not_processed for row in contexts)
+    unresolved_count = sum(row["file"] in unresolved_units for row in contexts)
+    for row in contexts:
+        row.update(processing_marker_observed=row["file"] in processed,
+                   configuration_ambiguous=row["file"] in ambiguous,
+                   processed=row["file"] not in not_processed)
     if unresolved_headers:
         gaps.append(f"system_headers_unresolved: {_bounded(unresolved_headers, _GAP_HEADERS)} not found "
-                    f"in {len(unresolved_units)} of {len(expected)} translation units"
+                    f"in {unresolved_count} of {len(contexts)} translation units"
                     + (f" ({_bounded([_unit_label(unit) for unit in unresolved_units], _GAP_UNITS)})"
                        if unresolved_units else ""))
     if not_processed:
-        gaps.append(f"clangd-indexer processed {len(expected) - len(not_processed)} of {len(expected)} "
+        gaps.append(f"clangd-indexer processed {processed_count} of {len(contexts)} "
                     "translation units")
     text = (run_root / execution["stdout_path"]).read_text(encoding="utf-8", errors="replace")
     try:
@@ -269,16 +303,28 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
     if capped:
         gaps.append("clangd index document limit reached")
 
+    unaccounted = sum(document.tag not in {"Symbol", "Refs"} for document in documents)
+    if unaccounted:
+        gaps.append("clangd index contains unsupported document tags")
     symbols: dict[str, LogicalIdentity] = {}
     sources: dict[str, _SourceBytes] = {}
     external = 0
     candidates: list[tuple[bool, int, str, Mapping[str, Any], Any, Any, Any, str]] = []
-    seen_ids: set[str] = set()
+    seen_ids: dict[str, Mapping[str, Any]] = {}
     for value in iter_tagged(documents, "Symbol"):
         clangd_id = str(value.get("ID", ""))
-        if not re.fullmatch(r"[0-9A-F]{16}", clangd_id) or clangd_id in seen_ids:
+        if not re.fullmatch(r"[0-9A-F]{16}", clangd_id):
+            unaccounted += 1
+            if "clangd index contains unsupported symbol IDs" not in gaps:
+                gaps.append("clangd index contains unsupported symbol IDs")
             continue
-        seen_ids.add(clangd_id)
+        if clangd_id in seen_ids:
+            if value != seen_ids[clangd_id]:
+                unaccounted += 1
+                if "clangd duplicate symbol IDs have unmerged records" not in gaps:
+                    gaps.append("clangd duplicate symbol IDs have unmerged records")
+            continue
+        seen_ids[clangd_id] = value
         definition = _accepted_location(unit, scope, value.get("Definition"), sources, gaps)
         declaration = _accepted_location(unit, scope, value.get("CanonicalDeclaration"), sources, gaps)
         chosen = definition or declaration
@@ -324,8 +370,14 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
     edges: dict[tuple[RelationKind, str, str], dict[str, Any]] = {}
     unresolved_refs = 0
     for value in iter_tagged(documents, "Refs"):
+        if not re.fullmatch(r"[0-9A-F]{16}", str(value.get("ID", ""))) \
+                or not isinstance(value.get("References"), list):
+            unaccounted += 1
+            if "clangd index contains unsupported reference documents" not in gaps:
+                gaps.append("clangd index contains unsupported reference documents")
+            continue
         target = symbols.get(str(value.get("ID", "")))
-        references = value.get("References") if isinstance(value.get("References"), list) else []
+        references = value["References"]
         for reference in references:
             container = reference.get("Container", {}) if isinstance(reference, Mapping) else {}
             source = symbols.get(str(container.get("ID", "")) if isinstance(container, Mapping) else "")
@@ -360,11 +412,13 @@ def normalize_scope(unit: UnitContext, scope: IndexScope, execution: Mapping[str
         status = "partial" if unique else "complete"
     builder.add_coverage(f"clangd:{scope.project_id}"[:256], status, "; ".join(unique[:10]) or None)
     return {"symbols": len(symbols), "external_symbols": external, "relations": len(edges),
-            "unresolved_references": unresolved_refs, "translation_units": len(expected),
-            "processed_translation_units": len(expected) - len(not_processed),
-            "omitted_translation_units": len(missing),
+            "unresolved_references": unresolved_refs, "translation_units": len(contexts),
+            "processed_translation_units": processed_count,
+            "omitted_translation_units": sum(context_counts[path] for path in missing),
+            "ambiguous_translation_units": ambiguous_count, "compile_contexts": contexts,
+            "unaccounted_documents": unaccounted,
             "unresolved_system_headers": unresolved_headers,
-            "translation_units_with_unresolved_headers": len(unresolved_units),
+            "translation_units_with_unresolved_headers": unresolved_count,
             "gaps": unique, "coverage": status,
             "symbols_by_disposition": dict(sorted(symbols_by_disposition.items())),
             "excluded_symbols_by_disposition": dict(sorted(excluded_by_disposition.items()))}
@@ -375,6 +429,37 @@ def _not_applicable_scope(scope: IndexScope) -> dict[str, Any]:
     return {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
             "terminal_status": "SKIPPED_NA", "gaps": [],
             "not_applicable_inputs": scope.not_applicable_inputs()}
+
+
+def _skipped_scope_index(unit: UnitContext, skipped: Mapping[str, Any]) -> dict[str, Any]:
+    """Retain known applicability, without asserting measured or unavailable coverage."""
+    shard = f"clangd-{skipped['scope_id']}"
+    fingerprint = checkpoint_identity({"schema": SCHEMA, "normalizer": NORMALIZER, **skipped})
+    path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}.sqlite"
+    builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
+                           target_snapshot=unit.job.source_fingerprint, shard_id=shard)
+    sha, _ = builder.build_or_reuse()
+    index = IndexIdentity("analysis", "appsec-review/retrieval-index/2", sha, fingerprint,
+                          path.relative_to(unit.job.run_root).as_posix(),
+                          {"job": JOB_ID, "unit": unit.unit_id, **skipped}, (), shard)
+    return {**skipped, "index_identity": asdict(index)}
+
+
+def _execution_artifacts(run_root: Path, execution: Mapping[str, Any]) -> dict[str, Any]:
+    """Verify the receipt's original raw-stream pins, not freshly measured replacements."""
+    receipt = json.loads(verify_run_artifact(run_root, execution["receipt"]).read_bytes())
+    if not isinstance(receipt, Mapping) or receipt.get("schema") != "appsec-review/container-execution/1":
+        raise ValueError("clangd execution receipt has an unsupported shape")
+    for key in ("tool_id", "exit_code", "timed_out", "oom_killed", "image_id", "image_digest",
+                "argv_identity", "stdout_path", "stderr_path", "stdout_truncated", "stderr_truncated"):
+        if key not in execution or receipt.get(key) != execution[key]:
+            raise ValueError(f"clangd execution differs from its receipt: {key}")
+    streams = {}
+    for stream in ("stdout", "stderr"):
+        ref = {"path": receipt.get(f"{stream}_path"), "sha256": receipt.get(f"{stream}_sha256")}
+        verify_run_artifact(run_root, ref)
+        streams[stream] = ref
+    return streams
 
 
 def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) -> dict[str, Any]:
@@ -390,13 +475,27 @@ def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) ->
     reused = scope_checkpoint(root / "checkpoint.json", identity, unit.job.run_root, scope,
                               required=("execution.receipt", "execution.compile_database"))
     if reused is not None:
+        try:
+            _execution_artifacts(unit.job.run_root, reused["execution"])
+        except (OSError, ValueError) as exc:
+            raise CheckpointIntegrityError(f"{scope.scope_id}: invalid clangd execution evidence: {exc}") from exc
         return reused
+    generation = 1
+    while True:
+        evidence_root = root / identity / f"execution-{generation:04d}"
+        try:
+            evidence_root.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            generation += 1
     execution = execute_scope_tool(
         unit, scope, TOOL_ID,
         ("/opt/clangd/clangd_23.1.0/bin/clangd-indexer", "--executor=all-TUs", "--format=yaml",
-         "/scratch/compile_commands.json"), root / "run", executor_factory)
+         "/scratch/compile_commands.json"), evidence_root / "run", executor_factory)
+    execution["raw_artifacts"] = _execution_artifacts(unit.job.run_root, execution)
     shard = f"clangd-{scope.scope_id}"
-    artifacts = [execution["receipt"], execution["compile_database"], dict(scope.compile_database)]
+    artifacts = [execution["receipt"], execution["compile_database"], dict(scope.compile_database),
+                 *execution["raw_artifacts"].values()]
     fingerprint = index_fingerprint(
         name="analysis", target_snapshot=scope.case_snapshot, producer_artifacts=artifacts,
         tool_identity={"tool": TOOL_ID, "image": execution["image_id"],
@@ -414,12 +513,12 @@ def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) ->
                           {"job": JOB_ID, "unit": unit.unit_id, "scope_id": scope.scope_id},
                           tuple(counts["gaps"]), shard)
     result = {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
-              "execution": {key: execution[key] for key in ("receipt", "compile_database", "exit_code",
-                                                              "timed_out", "oom_killed", "image_id")},
+              "execution": execution,
               "accepted_compile_database": dict(scope.compile_database),
               "index_identity": asdict(index), "counts": counts, "gaps": counts["gaps"],
               "not_applicable_inputs": scope.not_applicable_inputs(),
               "terminal_status": "COMPLETED_WITH_GAPS" if counts["gaps"] else "SUCCEEDED"}
+    save_scope_checkpoint(evidence_root / "checkpoint.json", identity, result)
     save_scope_checkpoint(root / "checkpoint.json", identity, result)
     return result
 
@@ -462,15 +561,21 @@ def build_job(*, executor_factory=None) -> Job:
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         loaded, indexed = unit.output("load.accepted_cpp"), unit.output("index.scopes")
+        skipped = indexed["not_applicable_scopes"]
+        skipped_indexes = [_skipped_scope_index(unit, item) for item in skipped]
         manifest = publish_scope_indexes(unit, job_id=JOB_ID, index_name="analysis", prefix="clangd",
-                                         results=indexed["scopes"], unavailable=loaded["unavailable"],
+                                         results=[*indexed["scopes"], *skipped_indexes],
+                                         unavailable=loaded["unavailable"],
                                          gaps=indexed["gaps"])
         counts = {key: sum(int(item["counts"][key]) for item in indexed["scopes"])
                   for key in ("symbols", "external_symbols", "relations", "translation_units",
                               "processed_translation_units")}
+        counts.update(scopes=len(indexed["scopes"]) + len(skipped),
+                      indexed_scopes=len(indexed["scopes"]), not_applicable_scopes=len(skipped))
         summary_path = unit.unit_root / "cpp-symbol-index-summary.json"
         atomic_json(summary_path, {"schema": SCHEMA, "upstream": loaded["upstream"], "counts": counts,
                                    "scopes": indexed["scopes"], "unavailable": loaded["unavailable"],
+                                   "not_applicable_scopes": skipped,
                                    "gaps": indexed["gaps"]})
         unit.job.events.write("CPP_SYMBOL_INDEX_COMPLETED", **counts, gap_count=len(indexed["gaps"]))
         return {"schema": SCHEMA, "artifact": artifact(unit.job.run_root, summary_path),

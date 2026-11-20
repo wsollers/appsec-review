@@ -25,7 +25,7 @@ normalizes the index into `analysis` shards with per-scope coverage (see
 | --- | --- |
 | `assets.lock.json` | Release provenance, plus the exact URL, path, byte size, SHA-256 and SHA-512 of the archive and its signature status. |
 | `tool.toml` | Runtime contract (non-root, no network, read-only root and target, limits, version probe) and the `[closure]` allowlist and extraction limits. |
-| `Dockerfile` | Two-stage offline build: verify and unpack in `python:3.12-slim` (digest-pinned), then install into `appsec-review/base-ubuntu:24.04`. |
+| `Dockerfile` | Two-stage offline build: verify and unpack in digest-pinned `python:3.12-slim-bookworm`, then install into `appsec-review/tool-native-cpp:1.0.0` with system C/C++ headers. |
 | `../shared/safe_extract.py` | Shared helper, copied in through the `shared` named build context. Validates every archive member, installs only the closure, and writes or compares the inventory. |
 | `inventory.json` | Committed, reviewed inventory of the installed closure: 335 files with path, kind, size and SHA-256. |
 | `LICENSE.md` | License, provenance and vulnerability review notes, including the open items. |
@@ -34,14 +34,15 @@ normalizes the index into `analysis` shards with per-scope coverage (see
 
 ## Build commands
 
-Run everything from the repository root.
+Run everything from the repository root, only when the corresponding build or native validation
+has been explicitly authorized. These are operator instructions, not a record of acceptance.
 
 ```sh
 # Validate the catalog, locks, and Dockerfile policy (no network, no Docker).
 python3 containers/build.py validate
 
 # Fetch the archive (the only network step) and build the image offline.
-# Dependencies such as base-ubuntu are built first.
+# The tool-native-cpp dependency (and its dependencies) is built first.
 python3 containers/build.py build tool-clangd-indexer
 
 # Version smoke, plus the functional fixture (indexes a Clang TU and a clang-cl TU).
@@ -77,8 +78,10 @@ POSIX equivalent.
      - installs only the closure under `/opt/clangd`;
      - fails unless the result equals the committed `inventory.json`.
 4. **Runtime stage:**
+   - inherits `tool-native-cpp:1.0.0`, not a header-free base Ubuntu image;
    - copies `/opt/clangd` (root-owned, not writable by the runtime user);
-   - runs `clangd-indexer --version` and requires `LLVM version 23.1.0`;
+   - runs `clangd-indexer --version`, requires `LLVM version 23.1.0`, and checks `stdio.h`,
+     `stdlib.h` and `/usr/include/c++/13` exist;
    - ends with `USER 10001:10001` and `WORKDIR /scratch`. No entrypoint, ports or volumes are
      defined.
 
@@ -97,6 +100,10 @@ docker run --rm --network none --read-only --user 10001:10001 \
 - **Paths.** The compilation database must use container paths (`/workspace/...`).
 - **Output.** `--format=yaml` writes a readable index to stdout. The default binary RIFF format is
   clangd's internal format, versioned with clangd, and is not a public schema.
+  Job integration and bounded normalization are implemented, but neither proves native
+  declaration/definition merging or every Refs shape. Processing markers identify filenames,
+  not exact compile configurations; the job reports ambiguity rather than certifying distinct
+  commands for one filename. See [manual acceptance](../../../docs/operations/job_cpp_symbol_index.md#acceptance).
 - **MSVC builds.** clang-cl commands also need the MSVC and Windows SDK headers mounted read-only.
   Those are licensed inputs and are never committed.
 

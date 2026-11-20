@@ -26,7 +26,12 @@ def _run(tmp_path: Path, *, limit: int, dispositions: SourceDispositions | None)
                                            "sha256": hashlib.sha256((target / "p" / "third_party" / "z.c").read_bytes()).hexdigest()},
     }
     scope = SimpleNamespace(project_id="cpp:p", case_snapshot="d" * 64, accepted_file=entries.get,
-                            container_compile_database=lambda: [{"file": path} for path in entries])
+                            compile_commands=tuple(
+                                {"target_path": item["target_path"], "arguments": ["clang", path]}
+                                for path, item in entries.items()),
+                            container_compile_database=lambda: [
+                                {"file": path, "directory": "/target/source", "arguments": ["clang", path]}
+                                for path in entries])
     # The vendored symbol comes first in clangd's output; the first-party one must still win the budget.
     text = (SYMBOL.format(id="1111111111111111", name="zlib_x", file="third_party/z.c") +
             SYMBOL.format(id="2222222222222222", name="main", file="a.cpp"))
