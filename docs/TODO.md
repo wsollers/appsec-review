@@ -411,8 +411,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5177 | [Deliver promoted leads and the bounded hunt queue to real consumers](#t-5177-deliver-promoted-leads-and-the-bounded-hunt-queue-to-real-consumers) | review | open |
 | T-5178 | [Preserve prioritization coverage and omitted-context qualifications](#t-5178-preserve-prioritization-coverage-and-omitted-context-qualifications) | review | open |
 | T-5179 | [Assign semantic evidence to the exact function rather than shared lines](#t-5179-assign-semantic-evidence-to-the-exact-function-rather-than-shared-lines) | review | open |
-| T-5180 | [Keep sanitizer attempts immutable with clean accepted-source copies](#t-5180-keep-sanitizer-attempts-immutable-with-clean-accepted-source-copies) | build | open |
-| T-5181 | [Distinguish sanitizer limit equality and split CMake flag masking](#t-5181-distinguish-sanitizer-limit-equality-and-split-cmake-flag-masking) | build | open |
+| T-5180 | [Keep sanitizer attempts immutable with clean accepted-source copies](#t-5180-keep-sanitizer-attempts-immutable-with-clean-accepted-source-copies) | build | done (2026-11-19, 9c69e8b8b0c03d002ed8b28ae1c888de2a0761e4) |
+| T-5181 | [Distinguish sanitizer limit equality and split CMake flag masking](#t-5181-distinguish-sanitizer-limit-equality-and-split-cmake-flag-masking) | build | done (2026-11-19, 9c69e8b8b0c03d002ed8b28ae1c888de2a0761e4) |
 | T-5182 | [Publish per-unit sanitizer readiness through its advertised query](#t-5182-publish-per-unit-sanitizer-readiness-through-its-advertised-query) | evidence | open |
 | T-5183 | [Classify only eligible first-party components from real producer shapes](#t-5183-classify-only-eligible-first-party-components-from-real-producer-shapes) | review | open |
 | T-5184 | [Contain malformed and optional security-tagging inference failures](#t-5184-contain-malformed-and-optional-security-tagging-inference-failures) | review | open |
@@ -3617,9 +3617,12 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   Additional scoped-check failure awaiting attribution:
   `tests/unit/test_t172_indexing_and_retrieval.py::test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards`
   raised `KeyError: end_byte` in `retrieval/syntax.py` while reading the guard-dominator fixture,
-  before reaching the SCA query. This was observed during T-5126's affected checks, not repaired
-  or counted as a pass. The separate real SCA publication/query regressions pass; exact-base
-  attribution and the mixed fixture's repair remain here.
+  before reaching the SCA query. This was not counted as a pass in the earlier affected checks.
+  Commit `54b19fb93be1bea888b1b0bdb5c37ab703f1f2f5` repairs this case: it reproduced on clean
+  main as one failure in 2.79 s, then passed in 2.59 s with all ten query assertions unchanged.
+  The fixture now derives source-byte spans and current completeness/guard records through
+  the actual CFG producer and serializers, rather than hand-writing obsolete CFG payloads.
+  The production guards were not weakened. The other failures in this entry remain open.
   Two legacy offline graph checks selected during T-5176 also remain unresolved:
   `tests/test_target_document_pipeline.py::test_ported_documents_flow_through_existing_indexes_and_source_retrieval`
   asserts absence of RPC/MUTATION context now emitted by its input path (not separately replayed
@@ -5090,20 +5093,28 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5180 — Keep sanitizer attempts immutable with clean accepted-source copies
 
-- **State:** open
+- **State:** done (2026-11-19, 9c69e8b8b0c03d002ed8b28ae1c888de2a0761e4)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: SB-F01, SB-F02. a fresh attempt destroys an earlier attempt's referenced sanitizer evidence; the supposedly fresh source copy retains target-owned build caches.
 - **Scope:** `src/appsec_review/jobs/job_sanitizer_build/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 78 passed/6.34 s, two workers, seed 9180, no skips or cases over 10 s.
+  Attempt-exclusive directories preserve previous referenced evidence; same-attempt collisions
+  report a gap instead of deleting it. Only CMake's cache entries at the accepted build
+  directory are reset; other accepted source/dependency bytes and target files are unchanged.
+  No actual sanitizer, compiler, container or live validation was run.
 - **Refs:** `audit-results/job-audit-job_sanitizer_build.md`.
 
 ### T-5181 — Distinguish sanitizer limit equality and split CMake flag masking
 
-- **State:** open
+- **State:** done (2026-11-19, 9c69e8b8b0c03d002ed8b28ae1c888de2a0761e4)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: SB-F03, SB-F04. exactly reaching the artifact limit is falsely reported as truncation; valid split CMake `-D` arguments bypass masking-flag detection.
 - **Scope:** `src/appsec_review/jobs/job_sanitizer_build/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5180's 78-case selection. Truncation is reported only after finding another
+  eligible changed artifact beyond the retained limit. Split and joined CMake definitions
+  receive the same masking checks without changing recorded argv or accepted policy.
 - **Refs:** `audit-results/job-audit-job_sanitizer_build.md`.
 
 ### T-5182 — Publish per-unit sanitizer readiness through its advertised query

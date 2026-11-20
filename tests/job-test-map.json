@@ -664,6 +664,7 @@
     },
     "job_review_data_indexing": {
       "unit": [
+        "tests/unit/test_t172_indexing_and_retrieval.py::test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards",
         "tests/unit/job_review_data_indexing/test_contract.py",
         "tests/unit/job_review_data_indexing/test_handlers.py",
         "tests/test_review_data_indexing.py",
@@ -720,6 +721,7 @@
     },
     "job_sanitizer_build": {
       "unit": [
+        "tests/unit/job_sanitizer_build/test_attempt_regressions.py",
         "tests/unit/job_sanitizer_build/test_contract.py",
         "tests/unit/job_sanitizer_build/test_handlers.py",
         "tests/unit/job_sanitizer_build/test_settings_and_evidence.py"
