@@ -35,57 +35,57 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `ci_analysis` | `ci_analysis.azure_checkov_scan` | 1 | `ci_linter` | `tool-checkov` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.azure_schema_scan` | 1 | `ci_linter` | Internal: `ci-schema` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.bitbucket_checkov_scan` | 1 | `ci_linter` | `tool-checkov` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.bitbucket_schema_scan` | 1 | `ci_linter` | Internal: `ci-schema` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.circleci_checkov_scan` | 1 | `ci_linter` | `tool-checkov` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.circleci_schema_scan` | 1 | `ci_linter` | Internal: `ci-schema` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.github_actionlint_scan` | 1 | `ci_linter` | `tool-actionlint` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.github_checkov_scan` | 1 | `ci_linter` | `tool-checkov` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.github_schema_scan` | 1 | `ci_linter` | Internal: `ci-schema` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.github_zizmor_scan` | 1 | `ci_linter` | `tool-zizmor` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.gitlab_checkov_scan` | 1 | `ci_linter` | `tool-checkov` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.gitlab_schema_scan` | 1 | `ci_linter` | Internal: `ci-schema` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.jenkins_structural_scan` | 1 | `ci_linter` | Internal: `ci-jenkins-structural` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.other_discovery_scan` | 1 | `ci_linter` | Internal: `supported_discovery_without_linter` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_analysis` | `ci_analysis.teamcity_structural_scan` | 1 | `ci_linter` | Internal: `ci-teamcity-structural` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L872) |
-| `ci_correlation` | `ci_correlation.correlate_findings` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L882) |
-| `ci_coverage` | `ci_coverage.join_coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L884) |
-| `ci_coverage` | `ci_coverage.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L887) |
-| `ci_discovery` | `ci_discovery.classify_providers` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L853) |
-| `ci_discovery` | `ci_discovery.discover_definitions` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L841) |
-| `ci_enrichment` | `ci_enrichment.build_hierarchy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L622) |
-| `ci_normalization` | `ci_normalization.azure_checkov_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.azure_schema_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.bitbucket_checkov_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.bitbucket_schema_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.circleci_checkov_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.circleci_schema_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.github_actionlint_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.github_checkov_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.github_schema_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.github_zizmor_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.gitlab_checkov_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.gitlab_schema_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.jenkins_structural_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.other_discovery_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_normalization` | `ci_normalization.teamcity_structural_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L874) |
-| `ci_observation_publication` | `ci_observation_publication.azure_checkov_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.azure_schema_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.bitbucket_checkov_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.bitbucket_schema_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.circleci_checkov_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.circleci_schema_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.github_actionlint_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.github_checkov_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.github_schema_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.github_zizmor_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.gitlab_checkov_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.gitlab_schema_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.jenkins_structural_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.other_discovery_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
-| `ci_observation_publication` | `ci_observation_publication.teamcity_structural_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L880) |
+| `ci_analysis` | `ci_analysis.azure_checkov_scan` | 1 | `ci_linter` | `tool-checkov` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.azure_schema_scan` | 1 | `ci_linter` | Internal: `ci-schema` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.bitbucket_checkov_scan` | 1 | `ci_linter` | `tool-checkov` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.bitbucket_schema_scan` | 1 | `ci_linter` | Internal: `ci-schema` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.circleci_checkov_scan` | 1 | `ci_linter` | `tool-checkov` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.circleci_schema_scan` | 1 | `ci_linter` | Internal: `ci-schema` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.github_actionlint_scan` | 1 | `ci_linter` | `tool-actionlint` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.github_checkov_scan` | 1 | `ci_linter` | `tool-checkov` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.github_schema_scan` | 1 | `ci_linter` | Internal: `ci-schema` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.github_zizmor_scan` | 1 | `ci_linter` | `tool-zizmor` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.gitlab_checkov_scan` | 1 | `ci_linter` | `tool-checkov` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.gitlab_schema_scan` | 1 | `ci_linter` | Internal: `ci-schema` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.jenkins_structural_scan` | 1 | `ci_linter` | Internal: `ci-jenkins-structural` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.other_discovery_scan` | 1 | `ci_linter` | Internal: `supported_discovery_without_linter` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_analysis` | `ci_analysis.teamcity_structural_scan` | 1 | `ci_linter` | Internal: `ci-teamcity-structural` | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L909) |
+| `ci_correlation` | `ci_correlation.correlate_findings` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L919) |
+| `ci_coverage` | `ci_coverage.join_coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L921) |
+| `ci_coverage` | `ci_coverage.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L924) |
+| `ci_discovery` | `ci_discovery.classify_providers` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L890) |
+| `ci_discovery` | `ci_discovery.discover_definitions` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L878) |
+| `ci_enrichment` | `ci_enrichment.build_hierarchy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L649) |
+| `ci_normalization` | `ci_normalization.azure_checkov_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.azure_schema_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.bitbucket_checkov_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.bitbucket_schema_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.circleci_checkov_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.circleci_schema_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.github_actionlint_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.github_checkov_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.github_schema_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.github_zizmor_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.gitlab_checkov_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.gitlab_schema_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.jenkins_structural_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.other_discovery_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_normalization` | `ci_normalization.teamcity_structural_normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L911) |
+| `ci_observation_publication` | `ci_observation_publication.azure_checkov_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.azure_schema_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.bitbucket_checkov_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.bitbucket_schema_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.circleci_checkov_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.circleci_schema_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.github_actionlint_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.github_checkov_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.github_schema_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.github_zizmor_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.gitlab_checkov_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.gitlab_schema_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.jenkins_structural_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.other_discovery_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
+| `ci_observation_publication` | `ci_observation_publication.teamcity_structural_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py#L917) |
 
 ### Accepted input declarations
 
@@ -122,7 +122,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_ci_configuration_analysis/test_ci_configuration_analysis_graph.py` |
 | live | `tests/live/test_ci_configuration_analysis_multivuln.py` |
-| unit | `tests/unit/job_ci_configuration_analysis/test_contract.py`<br>`tests/unit/job_ci_configuration_analysis/test_native_contracts.py`<br>`tests/unit/job_ci_configuration_analysis/test_discovery_and_static_rules.py`<br>`tests/unit/job_ci_configuration_analysis/test_checkov_locations.py`<br>`tests/unit/job_ci_configuration_analysis/test_zizmor_output.py`<br>`tests/unit/job_ci_configuration_analysis/test_job_graph.py` |
+| unit | `tests/unit/job_ci_configuration_analysis/test_lead_promotion.py`<br>`tests/unit/job_ci_configuration_analysis/test_contract.py`<br>`tests/unit/job_ci_configuration_analysis/test_native_contracts.py`<br>`tests/unit/job_ci_configuration_analysis/test_discovery_and_static_rules.py`<br>`tests/unit/job_ci_configuration_analysis/test_checkov_locations.py`<br>`tests/unit/job_ci_configuration_analysis/test_zizmor_output.py`<br>`tests/unit/job_ci_configuration_analysis/test_job_graph.py` |
 
 ### Dagster placement
 

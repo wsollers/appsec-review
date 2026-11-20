@@ -30,9 +30,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L454) |
-| `build` | `build.units` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L436) |
-| `load` | `load.accepted_native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L415) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L458) |
+| `build` | `build.units` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L440) |
+| `load` | `load.accepted_native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_sanitizer_build/job.py#L419) |
 
 ### Accepted input declarations
 
@@ -49,7 +49,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
-| `sanitizer_build_summary` | `acceptance` | `appsec-review/sanitizer-build-handoff/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
+| `sanitizer_build_summary` | `acceptance` | `appsec-review/sanitizer-build-handoff/1` | artifact_only | Not indexed | `query_dataset_inventory`, `query_sanitizer_readiness` |
 | `sanitizer_build_workspaces` | `build` | `application/octet-stream` | protected | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.
@@ -65,7 +65,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_sanitizer_build/test_sanitizer_build_graph.py` |
 | live | `tests/live/test_sanitizer_live.py` |
-| unit | `tests/unit/job_sanitizer_build/test_attempt_regressions.py`<br>`tests/unit/job_sanitizer_build/test_contract.py`<br>`tests/unit/job_sanitizer_build/test_handlers.py`<br>`tests/unit/job_sanitizer_build/test_settings_and_evidence.py` |
+| unit | `tests/unit/job_sanitizer_build/test_readiness_publication.py`<br>`tests/unit/job_sanitizer_build/test_attempt_regressions.py`<br>`tests/unit/job_sanitizer_build/test_contract.py`<br>`tests/unit/job_sanitizer_build/test_handlers.py`<br>`tests/unit/job_sanitizer_build/test_settings_and_evidence.py` |
 
 ### Dagster placement
 

@@ -78,7 +78,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_target_catalog/test_catalog_graph.py`<br>`tests/integration/job_target_catalog/test_catalog_path_graph.py`<br>`tests/integration/job_target_catalog/test_catalog_documents_graph.py` |
 | live | None declared |
-| unit | `tests/unit/job_target_catalog/test_cataloging_languages.py`<br>`tests/unit/job_target_catalog/test_contract.py`<br>`tests/unit/job_target_catalog/test_descriptor_discovery.py`<br>`tests/unit/job_target_catalog/test_discovery.py`<br>`tests/unit/job_target_catalog/test_documents.py`<br>`tests/unit/job_target_catalog/test_graph.py`<br>`tests/unit/job_target_catalog/test_helpers.py`<br>`tests/unit/job_target_catalog/test_indexes.py`<br>`tests/unit/runtime/test_wave5_contracts.py` |
+| unit | `tests/unit/job_build_environment_analysis/test_catalog_inputs.py`<br>`tests/unit/job_target_catalog/test_cataloging_languages.py`<br>`tests/unit/job_target_catalog/test_contract.py`<br>`tests/unit/job_target_catalog/test_descriptor_discovery.py`<br>`tests/unit/job_target_catalog/test_discovery.py`<br>`tests/unit/job_target_catalog/test_documents.py`<br>`tests/unit/job_target_catalog/test_graph.py`<br>`tests/unit/job_target_catalog/test_helpers.py`<br>`tests/unit/job_target_catalog/test_indexes.py`<br>`tests/unit/runtime/test_wave5_contracts.py` |
 
 ### Dagster placement
 

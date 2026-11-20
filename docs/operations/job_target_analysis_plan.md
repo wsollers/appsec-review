@@ -30,13 +30,13 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `analysis_decisions` | `analysis_decisions.apply_deterministic_rules` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L303) |
-| `analysis_decisions` | `analysis_decisions.resolve_ambiguity` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L326) |
-| `catalog_summary` | `catalog_summary.load_accepted_catalog` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L275) |
-| `catalog_summary` | `catalog_summary.summarize_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L290) |
-| `plan_acceptance` | `plan_acceptance.index_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L528) |
-| `plan_acceptance` | `plan_acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L620) |
-| `plan_acceptance` | `plan_acceptance.validate_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L516) |
+| `analysis_decisions` | `analysis_decisions.apply_deterministic_rules` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L228) |
+| `analysis_decisions` | `analysis_decisions.resolve_ambiguity` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L251) |
+| `catalog_summary` | `catalog_summary.load_accepted_catalog` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L200) |
+| `catalog_summary` | `catalog_summary.summarize_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L215) |
+| `plan_acceptance` | `plan_acceptance.index_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L453) |
+| `plan_acceptance` | `plan_acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L545) |
+| `plan_acceptance` | `plan_acceptance.validate_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L441) |
 
 ### Accepted input declarations
 
@@ -104,7 +104,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | None declared |
 | integration | `tests/integration/job_target_analysis_plan/test_target_analysis_plan_graph.py` |
 | live | None declared |
-| unit | `tests/unit/job_target_analysis_plan/test_contract.py`<br>`tests/unit/job_target_analysis_plan/test_partitioning.py`<br>`tests/unit/job_target_analysis_plan/test_planning.py`<br>`tests/unit/job_target_analysis_plan/test_feedback.py`<br>`tests/unit/job_target_analysis_plan/test_handlers.py`<br>`tests/unit/runtime/test_wave4_contracts.py` |
+| unit | `tests/unit/job_build_environment_analysis/test_catalog_inputs.py`<br>`tests/unit/job_target_analysis_plan/test_contract.py`<br>`tests/unit/job_target_analysis_plan/test_partitioning.py`<br>`tests/unit/job_target_analysis_plan/test_planning.py`<br>`tests/unit/job_target_analysis_plan/test_feedback.py`<br>`tests/unit/job_target_analysis_plan/test_handlers.py`<br>`tests/unit/runtime/test_wave4_contracts.py` |
 
 ### Dagster placement
 

@@ -138,6 +138,7 @@
           "query_build_security",
           "query_dataset_inventory",
           "query_precomputed",
+          "query_sanitizer_readiness",
           "search",
           "trace"
         ]
@@ -2763,12 +2764,12 @@
       ],
       "job_enabled": true,
       "mcp_tools": {
-        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "basis": "query_dataset_inventory; query_sanitizer_readiness (sanitized per-unit build evidence only)",
         "gaps": [],
         "state": "declared",
         "values": [
-          "coverage",
-          "query_dataset_inventory"
+          "query_dataset_inventory",
+          "query_sanitizer_readiness"
         ]
       },
       "producer": "job_sanitizer_build",

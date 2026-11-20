@@ -61,6 +61,7 @@
     },
     "job_build_environment_analysis": {
       "unit": [
+        "tests/unit/job_build_environment_analysis/test_catalog_inputs.py",
         "tests/unit/job_build_environment_analysis/test_analysis.py",
         "tests/unit/job_build_environment_analysis/test_contract.py",
         "tests/unit/job_build_environment_analysis/test_handlers.py",
@@ -114,6 +115,7 @@
     },
     "job_ci_configuration_analysis": {
       "unit": [
+        "tests/unit/job_ci_configuration_analysis/test_lead_promotion.py",
         "tests/unit/job_ci_configuration_analysis/test_contract.py",
         "tests/unit/job_ci_configuration_analysis/test_native_contracts.py",
         "tests/unit/job_ci_configuration_analysis/test_discovery_and_static_rules.py",
@@ -668,6 +670,7 @@
     "job_review_data_indexing": {
       "unit": [
         "tests/unit/test_t172_indexing_and_retrieval.py::test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards",
+        "tests/unit/job_review_data_indexing/test_sanitizer_readiness.py",
         "tests/unit/job_review_data_indexing/test_audit_semantics.py",
         "tests/unit/job_review_data_indexing/test_codeql_scope_binding.py",
         "tests/unit/job_review_data_indexing/test_contract.py",
@@ -726,6 +729,7 @@
     },
     "job_sanitizer_build": {
       "unit": [
+        "tests/unit/job_sanitizer_build/test_readiness_publication.py",
         "tests/unit/job_sanitizer_build/test_attempt_regressions.py",
         "tests/unit/job_sanitizer_build/test_contract.py",
         "tests/unit/job_sanitizer_build/test_handlers.py",
@@ -811,6 +815,7 @@
     },
     "job_target_analysis_plan": {
       "unit": [
+        "tests/unit/job_build_environment_analysis/test_catalog_inputs.py",
         "tests/unit/job_target_analysis_plan/test_contract.py",
         "tests/unit/job_target_analysis_plan/test_partitioning.py",
         "tests/unit/job_target_analysis_plan/test_planning.py",
@@ -826,6 +831,7 @@
     },
     "job_target_catalog": {
       "unit": [
+        "tests/unit/job_build_environment_analysis/test_catalog_inputs.py",
         "tests/unit/job_target_catalog/test_cataloging_languages.py",
         "tests/unit/job_target_catalog/test_contract.py",
         "tests/unit/job_target_catalog/test_descriptor_discovery.py",

@@ -347,7 +347,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5113 | [Preserve function identity through change-priority consumption](#t-5113-preserve-function-identity-through-change-priority-consumption) | review | done (2026-11-19, 8ab58ca676257f337cee31bd18ca1a6dba60142d) |
 | T-5114 | [Reject incomplete CI scanner output and bound reads before execution](#t-5114-reject-incomplete-ci-scanner-output-and-bound-reads-before-execution) | scanners | done (2026-11-19, fb969549b24fb7d733622a9031d5038a1cd874be) |
 | T-5115 | [Honor CI provider tool framework and identity settings](#t-5115-honor-ci-provider-tool-framework-and-identity-settings) | scanners | done (2026-11-19, fb969549b24fb7d733622a9031d5038a1cd874be) |
-| T-5116 | [Preserve exact CI locations and real job hierarchy](#t-5116-preserve-exact-ci-locations-and-real-job-hierarchy) | scanners | open |
+| T-5116 | [Preserve exact CI locations and real job hierarchy](#t-5116-preserve-exact-ci-locations-and-real-job-hierarchy) | scanners | done (2026-11-20, b41d62d0e1be972789eea1bd6500cba1bd095dfc) |
 | T-5117 | [Replay static analysis in the accepted compile working directory](#t-5117-replay-static-analysis-in-the-accepted-compile-working-directory) | graph | open |
 | T-5118 | [Preserve bounded resolving Clang diagnostic traces and valid spans](#t-5118-preserve-bounded-resolving-clang-diagnostic-traces-and-valid-spans) | graph | open |
 | T-5119 | [Distinguish failed unsupported and missing Clang scopes](#t-5119-distinguish-failed-unsupported-and-missing-clang-scopes) | graph | open |
@@ -413,7 +413,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5179 | [Assign semantic evidence to the exact function rather than shared lines](#t-5179-assign-semantic-evidence-to-the-exact-function-rather-than-shared-lines) | review | done (2026-11-20, 5efafe0ef48610ad5ef9ab07d28f9fd65d4cf2ee) |
 | T-5180 | [Keep sanitizer attempts immutable with clean accepted-source copies](#t-5180-keep-sanitizer-attempts-immutable-with-clean-accepted-source-copies) | build | done (2026-11-19, 9c69e8b8b0c03d002ed8b28ae1c888de2a0761e4) |
 | T-5181 | [Distinguish sanitizer limit equality and split CMake flag masking](#t-5181-distinguish-sanitizer-limit-equality-and-split-cmake-flag-masking) | build | done (2026-11-19, 9c69e8b8b0c03d002ed8b28ae1c888de2a0761e4) |
-| T-5182 | [Publish per-unit sanitizer readiness through its advertised query](#t-5182-publish-per-unit-sanitizer-readiness-through-its-advertised-query) | evidence | open |
+| T-5182 | [Publish per-unit sanitizer readiness through its advertised query](#t-5182-publish-per-unit-sanitizer-readiness-through-its-advertised-query) | evidence | done (2026-11-20, 632820daf08ac3870150fabf31c568b17419040c) |
 | T-5183 | [Classify only eligible first-party components from real producer shapes](#t-5183-classify-only-eligible-first-party-components-from-real-producer-shapes) | review | done (2026-11-20, 64d99abfc069aeb63138d81170c0acbbe4228176) |
 | T-5184 | [Contain malformed and optional security-tagging inference failures](#t-5184-contain-malformed-and-optional-security-tagging-inference-failures) | review | done (2026-11-20, 64d99abfc069aeb63138d81170c0acbbe4228176) |
 | T-5185 | [Express tagging evidence columns in the required UTF-16 units](#t-5185-express-tagging-evidence-columns-in-the-required-utf-16-units) | evidence | done (2026-11-20, 64d99abfc069aeb63138d81170c0acbbe4228176) |
@@ -459,7 +459,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5225 | [Honor the resolved structural fallback policy](#t-5225-honor-the-resolved-structural-fallback-policy) | codeql | open |
 | T-5226 | [Emit dependency gaps only for applicable required evidence](#t-5226-emit-dependency-gaps-only-for-applicable-required-evidence) | evidence | open |
 | T-5227 | [Count canonical report gaps once without erasing distinct scopes](#t-5227-count-canonical-report-gaps-once-without-erasing-distinct-scopes) | review | open |
-| T-5228 | [Read build environment inputs through the public admitted boundary](#t-5228-read-build-environment-inputs-through-the-public-admitted-boundary) | pipeline | open |
+| T-5228 | [Read build environment inputs through the public admitted boundary](#t-5228-read-build-environment-inputs-through-the-public-admitted-boundary) | pipeline | done (2026-11-20, ca5ad85f953d2ceccbb12db11811ecb772cc6517) |
 | T-5229 | [Reconcile audit-identified as-built prose and test navigation](#t-5229-reconcile-audit-identified-as-built-prose-and-test-navigation) | pipeline | open |
 | T-5230 | [Resolve clang static analysis conditional audit boundaries](#t-5230-resolve-clang-static-analysis-conditional-audit-boundaries) | pipeline | blocked |
 | T-5231 | [Resolve code graph index conditional audit boundaries](#t-5231-resolve-code-graph-index-conditional-audit-boundaries) | pipeline | open |
@@ -4319,11 +4319,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5116 — Preserve exact CI locations and real job hierarchy
 
-- **State:** open
+- **State:** done (2026-11-20, b41d62d0e1be972789eea1bd6500cba1bd095dfc)
 - **Area:** scanners
 - **Why:** Archived audit/feedback cases: CI-04, CI-05, CI-06. native actionlint columns are discarded; canonical correlation discards exact byte spans while continuing to claim exact mapping.
-- **Scope:** `src/appsec_review/jobs/job_ci_configuration_analysis/job.py`
+- **Scope:** `src/appsec_review/jobs/job_ci_configuration_analysis/job.py` and `static_rules.py`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 48 cases passed/16.59 s and 181 passed/8.30 s, two workers, seeds 9126/9127.
+  The unique union is 226 cases (three environment guards repeat); no skips or slow tests.
+  Actionlint columns retain native provenance; exact canonical byte spans survive correlation
+  and incompatible mappings stay separate. Unknown spans remain explicitly coarse.
+  Lexical GitHub job/step containment excludes structural keys and block-scalar command text.
+  Lead promotion remains enabled. No native linter or live validation was run.
 - **Refs:** `audit-results/job-audit-job_ci_configuration_analysis.md`.
 
 ### T-5117 — Replay static analysis in the accepted compile working directory
@@ -5144,11 +5150,20 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5182 — Publish per-unit sanitizer readiness through its advertised query
 
-- **State:** open
+- **State:** done (2026-11-20, 632820daf08ac3870150fabf31c568b17419040c)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: SB-F05. per-unit sanitizer readiness is not delivered to its advertised retrieval query.
 - **Scope:** `src/appsec_review/indexing/products.py`, `src/appsec_review/jobs/job_review_data_indexing/job.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 176 cases passed/41.90 s, two workers, seed 91822, no skips or slow tests.
+  Actual sanitizer publication and canonical projection feed admitted summary reads, immutable
+  per-unit inventory rows and the filtered readiness query; protected binaries stay private.
+  Each sanitizer's evidence readiness is independent of the aggregate required-evidence verdict.
+  Failed builds, incomplete catalogs/workspaces and unknown counts cannot become ready;
+  runtime verification remains not performed.
+  The initial main selection had 13 time-budget failures in 153.93 s because its new fixture
+  verified six real host feed snapshots. A private fixture repository and fail-closed
+  no-host-read sentinel removed that dependency without changing production or time limits.
 - **Refs:** `audit-results/job-audit-job_sanitizer_build.md`; follow-up to closed T-172 (not reopened).
 
 ### T-5183 — Classify only eligible first-party components from real producer shapes
@@ -5606,11 +5621,19 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5228 — Read build environment inputs through the public admitted boundary
 
-- **State:** open
+- **State:** done (2026-11-20, ca5ad85f953d2ceccbb12db11811ecb772cc6517)
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: FB-PRIVATE-CONSUME. Use public accepted-upstream consumption in build environment.
-- **Scope:** `src/appsec_review/jobs/job_build_environment_analysis/job.py`
+- **Scope:** `src/appsec_review/jobs/job_build_environment_analysis/job.py`,
+  `src/appsec_review/jobs/job_target_analysis_plan/job.py` and the public catalog-owned
+  `src/appsec_review/jobs/job_target_catalog/reader.py`.
 - **Done when:** Remove private accepted-handoff coupling while preserving required pins and observing actual reads; forbidden and missing inputs remain rejected.
+  Main: 68 focused cases passed in 12.71 s, two workers, seed 9228, no skips or slow cases.
+  The existing validated reader is extracted unchanged and shared by environment/planner.
+  This is maintenance decoupling, not a proved admission bypass: 12 preservation cases passed
+  before extraction too. Typed supplied pins, source/schema/hash/custody bounds, shared exception
+  identities and actual handoff read receipts remain; no dataset read receipts are invented.
+  A dependent manual replay import was updated, but integration/acceptance/live checks were not run.
 - **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory).
 
 ### T-5229 — Reconcile audit-identified as-built prose and test navigation
@@ -5625,6 +5648,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   enabled while T-102's registry work remains blocked; builtin archive inspection does not
   recurse into nested archives. The lead-promotion test map and task label were already
   corrected by earlier repairs. Other records in this entry remain open.
+  The next scoped batch addresses CI-D1 and sanitizer L153: CI prose retains intentional
+  lead-candidate publication; sanitizer prose distinguishes accepted built receipts, independent
+  readiness and separately authorized execution, with current explicit unit selectors.
+  CI-D2's lead-promotion selector is restored in the test map; broader T-113 remains open.
 - **Refs:** `audit-results/job-audit-cumulative.md` and the documentation/conditional sections in all 47 linked per-job reports, including the final-gate pinned-input/pointer-stability distinction; follow-up to closed T-168, T-169, T-170, T-171, T-172, T-173, T-176 (not reopened).
 
 ### T-5230 — Resolve clang static analysis conditional audit boundaries
