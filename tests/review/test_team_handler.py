@@ -18,7 +18,7 @@ from appsec_review.inference import ModelResult
 from appsec_review.inference.errors import ProviderError
 from appsec_review.jobs.job_inference_security_review import teams as team_handler
 from appsec_review.jobs.job_inference_security_review.job import (
-    TARGET_GUIDANCE, _excluded, package_works, review_context,
+    TARGET_GUIDANCE, _excluded, lead_package_rank, package_works, review_context,
 )
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.jobs.job_inference_security_review.teams import lane_allocation, lane_failure, run_lane, run_team
@@ -73,7 +73,6 @@ def _prepared_template(tmp_path_factory):
     from appsec_review.review.claims import normalize_cwe
     from appsec_review.review.identity import sha256_hex
     from appsec_review.review.lead_families import collect_leads
-    from appsec_review.review.lead_triage import menu_effective_severity
     from appsec_review.review.packages import (
         ASSEMBLY_RULE, PackageSettings, assemble_packages, publish_packages,
     )
@@ -153,8 +152,7 @@ def _prepared_template(tmp_path_factory):
                     for package in mine:
                         document = package.document()
                         rank = (
-                            (0 if menu_effective_severity(document["lead_menu"][0]) == "critical" else 1,
-                             package.package_id)
+                            lead_package_rank(document)
                             if lane is Lane.LEAD else (int(positions[package.unit_key]), package.package_id)
                         )
                         sanitized = {

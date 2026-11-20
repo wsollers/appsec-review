@@ -155,8 +155,8 @@ flowchart TD
   A[accept immutable run/index manifest] --> B[assemble review scope and evidence map]
   B --> C1[lane A: assemble finding-lead packages]
   B --> C2[lane B: rank review units, assemble hunt packages]
-  C1 --> D1{{lane A review teams\n3 red, then 2 blue + 1 blind verifier per claim}}
-  C2 --> D2{{lane B review teams\n3 red, triage, then 2 blue + 1 blind verifier per claim}}
+  C1 --> D1{{lane A review teams\nconfigured red lenses, then optional 2 blue + 1 blind verifier per claim}}
+  C2 --> D2{{lane B review teams\nconfigured hunt panel, triage, then optional 2 blue + 1 blind verifier per claim}}
   D1 --> E[merge claims across lanes deterministically]
   D2 --> E
   E --> H[evidence-qualified adjudication]
@@ -563,9 +563,9 @@ same code, schemas, and policy for both lanes. Only claim production, admission,
 budget accounting differ.
 
 ```text
-Lane A (lead): admitted leads ─► finding-lead packages ─► team: 3 red ─┐
-                                                                         ├─► normalize ─► team: 2 blue ∥ 1 verifier ─► adjudicate ─► score ─► PoC/chains
-Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─► triage ┘
+Lane A (lead): admitted leads ─► finding-lead packages ─► configured red lenses ─┐
+                                                                              ├─► normalize ─► optional 2 blue ∥ 1 verifier ─► adjudicate ─► score ─► PoC/chains
+Lane B (hunt): ranked review units ─► hunt packages ─► configured panel ─► triage ┘
                     ▲                                                                            │
                     └──────────── round 1: variant hunts seeded by round-0 confirmed claims ◄────┘
 ```
@@ -612,7 +612,11 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   run-pinned CISA KEV catalog, whatever its reported severity (`lanes.lead_admission_kev`, default
   `true`). Each lead package records its `admission_reasons` (`reported_severity`, `kev_listed`).
   EPSS is context only and has no admission effect.
-- **Reported severity orders work only.** It is a nomination, never an adjudicated severity. The
+- **Effective lead severity orders work only.** Ordinary lead packages sort by critical, high,
+  medium, low, info, then unknown, with package identity breaking ties. The anchor is the
+  highest effective-severity lead in the package (reported when known, otherwise assessed).
+  This does not change admission policy or the alternating exploratory prefix. It is a nomination,
+  never an adjudicated severity. The
   independent scorer assigns technical severity after adjudication, and only that score drives PoC
   eligibility and reporting.
 - **Packages.** Admitted leads that report one defect site share one finding-lead package: leads of a
@@ -682,7 +686,7 @@ Lane B (hunt): ranked review units ─► hunt packages ─► team: 3 red ─�
   gap names the plan's reason (`not_reached:<area>`, `unassigned`, `not_in_plan`,
   `beyond_hunt_max_units:<area>`); a plan that is empty or fails validation twice falls back to the rank with
   the gap `hunt_plan_unavailable:<code>`.
-- **Panel.** Each hunt package's three red cells use distinct (strategy, persona) pairs. They are
+- **Panel.** Each hunt package's configured red cells use distinct (strategy, persona) pairs. They are
   chosen by `hunt-panel/1` from the unit's tag cloud and from the data sources available.
 - **Strategies.** Strategies are task prompts, not roles; the red role is always
   `hypothesis_hunter`.
@@ -731,19 +735,24 @@ back to `persona_sweep` with the next-ranked persona.
 
 ### Review teams
 
-The unit of review capacity is the **review team**: `red_per_team` (default 3) red cells,
-`blue_per_team` (default 2) blue cells, and `verifier_per_team` (default 1) independent verifier.
+The unit of review capacity is the **review team**. The checked-in recipe has `red_per_team = 1`,
+`blue_per_team = 1` and `verifier_per_team = 1`. These settings are not interchangeable task counts:
+discovery uses up to `red_per_team` routed cells (at most three lead lenses); a positive blue setting
+commissions both blue tasks, zero commissions neither; one verifier task is commissioned per admitted
+claim. The blue and verifier settings sum to the shared review executor's capacity. The verifier
+role's `workers` field does not create another executor or extra verifiers. Judge multiplicity and
+capacity come separately from `judges_per_claim` and judge `workers`.
 
 - **One package per team.** A team takes one package and holds its worker slots until the blue and
   verifier cells of every claim admitted from that package have finished. Inside the team, the
   order is red, then package-local normalization (and triage in lane B), then blue and the
   verifier concurrently, for each admitted claim. Adjudication runs afterwards over the claims
   merged from all packages; it is deterministic and holds no team. The
-  `red_per_team` cells run once per package; the blue and verifier cells run once per admitted
+  selected red cells run once per package; the optional blue pair and one verifier run once per admitted
   claim.
 - **Distinct lenses.**
-  - *Lane A reds* use the lead's assigned persona with three lenses: the stack profile, attacker
-    preconditions, and the persona's likely failure modes.
+  - *Lane A reds* use the lead's assigned persona with a configured prefix of three lenses: the stack
+    profile, attacker preconditions, and the persona's likely failure modes.
   - *Lane B reds* use the panel's distinct (strategy, persona) pairs.
   - *The two blues* use the claim's persona and receive distinct task questions: one seeks an
     effective guard or control (`blue_control`), the other seeks a reachability or configuration
@@ -755,8 +764,8 @@ The unit of review capacity is the **review team**: `red_per_team` (default 3) r
   run's data directory. Both lane units acquire teams from it, so `review_teams = 1` means exactly
   one team in that run regardless of how many Dagster units are active. Concurrent runs have
   separate semaphores; this is not a host-wide call limit. The Dagster `inference_teams` pool
-  remains two lane units. Model-call concurrency is phase-dependent (up to three calls per
-  team for discovery/review, four for judges); see the
+  remains two lane units. In the checked-in recipe, model-call concurrency is phase-dependent
+  (up to one call per team for discovery, two for review, four for judges); see the
   [operational limits](../operations/inference-security-review.md#effective-production-assignments-and-bounds).
 - **Scheduling.** The scheduler is fair-share and work-conserving. The next free team goes to the
   lane that has consumed the smaller fraction of its budget share. A lane with no queued packages

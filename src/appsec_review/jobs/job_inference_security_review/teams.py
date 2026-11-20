@@ -4,13 +4,14 @@ A lane unit takes its packages in canonical order (rank, then ``package_id``) an
 review team per package under the run-wide :class:`ReviewTeamSemaphore`, the deterministic
 fair-share allocation, and the attempt's :class:`JobBudget`. A team runs:
 
-1. three red cells (lane A: ``red_team_analyst`` with the stack, preconditions and failure-mode
-   lenses; lane B: the ``hunt-panel/1`` (strategy, persona) pairs as ``hypothesis_hunter``), each
+1. configured red cells (lane A: ``red_team_analyst`` with the configured prefix of the three
+   stack, preconditions and failure-mode lenses; lane B: the ``hunt-panel/1`` (strategy, persona)
+   pairs as ``hypothesis_hunter``), each
    returning one admitted ``red-discovery-result/1`` (``review.red_discovery``);
 2. package-local normalization of the red proposals (``review.claims``), their evidence references
    and observed taint hops, evidence requests, named gaps, lead accounting and chain seeds, then the
    lane B triage gate or the lane A cap;
-3. for every admitted claim, ``blue_control`` and ``blue_reachability`` refuters and one blind
+3. for every admitted claim, optional ``blue_control`` and ``blue_reachability`` refuters and one blind
    ``independent_verifier`` whose request carries only the claim's identity fields;
 4. for the claims ``roles.adjudication_judge.when`` selects, ``judges_per_claim`` ``adjudication_judge`` cells that see
    the package and the red and blue positions as sides A and B in a deterministic shuffled order

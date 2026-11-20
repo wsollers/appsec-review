@@ -80,6 +80,10 @@ the composer cell is not launched and the manifest names the gap. Admitted pairs
 seed hints first, then pairs whose predicates plausibly chain (`info_disclosure` or
 `out_of_bounds_read` into `memory_corruption` or `use_after_free`; `path_traversal`,
 `command_injection`, `authn_bypass` and `authz_bypass` into anything), then the rest.
+Red/hunter seeds are optional priority hints, not a prerequisite for composition. With at least
+two supported/confirmed components, positive configured chain capacity and an available continuity
+source, the composer can propose from admitted pairs even when no seed was supplied. Seed prose
+is stripped; neither seeds nor a composer's rationale establish continuity.
 Supported components cap the chain at `qualified_supported`; missing challenges/no meaningful
 counted continuity gives `insufficient_evidence`, contradiction gives `refuted`. A chain cannot
 upgrade its component findings or sum their severities. The final report lists only confirmed and
@@ -97,8 +101,10 @@ not accepted chain evidence; source/seed/model prose never enters these event pa
 
 ## Model selection and upgrade
 
-The checked-in models are the `dev` profile. Real reviews select the `prod` profile, which uses more
-capable models, larger limits and a distinct `strong` verifier model; see
+The checked-in models are the `dev` profile. Real reviews select a production profile with larger
+limits; `prod` binds the verifier to `strong`, but a distinct profile name does not guarantee a
+distinct provider/model identity. The checked-in `prod` default and strong profiles both name
+`claude-fable-5-2`; `copilot-prod` uses distinct Sonnet and Opus identities. See
 [`model-profiles.md`](model-profiles.md) (`APPSEC_REVIEW_PROFILE=prod`, or `--profile prod` on the scripts).
 
 Models are configured as named profiles. Each role uses one profile, and a role without an entry
@@ -509,14 +515,17 @@ The following assignments apply to the initial and subsequent rounds, including 
 | Hunt `variant`, `sink_up`, `entry_down`, `persona_sweep` / `hypothesis_hunter` | `default`, high | Ranked hunt-panel persona and accepted package stack | `generative-investigation` |
 | Hunt `control_gap` / `hypothesis_hunter` | `default`, high | Ranked hunt-panel persona and accepted package stack | `generative-investigation`, `effective-control-verification` |
 | `blue_control`, `blue_reachability` / `blue_team_refuter` | `default`, high | Proposing claim's persona and package stack | `effective-control-verification` |
-| `blind_verifier` / `independent_verifier` | `strong`, high | Proposing claim's persona and package stack | `predicate-verification` |
-| `adjudicate_claim` / `adjudication_judge` | `strong`, high | `generalist` and package stack, with blinded A/B sides | `conflict-resolution` |
+| `blind_verifier` / `independent_verifier` | `verifier` (dev), `strong` (prod/copilot-prod), high | Proposing claim's persona and package stack | `predicate-verification` |
+| `adjudicate_claim` / `adjudication_judge` | `default` (dev), `strong` (prod/copilot-prod), high | `generalist` and package stack, with blinded A/B sides | `conflict-resolution` |
 | Upstream `triage.lead_severity` / `lead_triager` | `triage`, medium | Lean governing-rule/role/task bundle; no routed persona or stack | None |
 
-For `prod`, the provider is `claude-cli`: `default` and `triage` use `claude-sonnet-5-5`;
-`strong` uses `claude-opus-5-5`. For `copilot-prod`, the provider is `copilot-sdk` with exact IDs
-`claude-sonnet-5.5` and `claude-opus-5.5`, respectively. No model substitutions are introduced.
-The verifier remains distinct from the red models; the judge does not replace independent
+For dev, `default` and `triage` use `claude-haiku-5-5`, while `verifier` uses `claude-sonnet-5-5`.
+For `prod`, `default`, `triage` and `strong` all use `claude-fable-5-2` through `claude-cli`.
+For `copilot-prod`, the provider is `copilot-sdk`: `default` and `triage` use
+`claude-sonnet-5.5`, and `strong` uses `claude-opus-5.5`. These are configured identities, not a
+claim of model availability. Same-model production verification remains subject to the existing
+distinct-verification ship-block qualification; no configuration or policy is changed here.
+The judge does not replace independent
 verification or set claim state. It is enabled for every red-affirmed claim (`when = "all"`,
 one judge per claim).
 
@@ -551,19 +560,29 @@ concurrency pools or discovered from worker installations.
 | `scoring.score_claims` | `inference_score` | 4; deterministic scoring, not another model worker |
 | `publication.*` | `lifecycle` | 1 |
 
-Each team has three discovery workers, then a three-worker review executor serving two blue
-tasks plus one blind-verifier task per admitted claim. The judge phase permits up to four workers
-per team. `roles.independent_verifier.workers = 4` is not a separate four-slot runtime pool:
-team review concurrency is controlled by `blue_per_team + verifier_per_team`. Capacity overlays
-can change team/pool capacity but do not enable exploration.
+Worker capacity and logical tasks are different:
+
+| Setting | Runtime effect |
+| --- | --- |
+| `teams.red_per_team` | Discovery executor width and maximum discovery cells; lane A takes this prefix of the three fixed lenses, lane B takes the routed panel. Values above three do not invent additional lead lenses. |
+| `teams.blue_per_team` | Zero disables blue cells. Any positive value commissions **both** `blue_control` and `blue_reachability` for each admitted claim; the value contributes slots to the shared review executor. |
+| `teams.verifier_per_team` | Contributes slots to that same executor; there is still exactly one blind-verifier task per admitted claim, not this many independent verifiers. |
+| `roles.independent_verifier.workers` | No separate executor or task multiplicity in this handler; the effective review width is `blue_per_team + verifier_per_team`. |
+| `roles.adjudication_judge.judges_per_claim` / `.workers` | Selected judge tasks per claim / per-team judge executor width, capped by available judge tasks. |
+
+The checked-in dev and production team recipes inherit `red_per_team = 1`,
+`blue_per_team = 1`, `verifier_per_team = 1`: one discovery cell, then a two-slot executor serving
+three logical tasks per admitted claim. The judge phase permits up to four workers per team.
+Capacity overlays can change team/pool capacity but do not enable exploration. These descriptions
+preserve the existing typed configuration; they do not redefine worker settings as task counts.
 
 The two lane executors each have `review_teams` worker threads, but compete for the same
 run-owned kernel-lock semaphore: they cannot each launch seven teams independently. One
 lane can use all seven slots when the other has no work. The Dagster pool stays at two
 lane units, not seven; the existing eight-unit job/executor bounds do not cap their internal
 model calls. The transport adds no lower application-wide call semaphore.
-At full utilization, discovery or blue/verifier phases permit up to 21 production / 9 development
-concurrent model calls. Judge-heavy phases can reach 28 / 12 because each team can have four
+At full utilization, discovery permits up to 7 production / 3 development concurrent model calls;
+blue/verifier phases permit up to 14 / 6. Judge-heavy phases can reach 28 / 12 because each team can have four
 judges in flight. These are upper bounds, not always six simultaneous calls per team: phases
 run sequentially, and per-package claim caps or available work may reduce concurrency.
 Provider rate limits, CPU/memory, explicit capacity overlays, or the semaphore's one-hour wait
@@ -939,12 +958,14 @@ max_cited_row_chars = 400
 
 - **Cost.** `when = "all"` adds one judge cell (up to `max_turns` turns) per admitted claim that red affirmed, per
   `judges_per_claim`. `when = "disagreement"` runs a judge only where a blue cell contradicts, qualifies, leaves a
-  predicate unresolved or gave no answer, or the two blue cells disagree. The PoC candidate gate needs a verdict, so
-  claims that are not judged are never PoC candidates.
+  predicate unresolved or gave no answer, or the two blue cells disagree. Intentionally unselected
+  judges permit `not_convened` PoC candidates when all other gates pass; failed or incomplete
+  selected judging does not.
 - **Model.** `judge_model_distinct` records whether the judge's model profile differs from the roles in
   `require_distinct_from_roles` on the claim. It is recorded in the verdict, the finding package
   (`independence.judge_model_distinct`) and the handoff accounting (`accounting.judge_verdicts`), and is never required.
-  The checked-in configuration uses the `default` profile for every role.
+  The dev judge uses `default`, while its verifier uses `verifier`; production role overrides
+  select `strong`. See the model identity qualifications above.
 - **What changes.** Adding or changing this block changes the configuration hash and the judge cells' fingerprints
   only; red, blue and verifier cells are reused.
 - **Where it shows.** The ledger has one `judge_verdict` event per judge cell; a finding package carries
@@ -958,9 +979,13 @@ max_cited_row_chars = 400
 
 ### PoC candidates
 
-The handoff's `poc_candidates` lists every claim that is `supported` or `confirmed`, whose judge said `red_correct`,
-that carries a `poc_basis` with a resolved entry point and call path, and whose `application_risk_matrix/3` technical
-severity is configured:
+The handoff's `poc_candidates` lists claims that are `supported` or `confirmed`, carry a
+`poc_basis` with a resolved entry point and call path, and have a configured
+`application_risk_matrix/3` technical severity. Judging must either be complete with an admitted
+`red_correct` verdict (`partly` is opt-in below), or have no selected judge cells at all
+(`not_convened`). A null verdict alone is not evidence that judging was intentionally omitted:
+failed, timed-out, invalid, untrusted, not-launched or partially completed selected judges block
+candidacy. Missing severity or PoC basis also blocks candidacy; no score is inferred from lead priority.
 
 ```toml
 [jobs.job_inference_security_review.settings.poc_candidates]

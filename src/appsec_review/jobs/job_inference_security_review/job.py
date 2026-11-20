@@ -35,6 +35,7 @@ from appsec_review.indexing.store import open_shard
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
 from appsec_review.jobs.job_security_tagging.taxonomy import load_vocabulary
 from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
+from appsec_review.retrieval.observations import SEVERITY_ORDER
 from appsec_review.review import hunt_plan, obligations, ship_block, tool_rules
 from appsec_review.review.budget import JobBudget
 from appsec_review.review.claims import normalize_cwe
@@ -207,6 +208,12 @@ EVIDENCE_RULES = {"rule_predicates": RULE_PREDICATES_VERSION,
                   "graph_fact_predicates": FACT_PREDICATES_RULE,
                   "graph_fact_admissibility": GRAPH_FACT_ADMISSIBILITY_RULE,
                   "obligation_policy_sha256": obligations.POLICY_SHA256}
+
+
+def lead_package_rank(document: Mapping[str, Any]) -> tuple[int, str]:
+    """Order lead attention by effective severity, then immutable package identity."""
+    return (SEVERITY_ORDER[menu_effective_severity(document["lead_menu"][0])],
+            document["package_id"])
 
 
 def package_works(run_root: Path, packages_doc: Mapping[str, Any]) -> list[PackageWork]:
@@ -434,8 +441,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                 document = package.document()
                 if lane is Lane.LEAD:
                     # lane A order uses the effective severity (reported if known, else assessed by triage)
-                    rank = (0 if menu_effective_severity(document["lead_menu"][0]) == "critical" else 1,
-                            package.package_id)
+                    rank = lead_package_rank(document)
                 else:
                     rank = (int(positions[package.unit_key]), package.package_id)
                 sanitized = {key: value for key, value in document.items()
