@@ -221,7 +221,8 @@ class StaticExecutor:
             for line, rule, steps, fix_it in self.diagnostics.get((action, stem), ()):
                 diagnostics.append({"rule_id": rule, "message": f"{rule} fixture", "severity": "warning",
                                     "path": row["file"], "line": line, "column": 3, "fix_it": fix_it,
-                                    "notes": [{"message": f"step {n}", "line": line, "column": 3} for n in range(steps)]})
+                                    "notes": [{"message": f"step {n}", "path": row["file"],
+                                               "line": line, "column": 3} for n in range(steps)]})
         document = {"schema": "appsec-review/clang-static-output/1", "engine": engine, "truncated": False,
                     "diagnostics": diagnostics}
         if self.report_units:

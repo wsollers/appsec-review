@@ -79,9 +79,14 @@ def neighborhood_of(accepted: Mapping[str, Any], case_id: str) -> Neighborhood:
                         compile_units)
 
 
-def identity_values(settings: SeededSettings, scope_seeds: seeding.ScopeSeeds, hood: Neighborhood) -> dict[str, Any]:
+def identity_values(settings: SeededSettings, scope_seeds: seeding.ScopeSeeds, hood: Neighborhood,
+                    plan: seeding.SeedPlan) -> dict[str, Any]:
     return {"seeded": {**settings.identity(), "seeds": [list(row) for row in sorted(scope_seeds.rows)],
                        "seed_priorities": sorted([*seed.key, seed.rank] for seed in scope_seeds.seeds),
+                       "seed_sources": sorted([*seed.key, [source.as_dict() for source in sorted(
+                           seed.sources, key=seeding.ledger.SeedSource.key)]] for seed in scope_seeds.seeds),
+                       "population": {"total": scope_seeds.total, "dropped": scope_seeds.dropped,
+                                      "not_in_database": plan.not_in_database, "unlocated": plan.unlocated},
                        "neighborhood": hood.sha256(), "impl": SEEDED_IMPL}}
 
 

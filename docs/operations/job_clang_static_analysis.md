@@ -240,16 +240,25 @@ Source: [handler and diagnostic adapter](../../src/appsec_review/jobs/job_clang_
    Reuse only verified matching evidence. With no seeds or selected supported rows, run no engine
    and preserve the seeded ledger's omissions.
 3. Invoke both engines through `tool-clang-static-analysis`, each in its own scratch directory
-   with a file-size ceiling. On tool/image exception, timeout, OOM or truncated streams/output,
+   with a file-size ceiling and the accepted compile working directory. Clang-tidy uses an explicit
+   non-inheriting configuration and clears default checks before applying the central selection;
+   target `.clang-tidy` files do not select checks. On tool/image exception, timeout, OOM or truncated streams/output,
    discard that engine's result and record why. A failed exit is discarded except seeded per-unit failure reports allow
    successful units to survive.
 4. Read bounded JSON diagnostics and per-unit results. Preserve parse/diagnostic-cap reasons.
-   Resolve each diagnostic to accepted source; drop unresolved diagnostics with a reason.
+   The wrapper drains output incrementally and bounds retained diagnostics before aggregation,
+   not after buffering all units. Resolve each diagnostic span to physical accepted bytes;
+   reject malformed optional spans, and drop out-of-range primary coordinates with a reason.
    Publish observations, accepted source entities and `OBSERVED_AT` edges, including notes,
-   reported severity and fix-it flag.
+   reported severity and fix-it flag. Cross-file notes/ranges carry resolving accepted hashes and
+   spans or an explicit unresolved gap. Report trace counts/cuts through graph projection.
 5. In seeded mode classify placement and record failed/unresolved seeds; never claim whole-scope
    coverage. Publish an observations shard and coverage row. Save full-mode results, but do not
-   checkpoint seeded results with engine or translation-unit failures.
+   checkpoint seeded results with engine or translation-unit failures. Missing/malformed, omitted
+   or duplicated per-file outcomes cannot be replaced by aggregate zero-exit success: affected
+   seeds are unresolved (`not_run`), and incomplete outcomes are not checkpointed in either mode.
+   Successful outcomes and positive diagnostics from unaffected files remain usable. With no
+   verified successful file outcome across the executed engines, coverage is unavailable.
 
 Seeded placement retains every compiled-analysis function identity associated with a physical
 seed; repeated header definitions in different translation units are not reduced to one name.
@@ -265,13 +274,21 @@ The seeded checkpoint identity includes all seed-function memberships, ranges, d
 reported compile-unit identities. Reordered or duplicate seed-function rows are equivalent;
 adding/removing an identity or changing its scope invalidates reuse. The consumer implementation
 identity is versioned so older last-wins placement is not reused.
+It also includes selected seeds' source-observation identities and all output-affecting omitted,
+outside-database and unlocated population counts. Changing those refreshes the ledger even when
+selected locations are unchanged. Reordering the same identities is equivalent. Distinct scope
+identities and non-reused execution generations write separate evidence directories, preserving
+previous wrapper, stream and ledger bytes even when incomplete outcomes are retried.
 
 ### `acceptance`
 
 1. Compose scope shards and unavailable-scope coverage under the
    [retrieval manifest contract](../architecture/python-and-retrieval.md#accepted-index-sets).
 2. Publish `clang-static-analysis-summary.json` with upstream identity, per-scope results,
-   observation counts and reasons. No runnable scopes and no unavailable cases is not-applicable.
+   observation counts and reasons. Summary counts distinguish analyzed and not-applicable scopes.
+   Unsupported-only scopes retain `SKIPPED_NA`, identity and input decisions in the summary and an
+   empty scope shard's producer metadata. They create neither an unavailable-input row nor a
+   fictitious complete-analysis row. No runnable scopes and no unavailable cases is not-applicable.
 
 ## Dataflow
 
@@ -301,6 +318,7 @@ default non-retryable metadata is not advisory classification.
 - Tooling failure: unavailable tool/image, timeout, OOM, nonzero engine exit, and seeded per-unit
   failures; malformed/missing JSON is an adapter/output failure.
 - Coverage missing: execution/output/diagnostic bounds; diagnostic path outside accepted source;
+  invalid physical spans, unresolved trace locations/ranges and missing per-file outcome records;
   no seeds, unselected/unsupported seed units, missing known neighborhood and unresolved seed
   dispositions. Seeded coverage stays partial, or unavailable when every executed engine failed.
 - Changed accepted mappings/database or matching checkpoint artifacts raises an integrity error.
@@ -329,7 +347,10 @@ Scope checkpoints include accepted source/compile identities, adapter version, c
 tool identity and seeded identities. Changing engine settings, tool pin, source, compile rows,
 seeds or neighborhood invalidates the affected scope. Matching checkpoints verify referenced
 evidence; seeded failed engines are deliberately retried rather than reused. Full-mode partial
-results may be reused. Runtime unit-level reuse is separate
+results may be reused only when per-file outcome records are complete. Checkpoints bind raw wrapper
+documents and streams, and verify detached native objects, execution references and retention
+receipts with the public provenance verifier. Missing/changed native evidence is an integrity
+failure, never a successful reuse. Runtime unit-level reuse is separate
 ([resumability](../architecture/jobs-and-runtime.md#wave-1-resumability)).
 Generated task/tool bindings remain [T-147](../TODO.md);
 this is deterministic tool execution, not model inference.

@@ -127,6 +127,10 @@ database`. Every named bound produces a gap; none widens the selection.
 * **Compile or analyze failure**: a gap on exactly the seeds that unit carried; those seeds stay
   `unresolved` (reason `producer_failed`). A total failure is `unavailable` coverage. A failure is not
   checkpointed, so resume retries it.
+* **Missing Clang per-file outcomes**: aggregate exit zero is insufficient. Missing, malformed or
+  incomplete selected-file outcomes leave the affected seeds unresolved (`not_run`) and prevent
+  checkpoint reuse; positive evidence from unaffected files is retained. If neither engine has any
+  verified successful file outcome, Clang coverage is unavailable rather than partial.
 * **Not applicable** (a unit the tool does not support): the seeds are `not_applicable`, neither failed
   nor clean.
 * Neither a failure nor a not-applicable seed ever raises coverage.
@@ -145,6 +149,9 @@ Compile-database producers also bind each seed location's priority rank in their
 A rank-only change can change the selected TU when `unit_limit` is reached and therefore cannot reuse
 the old selection. Reordering the same locations/ranks does not invalidate it. Existing compile-unit,
 neighborhood membership/depth, tool and setting identities remain part of the checkpoint.
+Clang additionally binds source-observation provenance and total/omitted, outside-database and
+unlocated seed counts, so the ledger cannot silently reuse stale omissions. A reordered input that
+changes its observation identities is new provenance, not an equivalent seed iteration order.
 
 ## 9. Publication and exposure
 
@@ -218,9 +225,15 @@ neighborhood exists; labels never change coverage.
 
 ## 11. Tests
 
-* Shared module and ledger: `tests/test_seeding_module.py`, `tests/test_seeded_ir_and_record.py`.
-* Producers: `tests/test_seeded_compiled.py`, `tests/test_clang_cfg.py`, `tests/test_seeded_clang_static.py`,
-  `tests/test_clang_static_tool.py`, `tests/test_seeded_cpg.py`, `tests/test_cpg_export.py`,
+* Shared module and ledger: `tests/test_seeding_module.py`,
+  `tests/unit/job_cpp_compiled_analysis/test_seeded_ir_and_record.py`.
+* Producers: `tests/unit/job_cpp_compiled_analysis/test_seeded_compiled.py`,
+  `tests/unit/job_cpp_compiled_analysis/test_clang_cfg.py`,
+  `tests/unit/job_clang_static_analysis/test_seeded_clang_static.py`,
+  `tests/unit/job_clang_static_analysis/test_clang_static_tool.py`,
+  `tests/unit/job_clang_static_analysis/test_diagnostic_fidelity.py`,
+  `tests/unit/job_clang_static_analysis/test_outcomes_and_reuse.py`,
+  `tests/test_seeded_cpg.py`, `tests/test_cpg_export.py`,
   `tests/graph/test_analyzers.py` (12-unit fixture
   `tests/fixtures/seeded_clang/`, fake executors that record the replayed units).
 * End to end: `tests/integration/test_seeded_neighborhoods_end_to_end.py` runs the real seeded handlers

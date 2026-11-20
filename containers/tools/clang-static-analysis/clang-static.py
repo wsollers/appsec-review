@@ -8,8 +8,9 @@ adapter never invokes a produced binary; it only runs compiler analysis frontend
 from __future__ import annotations
 
 import json
-import os
+import io
 from pathlib import Path
+import posixpath
 import plistlib
 import re
 import subprocess
@@ -21,8 +22,11 @@ from typing import Any
 SCHEMA = "appsec-review/clang-static-output/1"
 MAX_COMMANDS = 4096
 MAX_CAPTURE = 8 * 1024 * 1024
+MAX_DIAGNOSTICS = 100000
+MAX_TRACE = 256
+MAX_RANGES = 16
 DIAGNOSTIC = re.compile(
-    r"^(?P<path>/.+?):(?P<line>\d+):(?P<column>\d+):\s+"
+    r"^(?P<path>.+?):(?P<line>\d+):(?P<column>\d+):\s+"
     r"(?P<severity>warning|error|note):\s+(?P<message>.*?)(?:\s+\[(?P<rule>[^\]]+)\])?$"
 )
 
@@ -33,34 +37,92 @@ def _database(path: Path) -> list[dict[str, Any]]:
         raise ValueError("compilation database exceeds command bound")
     for row in value:
         if not isinstance(row, dict) or not isinstance(row.get("file"), str) \
-                or not isinstance(row.get("arguments"), list) or len(row["arguments"]) > 2048:
+                or not isinstance(row.get("directory"), str) or not row["directory"].startswith("/target/") \
+                or not isinstance(row.get("arguments"), list) or not row["arguments"] \
+                or len(row["arguments"]) > 2048:
             raise ValueError("invalid compilation database row")
     return value
 
 
-def _run(argv: list[str]) -> tuple[int, str, bool]:
-    completed = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT, check=False)
-    truncated = len(completed.stdout) > MAX_CAPTURE
-    return completed.returncode, completed.stdout[:MAX_CAPTURE].decode("utf-8", "replace"), truncated
+def _run(argv: list[str], *, cwd: str | None = None) -> tuple[int, str, bool]:
+    # One merged pipe needs no selector/thread. Drain overflow without retaining it; the outer
+    # executor still owns process-tree time/memory limits. No application modules are in this image.
+    output = bytearray()
+    truncated = False
+    with subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT) as process:
+        while chunk := process.stdout.read(65536):
+            remaining = MAX_CAPTURE - len(output)
+            truncated |= len(chunk) > remaining
+            output.extend(chunk[:remaining])
+        code = process.wait()
+    return code, output.decode("utf-8", "replace"), truncated
+
+
+class Diagnostics(list):
+    """Bound allocation across all TUs, not just the final serialization."""
+
+    def __init__(self, maximum: int = MAX_DIAGNOSTICS):
+        super().__init__()
+        self.maximum = maximum
+        self.retained_bytes = 0
+        self.reported_count = 0
+        self.truncated = False
+
+    def add(self, record: dict[str, Any]) -> None:
+        self.reported_count += 1
+        size = len(json.dumps(record).encode("utf-8"))
+        self.truncated |= bool(record.get("trace_truncated") or record.get("ranges_truncated"))
+        if len(self) >= self.maximum or self.retained_bytes + size > MAX_CAPTURE:
+            self.truncated = True
+            return
+        self.append(record)
+        self.retained_bytes += size
 
 
 FIX_IT = re.compile(r"^fix-it:\"")
 
 
-def _text_diagnostics(text: str, *, engine: str, default_rule: str) -> list[dict[str, Any]]:
-    values = []
-    for line in text.splitlines():
-        if FIX_IT.match(line) and values:
-            values[-1]["fix_it"] = True          # presence only: a fix-it is never applied
+def _source_path(value: str, cwd: str | None) -> str:
+    return posixpath.normpath(posixpath.join(cwd, value)) if cwd else value
+
+
+def _text_diagnostics(text: str, *, engine: str, default_rule: str,
+                      values: Diagnostics | None = None, cwd: str | None = None) -> Diagnostics:
+    values = Diagnostics() if values is None else values
+    current = None
+    trace_length = 0
+
+    def flush() -> None:
+        if current is not None:
+            current.update(trace_length=trace_length, trace_truncated=trace_length > len(current["notes"]))
+            values.add(current)
+
+    for line in io.StringIO(text):
+        if FIX_IT.match(line) and current is not None:
+            current["fix_it"] = True
             continue
-        match = DIAGNOSTIC.match(line)
-        if not match or match.group("severity") == "note":
+        match = DIAGNOSTIC.match(line.rstrip("\r\n"))
+        if not match:
             continue
-        values.append({"rule_id": match.group("rule") or default_rule,
-                       "message": match.group("message"), "severity": match.group("severity"),
-                       "path": match.group("path"), "line": int(match.group("line")),
-                       "column": int(match.group("column")), "notes": [], "fix_it": False})
+        if match.group("severity") == "note":
+            if current is not None:
+                trace_length += 1
+                if len(current["notes"]) < MAX_TRACE:
+                    current["notes"].append({
+                        "message": match.group("message")[:4096], "path": _source_path(match.group("path"), cwd),
+                        "line": int(match.group("line")), "column": int(match.group("column")),
+                    })
+                values.truncated |= len(match.group("message")) > 4096
+            continue
+        flush()
+        trace_length = 0
+        current = {"rule_id": (match.group("rule") or default_rule)[:512],
+                       "message": match.group("message")[:16384], "severity": match.group("severity"),
+                       "path": _source_path(match.group("path"), cwd), "line": int(match.group("line")),
+                       "column": int(match.group("column")), "notes": [], "fix_it": False}
+        values.truncated |= len(match.group("message")) > 16384 or len(match.group("rule") or "") > 512
+    flush()
     return values
 
 
@@ -70,29 +132,61 @@ def _unit(row: dict[str, Any], code: int, output: str) -> dict[str, Any]:
     return {"file": row["file"], "exit_code": code, "message": failure[:512] if code else ""}
 
 
-def tidy(database: Path, checks: str, units: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bool, int]:
+def tidy(database: Path, checks: str, units: list[dict[str, Any]], *,
+         max_diagnostics: int = MAX_DIAGNOSTICS) -> tuple[list[dict[str, Any]], bool, int]:
     rows = _database(database)
-    diagnostics: list[dict[str, Any]] = []
+    diagnostics = Diagnostics(max_diagnostics)
     truncated = False
     exit_code = 0
     for row in rows:
         code, output, limited = _run(["clang-tidy-18", "-p", str(database.parent),
-                                      f"--checks={checks}", "--quiet",
-                                      "--extra-arg=-fdiagnostics-parseable-fixits", row["file"]])
+                                      f"--checks=-*,{checks}", '--config={"InheritParentConfig":false}', "--quiet",
+                                      "--extra-arg=-fdiagnostics-parseable-fixits", row["file"]],
+                                     cwd=row["directory"])
         units.append(_unit(row, code, output))
         exit_code = exit_code or code
         truncated = truncated or limited
-        diagnostics.extend(_text_diagnostics(output, engine="clang-tidy",
-                                             default_rule="clang-tidy-driver"))
-    return diagnostics, truncated, exit_code
+        _text_diagnostics(output, engine="clang-tidy", default_rule="clang-tidy-driver",
+                          values=diagnostics, cwd=row["directory"])
+    return diagnostics, truncated or diagnostics.truncated, exit_code
 
 
-def _plist_diagnostics(path: Path) -> list[dict[str, Any]]:
+def _plist_diagnostics(path: Path, values: Diagnostics | None = None, *, cwd: str | None = None) -> Diagnostics:
+    result = Diagnostics() if values is None else values
     if not path.is_file():
-        return []
-    document = plistlib.loads(path.read_bytes())
+        return result
+    with path.open("rb") as stream:
+        data = stream.read(MAX_CAPTURE + 1)
+    if len(data) > MAX_CAPTURE:
+        result.truncated = True
+        return result
+    document = plistlib.loads(data)
     files = document.get("files", [])
-    result = []
+
+    def point(value):
+        output = {"line": value.get("line"), "column": value.get("col")}
+        index = value.get("file")
+        if type(index) is int and 0 <= index < len(files):
+            output["path"] = _source_path(str(files[index]), cwd)
+        return output
+
+    def ranges(value):
+        raw = value.get("ranges", [])
+        if len(raw) > MAX_RANGES:
+            result.truncated = True
+        return [[point(start), point(end)] for start, end in raw[:MAX_RANGES]]
+
+    def pieces(path):
+        pending = [iter(path)]
+        while pending:
+            piece = next(pending[-1], None)
+            if piece is None:
+                pending.pop()
+                continue
+            yield piece
+            if isinstance(piece.get("path"), list):
+                pending.append(iter(piece["path"]))
+
     for diagnostic in document.get("diagnostics", []):
         location = diagnostic.get("location", {})
         file_index = location.get("file")
@@ -100,24 +194,37 @@ def _plist_diagnostics(path: Path) -> list[dict[str, Any]]:
             continue
         rule = diagnostic.get("check_name") or diagnostic.get("category") or "clang-static-analyzer"
         notes = []
-        for piece in diagnostic.get("path", [])[:256]:
+        trace_length = 0
+        fix_it = False
+        for piece in pieces(diagnostic.get("path", [])):
+            fix_it |= bool(piece.get("fixits"))
             message = piece.get("extended_message") or piece.get("message")
-            point = piece.get("location", {})
             if message:
-                notes.append({"message": str(message)[:4096], "line": point.get("line"),
-                              "column": point.get("col")})
-        result.append({"rule_id": str(rule), "message": str(diagnostic.get("description", rule)),
-                       "severity": "warning", "path": str(files[file_index]),
+                trace_length += 1
+                if len(notes) < MAX_TRACE:
+                    note = {"message": str(message)[:4096], **point(piece.get("location", {}))}
+                    if "ranges" in piece:
+                        note["ranges"] = ranges(piece)
+                    notes.append(note)
+                result.truncated |= len(str(message)) > 4096
+        description = str(diagnostic.get("description", rule))
+        record = {"rule_id": str(rule)[:512], "message": description[:16384],
+                       "severity": "warning", "path": _source_path(str(files[file_index]), cwd),
                        "line": int(location.get("line", 1)), "column": int(location.get("col", 1)),
-                       "notes": notes,
-                       "fix_it": any(piece.get("fixits") for piece in diagnostic.get("path", [])
-                                     if isinstance(piece, dict))})
+                       "notes": notes, "trace_length": trace_length, "trace_truncated": trace_length > len(notes),
+                       "fix_it": fix_it}
+        if "ranges" in diagnostic:
+            record["ranges"] = ranges(diagnostic)
+            record["ranges_truncated"] = len(diagnostic["ranges"]) > MAX_RANGES
+        result.truncated |= len(description) > 16384 or len(str(rule)) > 512
+        result.add(record)
     return result
 
 
-def analyze(database: Path, checkers: str, units: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bool, int]:
+def analyze(database: Path, checkers: str, units: list[dict[str, Any]], *,
+            max_diagnostics: int = MAX_DIAGNOSTICS) -> tuple[list[dict[str, Any]], bool, int]:
     rows = _database(database)
-    diagnostics: list[dict[str, Any]] = []
+    diagnostics = Diagnostics(max_diagnostics)
     truncated = False
     exit_code = 0
     with tempfile.TemporaryDirectory(dir=database.parent) as temporary:
@@ -129,16 +236,17 @@ def analyze(database: Path, checkers: str, units: list[dict[str, Any]]) -> tuple
             } else "clang-18"
             arguments += ["--analyze", "-Xanalyzer", f"-analyzer-checker={checkers}",
                           "-Xanalyzer", "-analyzer-output=plist-multi-file", "-o", str(output_path)]
-            code, output, limited = _run(arguments)
+            code, output, limited = _run(arguments, cwd=row["directory"])
             units.append(_unit(row, code, output))
             exit_code = exit_code or code
             truncated = truncated or limited
-            plist_diagnostics = _plist_diagnostics(output_path)
-            diagnostics.extend(plist_diagnostics)
-            if not plist_diagnostics:
-                diagnostics.extend(_text_diagnostics(output, engine="clang-static-analyzer",
-                                                     default_rule="clang-static-analyzer-driver"))
-    return diagnostics, truncated, exit_code
+            before = diagnostics.reported_count
+            _plist_diagnostics(output_path, diagnostics, cwd=row["directory"])
+            if diagnostics.reported_count == before:
+                _text_diagnostics(output, engine="clang-static-analyzer",
+                                  default_rule="clang-static-analyzer-driver", values=diagnostics, cwd=row["directory"])
+            output_path.unlink(missing_ok=True)
+    return diagnostics, truncated or diagnostics.truncated, exit_code
 
 
 def main(argv: list[str]) -> int:
@@ -151,19 +259,20 @@ def main(argv: list[str]) -> int:
         return 2
     action, database_name, output_name, maximum, selection = argv
     maximum_diagnostics = int(maximum)
-    if not 1 <= maximum_diagnostics <= 100000:
+    if not 1 <= maximum_diagnostics <= MAX_DIAGNOSTICS:
         raise ValueError("invalid diagnostic bound")
     units: list[dict[str, Any]] = []
-    diagnostics, capture_truncated, exit_code = (tidy(Path(database_name), selection, units)
+    diagnostics, capture_truncated, exit_code = (tidy(Path(database_name), selection, units,
+                                                      max_diagnostics=maximum_diagnostics)
                                                   if action == "tidy"
-                                                  else analyze(Path(database_name), selection, units))
-    bounded = diagnostics[:maximum_diagnostics]
+                                                  else analyze(Path(database_name), selection, units,
+                                                               max_diagnostics=maximum_diagnostics))
     Path(output_name).write_text(json.dumps({
         "schema": SCHEMA,
         "engine": "clang-tidy" if action == "tidy" else "clang-static-analyzer",
-        "diagnostics": bounded,
+        "diagnostics": diagnostics,
         "units": units,
-        "truncated": capture_truncated or len(diagnostics) > maximum_diagnostics,
+        "truncated": capture_truncated,
     }, sort_keys=True), encoding="utf-8")
     return exit_code
 

@@ -149,10 +149,15 @@ def _diagnostic_rows(shard_set: ShardSet, shards: Sequence[Mapping[str, Any]], s
                    "severity": source.get("reported_severity"), "message": str(source.get("message", ""))[:1024],
                    "fix_it": bool(source.get("fix_it")),
                    "trace_length": int(source.get("trace_length", len(trace)) or 0),
-                   "trace": trace[:MAX_TRACE_STEPS], "trace_truncated": len(trace) > MAX_TRACE_STEPS,
+                   "trace": trace[:MAX_TRACE_STEPS], "trace_retained_count": min(len(trace), MAX_TRACE_STEPS),
+                   "trace_truncated": bool(source.get("trace_truncated")) or len(trace) > MAX_TRACE_STEPS,
+                   "ranges": source.get("ranges", []),
                    "function": seeded.get("function"), "label": seeded.get("label"),
                    "seeds": list(seeded.get("seeds") or ()), "outside_neighborhood": bool(seeded.get("outside_neighborhood")),
                    "evidence_id": source.get("evidence_id")}
+        if payload["trace_truncated"]:
+            out.gaps.append(f"diagnostic_trace_truncated: {row['identity']} retains "
+                            f"{payload['trace_retained_count']} of {payload['trace_length']} steps")
         out.entities.append(_record(row, snapshot, payload))
     out.counts["diagnostics"] = min(len(rows), MAX_DIAGNOSTICS)
 

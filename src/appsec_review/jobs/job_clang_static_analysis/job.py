@@ -9,6 +9,7 @@ retained as scope-specific coverage gaps.
 from __future__ import annotations
 
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
+from collections import Counter, defaultdict
 from dataclasses import asdict
 import re
 import hashlib
@@ -18,11 +19,11 @@ from typing import Any, Mapping
 
 from appsec_review import seeding
 from appsec_review.jobs.cpp_index_scopes import (
-    SOURCE_MOUNT, IndexScope, project_prefix, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
+    SOURCE_MOUNT, CheckpointIntegrityError, IndexScope, project_prefix, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
     publish_scope_indexes, save_scope_checkpoint, scope_checkpoint, tool_identity,
 )
 from appsec_review.jobs.engineering_contracts import CLANG_STATIC_HANDOFF_SCHEMA
-from appsec_review.provenance import common_metadata, json_selector, retain_native_output, select_native
+from appsec_review.provenance import common_metadata, json_selector, retain_native_output, select_native, verify_native_reference
 from appsec_review.retrieval import (
     EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, RelationKind,
     RelationRecord, SourceLocation, index_fingerprint,
@@ -37,7 +38,7 @@ from .datasets import CONTRACT, DATASETS
 JOB_ID = "job_clang_static_analysis"
 TOOL_ID = "tool-clang-static-analysis"
 OUTPUT_SCHEMA = "appsec-review/clang-static-output/1"
-ADAPTER = "clang-static-adapter/5"
+ADAPTER = "clang-static-adapter/6"
 ENGINES = ("clang-tidy", "clang-static-analyzer")
 _CHECKER_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*")
 
@@ -64,11 +65,27 @@ def _validated_settings(settings: Mapping[str, Any]) -> dict[str, Any]:
     }
     if min(values["workers"], values["max_output_bytes"], values["max_diagnostics_per_scope"]) <= 0:
         raise ValueError("Clang static-analysis numeric bounds must be positive")
+    if values["max_diagnostics_per_scope"] > 100000:
+        raise ValueError("max_diagnostics_per_scope must not exceed the wrapper limit 100000")
     return values
 
 
 def _settings(unit: UnitContext) -> dict[str, Any]:
     return _validated_settings(unit.job.config.settings)
+
+
+def _valid_point(value: Any) -> bool:
+    return isinstance(value, Mapping) and all(
+        value.get(key) is None or
+        (isinstance(value[key], str) and len(value[key]) <= 4096 if key == "path"
+         else type(value[key]) is int and value[key] > 0)
+        for key in ("path", "line", "column"))
+
+
+def _valid_ranges(value: Any) -> bool:
+    return isinstance(value, list) and len(value) <= 16 and all(
+        isinstance(pair, list) and len(pair) == 2 and all(_valid_point(point) for point in pair)
+        for pair in value)
 
 
 def _read_output(path: Path, *, engine: str, max_bytes: int, max_diagnostics: int) -> tuple[list[dict[str, Any]], list[str]]:
@@ -114,17 +131,37 @@ def _read_output(path: Path, *, engine: str, max_bytes: int, max_diagnostics: in
                 or int(item["line"]) < 1 or int(item["column"]) < 1:
             safety.fail(f"{engine} returned an out-of-contract diagnostic", action="clang.output")
             return [], [f"{engine} diagnostic {index} exceeded field bounds"]
+        end_line, end_column = item.get("end_line", item["line"]), item.get("end_column", item["column"])
+        if (type(end_line) is not int or type(end_column) is not int or end_line < 1 or end_column < 1
+                or (end_line, end_column) < (item["line"], item["column"])):
+            safety.fail(f"{engine} returned an invalid span", action="clang.output")
+            return [], [f"{engine} diagnostic {index} had a malformed span"]
         notes = item.get("notes", [])
         if not isinstance(notes, list) or len(notes) > 256:
             safety.fail(f"{engine} returned an invalid trace", action="clang.output")
             return [], [f"{engine} diagnostic {index} had an unbounded trace"]
+        if not all(_valid_point(note) and isinstance(note.get("message"), str)
+                   and len(note["message"]) <= 4096 and _valid_ranges(note.get("ranges", []))
+                   for note in notes) or not _valid_ranges(item.get("ranges", [])):
+            safety.fail(f"{engine} returned malformed trace coordinates", action="clang.output")
+            return [], [f"{engine} diagnostic {index} had malformed trace/range fields"]
+        trace_length = item.get("trace_length", len(notes))
+        if type(trace_length) is not int or trace_length < len(notes) or (
+                "trace_truncated" in item and type(item["trace_truncated"]) is not bool):
+            safety.fail(f"{engine} returned malformed trace counts", action="clang.output")
+            return [], [f"{engine} diagnostic {index} had malformed trace counts"]
+        trace_truncated = item.get("trace_truncated") is True or trace_length > len(notes)
+        if trace_truncated:
+            safety.fail(f"{engine} trace was truncated", action="clang.output", expected=True)
+            gaps.append(f"{engine} diagnostic {index} trace truncated: retained {len(notes)} of {trace_length} steps")
         records.append({
             "engine": engine, "rule_id": item["rule_id"], "message": item["message"],
             "severity": str(item.get("severity", "warning"))[:32], "path": item["path"],
             "line": int(item["line"]), "column": int(item["column"]),
-            "end_line": max(int(item.get("end_line", item["line"])), int(item["line"])),
-            "end_column": max(int(item.get("end_column", item["column"])), int(item["column"])),
+            "end_line": end_line, "end_column": end_column,
             "notes": notes, "fix_it": item.get("fix_it") is True,
+            "trace_length": trace_length, "trace_truncated": trace_truncated,
+            "ranges": item.get("ranges", []),
             # Underscore keys address the retained native output and never enter the evidence identity.
             "_native_selector": json_selector("diagnostics", index).as_dict(),
         })
@@ -159,18 +196,72 @@ def _location(scope: IndexScope, record: Mapping[str, Any]) -> tuple[SourceLocat
     data = source.read_bytes()
     offsets = [0]
     offsets.extend(index + 1 for index, value in enumerate(data) if value == 10)
-    line = min(int(record["line"]), len(offsets))
-    end_line = min(int(record["end_line"]), len(offsets))
-    start = min(len(data), offsets[line - 1] + int(record["column"]) - 1)
-    end = min(len(data), offsets[end_line - 1] + int(record["end_column"]))
+    line, end_line = record["line"], record["end_line"]
+    column, end_column = record["column"], record["end_column"]
+    if any(type(value) is not int or value < 1 for value in (line, end_line, column, end_column)) \
+            or (end_line, end_column) < (line, column) or end_line > len(offsets):
+        return None, accepted
+
+    def position(line: int, column: int, *, inclusive_end: bool = False) -> int | None:
+        beginning = offsets[line - 1]
+        limit = offsets[line] - 1 if line < len(offsets) else len(data)
+        if limit > beginning and data[limit - 1:limit] == b"\r":
+            limit -= 1
+        offset = beginning + column - 1
+        if offset > limit or (offset < len(data) and data[offset] & 0xC0 == 0x80):
+            return None
+        if inclusive_end and offset < limit:
+            offset += 1
+            while offset < limit and data[offset] & 0xC0 == 0x80:
+                offset += 1
+        return offset
+
+    start, end = position(line, column), position(end_line, end_column, inclusive_end=True)
+    if start is None or end is None:
+        return None, accepted
     return SourceLocation(
         target_snapshot=scope.case_snapshot, path=str(accepted["target_path"]),
         file_sha256=str(accepted["sha256"]), start_byte=start, end_byte=max(start, end),
         start_line=line, end_line=end_line, start_column=int(record["column"]),
         end_column=int(record["end_column"]),
-        producer_location={"engine": record["engine"], "path": record["path"]},
+        producer_location={key: record[key] for key in
+                           ("engine", "path", "line", "column", "end_line", "end_column")},
         mapping_method="accepted-cpp-source-map", confidence=1.0,
     ), accepted
+
+
+def _resolved_ranges(scope: IndexScope, ranges: list[Any], engine: str) -> list[dict[str, Any]]:
+    resolved = []
+    for start, end in ranges:
+        location = None
+        if (all(point.get(key) is not None for point in (start, end) for key in ("path", "line", "column"))
+                and start["path"] == end["path"]):
+            location, _ = _location(scope, {**start, "engine": engine,
+                                            "end_line": end.get("line"), "end_column": end.get("column")})
+        resolved.append({"reported": [dict(start), dict(end)], "location": asdict(location) if location else None,
+                         **({} if location else {"gap": "range did not resolve to accepted source bytes"})})
+    return resolved
+
+
+def _resolved_trace(scope: IndexScope, record: Mapping[str, Any], gaps: list[str]) -> tuple[list[Any], list[Any]]:
+    notes = []
+    for note in record["notes"]:
+        location = None
+        if note.get("path") is not None and note.get("line") is not None and note.get("column") is not None:
+            location, _ = _location(scope, {**note, "engine": record["engine"],
+                                            "end_line": note["line"], "end_column": note["column"]})
+        resolved = {**note, "location": asdict(location) if location else None}
+        if location is None:
+            resolved["gap"] = "trace point did not resolve to accepted source bytes"
+            gaps.append(f"{record['engine']} {resolved['gap']}")
+        if "ranges" in note:
+            resolved["ranges"] = _resolved_ranges(scope, note["ranges"], record["engine"])
+        notes.append(resolved)
+    ranges = _resolved_ranges(scope, record["ranges"], record["engine"])
+    if any(item.get("gap") for item in ranges) or any(
+            item.get("gap") for note in notes for item in note.get("ranges", [])):
+        gaps.append(f"{record['engine']} diagnostic range did not resolve to accepted source bytes")
+    return notes, ranges
 
 
 def _engine_argv(engine: str, settings: Mapping[str, Any]) -> tuple[str, ...]:
@@ -187,6 +278,19 @@ def _not_applicable_scope(scope: IndexScope) -> dict[str, Any]:
             "not_applicable_inputs": scope.not_applicable_inputs()}
 
 
+def _skipped_scope_index(unit: UnitContext, skipped: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep applicability in the manifest without inventing measured analysis coverage."""
+    shard = f"clang-static-{skipped['scope_id']}"
+    fingerprint = checkpoint_identity({"adapter": ADAPTER, **skipped})
+    path = unit.job.run_root / "data" / "indices" / "observations" / f"{fingerprint}.sqlite"
+    builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
+                           target_snapshot=unit.job.source_fingerprint, shard_id=shard)
+    index = IndexIdentity("observations", "appsec-review/retrieval-index/2", builder.build(), fingerprint,
+                          path.relative_to(unit.job.run_root).as_posix(),
+                          {"job": JOB_ID, "unit": unit.unit_id, **skipped}, (), shard)
+    return {**skipped, "index_identity": asdict(index)}
+
+
 def _read_units(path: Path, *, max_bytes: int) -> list[dict[str, Any]] | None:
     """The wrapper's per-translation-unit outcomes, or ``None`` when it did not report any."""
     if not path.is_file() or path.is_symlink() or path.stat().st_size > max_bytes:
@@ -196,10 +300,13 @@ def _read_units(path: Path, *, max_bytes: int) -> list[dict[str, Any]] | None:
     except (OSError, UnicodeError, ValueError):
         return None
     units = document.get("units") if isinstance(document, Mapping) else None
-    if not isinstance(units, list) or not all(
-            isinstance(item, Mapping) and isinstance(item.get("file"), str) for item in units):
+    if not isinstance(units, list) or len(units) > 4096 or not all(
+            isinstance(item, Mapping) and isinstance(item.get("file"), str) and len(item["file"]) <= 4096
+            for item in units):
         return None
-    return [{"file": item["file"], "exit_code": item.get("exit_code"), "message": str(item.get("message") or "")[:512]}
+    return [{"file": item["file"],
+             "exit_code": item.get("exit_code") if type(item.get("exit_code")) is int else None,
+             "message": str(item.get("message") or "")[:512]}
             for item in units]
 
 
@@ -218,12 +325,25 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
         if executor_factory is None else {"tool_id": TOOL_ID, "injected_executor": True},
     }
     if run is not None:
-        values.update(seeded.identity_values(run.settings, run.scope_seeds, run.hood))
+        values.update(seeded.identity_values(run.settings, run.scope_seeds, run.hood, run.plan))
     identity = checkpoint_identity(values)
     reused = scope_checkpoint(root / "checkpoint.json", identity, unit.job.run_root, scope)
     if reused is not None:
+        try:
+            for native in reused.get("native_outputs", {}).values():
+                verify_native_reference(unit.job.run_root, native)
+        except (OSError, ValueError) as exc:
+            raise CheckpointIntegrityError(f"{scope.scope_id}: invalid Clang native evidence: {exc}") from exc
         return dict(reused)
 
+    generation = 1
+    while True:
+        evidence_root = root / identity / f"execution-{generation:04d}"
+        try:
+            evidence_root.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            generation += 1
     records: list[dict[str, Any]] = []
     gaps: list[str] = []
     executions: dict[str, Any] = {}
@@ -241,9 +361,13 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
             engines = ()
     engine_failed: set[str] = set()
     failed_units: dict[tuple[str, str], str] = {}
+    incomplete_units: set[tuple[str, str]] = set()
+    incomplete_engines: set[str] = set()
+    successful_units: dict[str, set[str]] = {}
+    expected_units = Counter(row["file"] for row in (rows if rows is not None else scope.container_compile_database()))
     retained: dict[str, dict[str, Any]] = {}
     for engine in engines:
-        scratch = root / ("tidy" if engine == "clang-tidy" else "analyze")
+        scratch = evidence_root / ("tidy" if engine == "clang-tidy" else "analyze")
         try:
             execution = execute_scope_tool(
                 unit, scope, TOOL_ID, _engine_argv(engine, settings), scratch, executor_factory,
@@ -257,6 +381,8 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
             continue
         executions[engine] = execution
         raw_artifacts.extend((execution["receipt"], execution["compile_database"]))
+        raw_artifacts.extend(artifact(unit.job.run_root, unit.job.run_root / execution[key])
+                             for key in ("stdout_path", "stderr_path"))
         from appsec_review.runtime import execution_safety as safety
         safety.failed_result(
             execution["timed_out"] or execution["oom_killed"] or execution["file_size_limit_reached"]
@@ -276,8 +402,8 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
             engine_failed.add(engine)
             continue
         output_path = scratch / ("tidy.json" if engine == "clang-tidy" else "analyze.json")
-        units = _read_units(output_path, max_bytes=settings["max_output_bytes"]) if run is not None else None
-        bad = [item for item in units or () if item["exit_code"] != 0]
+        units = _read_units(output_path, max_bytes=settings["max_output_bytes"])
+        bad = [item for item in units or () if item["exit_code"] is not None and item["exit_code"] != 0]
         from appsec_review.runtime import execution_safety as safety
         safety.failed_result(bool(bad) or execution["exit_code"] != 0,
                              f"{engine} failed on a translation unit", action="clang.execution")
@@ -285,6 +411,25 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
             gaps.append(f"{engine} exited with status {execution['exit_code']}")
             engine_failed.add(engine)
             continue
+        by_file: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for item in units or ():
+            by_file[item["file"]].append(item)
+        successful_units[engine] = set()
+        for path, count in sorted(expected_units.items()):
+            outcomes = by_file.get(path, [])
+            if len(outcomes) != count or any(item["exit_code"] is None for item in outcomes):
+                incomplete_units.add((engine, _source_of(path)))
+                gaps.append(f"{engine} incomplete per-file outcomes for {path}: expected {count} valid records, "
+                            f"got {sum(item['exit_code'] is not None for item in outcomes)}")
+            elif all(item["exit_code"] == 0 for item in outcomes):
+                successful_units[engine].add(path)
+        if set(by_file) - set(expected_units):
+            gaps.append(f"{engine} per-file outcomes included unselected files")
+            incomplete_engines.add(engine)
+        if units is None or any(item[0] == engine for item in incomplete_units):
+            incomplete_engines.add(engine)
+        if engine in incomplete_engines:
+            safety.fail(f"{engine} per-file outcomes were incomplete or malformed", action="clang.output")
         for item in bad:
             rel = _source_of(item["file"])
             failed_units[(engine, rel)] = item["message"] or f"exit {item['exit_code']}"
@@ -309,13 +454,15 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
         for key, rels in (selection.by_seed if selection else {}).items():
             if engine_failed or any((engine, rel) in failed_units for engine in ENGINES for rel in rels):
                 failed[key] = seeding.record.REASON_RUN_FAILED
+            elif any((engine, rel) in incomplete_units for engine in ENGINES for rel in rels):
+                failed[key] = seeding.record.REASON_NOT_RUN
         section = seeded.section_for(run, selection, failed)
         if not run.scope_seeds.seeds:
             section["gaps"] = [seeding.NO_SEEDS_GAP, *section["gaps"]]
         elif not run.hood.known:
             gaps.append(seeded.NEIGHBORHOOD_UNAVAILABLE)
         gaps.extend(gap for gap in section["gaps"] if gap not in gaps)
-        ledger_path = root / "seeded-ledger.json"
+        ledger_path = evidence_root / "seeded-ledger.json"
         atomic_json(ledger_path, {"schema": seeding.record.RECORD_SCHEMA, "branch": "clang-static",
                                   "project": scope.case_id, "seeded": section})
         ledger = artifact(unit.job.run_root, ledger_path)
@@ -345,7 +492,11 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
     for record in records:
         location, accepted = _location(scope, record)
         if location is None or accepted is None:
-            gaps.append(f"{record['engine']} diagnostic path did not resolve to accepted source: {record['path']}")
+            gaps.append(f"{record['engine']} diagnostic path did not resolve to accepted source: {record['path']}"
+                        if accepted is None else
+                        f"{record['engine']} diagnostic span did not resolve to accepted source bytes: "
+                        f"{record['path']}:{record['line']}:{record['column']}-"
+                        f"{record['end_line']}:{record['end_column']}")
             continue
         selector = record.get("_native_selector")
         hashed = {key: value for key, value in record.items() if not key.startswith("_")}
@@ -367,12 +518,14 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
             source_entities.add(source_id.value)
         # ``native_severity`` is the key retrieval normalizes (clang ``warning`` -> medium, ``error`` -> high);
         # ``reported_severity`` stays for readers of the previous adapter's payloads.
+        trace, ranges = _resolved_trace(scope, record, gaps)
         payload = {"tool_id": TOOL_ID, "scanner": record["engine"], "category": "source_sast",
                    "native_rule_id": record["rule_id"],
                    "message": record["message"], "native_severity": record["severity"],
                    "reported_severity": record["severity"],
-                   "project_id": scope.project_id, "trace": record["notes"], "evidence_id": evidence_id,
-                   "trace_length": len(record["notes"]), "fix_it": bool(record.get("fix_it"))}
+                   "project_id": scope.project_id, "trace": trace, "ranges": ranges, "evidence_id": evidence_id,
+                   "trace_length": record["trace_length"], "trace_retained_count": len(trace),
+                   "trace_truncated": record["trace_truncated"], "fix_it": bool(record.get("fix_it"))}
         native_output = retained.get(record["engine"])
         payload["common"] = common_metadata(
             payload,
@@ -392,10 +545,12 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
                                             source_id.value, True, 1.0))
         accepted_count += 1
     gaps = list(dict.fromkeys(gaps))
+    any_success = any(paths for engine, paths in successful_units.items() if engine not in engine_failed)
+    coverage_status = "unavailable" if engines and not any_success else "partial"
     if run is None:
-        coverage_status, coverage_text = ("complete" if not gaps else "partial"), (None if not gaps else "; ".join(gaps)[:16384])
+        coverage_status = coverage_status if gaps else "complete"
+        coverage_text = None if not gaps else "; ".join(gaps)[:16384]
     else:
-        coverage_status = "unavailable" if engines and engine_failed >= set(engines) else "partial"
         coverage_text = "; ".join([seeding.coverage_gap(section), *gaps])[:16384]
     builder.add_coverage(f"clang-static:{scope.project_id}", coverage_status, coverage_text)
     sha = builder.build()
@@ -411,6 +566,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
     collapsed = collapsed_repeats + builder.collapsed_identical_records
     result = {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
               "accepted_compile_database": dict(scope.compile_database), "executions": executions,
+              "evidence_artifacts": raw_artifacts, "native_outputs": retained,
               "observation_count": accepted_count - builder.collapsed_identical_records,
               "collapsed_identical_records": collapsed,
               "index_identity": asdict(index),
@@ -419,7 +575,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
     if run is not None:
         result.update(seeded=compact, ledger=ledger, diagnostic_labels=dict(sorted(labels.items())),
                       analyzed_units=[seeded.UNIT_PREFIX + _source_of(row["file"]) for row in (rows or ())])
-    if run is None or not (engine_failed or failed_units):
+    if not incomplete_engines and (run is None or not (engine_failed or failed_units)):
         save_scope_checkpoint(root / "checkpoint.json", identity, result)
     return result
 
@@ -471,16 +627,20 @@ def build_job(*, executor_factory: Any = None) -> Job:
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         loaded, analyzed = unit.output("load.accepted_cpp"), unit.output("analyze.scopes")
+        skipped = analyzed.get("not_applicable_scopes", [])
+        skipped_indexes = [_skipped_scope_index(unit, item) for item in skipped]
         manifest = publish_scope_indexes(
             unit, job_id=JOB_ID, index_name="observations", prefix="clang-static",
-            results=analyzed["scopes"], unavailable=loaded["unavailable"], gaps=analyzed["gaps"],
+            results=[*analyzed["scopes"], *skipped_indexes], unavailable=loaded["unavailable"], gaps=analyzed["gaps"],
         )
-        counts = {"scopes": len(analyzed["scopes"]),
+        counts = {"scopes": len(analyzed["scopes"]) + len(skipped),
+                  "analyzed_scopes": len(analyzed["scopes"]), "not_applicable_scopes": len(skipped),
                   "observations": sum(item["observation_count"] for item in analyzed["scopes"]),
                   "gap_count": len(analyzed["gaps"])}
         summary = unit.unit_root / "clang-static-analysis-summary.json"
         atomic_json(summary, {"schema": CLANG_STATIC_HANDOFF_SCHEMA, "upstream": loaded["upstream"],
                               "counts": counts, "scopes": analyzed["scopes"],
+                              "not_applicable_scopes": skipped,
                               "unavailable": loaded["unavailable"], "gaps": analyzed["gaps"]})
         return {"schema": CLANG_STATIC_HANDOFF_SCHEMA, "artifact": artifact(unit.job.run_root, summary),
                 "index_manifest": manifest, "item_count": counts["observations"], "counts": counts,

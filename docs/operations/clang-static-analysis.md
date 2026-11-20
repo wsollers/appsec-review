@@ -17,8 +17,9 @@ load.accepted_cpp -> analyze.scopes -> acceptance.publish_handoff
 
 - `workers`: concurrent accepted C/C++ scopes;
 - `max_output_bytes`: maximum result document and execution file-size boundary;
-- `max_diagnostics_per_scope`: maximum normalized diagnostics per engine and scope;
-- `clang_tidy_checks`: exact Clang-Tidy check globs; and
+- `max_diagnostics_per_scope`: maximum normalized diagnostics per engine and scope (1–100000);
+- `clang_tidy_checks`: exact Clang-Tidy check globs, applied after clearing default checks and
+  with an explicit non-inheriting configuration rather than target `.clang-tidy` files; and
 - `clang_analyzer_checkers`: exact Static Analyzer checker or package names (`core`, `alpha.security`). Patterns such as `alpha.security.*` are rejected: clang fails every unit on one.
 
 The container catalog entry is `tool-clang-static-analysis`, built from
@@ -37,14 +38,27 @@ for `clang-static:<project-id>`. Raw action documents, execution receipts, and r
 databases remain under `data/clang-static/` as protected run artifacts. Published retrieval records
 contain only bounded, source-mapped observations and resolving hashes.
 
+Both frontends run in the accepted, rebased compile directory, including build subdirectories;
+relative include options retain that context. The wrapper drains combined compiler output in
+fixed-size chunks, retains at most 8 MiB per command, reads at most 8 MiB plus one overflow byte
+per plist, and limits accumulated diagnostics to both the configured count and 8 MiB of serialized
+record bytes. Every cut is explicit. Trace notes retain source paths, physical coordinates and
+supported ranges; the job resolves them against accepted bytes. Invalid primary spans are dropped
+with a gap, never clamped to EOF. Unresolving trace points/ranges remain explicitly unresolved.
+Each trace carries reported/retained counts and a truncation flag, which the graph consumer preserves
+when applying its own smaller display limit.
+
 Retries reuse a scope checkpoint only when its identity (accepted scope, tool identity, checker
 selection, bounds, and adapter) matches and every referenced run artifact still verifies. A changed
-checker set or compile database produces a new immutable shard.
+checker set or compile database produces a new immutable shard. Wrapper documents, raw streams and
+detached native references are verified too; missing evidence is an integrity failure, not a cache hit.
+Seed population omissions and source-observation provenance are part of the seeded identity.
 
-For development verification, run the producer and adapter suites together:
+For development verification, collect the desired files first, then use the bounded test wrapper
+with that exact count (replace `COUNT` below):
 
 ```text
-python -m pytest -q tests/test_clang_static_analysis.py tests/test_clang_static_tool.py --basetemp=test/tmp/clang-static
+scripts/run-tests.sh --expect-tests COUNT --parallel --test-workers 2 --shuffle-seed 221122 -- tests/unit/job_clang_static_analysis/
 ```
 
 These tests validate bounded normalization and injected execution. The tool-image acceptance is a
@@ -62,10 +76,19 @@ Diagnostics carry the check id, severity, fix-it presence and trace length, and 
 checkpointed; an unsupported unit is `not_applicable`; zero seeds is a nonexecuted scope with a gap, not clean coverage
 (`COMPLETED_WITH_GAPS`). The driver writes a per-unit outcome list (`units`) beside the diagnostics so a
 failed unit is named; fix-its are detected from `-fdiagnostics-parseable-fixits` and plist fix-it hunks and
-never applied. In the code-graph index, checks in the reviewed table `graph/analyzers.py` can corroborate a
+never applied. Aggregate exit zero without complete per-file outcomes is **incomplete**, not legacy
+success: affected seeds stay unresolved (`not_run`) and no checkpoint is saved. Valid evidence from
+other files/engines remains available. When no selected file has a verified successful outcome from
+either engine, coverage is unavailable, including all-unit failures. Unsupported-only scopes remain
+`SKIPPED_NA` in summary counts and manifest metadata, without fabricated measured coverage.
+In the code-graph index, checks in the reviewed table `graph/analyzers.py` can corroborate a
 CodeQL `sink_site` or add an inexact analyzer-only one (`docs/architecture/seeded-neighborhoods.md`
 section 9). The `clang-static.py` change alters the `tool-clang-static-analysis` image
-identity: rebuild and re-pin it. Contract: `docs/architecture/seeded-neighborhoods.md`.
+identity: an operator must rebuild this image, verify its new image/release identity and refresh the
+host binding before use. `Dockerfile` copies the wrapper into `/opt/appsec`; reloading mounted Python
+alone does not update it. The package asset lock is unchanged. Application-source changes separately
+require the normal signed-source reload. These are manual rollout/acceptance steps, not unit-test
+gates. Contract: `docs/architecture/seeded-neighborhoods.md`.
 
 The [canonical job page](job_clang_static_analysis.md) distinguishes full-mode partial-result
 reuse from seeded failure retry and records the independent acceptance checks.

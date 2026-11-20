@@ -89,10 +89,14 @@ class FakeExecutor:
             count = 21 if engine == self.too_many else 2 if engine == self.duplicate else 1
             output.write_text(json.dumps({
                 "schema": OUTPUT_SCHEMA, "engine": engine, "truncated": False,
+                "units": [{"file": row["file"], "exit_code": 7 if engine == self.fail else 0,
+                           "message": "fixture failure" if engine == self.fail else ""}
+                          for row in json.loads((scratch / "compile_commands.json").read_text())],
                 "diagnostics": [{"rule_id": "bugprone-use-after-move" if action == "tidy" else "core.NullDereference",
                                  "message": "fixture diagnostic", "severity": "warning",
                                  "path": "/target/source/main.cpp", "line": 1, "column": 30,
-                                 "notes": [{"message": "path node", "line": 1, "column": 20}]}
+                                 "notes": [{"message": "path node", "path": "/target/source/main.cpp",
+                                            "line": 1, "column": 20}]}
                                 for _ in range(count)],
             }), encoding="utf-8")
         relative = lambda path: path.relative_to(self.run_root).as_posix()

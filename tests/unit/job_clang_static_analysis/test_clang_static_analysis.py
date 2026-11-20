@@ -431,7 +431,7 @@ def test_clang_common_record_cites_the_retained_wrapper_output_inside_an_attempt
     for payload in payloads:
         refs = payload["common"]["evidence_refs"]
         assert len(refs) == 1 and refs[0]["selector"] == {"kind": "json_pointer", "value": "/diagnostics/0"}
-        assert refs[0]["parser_identity"] == "clang-static-adapter/5"
+        assert refs[0]["parser_identity"] == "clang-static-adapter/6"
         assert payload["common"]["gap_ids"] == []
         assert payload["common"]["reported_severity"]["value"] == "medium"
 
