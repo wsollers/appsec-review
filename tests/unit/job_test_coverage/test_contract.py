@@ -195,7 +195,7 @@ def test_contract_topology_and_dataset_declarations_match_bounded_workflow() -> 
     ]
     assert declared["test_coverage"].indexes == ("analysis",)
     assert declared["test_coverage"].shard_prefixes == ("test-coverage-",)
-    assert declared["test_coverage"].query_route == "query_precomputed query_set=test_coverage"
+    assert declared["test_coverage"].query_route == "query_engineering_signals signal_family=test_coverage"
     assert declared["test_coverage_handoff"].query_route == METADATA_ROUTE
     assert declared["test_coverage_handoff"].artifacts == (
         "data/jobs/job_test_coverage/attempts/*/artifacts/test-coverage/*.json",

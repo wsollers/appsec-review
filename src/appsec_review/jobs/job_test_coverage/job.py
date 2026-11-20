@@ -397,7 +397,8 @@ def build_job() -> Job:
                                        target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
                 for row in value["files"]:
                     native = {"build_unit_id": value["build_unit_id"], "artifact_sha256": row["artifact_sha256"],
-                              "producer_path": row["producer_path"], "path": row.get("path")}
+                              "artifact_path": row["artifact_path"], "producer_path": row["producer_path"],
+                              "path": row.get("path")}
                     identity = LogicalIdentity.derive(EntityKind.COVERAGE_CELL, unit.job.source_fingerprint, native)
                     name = str(row.get("path") or row["producer_path"])
                     builder.add_entity(EntityRecord(identity, json.dumps(native, sort_keys=True), name,

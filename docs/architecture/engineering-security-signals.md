@@ -128,7 +128,17 @@ language-build receipt and must still match their accepted SHA-256. The parser a
 | JaCoCo | XML source-file counters and class method counters |
 | LLVM | `llvm-cov export` JSON file summaries |
 
-XML external entities and DTD/entity declarations are rejected. Each source row normalizes line,
+XML external entities and DTD/entity declarations are rejected, including the ordinary JaCoCo
+report DOCTYPE. Supporting that declaration remains an unresolved safety/format decision, not
+permission to relax XML policy. LCOV observations for the same source union line, branch, and
+function-name identities before totals are computed; repeated missed hits cannot erase covered hits.
+Cobertura unions physical lines and identifiable methods across classes, deduplicating method/class
+line copies. Cross-class branch summaries are combined only when their union is determined
+(matching denominators with zero or fully covered observations); ambiguous partial overlap is a
+`malformed_coverage` gap. Duplicate JaCoCo/LLVM source summaries lack the identities needed for a
+union and are likewise rejected rather than added as unique source lines. Missing/malformed
+Cobertura branch fractions and invalid LLVM integer counts also produce `malformed_coverage`;
+other valid reports continue to be processed. Each source row normalizes line,
 branch, and function covered/total counts; rates are derived and remain `null` for a zero
 denominator. Producer paths are data, not source identities: the binder accepts an exact
 target-relative catalog path, otherwise one unique suffix match, and retains unresolved or
@@ -137,8 +147,11 @@ ambiguous candidates as gaps. A bound row includes the catalog path and catalog 
 Each applicable build unit publishes source `coverage_cell` entities, a build-unit aggregate, and
 `complete`, `partial`, or `unavailable` coverage. Multiple reports for one source are added but
 also produce `overlapping_coverage_reports`, because the available summaries cannot express a
-lossless line-level union. A successful applicable receipt without a report produces
-`missing_applicable_coverage`, not zero coverage.
+lossless line-level union across artifacts. Copies with identical bytes at distinct accepted paths
+remain distinct indexed provenance, not conflicting entities. Retrieval uses
+`query_engineering_signals signal_family=test_coverage`; file cells (including unresolved producer
+paths) are never broadcast as build aggregates. A successful applicable receipt without a report
+produces `missing_applicable_coverage`, not zero coverage.
 
 ### Deterministic multivuln fixtures
 
@@ -276,9 +289,12 @@ Downstream behavior is deliberately narrower than the available context:
 
 - Clang observations join the `source_sast` scanner-correlation and finding-lead path. They are
   security leads requiring review, not confirmed findings.
-- Coverage cells attach by exact source path and build unit to lane-B review packages. Coverage is
-  review-completeness and hunt context; it does not currently change the numeric LPS and neither
-  covered nor uncovered status is a security conclusion.
+- Coverage file cells attach by exact source path, with one separate build aggregate, to lane-B
+  review packages. Prioritization also consumes accepted coverage and applies the configured
+  uncovered-risk boost through composite scoring, retaining the normalized 0..1 score policy.
+  The coverage loader reports the current envelope completion status (with domain/legacy
+  fallbacks), consistently with the cells actually read. Neither covered nor uncovered status is
+  a security conclusion.
 - Profile hotspots attach by source path when available and by build unit otherwise. They seed
   hotspot context but do not change numeric prioritization, finding severity, or verification rules.
 - Dependency and Scorecard entities are balanced under the normal context cap so a large package
@@ -290,9 +306,10 @@ Downstream behavior is deliberately narrower than the available context:
   Scorecard data do not establish product
   applicability, change finding severity, or bypass the normal evidence and verification gates.
 - `job_review_data_indexing` inventories all engineering-signal producers, exposes their coverage, and retains
-  their declared retrieval routes for later prioritization and review. The current numeric review
-  prioritization job consumes its own syntax, dependency-graph, Semgrep, CodeQL, and history
-  features; these engineering signals complement that ranking rather than silently modifying it.
+  their declared retrieval routes for later prioritization and review. Numeric review
+  prioritization combines syntax, dependency-graph, Semgrep, CodeQL, and history features with
+  configured composite modifiers, including the implemented uncovered-risk boost. Coverage
+  context and prioritization modifiers do not alter finding severity or verification requirements.
 
 ## Configuration, operation, and development
 
@@ -317,5 +334,7 @@ Implementation entry points are under `src/appsec_review/jobs/job_clang_static_a
 `job_test_coverage/`, `job_profile_data/`, and `job_dependency_intelligence/`; the shared schema vocabulary is in
 `jobs/engineering_contracts.py`. Cross-workflow wiring is covered by
 `tests/test_engineering_signal_integration.py`; focused behavior lives in
-`tests/test_clang_static_analysis.py`, `tests/test_test_coverage.py`, `tests/test_profile_data.py`,
-`tests/test_dependency_intelligence.py`, and `tests/test_multivuln_coverage_fixtures.py`.
+`tests/unit/job_clang_static_analysis/`, `tests/unit/job_test_coverage/`,
+`tests/unit/job_profile_data/`, and `tests/unit/job_dependency_intelligence/`.
+`tests/live/test_multivuln_coverage_fixtures.py` is manual live-tier fixture validation requiring
+explicit authorization, not part of the focused unit gate.

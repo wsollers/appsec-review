@@ -10,7 +10,7 @@ DATASETS = (
     indexed("test_coverage", "index", "build", "appsec-review/retrieval-index/2",
             "Bound test-coverage counts and rates by accepted source file and build unit.",
             indexes=("analysis",), prefixes=("test-coverage-",),
-            route="query_precomputed query_set=test_coverage"),
+            route="query_engineering_signals signal_family=test_coverage"),
     artifact_only("test_coverage_handoff", "acceptance", "build",
                   "appsec-review/test-coverage-handoff/1",
                   "Accepted coverage accounting, source bindings, and named gaps.",

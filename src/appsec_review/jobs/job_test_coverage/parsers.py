@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
+import math
 import re
 from typing import Any, Mapping
 import xml.etree.ElementTree as ET
@@ -60,21 +61,39 @@ class CoverageDocument:
 
 
 def _checked_int(value: Any, label: str) -> int:
-    if isinstance(value, bool):
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        raise ValueError(f"{label} is not an integer")
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
         raise ValueError(f"{label} is not an integer")
     try:
         result = int(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(f"{label} is not an integer") from exc
     if result < 0:
         raise ValueError(f"{label} cannot be negative")
     return result
 
 
+@dataclass
+class _LcovSource:
+    lines: dict[int, int] = field(default_factory=dict)
+    branches: set[tuple[int, str, str]] = field(default_factory=set)
+    covered_branches: set[tuple[int, str, str]] = field(default_factory=set)
+    functions: dict[str, int] = field(default_factory=dict)
+
+    def totals(self) -> CoverageTotals:
+        return CoverageTotals(
+            len(self.lines), sum(hit > 0 for hit in self.lines.values()),
+            len(self.branches), len(self.covered_branches), len(self.functions),
+            sum(hit > 0 for hit in self.functions.values()))
+
+
 def _merge(files: list[CoverageFile]) -> tuple[CoverageFile, ...]:
     values: dict[str, CoverageTotals] = {}
     for item in files:
-        values[item.source_path] = values.get(item.source_path, CoverageTotals()) + item.totals
+        if item.source_path in values:
+            raise ValueError(f"overlapping source summaries cannot be unioned: {item.source_path}")
+        values[item.source_path] = item.totals
     return tuple(CoverageFile(path, values[path]) for path in sorted(values))
 
 
@@ -85,63 +104,55 @@ def _lcov(data: bytes, max_rows: int) -> CoverageDocument:
         raise ValueError("LCOV is not valid UTF-8") from exc
     if len(lines) > max_rows:
         raise ValueError(f"LCOV row bound exceeded ({max_rows})")
-    files: list[CoverageFile] = []
-    path: str | None = None
-    line_hits: dict[int, int] = {}
-    branches: set[tuple[int, str, str]] = set()
-    covered_branches: set[tuple[int, str, str]] = set()
-    functions: dict[str, int] = {}
-
-    def finish() -> None:
-        nonlocal path, line_hits, branches, covered_branches, functions
-        if path is not None:
-            files.append(CoverageFile(path, CoverageTotals(
-                len(line_hits), sum(hit > 0 for hit in line_hits.values()),
-                len(branches), len(covered_branches), len(functions),
-                sum(hit > 0 for hit in functions.values()))))
-        path, line_hits, branches, covered_branches, functions = None, {}, set(), set(), {}
+    sources: dict[str, _LcovSource] = {}
+    source: _LcovSource | None = None
 
     for number, raw in enumerate(lines, 1):
         if raw.startswith("SF:"):
-            if path is not None:
-                finish()
             path = raw[3:].strip()
             if not path:
                 raise ValueError(f"LCOV row {number} has an empty source path")
+            source = sources.setdefault(path, _LcovSource())
         elif raw.startswith("DA:"):
-            if path is None:
+            if source is None:
                 raise ValueError(f"LCOV row {number} precedes SF")
             values = raw[3:].split(",")
             if len(values) < 2:
                 raise ValueError(f"LCOV row {number} is malformed")
-            line_hits[_checked_int(values[0], "LCOV line")] = _checked_int(values[1], "LCOV hits")
+            line = _checked_int(values[0], "LCOV line")
+            source.lines[line] = max(source.lines.get(line, 0), _checked_int(values[1], "LCOV hits"))
         elif raw.startswith("BRDA:"):
-            if path is None:
+            if source is None:
                 raise ValueError(f"LCOV row {number} precedes SF")
             values = raw[5:].split(",")
             if len(values) != 4:
                 raise ValueError(f"LCOV row {number} is malformed")
             key = (_checked_int(values[0], "LCOV branch line"), values[1], values[2])
-            branches.add(key)
+            source.branches.add(key)
             if values[3] != "-" and _checked_int(values[3], "LCOV branch hits") > 0:
-                covered_branches.add(key)
+                source.covered_branches.add(key)
         elif raw.startswith("FN:"):
+            if source is None:
+                raise ValueError(f"LCOV row {number} precedes SF")
             values = raw[3:].split(",", 1)
             if len(values) != 2 or not values[1]:
                 raise ValueError(f"LCOV row {number} is malformed")
             _checked_int(values[0], "LCOV function line")
-            functions.setdefault(values[1], 0)
+            source.functions.setdefault(values[1], 0)
         elif raw.startswith("FNDA:"):
+            if source is None:
+                raise ValueError(f"LCOV row {number} precedes SF")
             values = raw[5:].split(",", 1)
             if len(values) != 2 or not values[1]:
                 raise ValueError(f"LCOV row {number} is malformed")
-            functions[values[1]] = _checked_int(values[0], "LCOV function hits")
+            source.functions[values[1]] = max(
+                source.functions.get(values[1], 0), _checked_int(values[0], "LCOV function hits"))
         elif raw == "end_of_record":
-            finish()
-    finish()
-    if not files:
+            source = None
+    if not sources:
         raise ValueError("LCOV contains no source records")
-    return CoverageDocument("lcov", _merge(files))
+    return CoverageDocument("lcov", tuple(
+        CoverageFile(path, sources[path].totals()) for path in sorted(sources)))
 
 
 def _xml_root(data: bytes, max_rows: int) -> ET.Element:
@@ -163,16 +174,17 @@ def _cobertura(data: bytes, max_rows: int) -> CoverageDocument:
     root = _xml_root(data, max_rows)
     if root.tag.rsplit("}", 1)[-1] != "coverage":
         raise ValueError("Cobertura root element is not coverage")
-    files: list[CoverageFile] = []
-    for cls in root.iter():
+    sources: dict[str, tuple[dict[int, int], dict[int, tuple[int, int]],
+                             dict[tuple[str, str, str], bool]]] = {}
+    for class_index, cls in enumerate(root.iter()):
         if cls.tag.rsplit("}", 1)[-1] != "class" or not cls.get("filename"):
             continue
-        line_hits: dict[int, int] = {}
+        path = str(cls.get("filename"))
+        line_hits, source_branches, methods = sources.setdefault(path, ({}, {}, {}))
         # A class lists each line once under <lines> and again under its <method>; branch counts
         # are kept per line, like hits, so a line reported twice is counted once.
         line_branches: dict[int, tuple[int, int]] = {}
-        methods_total = methods_covered = 0
-        for child in cls.iter():
+        for method_index, child in enumerate(cls.iter()):
             name = child.tag.rsplit("}", 1)[-1]
             if name == "line" and child.get("number") is not None:
                 number = _checked_int(child.get("number"), "Cobertura line")
@@ -180,22 +192,42 @@ def _cobertura(data: bytes, max_rows: int) -> CoverageDocument:
                                         _checked_int(child.get("hits", "0"), "Cobertura hits"))
                 if child.get("branch") == "true":
                     match = _CONDITION.search(child.get("condition-coverage", ""))
-                    if match:
-                        covered = _checked_int(match.group(1), "Cobertura covered branches")
-                        total = _checked_int(match.group(2), "Cobertura branches")
-                        line_branches[number] = max(line_branches.get(number, (0, 0)), (total, covered))
+                    if not match:
+                        raise ValueError("Cobertura branch condition-coverage is missing or malformed")
+                    covered = _checked_int(match.group(1), "Cobertura covered branches")
+                    total = _checked_int(match.group(2), "Cobertura branches")
+                    if total == 0 or covered > total:
+                        raise ValueError("Cobertura branch counts are invalid")
+                    previous = line_branches.get(number)
+                    if previous is not None and previous != (total, covered):
+                        raise ValueError("overlapping Cobertura branch annotations disagree")
+                    line_branches[number] = (total, covered)
             elif name == "method":
-                methods_total += 1
+                key = (str(cls.get("name", f"@class-{class_index}")),
+                       str(child.get("name", f"@method-{method_index}")),
+                       str(child.get("signature", "")))
                 method_hits = [_checked_int(line.get("hits", "0"), "Cobertura method hits")
                                for line in child.iter() if line.tag.rsplit("}", 1)[-1] == "line"]
-                methods_covered += bool(method_hits and any(method_hits))
-        files.append(CoverageFile(str(cls.get("filename")), CoverageTotals(
-            len(line_hits), sum(value > 0 for value in line_hits.values()),
-            sum(total for total, _ in line_branches.values()),
-            sum(covered for _, covered in line_branches.values()), methods_total, methods_covered)))
-    if not files:
+                methods[key] = methods.get(key, False) or any(method_hits)
+        for number, counts in line_branches.items():
+            previous = source_branches.get(number)
+            if previous is not None:
+                # Fractions alone cannot identify which branches two classes covered.
+                total, covered = counts
+                old_total, old_covered = previous
+                if total != old_total or (0 < covered < total and 0 < old_covered < total):
+                    raise ValueError("overlapping Cobertura branch summaries cannot be unioned")
+                counts = (total, max(covered, old_covered))
+            source_branches[number] = counts
+    if not sources:
         raise ValueError("Cobertura contains no class source records")
-    return CoverageDocument("cobertura", _merge(files))
+    files = []
+    for path, (line_hits, branches, methods) in sorted(sources.items()):
+        files.append(CoverageFile(path, CoverageTotals(
+            len(line_hits), sum(value > 0 for value in line_hits.values()),
+            sum(total for total, _ in branches.values()),
+            sum(covered for _, covered in branches.values()), len(methods), sum(methods.values()))))
+    return CoverageDocument("cobertura", tuple(files))
 
 
 def _counter(element: ET.Element, kind: str) -> tuple[int, int]:

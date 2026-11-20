@@ -46,7 +46,11 @@ supported format, the job records `unsupported_coverage_format`. Receipts whose 
 in the settings must equal the code constants; any other value fails configuration loading.
 
 The accepted output is under the job attempt's `artifacts/test-coverage/` directory. Retrieval
-shards use the `analysis` index and `test-coverage-` prefix. Downstream code should call
+shards use the `analysis` index and `test-coverage-` prefix, exposed through
+`query_engineering_signals signal_family=test_coverage` with optional exact source-path filtering.
+File cells retain `producer_path`, accepted artifact path/hash, and catalog file identity; only the
+separate build aggregate is build-wide review context. Identical report bytes at distinct accepted
+paths retain distinct provenance and the overlap gap. Downstream code should call
 `load_accepted_test_coverage(run_root)` rather than selecting a latest file directly.
 
 The checked-in `appsec-multi-vuln` reports are deterministic parser/source-binding fixtures marked
@@ -73,20 +77,30 @@ handoff, or invalid manifest stops publication and leaves the previous accepted 
 
 ## Verification
 
-Run the focused suite with:
+Use the owning Linux checkout and editable environment. Collect the four focused unit files first:
 
-```text
-pytest -q tests/test_test_coverage.py --basetemp=test/tmp/test-coverage
+```sh
+.venv/bin/python -m pytest --collect-only -q --basetemp=test/tmp/test-coverage-collect \
+  tests/unit/job_test_coverage/test_parsers.py tests/unit/job_test_coverage/test_ingestion.py \
+  tests/unit/job_test_coverage/test_job_graph.py tests/unit/job_test_coverage/test_contract.py
 ```
 
-The suite covers all four formats, catalog SHA binding, aggregate metrics, malformed and bounded
-inputs, absent applicable coverage, and accepted handoff/manifest verification.
+Then substitute the inspected count for `N` in this guarded command:
 
-When the ignored `targets/appsec-multi-vuln` checkout is available, also run:
-
-```text
-pytest -q tests/test_multivuln_coverage_fixtures.py --basetemp=test/tmp/multivuln-coverage
+```sh
+scripts/run-tests.sh --expect-tests N --max-tests 200 --parallel --test-workers 2 \
+  --shuffle-seed 20261120 --strict -- \
+  tests/unit/job_test_coverage/test_parsers.py tests/unit/job_test_coverage/test_ingestion.py \
+  tests/unit/job_test_coverage/test_job_graph.py tests/unit/job_test_coverage/test_contract.py
 ```
 
-That suite verifies the target's 19 project records and four fixture reports against the production
-parser and source binder. It proves fixture ingestion, not live test execution or security coverage.
+These units exercise synthetic standard-format report bytes, all four parsers, duplicate source
+accounting, artifact/path/hash binding, malformed and bounded inputs, real index/retrieval/context
+delivery, and a real runtime coverage publication consumed by prioritization with pinned read
+receipts. They do not generate measurements by executing target tests.
+
+`tests/live/test_multivuln_coverage_fixtures.py` is a **manual, explicitly authorized live-tier
+check**, not an automatic gate when a target checkout happens to exist. It verifies the target's
+19 project records and four fixture reports against the parser and source binder; this proves
+fixture ingestion, not live test measurements or security coverage. Follow the
+[testing workflow](../architecture/testing.md#working-loop) before selecting it.

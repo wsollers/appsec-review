@@ -275,3 +275,33 @@ def test_ingestion_enforces_artifact_origin_and_custody(tmp_path: Path) -> None:
     )
     assert clean["units"][0]["coverage_state"] == "complete"
 
+
+
+
+@pytest.mark.parametrize(("name", "payload"), [
+    ("coverage.json", b'{"type":"llvm.coverage.json.export","data":[{"files":[{"filename":"a.c","summary":{"lines":{"count":1e309}}}]}]}'),
+    ("coverage.json", b'{"type":"llvm.coverage.json.export","data":[{"files":[{"filename":"a.c","summary":{"lines":{"count":-0.5}}}]}]}'),
+    ("coverage.xml", b'<coverage><class filename="a.c"><line number="1" hits="1" branch="true"/></class></coverage>'),
+    ("lcov.info", b"FN:1,ghost\nFNDA:1,ghost\nSF:a.c\nDA:1,1\n"),
+    ("jacoco.xml", b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd"><report name="jacoco"><package name="p"><sourcefile name="A.java"><counter type="LINE" missed="0" covered="1"/></sourcefile></package></report>'),
+], ids=["overflow", "fraction", "unknown-branches", "orphan-function", "jacoco-doctype-policy"])
+def test_malformed_report_is_a_gap_not_zero_and_other_reports_survive(
+    tmp_path: Path, name: str, payload: bytes,
+) -> None:
+    bad = _artifact(tmp_path, f"data/bad/{name}", payload)
+    receipt = {"build_unit_id": "u1", "family": "native", "terminal_status": "SUCCEEDED",
+               "artifacts": [bad]}
+    unavailable = ingest_coverage_artifacts(tmp_path, [receipt], {"a.c": "1" * 64})
+    unit = unavailable["units"][0]
+    assert unit["coverage_state"] == "unavailable"
+    assert unit["totals"]["lines_rate"] is None
+    assert unit["files"] == []
+    assert len(unit["gaps"]) == 1 and unit["gaps"][0].startswith("malformed_coverage:")
+    good = _artifact(tmp_path, "data/good/lcov.info", b"SF:a.c\nDA:1,0\nend_of_record\n")
+    receipt["artifacts"] = [bad, good]
+    partial = ingest_coverage_artifacts(tmp_path, [receipt], {"a.c": "1" * 64})["units"][0]
+    assert partial["coverage_state"] == "partial"
+    assert partial["totals"]["lines_rate"] == 0.0
+    assert len(partial["files"]) == 1
+    assert partial["files"][0]["artifact_sha256"] == good["sha256"]
+    assert partial["gaps"] == unit["gaps"]

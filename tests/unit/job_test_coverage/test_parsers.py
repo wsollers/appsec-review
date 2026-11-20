@@ -92,7 +92,7 @@ def test_parses_cobertura_counts_and_deduplicates_method_and_class_branch_lines(
 <coverage><packages><package><classes><class name="Empty"/><class filename="pkg/a.py"><methods>
 <method name="f"><lines><line number="1" hits="1"/></lines></method></methods><lines>
 <line number="1" hits="1"/><line number="2" hits="0" branch="true"
-condition-coverage="50% (1/2)"/><line number="3" hits="1" branch="true" condition-coverage="unparsed"/></lines>
+condition-coverage="50% (1/2)"/><line number="3" hits="1"/></lines>
 </class></classes></package></packages></coverage>""",
         "cobertura",
     )
@@ -210,3 +210,111 @@ def test_parse_coverage_rejects_unsupported_malformed_and_bounded_inputs(
     fmt = "gcov" if "gcov" in match else "lcov" if "LCOV" in match else "cobertura" if "declarations" in match else "llvm"
     with pytest.raises(ValueError, match=match):
         parse_coverage(payload, fmt, max_rows=max_rows)
+
+
+
+@pytest.mark.parametrize("format_name", ["lcov", "cobertura"])
+def test_same_source_records_union_physical_lines(format_name: str) -> None:
+    if format_name == "lcov":
+        data = (
+            b"TN:first\nSF:a.c\nDA:1,0\nDA:2,1\nFN:2,f\nFNDA:1,f\n"
+            b"BRDA:2,0,0,1\nBRDA:2,0,1,-\nend_of_record\n"
+            b"TN:second\nSF:a.c\nDA:1,1\nDA:2,0\nFN:2,f\nFNDA:0,f\n"
+            b"BRDA:2,0,0,-\nBRDA:2,0,1,1\nend_of_record\n"
+        )
+    else:
+        data = (
+            b'<coverage><class name="A" filename="a.c"><line number="1" hits="0"/>'
+            b'<line number="2" hits="1"/></class>'
+            b'<class name="B" filename="a.c"><line number="1" hits="1"/>'
+            b'<line number="2" hits="0"/></class></coverage>'
+        )
+    document = parse_coverage(data, format_name)
+    assert len(document.files) == 1
+    totals = _totals(document)
+    assert (totals["lines_total"], totals["lines_covered"], totals["lines_rate"]) == (2, 2, 1.0)
+    if format_name == "lcov":
+        assert (totals["branches_total"], totals["branches_covered"]) == (2, 2)
+        assert (totals["functions_total"], totals["functions_covered"]) == (1, 1)
+
+
+def test_lcov_duplicate_hits_do_not_erase_coverage() -> None:
+    document = parse_coverage(
+        b"SF:a.c\nDA:1,1\nDA:1,0\nFN:1,f\nFNDA:1,f\nFNDA:0,f\n", "lcov"
+    )
+    assert (_totals(document)["lines_covered"], _totals(document)["functions_covered"]) == (1, 1)
+
+
+@pytest.mark.parametrize("record", [b"FN:1,ghost", b"FNDA:1,ghost"])
+def test_lcov_requires_source_for_function_records(record: bytes) -> None:
+    with pytest.raises(ValueError, match="precedes SF"):
+        parse_coverage(record + b"\nSF:a.c\nDA:1,1\n", "lcov")
+
+
+@pytest.mark.parametrize("count", ["1.9", "-0.5", "1e309", "NaN", "true"])
+def test_llvm_rejects_invalid_numeric_counts(count: str) -> None:
+    payload = (
+        '{"data":[{"files":[{"filename":"a.c","summary":{"lines":{"count":'
+        + count + ',"covered":0}}}]}]}'
+    ).encode()
+    with pytest.raises(ValueError, match="not an integer"):
+        parse_coverage(payload, "llvm")
+
+
+@pytest.mark.parametrize("annotation", ["", "not-a-count", "50% (3/2)"],
+                         ids=["missing", "malformed", "exceeds-total"])
+def test_cobertura_rejects_unknown_or_invalid_branch_counts(annotation: str) -> None:
+    payload = (
+        '<coverage><class filename="a.py"><line number="1" hits="1" branch="true" '
+        f'condition-coverage="{annotation}"/></class></coverage>'
+    ).encode()
+    with pytest.raises(ValueError, match="Cobertura.*branch"):
+        parse_coverage(payload, "cobertura")
+
+
+def test_cobertura_refuses_ambiguous_cross_class_branch_union() -> None:
+    payload = (
+        b'<coverage><class name="A" filename="a.py"><line number="1" hits="1" '
+        b'branch="true" condition-coverage="50% (1/2)"/></class>'
+        b'<class name="B" filename="a.py"><line number="1" hits="1" '
+        b'branch="true" condition-coverage="50% (1/2)"/></class></coverage>'
+    )
+    with pytest.raises(ValueError, match="overlapping Cobertura branch"):
+        parse_coverage(payload, "cobertura")
+
+
+
+def test_cobertura_unions_identifiable_method_and_fully_covered_branch_records() -> None:
+    first = (
+        b'<class name="A" filename="a.py"><method name="f" signature="()"><line number="1" hits="0" '
+        b'branch="true" condition-coverage="0% (0/2)"/></method></class>'
+    )
+    second = first.replace(b'hits="0"', b'hits="1"').replace(b'0% (0/2)', b'100% (2/2)')
+    for records in (first + second, second + first):
+        totals = _totals(parse_coverage(b"<coverage>" + records + b"</coverage>", "cobertura"))
+        assert (totals["lines_total"], totals["lines_covered"]) == (1, 1)
+        assert (totals["branches_total"], totals["branches_covered"]) == (2, 2)
+        assert (totals["functions_total"], totals["functions_covered"]) == (1, 1)
+
+
+@pytest.mark.parametrize("format_name", ["jacoco", "llvm"])
+def test_duplicate_summary_only_source_records_are_not_added_as_unique_lines(format_name: str) -> None:
+    if format_name == "jacoco":
+        record = b'<sourcefile name="A.java"><counter type="LINE" missed="0" covered="1"/></sourcefile>'
+        payload = b'<report><package name="p">' + record + record + b"</package></report>"
+    else:
+        record = {"filename": "a.c", "summary": {"lines": {"count": 1, "covered": 1}}}
+        payload = json.dumps({"data": [{"files": [record, record]}]}).encode()
+    with pytest.raises(ValueError, match="overlapping source summaries cannot be unioned"):
+        parse_coverage(payload, format_name)
+
+
+
+def test_cobertura_conflicting_method_and_class_branches_are_not_silently_maximized() -> None:
+    payload = (
+        b'<coverage><class filename="a.py"><method name="f"><line number="1" hits="1" '
+        b'branch="true" condition-coverage="50% (1/2)"/></method><line number="1" hits="1" '
+        b'branch="true" condition-coverage="50% (2/4)"/></class></coverage>'
+    )
+    with pytest.raises(ValueError, match="overlapping Cobertura branch annotations disagree"):
+        parse_coverage(payload, "cobertura")

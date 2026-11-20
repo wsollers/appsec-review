@@ -431,3 +431,161 @@ def test_accepted_publication_verifies_handoff_artifact_and_manifest(
     )
     with pytest.raises(CoverageIntegrityError, match="schema is unsupported"):
         load_accepted_test_coverage(tmp_path)
+
+
+
+def _index_report_fixture(tmp_path: Path, *, duplicate: bool = False):
+    from appsec_review.jobs.job_test_coverage import ingest_coverage_artifacts
+
+    run_root = tmp_path / "runs" / "2026-11-20-0001"
+    run_root.mkdir(parents=True, mode=0o700)
+    manifest = run_root / "data/indices/manifests/input.json"
+    write_manifest(manifest, run_id=run_root.name, target_snapshot="snapshot",
+                   target_root=run_root, indexes=())
+    artifacts = []
+    for name in (("original", "copy") if duplicate else ("original",)):
+        path = run_root / f"data/build/u1/{name}/lcov.info"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(
+            b"SF:src/a.c\nDA:1,1\nend_of_record\n"
+            b"SF:src/b.c\nDA:1,0\nend_of_record\n"
+            b"SF:missing.c\nDA:1,0\nend_of_record\n"
+        )
+        artifacts.append({**_identity(run_root, path), "kind": "test-coverage",
+                          "workspace_path": f"{name}/lcov.info", "artifact_origin": "accepted-input"})
+    normalized = ingest_coverage_artifacts(
+        run_root, [{"build_unit_id": "u1", "family": "native", "root": ".",
+                    "terminal_status": "SUCCEEDED", "artifacts": artifacts}],
+        {"src/a.c": "1" * 64, "src/b.c": "2" * 64})
+    config = load_config("appsec-review.toml").job("job_test_coverage")
+    ctx = SimpleNamespace(
+        run_root=run_root, run_id=run_root.name, source_fingerprint="snapshot",
+        target_root=run_root, repository_root=run_root, config=config,
+        attempt_id="attempt_0001",
+        attempt_root=run_root / "data/jobs/job_test_coverage/attempts/attempt_0001")
+    index = next(unit for unit in build_job().units if unit.unit_id == "index.coverage")
+    output = index.handler(_uctx(ctx, "index.coverage", {
+        "load.accepted_inputs": {"upstream_manifest": _identity(run_root, manifest)},
+        "normalize.coverage": normalized}))
+    return run_root, normalized, output
+
+
+def test_identical_report_copies_keep_distinct_index_provenance(tmp_path: Path) -> None:
+    from appsec_review.indexing.store import ShardSet
+
+    run_root, normalized, output = _index_report_fixture(tmp_path, duplicate=True)
+    assert normalized["units"][0]["coverage_state"] == "partial"
+    assert any("overlapping_coverage_reports" in gap for gap in normalized["gaps"])
+    store = ShardSet(run_root, output["indexes"])
+    cells = list(store.entities(store.shards, kinds=("coverage_cell",)))
+    files = [row for row in cells if "producer_path" in row["payload"]]
+    assert len(files) == len({row["identity"] for row in files}) == 6
+    copies = [row["payload"] for row in files if row["payload"]["path"] == "src/a.c"]
+    assert len({row["artifact_path"] for row in copies}) == 2
+    assert len({row["artifact_sha256"] for row in copies}) == 1
+    assert {row["file_sha256"] for row in copies} == {"1" * 64}
+    assert {row["artifact_origin"] for row in copies} == {"accepted-input"}
+
+
+def test_advertised_route_retrieves_real_coverage_cells(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_test_coverage.datasets import DATASETS
+    from appsec_review.retrieval.core import RetrievalCore
+
+    run_root, _, output = _index_report_fixture(tmp_path)
+    ref = output["index_manifest"]
+    core = RetrievalCore(run_root.parent, run_root.name, manifest_path=run_root / ref["path"],
+                         manifest_sha256=ref["sha256"])
+    route, argument = DATASETS[0].query_route.split()
+    key, value = argument.split("=")
+    response = getattr(core, route)(**{key: value, "path": "src/a.c"})
+    assert len(response["results"]) == 1
+    cell = response["results"][0]
+    assert cell["payload"]["file_sha256"] == "1" * 64
+    assert cell["payload"]["totals"]["lines_rate"] == 1.0
+    assert cell["signal_family"] == "test_coverage"
+    assert core.query_engineering_signals(signal_family="test_coverage", path="src/absent.c")["results"] == []
+    with pytest.raises(ValueError, match="signal_family"):
+        core.query_engineering_signals(signal_family="unregistered")
+
+
+def test_review_context_excludes_other_files_and_unresolved_cells_from_build(tmp_path: Path) -> None:
+    from appsec_review.indexing.store import ShardSet
+    from appsec_review.review.units import _engineering_context
+
+    run_root, _, output = _index_report_fixture(tmp_path)
+    store = ShardSet(run_root, output["indexes"])
+    # Only accepted-scope selection is substituted; rows come from the real coverage producer.
+    scope = SimpleNamespace(
+        store=store, shard_sha256=lambda shard: shard["sha256"],
+        producer=lambda name: SimpleNamespace(shards=store.shards if name == "test_coverage" else ()))
+    by_path, by_build, dependencies = _engineering_context(scope)
+    rows = list(store.entities(store.shards, kinds=("coverage_cell",)))
+    aggregates = {row["identity"] for row in rows if "producer_path" not in row["payload"]}
+    assert len(by_build["u1"]) == 1
+    assert {entry.id for entry in by_build["u1"]} == aggregates
+    assert set(by_path) == {"src/a.c", "src/b.c"}
+    for path in sorted(by_path):
+        expected = {row["identity"] for row in rows if row["payload"].get("path") == path}
+        assert {entry.id for entry in by_path[path]} == expected
+        assert expected.isdisjoint(aggregates)
+    assert dependencies == []
+
+
+def test_prioritization_reads_runtime_published_coverage_status_and_receipts(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_review_prioritization.composite import _load_test_coverage
+    from appsec_review.jobs.job_review_prioritization.datasets import CONTRACT
+    from appsec_review.runtime.inputs import input_read_scope
+    from appsec_review.storage.validation import validation_scope
+    from tests.artifact_input_support import recorded_job
+    from tests.unit.runtime.test_wave3_contracts import _recorded_catalog_run
+
+    job = build_job()
+    runner, run_id, run_root, target, snapshot, catalog_out, _ = _recorded_catalog_run(
+        tmp_path, ("job_language_build", job.job_id), disabled_jobs=("job_artifact_indexing",))
+    report = run_root / "data/build/u1/coverage/lcov.info"
+    report.parent.mkdir(parents=True)
+    report.write_bytes(b"SF:src/main.c\nDA:1,1\nDA:2,0\nend_of_record\n")
+    manifest = run_root / "data/indices/manifests/language-fixture.json"
+    write_manifest(manifest, run_id=run_id, target_snapshot=snapshot, target_root=target, indexes=())
+    atomic_json(run_root / "data/inputs/artifact-fixture/job_language_build.json", {
+        "document": {
+            "schema": "appsec-review/language-build-handoff/2", "source_fingerprint": snapshot,
+            "upstream_project_build_handoff_sha256": "c" * 64, "gaps": [],
+            "receipts": [{"build_unit_id": "build-unit-u1", "family": "native", "root": ".",
+                          "terminal_status": "SUCCEEDED", "fingerprint": "d" * 64,
+                          "executor_identity": "fixture", "capture_identity": "fixture",
+                          "artifacts": [{**_identity(run_root, report), "workspace_path": "coverage/lcov.info",
+                                         "kind": "test-coverage", "artifact_origin": "accepted-input"}]}]},
+        "manifest": _identity(run_root, manifest)})
+    language_out = runner.run(recorded_job(run_root, "job_language_build"), run_id=run_id,
+                              target_root=target, source_fingerprint=snapshot)
+    result = runner.run(job, run_id=run_id, target_root=target, source_fingerprint=snapshot,
+                        upstream_handoffs={"job_target_catalog": catalog_out["handoff_sha256"],
+                                           "job_language_build": language_out["handoff_sha256"]})
+    context = SimpleNamespace(
+        run_root=run_root, config=SimpleNamespace(job_id="job_review_prioritization"),
+        contract=CONTRACT, upstream_handoffs={"job_test_coverage": result["handoff_sha256"]})
+    with validation_scope(run_root), input_read_scope(context) as reads:
+        status, files = _load_test_coverage(run_root, True)
+    assert reads is not None
+    receipts = reads.document()["reads"]
+    assert len(receipts) == 1
+    assert receipts[0]["producer"] == "job_test_coverage"
+    assert receipts[0]["handoff_sha256"] == result["handoff_sha256"]
+    assert receipts[0]["target_snapshot"] == snapshot
+    assert receipts[0]["read"] is True and receipts[0]["cited"] is None
+    assert status == "COMPLETED_WITH_GAPS"
+    assert (files["src/main.c"]["lines_total"], files["src/main.c"]["lines_covered"]) == (2, 1)
+    assert _load_test_coverage(run_root, False) == ("DISABLED", {})
+    with validation_scope(run_root), upstream_scope(
+        run_root, "job_review_prioritization", {}, contract=CONTRACT,
+    ):
+        assert _load_test_coverage(run_root, True) == ("UNAVAILABLE", {})
+    handoff_path = run_root / "data/jobs/job_test_coverage/attempts/attempt_0001/handoff.json"
+    handoff = json.loads(handoff_path.read_text())
+    assert handoff["completion_status"] == status
+    summary = run_root / handoff["outputs"]["acceptance.publish_handoff"]["artifact"]["path"]
+    summary.write_text("{}", encoding="utf-8")
+    with validation_scope(run_root), pytest.raises(ValueError, match="identity changed"):
+        with input_read_scope(context):
+            _load_test_coverage(run_root, True)

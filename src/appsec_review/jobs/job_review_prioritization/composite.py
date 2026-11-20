@@ -250,8 +250,9 @@ def _load_test_coverage(run_root: Path, enabled: bool) -> tuple[str, dict[str, d
     if not has_handoff(run_root, "job_test_coverage"):
         return "UNAVAILABLE", {}
     handoff, _ = accepted_handoff(run_root, "job_test_coverage")
-    status = str(handoff.get("terminal_status") or "UNAVAILABLE")
     out = handoff.get("outputs", {}).get("acceptance.publish_handoff") or {}
+    status = str(handoff.get("completion_status") or out.get("terminal_status")
+                 or handoff.get("terminal_status") or "UNAVAILABLE")
     art = out.get("artifact")
     if not isinstance(art, Mapping):
         return status, {}

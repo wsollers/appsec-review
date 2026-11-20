@@ -77,7 +77,7 @@ def _engineering_context(scope: AcceptedScope
         for row in scope.store.entities((shard,), kinds=("coverage_cell",)):
             payload = row["payload"]
             path = payload.get("path")
-            aggregate = payload.get("totals") is not None
+            aggregate = payload.get("totals") is not None and "producer_path" not in payload
             entry = context_entry(row["identity"], COVERAGE_ROLE, sha)
             if isinstance(path, str) and path:
                 by_path[path].append(entry)
