@@ -389,9 +389,10 @@ def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list
             lines = item.get("file_line_range") if isinstance(item.get("file_line_range"), list) else []
             try:
                 start_line = int(location.get("line") or item.get("line") or (lines[0] if lines else 1) or 1)
-                end_line = int(location.get("end_line") or (lines[-1] if lines else start_line) or start_line)
-                start_column = int(location.get("column") or 1)
-                end_column = int(location.get("end_column") or location.get("column") or 1)
+                end_line = int(location.get("end_line") or item.get("end_line") or
+                               (lines[-1] if lines else start_line) or start_line)
+                start_column = int(location.get("column") or item.get("column") or 1)
+                end_column = int(location.get("end_column") or item.get("end_column") or start_column)
             except (TypeError, ValueError, OverflowError) as exc:
                 raise _CiOutputParseError(f"{spec.name} finding has invalid coordinates") from exc
             severity = item.get("severity")
@@ -406,6 +407,16 @@ def _generic_external_records(spec: ToolSpec, payload: bytes, path: str) -> list
             }
             if severity is None:
                 record["gaps"] = ["severity_missing_or_unrated"]
+            if spec.tool_id == "tool-actionlint":
+                coordinates = ("line", "column", "end_line", "end_column")
+                record["producer_location"] = {
+                    "tool_id": spec.tool_id,
+                    **{key: item[key] for key in coordinates if key in item},
+                }
+                if location:
+                    record["producer_location"]["location"] = {
+                        key: location[key] for key in coordinates if key in location
+                    }
             if spec.tool_id == "tool-checkov":
                 record["producer_location"] = {key: item[key] for key in
                                                ("file_abs_path", "file_path", "file_line_range") if key in item}
@@ -584,6 +595,21 @@ def _scan(unit: UnitContext, spec: ToolSpec, executor_factory: ExecutorFactory,
     return finish(terminal, image_id=image_id, not_applicable=not_applicable)
 
 
+def _mapping_metadata(record: Mapping[str, Any]) -> dict[str, Any]:
+    precise = all(type(record.get(key)) is int for key in ("start_byte", "end_byte"))
+    provenance = record.get("producer_location", {
+        key: record.get(key) for key in ("tool_id", "start_line", "end_line", "start_column", "end_column")
+    })
+    method = ("ci-static-source-span" if str(record.get("tool_id", "")).startswith("ci-")
+              else "ci-native-byte-span") if precise else "ci-line-range"
+    return {
+        "producer_location": provenance,
+        "mapping_method": record.get("mapping_method", method) if precise else method,
+        "confidence": record.get("confidence", 1.0) if precise else min(record.get("confidence", 0.5), 0.5),
+        "ambiguous": record.get("ambiguous", False) if precise else True,
+    }
+
+
 def _normalize(unit: UnitContext, scan_id: str) -> Mapping[str, Any]:
     output = dict(unit.output(scan_id))
     raw = _read(unit.job.run_root, output["raw_artifact"])
@@ -601,6 +627,7 @@ def _normalize(unit: UnitContext, scan_id: str) -> Mapping[str, Any]:
         value["end_line"] = max(value["start_line"], int(value["end_line"] or value["start_line"]))
         value["start_column"] = max(1, int(value["start_column"] or 1))
         value["end_column"] = max(1, int(value["end_column"] or value["start_column"]))
+        value.update(_mapping_metadata(value))
         value["observation_id"] = "cio:" + hashlib.sha256(canonical_json(value)).hexdigest()
         value.update(classify_ci_lead_promotion(record))
         records.append(value)
@@ -641,8 +668,11 @@ def _hierarchy(unit: UnitContext) -> Mapping[str, Any]:
 
 
 def _enrich(record: dict[str, Any], nodes: list[Mapping[str, Any]]) -> dict[str, Any]:
+    bounded_workflow = record.get("provider") == "github" and record["path"].startswith(".github/workflows/")
     candidates = [node for node in nodes if node["path"] == record["path"] and
-                  int(node["start_line"]) <= int(record["start_line"])]
+                  int(node["start_line"]) <= int(record["start_line"]) and
+                  (not bounded_workflow or int(record.get("end_line", record["start_line"])) <=
+                   int(node["end_line"]))]
     context: dict[str, str] = {}
     for kind in ("stage", "job", "step"):
         matches = [node for node in candidates if node["kind"] == kind]
@@ -657,20 +687,28 @@ def _source_location(unit: UnitContext, record: Mapping[str, Any]) -> SourceLoca
         return None
     _, max_bytes, _ = _bounds(unit)
     data = _bounded_bytes(source, max_bytes, "max_file_bytes")
-    offsets = [0, *(match.end() for match in re.finditer(b"\n", data))]
     start_line, end_line = int(record["start_line"]), int(record["end_line"])
-    start_byte = int(record["start_byte"] if record.get("start_byte") is not None
-                     else offsets[min(start_line - 1, len(offsets) - 1)])
-    end_byte = int(record["end_byte"] if record.get("end_byte") is not None
-                   else (offsets[end_line] if end_line < len(offsets) else len(data)))
+    start_column, end_column = int(record["start_column"]), int(record["end_column"])
+    metadata = _mapping_metadata(record)
+    if all(type(record.get(key)) is int for key in ("start_byte", "end_byte")):
+        start_byte, end_byte = record["start_byte"], record["end_byte"]
+        if not 0 <= start_byte <= end_byte <= len(data):
+            raise CiConfigurationAnalysisFailed(f"CI source byte span is outside {record['path']}")
+    else:
+        # A native column alone does not establish its encoding or an exact byte span.
+        lines = data.splitlines(keepends=True)
+        if not lines:
+            return None
+        start_line = min(start_line, len(lines))
+        end_line = min(end_line, len(lines))
+        start_byte = sum(map(len, lines[:start_line - 1]))
+        end_byte = sum(map(len, lines[:end_line - 1])) + len(lines[end_line - 1].rstrip(b"\r\n"))
+        start_column, end_column = 1, len(lines[end_line - 1].rstrip(b"\r\n")) + 1
     return SourceLocation(
         target_snapshot=unit.job.source_fingerprint, path=str(record["path"]), file_sha256=hashlib.sha256(data).hexdigest(),
-        start_byte=min(start_byte, len(data)), end_byte=min(max(start_byte, end_byte), len(data)),
-        start_line=start_line, end_line=end_line, start_column=int(record["start_column"]),
-        end_column=int(record["end_column"]),
-        producer_location=record.get("producer_location", {"tool_id": record["tool_id"]}),
-        mapping_method=record.get("mapping_method", "ci-static-source-span"),
-        confidence=record.get("confidence", 1.0), ambiguous=record.get("ambiguous", False),
+        start_byte=start_byte, end_byte=end_byte,
+        start_line=start_line, end_line=end_line, start_column=start_column, end_column=end_column,
+        **metadata,
     )
 
 
@@ -750,9 +788,9 @@ def _correlate(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, An
             "attack_class": chosen_promo["attack_class"],
             "severity_hint": chosen_promo["severity_hint"],
         }
-        if observations[0].get("ambiguous"):
-            finding.update({field: observations[0][field]
-                            for field in (*_SOURCE_MAPPING_FIELDS, "start_byte", "end_byte")})
+        finding.update({field: observations[0][field]
+                        for field in (*_SOURCE_MAPPING_FIELDS, "start_byte", "end_byte")
+                        if field in observations[0]})
         findings.append(finding)
     document = {"schema": "appsec-review/canonical-ci-findings/1", "correlation": settings.correlation,
                 "findings": findings, "finding_count": len(findings)}
@@ -782,12 +820,11 @@ def _correlate(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, An
 
 
 def correlation_key(record: Mapping[str, Any]) -> tuple[Any, ...]:
-    """Coarse mappings must also match provenance; clipping cannot manufacture exact duplicates."""
+    """Only matching byte spans and mapping provenance can establish exact duplicates."""
     key = (record["provider"], record["path"], record["start_line"], record["end_line"],
            record["start_column"], record["end_column"], record["category"], record["message"])
-    if record.get("ambiguous"):
-        key += (canonical_json({field: record[field]
-                                for field in (*_SOURCE_MAPPING_FIELDS, "start_byte", "end_byte")}).decode(),)
+    key += (canonical_json({field: record.get(field)
+                            for field in (*_SOURCE_MAPPING_FIELDS, "start_byte", "end_byte")}).decode(),)
     return key
 
 

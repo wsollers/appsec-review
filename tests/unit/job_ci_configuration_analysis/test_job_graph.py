@@ -1,6 +1,7 @@
 """Unit tests for job_ci_configuration_analysis decoders, helpers, and unit handlers."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -14,6 +15,7 @@ from appsec_review.jobs.job_ci_configuration_analysis.job import (
     ToolSpec,
     _argv,
     _checkov_source_records,
+    _correlate,
     _enrich,
     _external_records,
     _generic_external_records,
@@ -25,6 +27,8 @@ from appsec_review.jobs.job_ci_configuration_analysis.job import (
     build_job,
     correlation_key,
 )
+from appsec_review.jobs.job_ci_configuration_analysis.static_rules import scan_text
+from appsec_review.retrieval import RetrievalCore
 from tests.unit.job_ci_configuration_analysis.support import (
     FakeExecutor,
     ROOT,
@@ -36,6 +40,167 @@ from tests.unit.job_ci_configuration_analysis.support import (
 
 
 SPEC_BY_KEY = {spec.key: spec for spec in SPECS}
+
+
+def _published_ci(tmp_path, source, *, tool="schema", native=b"[]"):
+    path = ".github/workflows/ci.yml"
+    unit, _, _ = make_unit_context(
+        tmp_path, target_files={path: source}, run_id="2026-11-20-0001",
+        settings_override={"providers": {"github": {"tools": [tool]}}},
+    )
+    calls = []
+    job = build_job(executor_factory=lambda u: FakeExecutor(
+        ROOT, u.job.run_root, calls, stdout=native))
+    with attempt_scope(unit):
+        result = job.handler(unit.job)
+    outputs = result["outputs"]
+    manifest = outputs["ci_coverage.publish_handoff"]["index_manifest"]
+    core = RetrievalCore(
+        unit.job.run_root.parent, unit.job.run_id,
+        manifest_path=unit.job.run_root / manifest["path"], manifest_sha256=manifest["sha256"],
+    )
+    return unit, outputs, core
+
+
+def test_native_actionlint_columns_remain_distinct_through_publication(tmp_path: Path) -> None:
+    source = "# café\njobs:\n  build:\n    steps:\n      - run: echo first second\n"
+    native = [{"kind": "expression", "message": "same diagnostic", "line": 5, "column": column}
+              for column in (19, 25, 19)]
+    native.append({"kind": "expression", "message": "same diagnostic", "line": 5})
+    unit, outputs, core = _published_ci(
+        tmp_path, source, tool="actionlint", native=json.dumps(native).encode())
+    normalized = outputs["ci_normalization.github_actionlint_normalize"]
+    assert (normalized["record_count"], normalized["duplicate_observation_count"]) == (3, 1)
+    records = _read(unit.job.run_root, normalized["normalized_artifact"])["records"]
+    assert sorted((r["start_column"], r["end_column"]) for r in records) == [(1, 1), (19, 19), (25, 25)]
+    observations = core.query_ci_configuration(shard="ci_github_actionlint")["results"]
+    findings = core.query_ci_configuration(shard="ci_findings")["results"]
+    assert len(observations) == len(findings) == 3
+    for item in [*observations, *findings]:
+        location = item["location"]
+        assert location["ambiguous"] and location["confidence"] < 1
+        assert item["payload"]["producer_location"].get("column") in (None, 19, 25)
+        assert item["payload"].get("start_byte") is None
+        assert not core.read_excerpt(identity=item["identity"])["coverage_gaps"]
+
+
+@pytest.mark.parametrize("tool", ["schema", "zizmor"])
+@pytest.mark.parametrize("ending", ["lf", "crlf", "no-final-newline"])
+def test_precise_source_bytes_survive_correlation_and_immutable_indexes(
+    tmp_path: Path, tool: str, ending: str,
+) -> None:
+    feature = "permissions: write-all"
+    text = '# café 🚀\nrun: echo "é"; permissions: write-all\n'
+    if ending == "crlf":
+        text = text.replace("\n", "\r\n")
+    elif ending == "no-final-newline":
+        text = text.rstrip("\n")
+    source = text.encode()
+    start = source.index(feature.encode())
+    # Native Zizmor byte positions differ from Python character columns after the accented prefix.
+    column = source.splitlines()[1].index(feature.encode())
+    native = zizmor_finding(path=".github/workflows/ci.yml", row=1, column=column,
+                            offset=start, feature=feature)
+    unit, outputs, core = _published_ci(tmp_path, source, tool=tool, native=json.dumps([native]).encode())
+    [observation] = core.query_ci_configuration(shard=f"ci_github_{tool}")["results"]
+    [finding] = core.query_ci_configuration(shard="ci_findings")["results"]
+    for item in (observation, finding):
+        payload, location = item["payload"], item["location"]
+        assert (payload["start_byte"], payload["end_byte"]) == (start, start + len(feature))
+        assert source[location["start_byte"]:location["end_byte"]] == feature.encode()
+        assert location["file_sha256"] == hashlib.sha256(source).hexdigest()
+        assert location["confidence"] == 1.0 and not location["ambiguous"]
+        assert not core.read_excerpt(identity=item["identity"], context_lines=0)["coverage_gaps"]
+    assert finding["location"] == observation["location"]
+    assert finding["payload"]["producer_location"] == observation["payload"]["producer_location"]
+    assert outputs["ci_coverage.publish_handoff"]["security_findings"], "lead promotion must remain enabled"
+
+
+def test_zero_native_byte_span_is_preserved_in_canonical_index(tmp_path: Path) -> None:
+    native = zizmor_finding(path=".github/workflows/ci.yml", row=0, column=0, offset=0, feature="")
+    _, _, core = _published_ci(tmp_path, "name: ci\n", tool="zizmor", native=json.dumps([native]).encode())
+    [finding] = core.query_ci_configuration(shard="ci_findings")["results"]
+    assert finding["payload"]["start_byte"] == finding["payload"]["end_byte"] == 0
+    assert finding["location"]["start_byte"] == finding["location"]["end_byte"] == 0
+    assert finding["location"]["confidence"] == 1 and not finding["location"]["ambiguous"]
+
+
+def test_native_bytes_outside_source_cannot_be_clamped_into_an_exact_location(tmp_path: Path) -> None:
+    unit, _, _ = make_unit_context(tmp_path, target_files={".github/workflows/ci.yml": "name: ci\n"})
+    [record] = _external_records(
+        SPEC_BY_KEY["github_zizmor"],
+        json.dumps([zizmor_finding(path=".github/workflows/ci.yml", row=0, column=0, offset=100)]).encode(),
+        ".github/workflows/ci.yml",
+    )
+    with pytest.raises(CiConfigurationAnalysisFailed, match="source byte span is outside"):
+        _source_location(unit, record)
+
+
+@pytest.mark.parametrize("change", ["bytes", "mapping", "missing-bytes", "ambiguity"])
+def test_exact_correlation_requires_compatible_byte_and_mapping_identity(tmp_path: Path, change: str) -> None:
+    source = "    permissions: write-all\n"
+    unit, _, _ = make_unit_context(
+        tmp_path, unit_id="ci_correlation.correlate_findings",
+        target_files={".github/workflows/ci.yml": source})
+    [record] = scan_text("github", ".github/workflows/ci.yml", source, tool_id="ci-schema")
+    record.update(observation_id="one", producer_location={"tool_id": "ci-schema"},
+                  mapping_method="ci-static-source-span", confidence=1.0, ambiguous=False)
+    other = {**record, "observation_id": "other"}
+    if change == "bytes":
+        other["start_byte"] -= 1
+    elif change == "mapping":
+        other["producer_location"] = {"tool_id": "another-mapper"}
+    elif change == "missing-bytes":
+        other.pop("start_byte")
+        other.pop("end_byte")
+    else:
+        other.update(ambiguous=True, confidence=0.5)
+    unit.output = {"index": {"records": [record, {**record, "observation_id": "duplicate"}, other]}}.__getitem__
+    with attempt_scope(unit):
+        correlated = _correlate(unit, ("index",))
+    assert correlated["finding_count"] == 2
+    [exact] = [f for f in correlated["findings"] if "one" in f["observation_ids"]]
+    assert exact["observation_ids"] == ["duplicate", "one"]
+    assert exact["start_byte"] == 4 and exact["end_byte"] == len(source.rstrip("\n"))
+    assert exact["producer_location"] == record["producer_location"]
+
+
+def test_github_hierarchy_facets_follow_real_job_and_step_boundaries(tmp_path: Path) -> None:
+    source = (
+        "name: ci\non: push\njobs: # actual workflow container\n"
+        "  build:\n"
+        "    permissions: write-all\n"
+        "    steps:\n"
+        "      - name: Install\n"
+        "        run: |\n"
+        "          curl https://example.invalid/a | sh\n"
+        "          jobs:\n"
+        "            bogus:\n"
+        "              steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "    env:\n"
+        "      LABEL: ordinary metadata\n"
+        "  'deploy': # second job\n"
+        "    permissions: write-all\n"
+        "    steps:\n"
+        "      - run: eval deploy\n"
+        "permissions: write-all\n"
+    )
+    _, _, core = _published_ci(tmp_path, source)
+    build = core.query_ci_configuration(job="build", shard="ci_github_schema")["results"]
+    deploy = core.query_ci_configuration(job="deploy", shard="ci_github_schema")["results"]
+    assert {item["payload"]["native_rule_id"] for item in build} == {
+        "CI-WRITE-ALL", "CI-PIPE-COMMAND", "CI-MUTABLE-DEPENDENCY"}
+    assert {item["payload"]["native_rule_id"] for item in deploy} == {"CI-WRITE-ALL", "CI-PIPE-COMMAND"}
+    for results in (build, deploy):
+        [permission] = [item["payload"] for item in results if item["payload"]["native_rule_id"] == "CI-WRITE-ALL"]
+        assert "step" not in permission, "a prior job's last step is not the next job's context"
+    [install] = core.query_ci_configuration(job="build", step="- name: Install")["results"]
+    assert install["payload"]["native_rule_id"] == "CI-PIPE-COMMAND"
+    assert not core.query_ci_configuration(job="steps")["results"]
+    all_records = core.query_ci_configuration(shard="ci_github_schema")["results"]
+    [root] = [item["payload"] for item in all_records if item["payload"]["start_line"] == 20]
+    assert "job" not in root and "step" not in root
 
 
 def test_argv_read_write_source_location_enrich_and_correlation_helpers(tmp_path: Path) -> None:
@@ -98,7 +263,9 @@ def test_argv_read_write_source_location_enrich_and_correlation_helpers(tmp_path
             "end_byte": None,
         },
     )
-    assert loc_offsets is not None and loc_offsets.start_byte == 6 and loc_offsets.end_byte == 18
+    assert loc_offsets is not None and loc_offsets.start_byte == 6 and loc_offsets.end_byte == 17
+    assert loc_offsets.end_line == 3 and loc_offsets.ambiguous and loc_offsets.confidence == 0.5
+    assert loc_offsets.producer_location["end_line"] == 99
 
     # _enrich attaches nearest preceding stage/job/step for matching path only.
     nodes = [
@@ -471,7 +638,7 @@ def test_hierarchy_error_branches_and_default_executor_factory(tmp_path: Path) -
 
 
 def test_full_job_unit_executor_end_to_end_correlates_indexes_and_publishes(tmp_path: Path) -> None:
-    """Run all 49 units of build_job().handler in-process with FakeExecutor, including secret redaction,
+    """Run every unit of build_job().handler in-process with FakeExecutor, including secret redaction,
     duplicate collapsing, ambiguous Checkov findings, truncation gap propagation, and RetrievalCore search."""
     wf = ".github/workflows/ci.yml"
     wf_text = (

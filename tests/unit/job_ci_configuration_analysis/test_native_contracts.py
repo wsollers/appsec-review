@@ -210,7 +210,9 @@ def test_source_location_hashes_the_same_bounded_bytes(tmp_path, monkeypatch) ->
     location = _source_location(unit, {"path": PATH, "tool_id": "ci-schema", "start_line": 1,
                                       "end_line": 1, "start_column": 1, "end_column": 8})
     assert location.file_sha256 == hashlib.sha256(data).hexdigest()
-    assert location.end_byte == len(data)
+    assert data[location.start_byte:location.end_byte] == b"name: ci"
+    assert location.ambiguous and location.confidence < 1
+    assert (location.start_column, location.end_column) == (1, 9)
     assert reads == [10]
 
 

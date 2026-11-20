@@ -29,7 +29,7 @@ admission. Frameworks must match their provider's wired Checkov adapter; the sup
 remain `ci-static-reviewed-rules/1` and `exact-only/1`. Changing an identity does not select a new
 implementation.
 
-The lane never contacts a CI controller or provider API. It never evaluates YAML, Groovy, or Kotlin
+The lane never contacts a CI controller or provider API. It never executes YAML, Groovy, or Kotlin
 DSL, never loads Jenkins or TeamCity plugins, never expands generators, never starts a build, and
 never executes commands found in a pipeline; all commands in target definitions are inert data.
 Before a live run, build the enabled pinned images for Zizmor, Checkov, and actionlint using the
@@ -55,16 +55,31 @@ Accepted outputs include:
 - immutable `observations/ci_*` shards;
 - an immutable `evidence/ci_findings` shard;
 - exact-only canonical findings;
+- the canonical `lead_candidate` subset as handoff `security_findings`, consumed by review
+  prioritization as leads rather than final adjudicated vulnerabilities;
 - a coverage join naming every missing or partial provider/tool branch, plus a separately
   counted `not_applicable_inputs` summary.
 
 Raw output remains hash-bound run-owned evidence; bounded normalized observations are the retrieval
 surface, not arbitrary raw-payload access. Canonical records merge only identical provider, path,
-source span, category and normalized-message keys. Ambiguous source mappings must also match their
-byte ranges and mapping provenance; similar or merely co-located observations are not merged.
+source span, category and normalized-message keys. All source mappings, precise or ambiguous, must
+also match their byte ranges, provenance, method, confidence and ambiguity; similar or merely
+co-located observations are not merged. Canonical records retain contributor byte spans and mapping
+identity rather than reconstructing exact matches as whole-line excerpts. Native actionlint columns
+survive normalization and deduplication, but do not by themselves establish byte offsets or a column
+encoding. Without byte offsets, indexed locations are explicitly ambiguous line ranges and retain
+native coordinates in `producer_location`. Invalid explicit byte spans fail instead of being clipped
+and mislabeled exact.
 Observation fingerprints bind snapshot, normalized artifact and hierarchy, provider/tool/framework,
 ruleset, settings and parser/normalizer/mapping identities. Canonical evidence fingerprints bind the
 exact correlation document.
+
+For GitHub workflow block mappings, structural context uses actual job IDs directly beneath `jobs`
+and step sequence items beneath each job's `steps`, not those container names as invented jobs.
+Job/step ranges contain observations only within their lexical boundaries, including named steps
+and block-scalar commands; another job's last step cannot leak into subsequent observations.
+Block-scalar command text is inert, not hierarchy syntax. Other providers retain conservative
+latest-preceding structural context. This is not alias expansion or dynamic CI semantics.
 
 External linters receive only definitions their declared input support accepts
 (`appsec_review.tool_inputs`): actionlint and Checkov's `github_actions` framework read workflow

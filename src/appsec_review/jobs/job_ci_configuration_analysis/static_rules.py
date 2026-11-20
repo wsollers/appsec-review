@@ -120,10 +120,76 @@ def scan_text(provider: str, path: str, text: str, *, tool_id: str,
     return values
 
 
+def _github_workflow_nodes(path: str, text: str) -> list[dict[str, Any]]:
+    """Track lexical YAML scopes, never resolving aliases, expressions or executable content."""
+    lines = text.splitlines()
+    nodes: list[dict[str, Any]] = []
+    job = step = None
+    jobs_indent = job_indent = member_indent = steps_indent = step_indent = scalar_indent = None
+    key_pattern = re.compile(r"""^(?:([A-Za-z0-9_.-]+)|'([^']+)'|"([^"]+)")\s*:(?:\s|$)""")
+    for number, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if scalar_indent is not None:
+            if indent > scalar_indent:
+                continue
+            scalar_indent = None
+        is_item = stripped == "-" or stripped.startswith("- ")
+        if step is not None and indent <= step_indent:
+            step["end_line"] = number - 1
+            step = None
+        if job is not None and indent <= job_indent:
+            job["end_line"] = number - 1
+            job = None
+            member_indent = steps_indent = None
+        if jobs_indent is not None and indent <= jobs_indent:
+            jobs_indent = job_indent = None
+        match = key_pattern.match(stripped)
+        key = next((value for value in match.groups() if value is not None), None) if match else None
+        value = stripped[match.end():].strip() if match else None
+        empty_mapping = value is not None and (not value or value.startswith("#"))
+        if indent == 0 and key == "jobs" and empty_mapping:
+            jobs_indent = indent
+        elif jobs_indent is not None and indent > jobs_indent:
+            if job_indent is None and key is not None:
+                job_indent = indent
+            if key is not None and indent == job_indent:
+                job = {"kind": "job", "name": key, "path": path,
+                       "start_line": number, "end_line": len(lines)}
+                nodes.append(job)
+            elif job is not None:
+                if member_indent is None and key is not None:
+                    member_indent = indent
+                if steps_indent is not None and (
+                    indent < steps_indent or (indent == steps_indent and not is_item)
+                ):
+                    if step is not None:
+                        step["end_line"] = number - 1
+                        step = None
+                    steps_indent = None
+                if key == "steps" and indent == member_indent and empty_mapping:
+                    steps_indent = indent
+                    step_indent = None
+                elif steps_indent is not None and is_item and indent >= steps_indent:
+                    if step_indent is None:
+                        step_indent = indent
+                    if indent == step_indent:
+                        step = {"kind": "step", "name": stripped[:120], "job": job["name"],
+                                "path": path, "start_line": number, "end_line": len(lines)}
+                        nodes.append(step)
+        if re.search(r":\s*[|>](?:[+-]?[1-9]?|[1-9][+-]?)\s*(?:#.*)?$", stripped):
+            scalar_indent = indent + (2 if is_item else 0)
+    return nodes
+
+
 def hierarchy(provider: str, path: str, text: str) -> list[dict[str, Any]]:
     """Build a conservative source-backed hierarchy without interpreting a provider DSL."""
     nodes: list[dict[str, Any]] = [{"kind": "pipeline", "name": path, "path": path,
                                     "start_line": 1, "end_line": max(1, len(text.splitlines()))}]
+    if provider == "github" and path.startswith(".github/workflows/"):
+        return nodes + _github_workflow_nodes(path, text)
     current_stage = None
     current_job = None
     for number, line in enumerate(text.splitlines(), 1):

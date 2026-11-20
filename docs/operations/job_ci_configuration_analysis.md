@@ -14,8 +14,9 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 Identify accepted CI definitions, run applicable provider linters and structural rules, and
 correlate exact duplicate observations into canonical CI records. The job answers which
 configuration concerns have bounded source support, not whether a pipeline is exploitable or a
-repository is secure. Its canonical “findings” are correlated scanner/rule judgments; the handoff's
-security-findings list remains empty.
+repository is secure. Its canonical “findings” are correlated scanner/rule judgments. The handoff's
+`security_findings` contains the canonical `lead_candidate` subset, deliberately consumed by review
+prioritization as leads, not adjudicated vulnerabilities. Lower-signal observations remain indexed.
 
 Generic external-linter records retain absent severity as null rather than defaulting to medium.
 The observation remains available with `severity_missing_or_unrated`, which propagates through
@@ -219,9 +220,12 @@ The job declares strict structured gaps; generated task bindings remain [T-147](
    Resolve pinned offline images; unavailable resolution emits retryable `producer_blocked`.
    Execute per definition with bounded container policy, accepting the adapter's diagnostic
    exit convention. Failed invocation/timeout/OOM emits `producer_failed`.
-3. Parse native output with tool-specific mappings. Zizmor spans and Checkov source-range
-   reconstruction retain exact or ambiguous mapping provenance; malformed native output emits
-   `parser_error`, not a clean empty result.
+3. Parse native output with tool-specific mappings. Preserve actionlint's native top-level
+   line/column coordinates, including distinct diagnostics on one line. A column without known
+   byte coordinates does not establish a column encoding or an exact span: indexed locations use
+   an explicitly ambiguous line range, retaining native coordinates in `producer_location`.
+   Zizmor byte spans and Checkov source-range reconstruction retain exact or ambiguous mapping
+   provenance; malformed native output emits `parser_error`, not a clean empty result.
 4. For static specs, read bounded UTF-8 definitions and run source structural rules. Jenkins and
    TeamCity use structural analysis, not target-language execution. Unreadable/invalid text emits
    `parser_error`; file bounds emit `producer_reported_gap`. Other-provider discovery without a
@@ -241,8 +245,13 @@ The job declares strict structured gaps; generated task bindings remain [T-147](
 
 1. Read accepted definitions within the file-byte/UTF-8 bounds and derive structural stage/job/step
    hierarchy. Over-bound files emit `producer_reported_gap`; unreadable hierarchy emits `parser_error`.
-2. Publish `hierarchy.json`. Later enrichment uses the latest preceding node of each kind in the
-   same path; this is structural context, not proof of CI runtime control flow.
+2. Publish `hierarchy.json`. GitHub workflow block mappings distinguish the `jobs`/`steps`
+   containers from actual job IDs and sequence items. Job/step ranges end at their structural
+   boundaries; named steps include their command bodies, and block-scalar command text cannot
+   invent hierarchy nodes. Enrichment requires the observation to lie within those ranges, so
+   context cannot leak from a preceding job or step. Other definitions retain conservative
+   latest-preceding structural context. Neither path proves CI runtime control flow or resolves
+   aliases, generated definitions or dynamic expressions.
 
 ### `ci_observation_publication`
 
@@ -254,8 +263,12 @@ The job declares strict structured gaps; generated task bindings remain [T-147](
 
 ### `ci_correlation`
 
-1. Group only exact provider/path/range/category/message matches; ambiguous mappings must also
-   match provenance and byte ranges. Do not merge merely similar wording or neighboring spans.
+1. Group only exact provider/path/range/category/message matches with compatible byte ranges and
+   identical mapping provenance, confidence and ambiguity, for precise as well as coarse records.
+   Preserve those fields in canonical payloads and indexed locations; an exact byte span, including
+   a zero-length span, is never reconstructed as a whole line. Out-of-source byte spans fail rather
+   than being silently clipped into an exact location. Do not merge merely similar wording or
+   neighboring spans.
 2. Publish `canonical-findings.json` plus an evidence shard linking canonical records to their
    observation IDs/tool lists. Duplicate count is an accounting fact, not confidence in exploitability.
 
@@ -264,7 +277,9 @@ The job declares strict structured gaps; generated task bindings remain [T-147](
 1. Join discovery, scan and hierarchy gaps by stable gap ID; publish `coverage.json` with provider
    counts, tool statuses and skipped-input accounting. Do not re-declare joined records.
 2. Replace this producer's prior shards in the verified upstream manifest and publish `handoff.json`
-   with coverage/canonical-record references, finding count and an empty security-findings list.
+   with coverage/canonical-record references, finding count and the canonical `lead_candidate`
+   subset in `security_findings`. Lead promotion retains attack-class/severity hints for downstream
+   prioritization; it is not final adjudication.
    Publication succeeds on its own terms; originating unit gaps determine job coverage.
 
 ## Dataflow
@@ -310,6 +325,14 @@ successful gap artifacts. Execution-safety may stop before a tool fallback is pu
 Known causes still need the particular walk's user-approved expected classification.
 
 ## Acceptance
+
+Focused offline units include
+[`test_job_graph.py`](../../tests/unit/job_ci_configuration_analysis/test_job_graph.py) for real
+native/static decoding through normalization, immutable indexes, canonical byte locations and
+job/step queries, plus
+[`test_lead_promotion.py`](../../tests/unit/job_ci_configuration_analysis/test_lead_promotion.py)
+for promoted versus non-lead patterns. Unit fixtures replace only the external executor; they do
+not establish live linter or pipeline execution.
 
 1. **A. Inputs:** Compare admitted catalog pin and definition paths/hashes, provider assignment and
    supported input decisions; match actual linter image and argv receipts to selected definitions.

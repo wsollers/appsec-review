@@ -202,9 +202,10 @@ def make_unit_context(
     seed_catalog: bool = True,
     include_context_manifest: bool = True,
     include_stale_ci_index: bool = False,
+    run_id: str = "run_0001",
 ) -> tuple[SimpleNamespace, list[dict[str, Any]], list[tuple[str, dict[str, Any]]]]:
     """Construct a fast, engine-free UnitContext for direct code-level unit calls."""
-    run_root = tmp_path / "runs" / "run_0001"
+    run_root = tmp_path / "runs" / run_id
     attempt_root = run_root / "data" / "jobs" / "job_ci_configuration_analysis" / "attempts" / "attempt_0001"
     step_id, task_id = unit_id.split(".", 1)
     unit_root = attempt_root / "steps" / step_id / "tasks" / task_id
