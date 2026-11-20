@@ -100,6 +100,12 @@ prefixes, and the shard at 2,000,000 lookup rows (bounding both prefix and inter
 tables). The producer checks these before normalization: an over-limit artifact
 gets a named unavailable-coverage reason; other admissible artifacts remain
 queryable. It does not truncate a function's ranges or enlarge the bounds.
+Verified matching companions participate in ambiguity detection even when their
+records exceed an indexing bound. Two distinct matches cannot become a unique
+pair by discarding the over-limit one. A sole over-limit match retains its exact
+debug reference and reader/limit diagnostics with unavailable coverage. An
+incomplete export supplies no complete match evidence; its limit diagnostic
+remains visible even if another companion yields usable records.
 
 Source binding reads only the declared, admitted `job_target_catalog/source_files`
 shards through the observed-read boundary. Artifact catalog reads likewise produce

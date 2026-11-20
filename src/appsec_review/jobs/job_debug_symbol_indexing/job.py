@@ -51,6 +51,11 @@ _TOPOLOGY = {"decide": ("target",), "extract": ("clang_dwarf", "msvc_pdb"),
 _ARTIFACT_KINDS = {EntityKind.EXECUTABLE, EntityKind.OBJECT_FILE, EntityKind.LIBRARY,
                    EntityKind.BUILD_ARTIFACT}
 _DEBUG_KINDS = {"native-symbols", "debug-information", "debug-metadata"}
+_LIMIT_GAPS = {
+    "max_input_bytes", "max_records", "max_records_total", "max_output_bytes",
+    "input_limit", "output_limit", "record_limit", "depth_limit",
+    "address_range_limit", "address_lookup_prefix_limit", "address_lookup_row_limit",
+}
 _RECORD_KINDS = {
     RecordKind.SYMBOL: EntityKind.SYMBOL,
     RecordKind.SOURCE_RANGE: EntityKind.IR_ENTITY,
@@ -564,7 +569,9 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
             companions = debug_candidates if target is CompilerTarget.MSVC else [None, *debug_candidates]
             if not companions:
                 gaps.append("missing_debug_artifact")
-            matches = []
+            indexable_matches = []
+            verified_matches = {}
+            matched_gaps = []
             for candidate in companions:
                 if candidate is not None and candidate.get("gap"):
                     gaps.append(candidate["gap"])
@@ -590,6 +597,12 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
                                 settings["reader"]["max_input_bytes"])
                     if not isinstance(result, Extraction):
                         raise FrameworkIntegrityError("invalid extraction contract")
+                    if result.records:
+                        # Pairing evidence survives a later refusal to index these records.
+                        match_sha = (candidate["reference"]["sha256"] if candidate
+                                     else artifact["reference"]["sha256"])
+                        verified_matches[match_sha] = candidate
+                        matched_gaps.extend(_private_text(gap) for gap in result.gaps)
                     if len(result.records) > settings["reader"]["max_records"]:
                         gaps.append("max_records")
                         continue
@@ -605,7 +618,7 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
                         result_lookup_rows += lookup_cost([asdict(value) for value in record.ranges])
                         check_lookup_rows(lookup_rows + result_lookup_rows)
                     if result.records:
-                        matches.append((result, candidate, executions, result_lookup_rows))
+                        indexable_matches.append((result, candidate, executions, result_lookup_rows))
                         if candidate is None:
                             break
                     else:
@@ -619,21 +632,23 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
                 finally:
                     if exporter is not None:
                         reader_executions.extend(exporter.attempts)
-            distinct = {(candidate["reference"]["sha256"] if candidate else artifact["reference"]["sha256"])
-                        for _, candidate, _, _ in matches}
-            if len(distinct) > 1:
+            gaps.extend(matched_gaps)
+            if len(verified_matches) > 1:
                 gaps.append("ambiguous_debug_artifact")
-            elif matches:
-                extracted, debug, selected_executions, selected_lookup_rows = matches[0]
-                # Failed candidate pairing is not a coverage gap after exactly one match is proved.
-                gaps = list(extracted.gaps)
-                try:
-                    gaps = _normalize(builder, artifact, debug, extracted, unit, target.value, sources,
-                                      selected_executions)
-                    output_bytes += len(canonical_json(asdict(extracted)))
-                    lookup_rows += selected_lookup_rows
-                except (ValueError, KeyError, TypeError):
-                    raise ValueError("invalid normalized debug-symbol records") from None
+            elif verified_matches:
+                debug = next(iter(verified_matches.values()))
+                if indexable_matches:
+                    extracted, debug, selected_executions, selected_lookup_rows = indexable_matches[0]
+                    # A bounded/truncated candidate is not disproved by another complete match.
+                    retained_gaps = [gap for gap in gaps if gap in _LIMIT_GAPS]
+                    try:
+                        gaps = sorted(set(_normalize(
+                            builder, artifact, debug, extracted, unit, target.value, sources,
+                            selected_executions) + matched_gaps + retained_gaps))
+                        output_bytes += len(canonical_json(asdict(extracted)))
+                        lookup_rows += selected_lookup_rows
+                    except (ValueError, KeyError, TypeError):
+                        raise ValueError("invalid normalized debug-symbol records") from None
         if extracted is None and not gaps:
             gaps.append("debug_symbols_unavailable")
         coverage = "partial" if extracted and gaps else "complete" if extracted else "unavailable"

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
+import json
 
 import pytest
 
@@ -149,3 +151,78 @@ def test_function_overlap_preserves_ambiguity_and_excludes_another_compilation_u
     for name in ("foreign", "boundary", "unknown"):
         result = core.query_debug_symbols(mode="source_ranges", subject=functions[name]["identity"])
         assert not result["results"] and result["coverage_gaps"]
+
+
+@pytest.mark.parametrize("case", ["overbound-first", "overbound-last", "unique-overbound", "truncated-second"])
+def test_companion_identity_survives_index_bounds_through_publication(tmp_path, monkeypatch, case):
+    context = job_context(tmp_path)
+    root = context.run_root
+    # A build-ID-only ELF permits distinct companions with the same verified build ID.
+    # Do not bypass either the native verifier or the captured-output parser.
+    stripped = (FIXTURES / "stripped.elf").read_bytes()
+    assert stripped.count(b".gnu_debuglink\0") == 1
+    stripped = stripped.replace(b".gnu_debuglink\0", b".xnu_debuglink\0")
+    companion = (FIXTURES / "tiny.debug").read_bytes()
+    fragmented = companion + b"\0fragmented-companion"
+    bad = artifact(root, "stripped-program", stripped)
+    control = artifact(root, "embedded-control", (FIXTURES / "tiny.elf").read_bytes())
+    limited = artifact(root, "fragmented.debug", fragmented, "debug-information")
+    ordinary = artifact(root, "ordinary.debug", companion, "debug-information")
+    companions = ([limited] if case == "unique-overbound" else
+                  [ordinary, limited] if case in {"overbound-last", "truncated-second"}
+                  else [limited, ordinary])
+    items = [bad, *companions, control]
+    source = source_shard(root, (FIXTURES / "tiny.c").read_bytes(),
+                          path="tests/fixtures/debug_symbols/tiny.c")
+    upstream = manifest(root, [catalog_shard(root, items), source])
+    native = (FIXTURES / "tiny.dwarf.txt").read_text()
+    intervals = "\n".join(f"[0x{index * 2:x}, 0x{index * 2 + 1:x})" for index in range(501))
+    fragmented_export = native.replace(
+        "DW_AT_high_pc\t(0x000000000040102f)", f"DW_AT_ranges\t(0x00\n{intervals})")
+    tool_settings = settings(tmp_path, max_output_bytes=32768)
+    parsed = []
+
+    def reader(binary, debug_file, *, target, settings):
+        limited_input = debug_file is not None and hashlib.sha256(
+            debug_file.read_bytes()).hexdigest() == limited["reference"]["sha256"]
+        output = ("x" * 32769 if case == "truncated-second" else fragmented_export) if limited_input else native
+        result = extract_symbols(binary, debug_file, target=target, settings=tool_settings,
+                                 runner=lambda *a, **k: output)
+        parsed.append((hashlib.sha256(binary.read_bytes()).hexdigest(), limited_input, result))
+        return result
+
+    job = build_job(extractor=reader)
+    outputs = {"decide.target": decide(monkeypatch, job, context, accepted_inputs(items, upstream))}
+    for name in ("extract.clang_dwarf", "extract.msvc_pdb", "acceptance.publish_handoff"):
+        outputs[name] = handlers(job)[name](unit(context, name, outputs))
+    published = outputs["acceptance.publish_handoff"]
+    core = RetrievalCore(root.parent, context.run_id, manifest_path=root / published["index_manifest"]["path"])
+    coverage = json.loads((root / outputs["extract.clang_dwarf"]["coverage"]["path"]).read_text())
+    affected = next(row for row in coverage["coverage"] if row["artifact_identity"] == bad["artifact_identity"])
+    ambiguous = case in {"overbound-first", "overbound-last"}
+    expected_gap = "output_limit" if case == "truncated-second" else "address_range_limit"
+    assert ("ambiguous_debug_artifact" in affected["gap"]) is ambiguous
+    assert expected_gap in affected["gap"]
+    assert affected["status"] == ("partial" if case == "truncated-second" else "unavailable")
+    assert any(gap.endswith(": " + expected_gap) for gap in published["gaps"])
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    if case != "truncated-second":
+        complete = [result for digest, is_limited, result in parsed
+                    if digest == bad["reference"]["sha256"] and is_limited]
+        assert len(complete) == 1 and any(len(row.ranges) == 501 for row in complete[0].records)
+        assert "variable_locations_not_indexed" in affected["gap"]
+        assert not core.query_debug_symbols(mode="symbol", artifact_identity=bad["artifact_identity"])["results"]
+    else:
+        assert any(not result.records and result.gaps == ("output_limit",)
+                   for _, is_limited, result in parsed if is_limited)
+        assert core.query_debug_symbols(mode="symbol", artifact_identity=bad["artifact_identity"])["results"]
+    raw = json.loads((root / outputs["extract.clang_dwarf"]["artifact"]["path"]).read_text())
+    affected_raw = next(row for row in raw["artifacts"] if row["artifact_identity"] == bad["artifact_identity"])
+    assert affected_raw["debug"] == (
+        None if ambiguous else ordinary["reference"] if case == "truncated-second" else limited["reference"])
+    if case != "truncated-second":
+        assert affected_raw["reader_records"] == []
+    unaffected = core.query_debug_symbols(mode="symbol", artifact_identity=control["artifact_identity"])["results"]
+    assert unaffected and all(row["payload"]["debug_sha256"] == control["reference"]["sha256"] for row in unaffected)
+    retained_control = next(row for row in raw["artifacts"] if row["artifact_identity"] == control["artifact_identity"])
+    assert retained_control["reader_records"] and retained_control["status"] == "partial"
