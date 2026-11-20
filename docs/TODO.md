@@ -458,7 +458,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5224 | [Grant querying capabilities only for admitted evidence](#t-5224-grant-querying-capabilities-only-for-admitted-evidence) | review | open |
 | T-5225 | [Honor the resolved structural fallback policy](#t-5225-honor-the-resolved-structural-fallback-policy) | codeql | done (2026-11-20, 28c1cd829d5380883a98b59d97a3d0f1ff7d7b72) |
 | T-5226 | [Emit dependency gaps only for applicable required evidence](#t-5226-emit-dependency-gaps-only-for-applicable-required-evidence) | evidence | open |
-| T-5227 | [Count canonical report gaps once without erasing distinct scopes](#t-5227-count-canonical-report-gaps-once-without-erasing-distinct-scopes) | review | open |
+| T-5227 | [Count canonical report gaps once without erasing distinct scopes](#t-5227-count-canonical-report-gaps-once-without-erasing-distinct-scopes) | review | done (2026-11-20, 54c0645a64e448166fad2f50d56ae7079dd8e741) |
 | T-5228 | [Read build environment inputs through the public admitted boundary](#t-5228-read-build-environment-inputs-through-the-public-admitted-boundary) | pipeline | done (2026-11-20, ca5ad85f953d2ceccbb12db11811ecb772cc6517) |
 | T-5229 | [Reconcile audit-identified as-built prose and test navigation](#t-5229-reconcile-audit-identified-as-built-prose-and-test-navigation) | pipeline | open |
 | T-5230 | [Resolve clang static analysis conditional audit boundaries](#t-5230-resolve-clang-static-analysis-conditional-audit-boundaries) | pipeline | done (2026-11-20, 39c905cad22774c00a7dfa35226e52697d3ab9be) |
@@ -469,8 +469,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5235 | [Resolve dossier publication conditional audit boundaries](#t-5235-resolve-dossier-publication-conditional-audit-boundaries) | pipeline | open |
 | T-5236 | [Resolve evidence collection conditional audit boundaries](#t-5236-resolve-evidence-collection-conditional-audit-boundaries) | pipeline | open |
 | T-5237 | [Resolve final publication gate conditional audit boundaries](#t-5237-resolve-final-publication-gate-conditional-audit-boundaries) | pipeline | open |
-| T-5238 | [Resolve final report publication conditional audit boundaries](#t-5238-resolve-final-report-publication-conditional-audit-boundaries) | pipeline | open |
-| T-5239 | [Resolve inference security review conditional audit boundaries](#t-5239-resolve-inference-security-review-conditional-audit-boundaries) | pipeline | open |
+| T-5238 | [Resolve final report publication conditional audit boundaries](#t-5238-resolve-final-report-publication-conditional-audit-boundaries) | pipeline | done (2026-11-20, 54c0645a64e448166fad2f50d56ae7079dd8e741) |
+| T-5239 | [Resolve inference security review conditional audit boundaries](#t-5239-resolve-inference-security-review-conditional-audit-boundaries) | pipeline | done (2026-11-20, d375a0a99681ce9796a3e8f52f26c40e907d498e) |
 | T-5240 | [Resolve language build conditional audit boundaries](#t-5240-resolve-language-build-conditional-audit-boundaries) | pipeline | blocked |
 | T-5241 | [Resolve model connectivity conditional audit boundaries](#t-5241-resolve-model-connectivity-conditional-audit-boundaries) | pipeline | open |
 | T-5242 | [Resolve poc generation conditional audit boundaries](#t-5242-resolve-poc-generation-conditional-audit-boundaries) | testing | open |
@@ -492,6 +492,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5258 | [Classify unmapped Clang compile rows before execution](#t-5258-classify-unmapped-clang-compile-rows-before-execution) | scanners | done (2026-11-20, 8d6cd37c0a811060443a52d0d3c2373588596fe0) |
 | T-5259 | [Verify CodeQL SARIF base and scope-relative URI semantics](#t-5259-verify-codeql-sarif-base-and-scope-relative-uri-semantics) | codeql | done (2026-11-20, 7dcd2d60f47dcaafb9747070e447eb57b453dd8d) |
 | T-5260 | [Attribute structural seed origins and scope accounting](#t-5260-attribute-structural-seed-origins-and-scope-accounting) | codeql | done (2026-11-20, 7dcd2d60f47dcaafb9747070e447eb57b453dd8d) |
+| T-5261 | [Preserve Clang AST file elision across macro locations](#t-5261-preserve-clang-ast-file-elision-across-macro-locations) | graph | done (2026-11-20, 9c669701a7f1b11f4fb575492a90ac7a9b04a48b) |
+| T-5262 | [Retain bounded diagnostics when descendant pipe draining fails](#t-5262-retain-bounded-diagnostics-when-descendant-pipe-draining-fails) | native | done (2026-11-20, 8ed56f29a9407ab9e044428b37d4b21fab27f90d) |
+| T-5263 | [Complete authorized native tooling rollout and positive acceptance](#t-5263-complete-authorized-native-tooling-rollout-and-positive-acceptance) | images | blocked |
 
 ## Active entries
 
@@ -4096,6 +4099,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   Short reads finish within the byte bound rather than certifying a prefix. Rank-based selection
   and CPP/Clang/CPG cache identities are consistent. Main combined selection: 147 passed/12.21 s,
   two workers, seed 5097, no skips or slow cases; native compiler validation not run.
+  Implementation began in `d9dcc230`; `a6a46b51` adds the short-read correction and is the
+  final verified revision, not the introducing commit for every part of the repair.
 
 ### T-5098 — Preserve alternate graph symbol kinds identities and disputed evidence
 
@@ -4242,6 +4247,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   `@call` preserves seen/pending-script uncertainty without extra traversal slots; unsupported
   control/continuations retain gaps, original path case and redaction. Main: 82 passed/5.48 s,
   two workers, seed 5108, no skips or slow cases. Scripts were not executed.
+  Dialect/uncertainty repair was introduced in `e8cf0008`; final verified revision `49a9d98d`
+  additionally handles batch `@call`.
 
 ### T-5109 — Reconstruct build iterations and preserve current failure context
 
@@ -4256,6 +4263,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   trials retain failed-generation admission. Product rejection retains current transaction failure
   evidence without rewriting the original success receipt. Main combined selection: 132 passed/17.35 s,
   two workers, seed 5109, no skips or slow cases; native builds/live validation not run.
+  Implementation was introduced in `e33020c4`. The closure names final verified revision
+  `083f216e`, which corrects two successful-build fixtures rather than introducing this fix.
 
 ### T-5110 — Read manual build transaction requests before unrelated checkout requirements
 
@@ -4268,6 +4277,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   Shares the 132-case main verification with T-5109. The audited manual CLI branch reads its
   immutable request without an unrelated checkout gate; request/configuration validation and
   registered target admission remain in place.
+  Implementation was introduced in `e33020c4`; `083f216e` identifies the final tested
+  revision after the related native-product fixture corrections.
 
 ### T-5111 — Validate native product bytes against declared product kind
 
@@ -4284,6 +4295,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   combined run had 120 passes and 12 failures because success fixtures emitted shared-object
   bytes while declaring executables. Two fixture calls now provide real interpreter markers;
   no production gate or assertion was weakened.
+  Role admission was introduced in `e33020c4` and strengthened in `737988ee`. The closure
+  SHA `083f216e` is the final tested fixture-correction revision, not the role-verifier patch.
 
 ### T-5112 — Retain unknown review state bounded hunks and unique change churn
 
@@ -5711,11 +5724,19 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5227 — Count canonical report gaps once without erasing distinct scopes
 
-- **State:** open
+- **State:** done (2026-11-20, 54c0645a64e448166fad2f50d56ae7079dd8e741)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: FB-FINAL-GAP-COUNT. Count final-report gaps once by canonical identity.
 - **Scope:** `src/appsec_review/jobs/job_final_report_publication/report.py`
 - **Done when:** Pair real gate/report projections and assert exact counts for repeated same-identity gaps and distinct scoped gaps.
+  Publication previously returned six entries for four canonical gaps by forwarding two gate
+  limitations again beside SARIF's copies. Canonical SARIF/PDF gap records now survive forwarding
+  unchanged, so real runtime outcomes deduplicate repeated references without erasing scopes.
+  Real ledger/gate/report fixtures preserve one repeated identity versus two distinct subject gaps
+  under both disabled and failed PDF boundaries. Repeated population counters are not additive
+  gaps, and no CodeQL seed-counter overcount is inferred.
+  Main combined capture/report union: 186 passed/35.65 s, two workers, seed 152627,
+  maximum case 6.19 s, no skips or slow cases; all 130 report-owner cases retained.
 - **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory); follow-up to closed T-176 (not reopened).
 
 ### T-5228 — Read build environment inputs through the public admitted boundary
@@ -5766,6 +5787,15 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   name the actual `tool-native-cpp` base and header checks, and describe implemented normalization
   without claiming pinned native compatibility. The wrapper and graph-normalization regression
   selectors are included in its unit map.
+  Inference L160 now reflects existing unseeded post-adjudication chain composition,
+  PoC non-convened versus failed-judge behavior and actual configured model-role identities.
+  The two discovery-role seed sentences are corrected without new authority or limits.
+  Real registered composition/rendering/verification/pinning and immutable/tamper controls
+  pass within the 68-case main union at `d375a0a9`; no live model-quality claim is made.
+  Final-report L208 now names report /4, distinguishes bound executive narratives from the
+  closed JSON contract, records the still-unimplemented OWASP matrix under T-5012, and includes
+  SARIF publication/accounting in the authored flow. Renderer dimensions were already correct;
+  no actual PDF/browser rendering or model execution is claimed.
 - **Refs:** `audit-results/job-audit-cumulative.md` and the documentation/conditional sections in all 47 linked per-job reports, including the final-gate pinned-input/pointer-stability distinction; follow-up to closed T-168, T-169, T-170, T-171, T-172, T-173, T-176 (not reopened).
 
 ### T-5230 — Resolve clang static analysis conditional audit boundaries
@@ -5865,20 +5895,37 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5238 — Resolve final report publication conditional audit boundaries
 
-- **State:** open
+- **State:** done (2026-11-20, 54c0645a64e448166fad2f50d56ae7079dd8e741)
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: FR-U01. Conditional medium — Executive wording ignores an explicit lack of independence.
 - **Scope:** `src/appsec_review/jobs/job_final_report_publication/job.py`
 - **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+  A real serializer/gate/report fixture with explicit false independence rendered Yes.
+  HTML/LaTeX source now retains No, and missing independence remains unknown, without changing
+  confirmed state or adjudication/certification policy. Same-model and distinct-model independent
+  controls retain their distinctness flags. Ordinary production reachability of contradictory
+  confirmed/false-independence input remains unproven.
+  Verified within T-5227's 186-case main union, including the original 130 report cases and
+  actual adjudication controls. DP-01 is downstream duplicate verification only, not proof that
+  hashes establish narrative/path truth or closure of all shared T-5086 work.
 - **Refs:** `audit-results/job-audit-job_final_report_publication.md`.
 
 ### T-5239 — Resolve inference security review conditional audit boundaries
 
-- **State:** open
+- **State:** done (2026-11-20, d375a0a99681ce9796a3e8f52f26c40e907d498e)
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: L158. Verify noncritical severity ordering and worker-cardinality configuration.
 - **Scope:** `src/appsec_review/jobs/job_inference_security_review/job.py`
 - **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+  Severity ordering introduced at `c3ff93c9` uses the existing six attention ranks with stable
+  identity ties, without changing finding severity. Worker capacity and logical task cardinality
+  remain distinct and unchanged. The initial recorder incorrectly replaced the production
+  executor; `5b05db18` preserves its context/operation wrapper and verifies actual handler calls.
+  `d375a0a9` corrects only the two approved optional-chain-seed role sentences.
+  Main: 68 passed/24.82 s, two workers, seed 152239, no skips or slow cases. Exact node union
+  preserves original 31-case coverage, the 44-case follow-up and the separate blindness control.
+  Fake model replies are external boundaries; production dispatch, contexts and guidance pins
+  are exercised. No models, live evaluation, integration or acceptance were run.
 - **Refs:** `audit-results/job-audit-job_inference_security_review.md`.
 
 ### T-5240 — Resolve language build conditional audit boundaries
@@ -6223,6 +6270,72 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   production speedup or elimination of all repeated computation is claimed.
 - **Refs:** T-5225, T-5227; `src/appsec_review/seeding/ledger.py`,
   `src/appsec_review/jobs/job_codeql_analysis/job.py`; user feedback, 2026-11-20.
+
+### T-5261 — Preserve Clang AST file elision across macro locations
+
+- **State:** done (2026-11-20, 9c669701a7f1b11f4fb575492a90ac7a9b04a48b)
+- **Area:** graph
+- **Why:** A macro clears the compiled AST reader's file state; subsequent file-elided foreign
+  declarations bypass source filtering and consume the node allowance. They have null locations
+  and explicit gaps, not fabricated exact source ownership.
+- **Scope:** Compiled-analysis AST filename state and focused whole-program admission regressions.
+  Follow LLVM's spelling-then-expansion emitter order independently of coordinate resolvability;
+  preserve source/custody checks, macro uncertainty and accepted-source budgets.
+- **Done when:** An emitter-faithful macro-then-elided sequence cannot admit foreign declarations
+  or crowd out accepted source. Accepted-file transitions and ambiguous macro locations retain
+  their correct mapping or explicit uncertainty without running the compiler.
+  Main: 101 passed/5.64 s, two workers, seed 15261, no skips or slow cases. Nine new cases
+  cover loc/range-only forms, nested filename elision, accepted/foreign transitions, real cwd,
+  node-budget pressure and changed-byte/symlink refusal through actual SQLite publication.
+  Parser identity `clang-ast/6` invalidates older results. Fixtures follow the LLVM 18.1.3
+  emitter schema and are not native captures; macro coordinate ownership remains unresolved.
+- **Refs:** `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`;
+  LLVM 18.1.3 `clang/lib/AST/JSONNodeDumper.cpp`; cumulative feedback and inert probe,
+  2026-11-20. File-state reset predates the range; whole-program filtering interaction is in
+  `677e7a7c`. Follow-up to T-5095/T-5096, not a claim of native acceptance.
+
+### T-5262 — Retain bounded diagnostics when descendant pipe draining fails
+
+- **State:** done (2026-11-20, 8ed56f29a9407ab9e044428b37d4b21fab27f90d)
+- **Area:** native
+- **Why:** After a local timeout and process-group cancellation, an escaped descendant can keep
+  pipes open. The second `capture.wait(5)` raises `TimeoutExpired` without delivering the retained
+  prefixes to the normal failure-evidence path. Internal buffers still contain the bytes.
+- **Scope:** Local container-runtime capture timeout handling and focused regressions. Preserve
+  bounded stdout/stderr, original timeout facts and uncertainty about surviving descendants.
+  Execution-safety quarantine and `ReviewStopped` must remain fatal; do not claim cleanup succeeded.
+- **Done when:** Failed post-cancellation draining retains exact bounded prefixes in a typed failure
+  result or exception, while guarded execution still quarantines unconfirmed descendant death.
+  Any real child-process unit fixture cleans up only its own known processes and stays under 10 s.
+  Main's combined 186-case capture/report union passed/35.65 s, maximum case 6.19 s,
+  two workers, seed 152627, no skips or slow cases; exact 56-case capture coverage retained.
+  `TimeoutExpired` carries bounded stdout/stderr; failed post-cancel drain preserves the original
+  execution timeout and chains its cause. Partial receipts mark `capture_complete=false` and
+  `cleanup=UNCONFIRMED`. Cancellation stays fatal with `timed_out=null`, not a fabricated deadline.
+  Real separately sessioned, directly owned pipe holders reproduce custody without orphaning a
+  grandchild; every test kills/reaps only its own known processes. Guard quarantine is unchanged.
+- **Refs:** T-5251; `src/appsec_review/container_runtime/executor.py`,
+  `src/appsec_review/runtime/execution_safety.py`; cumulative feedback and inert real-capture
+  boundary probe, 2026-11-20.
+
+### T-5263 — Complete authorized native tooling rollout and positive acceptance
+
+- **State:** blocked
+- **Area:** images
+- **Why:** Affected native-C++ and Ghidra tooling changes and the Clang wrapper have not received
+  the required operator rebuild/verification/binding and positive native acceptance. Closed
+  offline repair records do not close these pre-live deployment gaps; authorization is still needed.
+- **Scope:** Only explicitly authorized affected-tool rollout on the chosen review host: exact
+  source/release/image identities, Ghidra's pinned-class compile gate, configured signing policy
+  and host-owned bindings. Record version-attributed positive native output for affected parsers,
+  including CodeQL URI forms; do not invent captures or rebuild unrelated images.
+- **Done when:** The operator-authorized evidence identifies the rebuilt/verified affected tools,
+  current host bindings and positive native results. Mounted application-source reload remains
+  separate from tooling rebuilds; prior run pins stay immutable. No real target, review restart,
+  key provisioning, enforcement change or broad integration suite is authorized by this entry.
+- **Refs:** T-5095, T-5106, T-5117, T-5257, T-5259;
+  `docs/architecture/deployment-image-and-source-mount.md`,
+  `docs/operations/clang-static-analysis.md`; cumulative feedback, 2026-11-20.
 
 ## Legacy backlog
 

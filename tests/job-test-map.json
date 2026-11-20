@@ -401,6 +401,8 @@
     },
     "job_inference_security_review": {
       "unit": [
+        "tests/unit/job_inference_security_review/test_ordering_and_cardinality.py",
+        "tests/unit/job_inference_security_review/test_chain_seed_guidance.py",
         "tests/review/test_attack_chain_job.py",
         "tests/review/test_attack_chains.py",
         "tests/review/test_bounded_cells.py",
@@ -973,7 +975,7 @@
         "job_third_party_data_sync",
         "job_tree_sitter_ast"
       ],
-      "unit": ["tests/test_stream_capture.py"],
+      "unit": ["tests/test_stream_capture.py", "tests/test_escaped_capture.py"],
       "integration": [],
       "acceptance": [],
       "live": []

@@ -37,6 +37,11 @@ byte. Only the configured prefix is published; full and first-error partial rece
 each stream's truncation independently. Excess output is drained, not buffered; a zero exit code
 does not make truncated coverage complete. This applies both with and without execution safety; timeout, cancellation,
 process-generation checks and failure classification remain in their existing execution paths.
+If post-cancellation pipe draining fails, the fatal exception retains bounded diagnostic prefixes
+and the original execution timeout. Partial receipts mark `capture_complete=false` and
+`cleanup=UNCONFIRMED`; an untruncated stream is not proof of complete capture. External cancellation
+does not invent a deadline (`timed_out=null`), and unconfirmed descendant death still quarantines
+the execution and raises `ReviewStopped` under the safety guard.
 File-directed build capture still retains complete files, and safety callers without an explicit
 byte budget retain their existing complete-output contract. The native broker retains its separate
 bounded capture and fail-closed completeness validation; it never falls back to local execution.

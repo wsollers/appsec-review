@@ -226,6 +226,9 @@ their explicit outcomes. File sinks, callers without a supplied byte budget and 
 bounded native broker preserve their existing contracts. The offline repair is recorded in
 [T-5251](../TODO.md#t-5251-bound-shared-subprocess-stream-capture-before-materialization);
 it does not establish native/live validation.
+Post-cancellation drain failures retain bounded diagnostics in the fatal exception and partial
+receipt without certifying process cleanup or complete capture
+([T-5262](../TODO.md#t-5262-retain-bounded-diagnostics-when-descendant-pipe-draining-fails)).
 
 The protected `artifact_scanner_io` dataset owns scanner scratch, receipts, retained parser bytes
 and diagnostics, plus the empty mount placeholders under each task's `target-inputs/<token>/` and
