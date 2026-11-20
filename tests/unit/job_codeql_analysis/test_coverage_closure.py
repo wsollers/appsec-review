@@ -166,6 +166,7 @@ def _execute_publish(unit):
         unit.unit_id = publish.unit_id
         published = publish.handler(unit)
     assert any(row["producer"] == "job_language_build" for row in reads.document()["reads"])
+    unit.job.reads = reads.document()["reads"]
     return output, published
 
 
@@ -273,6 +274,16 @@ def test_export_seed_ownership_uses_whole_plan_and_only_own_normalizations(tmp_p
     unit._stored["plan.inventory"]["upstream_manifests"].append(ref)
     captured = []
     seed_plan = codeql._seed_plan
+    from appsec_review.seeding import ledger
+    shared_reads = []
+    observation_shards = ledger.observation_shards
+
+    def read_shared(root, manifests):
+        assert root == unit.job.run_root
+        shared_reads.append(tuple(manifests))
+        return observation_shards(root, manifests)
+
+    monkeypatch.setattr(ledger, "observation_shards", read_shared)
 
     def capture(*args, **kwargs):
         result = seed_plan(*args, **kwargs)
@@ -282,6 +293,11 @@ def test_export_seed_ownership_uses_whole_plan_and_only_own_normalizations(tmp_p
     monkeypatch.setattr(codeql, "_seed_plan", capture)
     output, published = _execute_publish(unit)
     assert len(captured) == 2
+    assert len(shared_reads) == 1, "immutable upstream seeds must be read once, not once per export"
+    assert any(row["producer"] == "job_evidence_collection" for row in unit.job.reads)
+    export_document = json.loads((root / output["graph_export_artifact"]["path"]).read_bytes())
+    shared = export_document["seed_accounting"]["shared"]
+    assert shared["aggregation"] == "non_additive" and shared["not_in_database"] == int(outside)
     for (seeds, shards), scope, normalized, exported in zip(
         captured, plan.scopes, output["scopes"], output["exports"], strict=True,
     ):
@@ -293,6 +309,7 @@ def test_export_seed_ownership_uses_whole_plan_and_only_own_normalizations(tmp_p
         other = next(item for item in plan.scopes if item.scope_id != scope.scope_id)
         assert seeds.for_scope(other.scope_id).rows == (("app.py", 1, 1),)
         assert exported["export_status"] == "SUCCEEDED"
+        assert exported["seeded"]["accounting"]["shared"] == shared
         assert exported["seeded"]["status_counts"].get("file_not_in_database", 0) == int(outside)
     assert published["terminal_status"] == ("COMPLETED_WITH_GAPS" if outside else "SUCCEEDED")
 

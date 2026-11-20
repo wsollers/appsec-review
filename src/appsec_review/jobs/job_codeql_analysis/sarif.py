@@ -41,8 +41,43 @@ def _region(physical: Mapping[str, Any]) -> tuple[int, int, int, int]:
     return start_line, end_line, start_column, end_column
 
 
+def _based_path(artifact: Mapping[str, Any], bases: object) -> str | None:
+    """Resolve only the referenced base chain; cycles are bounded by the supplied base inventory."""
+    def decode(uri: object) -> str | None:
+        if not isinstance(uri, str):
+            return None
+        try:
+            parsed = urlparse(uri)
+        except ValueError:
+            return None
+        path = unquote(parsed.path).replace("\\", "/")
+        if (parsed.scheme not in {"", "file"} or parsed.netloc or parsed.query or parsed.fragment
+                or ".." in PurePosixPath(path).parts or path.startswith("//")):
+            return None
+        return path
+
+    path, base_id = decode(artifact["uri"]), artifact.get("uriBaseId")
+    if path is None:
+        return None
+    visited: set[str] = set()
+    while not PurePosixPath(path).is_absolute():
+        if (not isinstance(base_id, str) or base_id in visited or not isinstance(bases, Mapping)
+                or not isinstance(bases.get(base_id), Mapping)):
+            return None
+        visited.add(base_id)
+        base = bases[base_id]
+        prefix = decode(base.get("uri", ""))
+        if prefix is None:
+            return None
+        # Decode once before interpreting directory separators; never join first and lose a base directory.
+        directory = PurePosixPath(prefix) if prefix.endswith("/") else PurePosixPath(prefix).parent
+        path = (directory / path).as_posix() if path else prefix
+        base_id = base.get("uriBaseId")
+    return path
+
+
 def map_location(physical: Mapping[str, Any], *, files: Sequence[Mapping[str, Any]],
-                 root: str) -> MappedLocation:
+                 root: str, uri_bases: object = None) -> MappedLocation:
     artifact = physical.get("artifactLocation")
     region = _region(physical)
     producer = sanitize_producer_data({"artifactLocation": artifact, "region": physical.get("region", {})})
@@ -59,14 +94,25 @@ def map_location(physical: Mapping[str, Any], *, files: Sequence[Mapping[str, An
     if ".." in PurePosixPath(raw).parts or raw.startswith("//"):
         return MappedLocation(None, None, *region, 0.0, False, (), producer)
     accepted = {str(item["path"]): str(item["sha256"]) for item in files}
+    if "uriBaseId" in artifact and not PurePosixPath(raw).is_absolute():
+        resolved_path = _based_path(artifact, uri_bases) or ""
+        for prefix in ("/scratch/workspace/", "/workspace/"):
+            if resolved_path.startswith(prefix):
+                candidate = PurePosixPath(resolved_path[len(prefix):]).as_posix()
+                if candidate in accepted:
+                    return MappedLocation(candidate, accepted[candidate], *region, 1.0, False,
+                                          (candidate,), producer)
+                break
+        return MappedLocation(None, None, *region, 0.0, False, (), producer)
     if not PurePosixPath(raw).is_absolute():
         # Literal relative source names outrank compatibility workspace aliases.
         relative = PurePosixPath(raw).as_posix()
-        rooted = (f"{root.rstrip('/')}/{relative}"
-                  if root != "." and not relative.startswith(root.rstrip("/") + "/") else relative)
-        for candidate in (relative, rooted):
-            if candidate in accepted:
-                return MappedLocation(candidate, accepted[candidate], *region, 1.0, False, (candidate,), producer)
+        rooted = (PurePosixPath(root) / relative).as_posix()
+        matches = tuple(sorted({relative, rooted} & accepted.keys()))
+        if len(matches) > 1:
+            return MappedLocation(None, None, *region, 0.5, True, matches, producer)
+        if matches:
+            return MappedLocation(matches[0], accepted[matches[0]], *region, 1.0, False, matches, producer)
     while raw.startswith("./"):
         raw = raw[2:]
     for prefix in ("/scratch/workspace/", "scratch/workspace/", "/workspace/", "workspace/"):
@@ -177,7 +223,8 @@ def normalize_sarif(document: Mapping[str, Any], *, files: Sequence[Mapping[str,
             for location in result.get("locations", ()) if isinstance(result.get("locations", ()), list) else ():
                 physical = location.get("physicalLocation") if isinstance(location, Mapping) else None
                 if isinstance(physical, Mapping):
-                    locations.append(map_location(physical, files=files, root=root))
+                    locations.append(map_location(physical, files=files, root=root,
+                                                  uri_bases=run.get("originalUriBaseIds")))
             primary = next((item for item in locations if item.path is not None), locations[0] if locations else None)
             flows: list[dict[str, Any]] = []
             flow_ordinal = 0
@@ -195,7 +242,8 @@ def normalize_sarif(document: Mapping[str, Any], *, files: Sequence[Mapping[str,
                             gaps.append(f"CodeQL flow step for {run_index}:{result_index} had no physical location")
                             continue
                         flow_ordinal += 1
-                        mapped = map_location(physical, files=files, root=root)
+                        mapped = map_location(physical, files=files, root=root,
+                                              uri_bases=run.get("originalUriBaseIds"))
                         flows.append({
                             # code_flow separates alternative SARIF paths for the same result.
                             "ordinal": flow_ordinal, "code_flow": code_flow_index, "thread_flow": thread_index,

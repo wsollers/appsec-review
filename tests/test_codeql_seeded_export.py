@@ -386,7 +386,8 @@ def test_seeded_export_stages_the_seeds_and_publishes_the_ledger_from_the_report
     assert ledger[("a.cpp", 10, 12)]["status"] == "resolved"
     assert ledger[("a.cpp", 10, 12)]["functions"] == ["ns::f", "ns::f2"]
     assert ledger[("a.cpp", 10, 12)]["sources"][0] | {"observation_id": "x"} == {
-        "scanner": "tool-cppcheck", "rule": "oob", "severity": "high", "observation_id": "x"}
+        "scanner": "tool-cppcheck", "rule": "oob", "severity": "high", "observation_id": "x",
+        "origin": "upstream_observation", "tier": "observation", "entity_kind": "tool_observation"}
     assert ledger[("b.cpp", 1, 1)]["status"] == "unresolved" and ledger[("b.cpp", 1, 1)]["functions"] == []
     assert seeded["status_counts"] == {"resolved": 2, "unresolved": 1, "file_not_in_database": 1}
     assert any(gap.startswith("seed_unresolved: 1 of 3") for gap in seeded["gaps"])
@@ -561,3 +562,146 @@ def test_extra_codeql_shards_and_structural_fallbacks_seed_export_within_limit(t
     # Cap of 3 picks: (1) CodeQL finding a.cpp:14, (2) priority hotspot b.cpp:22..24, (3) high_cc CFG function a.cpp:50..55.
     assert selected.dropped == 0
     assert selected.rows == (("a.cpp", 14, 14), ("a.cpp", 50, 55), ("b.cpp", 22, 24))
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_mixed_seed_origins_and_nonadditive_counts_survive_compaction_and_card(tmp_path, monkeypatch, reverse):
+    from appsec_review.indexing import store
+    from appsec_review.jobs.job_code_graph_index.scopes import bounded_seeded
+    from appsec_review.seeding.record import compact_record
+
+    run = tmp_path / "run"
+    scopes = [_scope("native", ("native/a.cpp", "native/b.cpp"), "a"),
+              _scope(".", ("native/a.cpp", "native/b.cpp"), "b")]
+    observations = [_observation("native/a.cpp", 4, severity="HIGH"),
+                    _observation("outside.cpp", 1), _observation(None, None)]
+    upstream = _shard(tmp_path, "upstream", "job_evidence_collection", observations)
+    own = _shard(tmp_path, "own", JOB, [_observation("native/a.cpp", 14, tool="codeql", severity="LOW")])
+    path = run / "data/indices/analysis/structural.sqlite"
+    builder = IndexBuilder(path, name="analysis", fingerprint="c" * 64,
+                           target_snapshot=SNAPSHOT, shard_id="structural")
+    rows = [(EntityKind.HOTSPOT, "native/b.cpp", 22, {"score": 0.9}),
+            (EntityKind.AST_NODE, "native/a.cpp", 50, {"cfg": {"cyclomatic_complexity": 9}}),
+            (EntityKind.SYMBOL, "native/a.cpp", 70, {"kind": "function"})]
+    for kind, path_name, line, payload in reversed(rows) if reverse else rows:
+        identity = LogicalIdentity.derive(kind, SNAPSHOT, {"line": line})
+        builder.add_entity(EntityRecord(identity, str(line), "fixture", "fixture", payload,
+            SourceLocation(SNAPSHOT, path_name, "a" * 64, 0, 10, line, line, 1, 1, {}, "exact", 1.0)))
+    sha = builder.build()
+    structural = IndexIdentity("analysis", INDEX_SCHEMA, sha, "c" * 64,
+                              path.relative_to(run).as_posix(), {"job": "job_tree_sitter_ast"}, (), "structural")
+    manifests = [_manifest(tmp_path, "observations", upstream), _manifest(tmp_path, "structure", structural)]
+    actual_open = store.open_shard
+    reads = []
+
+    def private_open(root, shard):
+        assert Path(root).resolve() == run.resolve(), "seed extraction must never read host repositories/feeds"
+        assert run.resolve() in (Path(root) / shard["relative_path"]).resolve().parents
+        reads.append(shard["shard_id"])
+        return actual_open(root, shard)
+
+    monkeypatch.setattr(store, "open_shard", private_open)
+    plans = [seeding.extract_seeds(run, order, list(reversed(scopes)) if reverse else scopes, seed_limit=5,
+                                  extra_observation_shards=[own], include_structural_fallbacks=True)
+             for order in (manifests, list(reversed(manifests)))]
+    assert plans[0] == plans[1]
+    prepared = seeding.prepare_seeds(run, manifests, scopes, include_structural_fallbacks=True)
+    assert seeding.extract_seeds(run, list(reversed(manifests)), scopes, seed_limit=5,
+                                  extra_observation_shards=[own], include_structural_fallbacks=True,
+                                  prepared=prepared) == plans[0]
+    bounded = seeding.extract_seeds(run, manifests, scopes, seed_limit=3,
+                                    extra_observation_shards=[own], include_structural_fallbacks=True,
+                                    prepared=prepared)
+    assert [seed.start_line for seed in bounded.for_scope(scopes[0].scope_id).seeds] == [4, 14, 22]
+    assert reads
+    sections = []
+    for scope in scopes:
+        selected = plans[0].for_scope(scope.scope_id)
+        assert [seed.start_line for seed in selected.seeds] == [4, 14, 50, 70, 22]
+        sources = {seed.start_line: seed.sources[0].as_dict() for seed in selected.seeds}
+        assert sources[4]["origin"] == "upstream_observation" and sources[4]["severity"] == "high"
+        assert sources[14]["origin"] == "current_observation" and sources[14]["severity"] == "low"
+        for line, tier, kind in ((22, "priority_hotspot", "hotspot"), (50, "cfg_function", "ast_node"),
+                                 (70, "catalog_symbol", "symbol")):
+            assert sources[line]["origin"] == "structural"
+            assert sources[line]["tier"] == tier and sources[line]["entity_kind"] == kind
+            assert sources[line]["severity"] is None
+        section = seeding.seeded_section(depth=3, seed_limit=5, scope_seeds=selected, plan=plans[0])
+        compact = compact_record(section)
+        card = bounded_seeded(compact)
+        assert compact["accounting"] == card["accounting"] == section["accounting"]
+        assert card["seeds"][2]["sources"][0]["origin"] == "structural"
+        assert card["seeds"][2]["sources"][0]["entity_kind"] == "ast_node"
+        assert "severity" not in card["seeds"][2]["sources"][0]
+        sections.append(section)
+    shared = [section["accounting"]["shared"] for section in sections]
+    assert shared[0] == shared[1]
+    assert shared[0]["aggregation"] == "non_additive"
+    assert shared[0]["not_in_database"] == shared[0]["unlocated"] == 1
+    assert shared[0]["identity"]
+    assert all(section["accounting"]["meaning"] == "query_seeds_not_findings" for section in sections)
+
+
+@pytest.mark.parametrize("changed", ["manifest", "scope", "run", "structural"])
+def test_prepared_candidates_cannot_cross_admitted_input_boundaries(tmp_path, changed):
+    scope = _scope(".", ("a.cpp",))
+    run = tmp_path / "run"
+    manifest = _manifest(tmp_path, "upstream",
+                         _shard(tmp_path, "upstream", "job_evidence_collection", [_observation("a.cpp", 4)]))
+    prepared = seeding.prepare_seeds(run, [manifest], [scope])
+    manifests, scopes, structural = [manifest], [scope], False
+    if changed == "manifest":
+        manifests = [{**manifest, "sha256": "0" * 64}]
+    elif changed == "scope":
+        scopes = [replace(scope, files=({"path": "a.cpp", "sha256": "b" * 64},))]
+    elif changed == "run":
+        run = tmp_path / "other-private-run"
+    else:
+        structural = True
+    with pytest.raises(seeding.SeedIntegrityError, match="prepared seed inputs differ"):
+        seeding.extract_seeds(run, manifests, scopes, seed_limit=5,
+                              include_structural_fallbacks=structural, prepared=prepared)
+
+
+def test_shared_and_additional_outside_locations_keep_unique_legacy_count(tmp_path):
+    scope = _scope(".", ("a.cpp",))
+    observations = [_observation("outside.cpp", 7)]
+    manifest = _manifest(tmp_path, "upstream", _shard(tmp_path, "upstream", "job_evidence_collection", observations))
+    own = _shard(tmp_path, "own", JOB, observations)
+    plan = seeding.extract_seeds(tmp_path / "run", [manifest], [scope], seed_limit=5,
+                                extra_observation_shards=[own])
+    assert plan.not_in_database == 1
+    accounting = plan.accounting(scope.scope_id)
+    assert accounting["shared"]["not_in_database"] == accounting["additional"]["not_in_database"] == 1
+    assert accounting["shared"]["identity"] != accounting["additional"]["identity"]
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_conflicting_logical_shards_cannot_make_seeds_depend_on_manifest_order(tmp_path, reverse):
+    scope = _scope(".", ("a.cpp",))
+    shard = _shard(tmp_path, "upstream", "job_evidence_collection", [_observation("a.cpp", 4)])
+    manifests = [_manifest(tmp_path, "first", shard),
+                 _manifest(tmp_path, "second", replace(shard, producer={"job": "job_artifact_security_analysis"}))]
+    with pytest.raises(seeding.SeedIntegrityError, match="seed shard identity conflicts"):
+        seeding.extract_seeds(tmp_path / "run", list(reversed(manifests)) if reverse else manifests,
+                              [scope], seed_limit=5)
+
+
+def test_new_seed_metadata_stays_bounded_through_compaction_and_card():
+    from appsec_review.jobs.job_code_graph_index.scopes import bounded_seeded
+    from appsec_review.seeding.record import compact_record
+
+    selected = seeding.ScopeSeeds("scope", (seeding.Seed("a.cpp", 1, 1, (
+        seeding.SeedSource("catalog", "function", None, "asr:symbol:" + "a" * 64,
+                          "structural", "catalog_symbol", "symbol"),)),))
+    section = seeding.seeded_section(depth=3, seed_limit=200, scope_seeds=selected, plan=seeding.SeedPlan())
+    source = section["seeds"][0]["sources"][0]
+    source.update(rule="r" * 500, untrusted_authority="confirmed_finding")
+    section["seeds"][0]["sources"] *= 20
+    section["accounting"]["shared"].update(identity="invalid", not_in_database=True, unlocated=-1)
+    card = bounded_seeded(compact_record(section))
+    assert len(card["seeds"][0]["sources"]) == seeding.MAX_SOURCES_PER_SEED
+    assert len(card["seeds"][0]["sources"][0]["rule"]) == 300
+    assert "untrusted_authority" not in card["seeds"][0]["sources"][0]
+    assert card["accounting"]["shared"] == {
+        "identity": None, "aggregation": "non_additive", "not_in_database": None, "unlocated": None}

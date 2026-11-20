@@ -62,6 +62,8 @@ def with_reasons(section: Mapping[str, Any],
 def compact_record(section: Mapping[str, Any], *, ledger: Mapping[str, Any] | None = None,
                    skipped: bool = False) -> dict[str, Any]:
     """The bounded ``producer["seeded"]`` record; ``ledger`` is the artifact identity of the full section."""
+    from .ledger import bounded_seed_accounting, bounded_seed_sources
+
     seeds = [[entry["path"], entry["start_line"], entry["end_line"], entry["status"]]
              for entry in section.get("seeds", ())][:MAX_RECORD_SEEDS]
     record = {
@@ -73,8 +75,13 @@ def compact_record(section: Mapping[str, Any], *, ledger: Mapping[str, Any] | No
         "depth_histogram": dict(section.get("depth_histogram", {})),
         "status_counts": dict(section.get("status_counts", {})),
         "seeds": seeds, "skipped": bool(skipped),
+        "seed_sources": [bounded_seed_sources(entry.get("sources"))
+                         for entry in section.get("seeds", ())[:MAX_RECORD_SEEDS]],
         "gaps": list(section.get("gaps", ()))[:MAX_RECORD_GAPS],
     }
+    accounting = bounded_seed_accounting(section.get("accounting"))
+    if accounting is not None:
+        record["accounting"] = accounting
     if ledger is not None:
         record["ledger"] = {"path": ledger["path"], "sha256": ledger["sha256"]}
     return record

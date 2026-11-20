@@ -31,6 +31,81 @@ def _normalize_location(physical, files, root):
     )
 
 
+@pytest.mark.parametrize("base", [None, "%SRCROOT%", "%TARGET%"])
+def test_planned_nested_root_requires_uri_base_to_disambiguate_primary_and_flow(base):
+    from appsec_review.jobs.job_codeql_analysis.planning import build_codeql_plan
+    from .test_planning import IMAGE, _file, _receipt
+
+    plan = build_codeql_plan(
+        source_fingerprint="snapshot", files=(
+            _file("a.cpp", "c" * 64), _file("project/a.cpp", "a" * 64),
+            _file("project/project/a.cpp", "b" * 64)),
+        receipts=(_receipt("native", "native", root="project"),),
+        supported_extractors=("cpp",), source_image_id=IMAGE)
+    scope, = plan.scopes
+    assert {item["path"] for item in scope.files} == {"project/a.cpp", "project/project/a.cpp"}
+    artifact = {"uri": "project/a.cpp", **({"uriBaseId": base} if base else {})}
+    physical = {"artifactLocation": artifact, "region": {"startLine": 2}}
+    bases = {"%SRCROOT%": {"uri": "file:///scratch/workspace/project/"},
+             "%TARGET%": {"uri": "file:///scratch/workspace/"}}
+    document = {"version": "2.1.0", "runs": [{
+        "originalUriBaseIds": bases,
+        "results": [{"locations": [{"physicalLocation": physical}],
+                     "codeFlows": [{"threadFlows": [{"locations": [
+                         {"location": {"physicalLocation": physical}}]}]}]}],
+    }]}
+    observations, gaps = normalize_sarif(
+        document, files=scope.files, root=scope.root, query_identity="fixture", result_limit=10)
+    locations = (observations[0]["location"], observations[0]["flows"][0]["location"])
+    if base is None:
+        assert gaps
+        assert all(item["path"] is None and item["ambiguous"] for item in locations)
+        assert locations[0]["candidates"] == ("project/a.cpp", "project/project/a.cpp")
+    else:
+        expected = "project/project/a.cpp" if base == "%SRCROOT%" else "project/a.cpp"
+        digest = "b" * 64 if base == "%SRCROOT%" else "a" * 64
+        assert not gaps
+        assert all(item["path"] == expected and item["file_sha256"] == digest for item in locations)
+
+
+@pytest.mark.parametrize(("bases", "expected"), [
+    ({"%SRCROOT%": {"uri": "file:///scratch/workspace/project/"},
+      "CHILD": {"uri": ".hidden/", "uriBaseId": "%SRCROOT%"}}, "project/.hidden/a.cpp"),
+    ({"%SRCROOT%": {"uri": "file:///scratch/workspace/project/"},
+      "CHILD": {"uri": ".hidden\\", "uriBaseId": "%SRCROOT%"}}, "project/.hidden/a.cpp"),
+    ({"CHILD": {"uri": "file:///scratch/workspace/project/.hidden%2f"}}, "project/.hidden/a.cpp"),
+    ({"CHILD": {"uri": "file:///scratch/workspace/project/%252e/"}}, "project/%2e/a.cpp"),
+    ({"CHILD": "not-a-base-record"}, None),
+    ({}, None),
+    ({"CHILD": {"uri": ".hidden/", "uriBaseId": "CHILD"}}, None),
+    ({"CHILD": {"uri": ".hidden/", "uriBaseId": "OTHER"},
+      "OTHER": {"uri": "./", "uriBaseId": "CHILD"}}, None),
+    ({"CHILD": {"uri": "file://foreign/scratch/workspace/project/.hidden/"}}, None),
+    ({"CHILD": {"uri": "file:///unknown/project/.hidden/"}}, None),
+    ({"CHILD": {"uri": "file:///scratch/workspace/project/../.hidden/"}}, None),
+    ({"CHILD": {"uri": "file:///scratch/workspace/project/"},
+      "unused": {"uriBaseId": "unused"}}, "project/a.cpp"),
+], ids=["chain-hidden", "backslash-base", "encoded-separator-base", "decode-once", "malformed",
+        "missing", "self-cycle", "cycle", "foreign", "unknown-root", "traversal",
+        "unused-cycle"])
+def test_uri_base_resolution_is_bounded_and_never_falls_back_on_invalid_base(bases, expected):
+    files = ({"path": "project/a.cpp", "sha256": "a" * 64},
+             {"path": "project/.hidden/a.cpp", "sha256": "b" * 64},
+             {"path": "project/%2e/a.cpp", "sha256": "c" * 64})
+    physical = {"artifactLocation": {"uri": "a.cpp", "uriBaseId": "CHILD"}}
+    observations, gaps = normalize_sarif(
+        {"version": "2.1.0", "runs": [{"originalUriBaseIds": bases,
+          "results": [{"locations": [{"physicalLocation": physical}]}]}]},
+        files=files, root="project", query_identity="fixture", result_limit=10)
+    assert observations[0]["location"]["path"] == expected
+    if expected is None:
+        assert gaps and observations[0]["location"]["file_sha256"] is None
+    else:
+        assert not gaps
+        assert observations[0]["location"]["file_sha256"] == next(
+            item["sha256"] for item in files if item["path"] == expected)
+
+
 @pytest.mark.parametrize(("uri", "path", "alias", "root"), [
     ("workspace/a.cpp", "workspace/a.cpp", "a.cpp", "."),
     ("scratch/workspace/a.cpp", "scratch/workspace/a.cpp", "a.cpp", "."),

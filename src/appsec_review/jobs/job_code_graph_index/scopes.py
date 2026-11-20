@@ -97,6 +97,7 @@ def bounded_seeded(value: Any) -> dict[str, Any] | None:
     """
     if not isinstance(value, Mapping):
         return None
+    from appsec_review.seeding.ledger import bounded_seed_accounting, bounded_seed_sources
 
     def text(item: Any) -> str:
         return str(item)[:300]
@@ -105,18 +106,21 @@ def bounded_seeded(value: Any) -> dict[str, Any] | None:
         return item if isinstance(item, int) and not isinstance(item, bool) and item >= 0 else None
 
     seeds = []
-    for seed in list(value.get("seeds") or ())[:MAX_CARD_SEEDS]:
+    compact_sources = value.get("seed_sources")
+    for index, seed in enumerate(list(value.get("seeds") or ())[:MAX_CARD_SEEDS]):
+        if isinstance(seed, (list, tuple)) and len(seed) == 4:
+            seed = {"path": seed[0], "start_line": seed[1], "end_line": seed[2], "status": seed[3],
+                    "sources": compact_sources[index] if isinstance(compact_sources, (list, tuple))
+                    and index < len(compact_sources) else ()}
         if not isinstance(seed, Mapping):
             continue
-        sources = [{key: text(source[key]) for key in ("scanner", "rule", "severity", "observation_id")
-                    if source.get(key) is not None}
-                   for source in list(seed.get("sources") or ())[:MAX_CARD_SOURCES] if isinstance(source, Mapping)]
+        sources = bounded_seed_sources(seed.get("sources"), limit=MAX_CARD_SOURCES)
         seeds.append({"path": text(seed.get("path", "")), "start_line": count(seed.get("start_line")),
                       "end_line": count(seed.get("end_line")), "status": text(seed.get("status", "")),
                       "functions": [text(name) for name in list(seed.get("functions") or ())[:16]],
                       "sources": sorted(sources, key=canonical_json)})
     histogram = value.get("depth_histogram")
-    return {
+    result = {
         "mode": text(value.get("mode") or "whole_program"), "depth": count(value.get("depth")),
         "seed_limit": count(value.get("seed_limit")), "seed_count": count(value.get("seed_count")) or 0,
         "resolved_seed_count": count(value.get("resolved_seed_count")) or 0,
@@ -125,6 +129,10 @@ def bounded_seeded(value: Any) -> dict[str, Any] | None:
         if isinstance(histogram, Mapping) else {},
         "seeds": seeds, "gaps": producers.bounded_gaps(value.get("gaps") or (), MAX_CARD_GAPS),
     }
+    accounting = bounded_seed_accounting(value.get("accounting"))
+    if accounting is not None:
+        result["accounting"] = accounting
+    return result
 
 
 def is_seeded(scope: Mapping[str, Any]) -> bool:

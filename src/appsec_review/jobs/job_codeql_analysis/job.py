@@ -1031,7 +1031,8 @@ def _export_success(unit: UnitContext, base: Mapping[str, Any], identity: str, r
 
 
 def _seed_plan(unit: UnitContext, scopes: Sequence[CodeQLScope], *,
-               extra_observation_shards: Sequence[Mapping[str, Any]] = ()) -> seeding.SeedPlan:
+               extra_observation_shards: Sequence[Mapping[str, Any]] = (),
+               prepared: seeding.PreparedSeeds | None = None) -> seeding.SeedPlan:
     """Seeds of every scope from accepted upstream shards, CodeQL's own findings, and structural fallbacks."""
     manifests = unit.output("plan.inventory").get("upstream_manifests", ())
     try:
@@ -1040,6 +1041,7 @@ def _seed_plan(unit: UnitContext, scopes: Sequence[CodeQLScope], *,
             seed_limit=_settings(unit).export_queries.seed_limit,
             extra_observation_shards=extra_observation_shards,
             include_structural_fallbacks=True,
+            prepared=prepared,
         )
     except seeding.SeedIntegrityError as exc:
         raise FrameworkIntegrityError(str(exc)) from exc
@@ -1619,6 +1621,8 @@ def build_job() -> Job:
         admission = ResourceAdmission(unit.job.metadata_root, budget)
         normalized_lock = threading.Lock()
         normalized_by_scope: dict[str, list[Mapping[str, Any]]] = {}
+        shared_seeds = None
+        shared_seed_lock = threading.Lock()
 
         def admitted(action, function, *args, scope_id, query_profile=None):
             threads, ram = settings.threads, settings.ram_mb
@@ -1669,19 +1673,29 @@ def build_job() -> Job:
             return item
 
         def export_one(value):
+            nonlocal shared_seeds
             scope = _scope_from(value["scope"])
             profile = _export_profile(settings, scope.language)
             if profile is not None and value.get("terminal_status") == "SUCCEEDED":
                 _verify_export_sources(unit.job.repository_root, profile, settings)
             scope_plan = None
             if settings.export_queries.enabled and settings.export_queries.mode == "seeded":
+                with shared_seed_lock:
+                    if shared_seeds is None:
+                        try:
+                            shared_seeds = seeding.prepare_seeds(
+                                unit.job.run_root, unit.output("plan.inventory").get("upstream_manifests", ()),
+                                plan_value.scopes, include_structural_fallbacks=True)
+                        except seeding.SeedIntegrityError as exc:
+                            raise FrameworkIntegrityError(str(exc)) from exc
                 with normalized_lock:
                     extra_shards = [
                         item["index_identity"]
                         for item in normalized_by_scope.get(scope.scope_id, ())
                         if isinstance(item.get("index_identity"), Mapping)
                     ]
-                scope_plan = _seed_plan(unit, plan_value.scopes, extra_observation_shards=extra_shards)
+                scope_plan = _seed_plan(unit, plan_value.scopes, extra_observation_shards=extra_shards,
+                                        prepared=shared_seeds)
             return _export_isolated(unit, value, seed_plan=scope_plan)
 
         def export_ready(value):
@@ -1705,7 +1719,8 @@ def build_job() -> Job:
         artifact = _json_artifact(unit.job.run_root,
             unit.job.attempt_root / "artifacts" / "codeql" / "graph-exports.json",
             {"schema": GRAPH_EXPORTS_SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
-             "settings": asdict(settings.export_queries), "exports": exports})
+             "settings": asdict(settings.export_queries), "exports": exports,
+             **({"seed_accounting": shared_seeds.accounting()} if shared_seeds is not None else {})})
         # The runner projects away normalized scopes. Publish only the bounded binding
         # metadata consumers need, never the full source inventory, commands or tool streams.
         bindings = []

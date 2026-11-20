@@ -527,6 +527,19 @@ export's seed ledger; they are not the pre-execution no-seed branch. Each export
 and the per-depth histogram. `job_code_graph_index` publishes one database card per scope; models
 list the cards with `list_codeql_databases` and expand one with `query_codeql_neighborhood`.
 
+Seed sources explicitly retain observation/structural `origin`, selection `tier` and `entity_kind`.
+Structural sources have no fabricated severity; their old scanner-like labels are compatibility
+labels, not evidence of a scanner finding. The execution attempt prepares shared candidates once
+(one observation pass and one structural pass), preserving real admitted reads, then merges each
+scope's current observations before applying the unchanged seed limit. This removes repeated
+shared extraction, not all per-scope in-memory ranking work.
+
+Ledger `accounting` labels these as query seeds, not findings. Its shared and additional-input
+identities and counts are non-additive: shared counts repeat across scopes, and the two input sets
+can overlap. The graph-export index's `seed_accounting` records shared preparation once.
+Compact records and graph cards retain bounded origin/accounting metadata. Do not infer a
+final-report overcount from repeated scope counters alone.
+
 ## Execution telemetry
 
 Every CodeQL action emits a telemetry event with `action` (`database`, `analyze`, `compile`,
@@ -583,6 +596,20 @@ the accepted sibling manifests as verified `upstream_manifests`; it does not cop
 its own list. Later publishers compose onto it, and shards it dropped from the accepted list are
 restored from their producers' accepted handoffs by `job_code_graph_index` (clangd, IR and AST
 shards) and `job_review_data_indexing` (every producer).
+
+The producer creates databases with source root `/scratch/workspace[/<scope-root>]`; planned
+files are restricted to that scope, but nested names can still collide (`project/a.cpp` versus
+`project/project/a.cpp`). Without a URI base, two exact target-relative/scope-relative candidates
+remain ambiguous rather than choosing one hash.
+
+For relative artifact locations with `uriBaseId`, primary and flow normalization resolve the
+referenced `run.originalUriBaseIds` chain, including a declared `%SRCROOT%`, into a known absolute
+workspace root and then require an exact accepted source identity. Missing IDs, cycles, malformed,
+foreign or traversal-containing bases remain unmapped gaps; `%SRCROOT%` is not guessed when its
+mapping is absent. Only the referenced chain is followed, bounded by its finite supplied inventory.
+An unresolved base never falls back to an unrelated bare path or suffix match. Native actual-URI
+acceptance remains unverified without version-attributed native SARIF evidence; offline fixtures
+exercise these semantics but are not native captures.
 
 Use the `query_codeql` MCP tool to filter accepted observations by language, original source
 language, scope, build unit, rule, severity, path, or CodeQL shard.

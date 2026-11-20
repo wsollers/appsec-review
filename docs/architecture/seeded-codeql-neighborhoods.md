@@ -72,12 +72,25 @@ re-runs the export. The seed set (sorted `path,start_line,end_line`) is part of 
   shards are not read opportunistically, so completion order does not change the seed set.
   The observation's location gives the target-relative path and line range; `scanner_of`,
   `rule_of` and `normalize_reported_severity` give the ledger fields.
+  Each source also records `origin` (`upstream_observation`, `current_observation` or `structural`),
+  `tier` and `entity_kind`. The legacy `observation_id` field holds that entity's resolving identity;
+  structural sources are not tool observations merely because that field keeps its old name.
 * Structural fallback: CodeQL explicitly enables the shared extractor's structural candidates.
   After observation seeds, remaining slots up to the configured `seed_limit` are filled from
   admitted priority hotspots, Tree-sitter CFG functions and catalog symbols, in that order.
   Candidate availability is limited to the admitted manifests, not a new input grant. The typed
   `CodeQLExportSettings` has no separate structural-fallback policy switch; the shared helper's
   default argument is not a job configuration setting.
+  Structural tiers are `priority_hotspot`, `cfg_function` and `catalog_symbol`; their `severity`
+  is `null`, not an invented low/info vulnerability severity. Observation severity ranks and
+  structural score/complexity ordering still select the same spans. Every tier selects query
+  scope, never confirmed findings or new evidence authority.
+* Shared preparation: the first export prepares one immutable candidate snapshot inside the
+  execution attempt. It performs the admitted observation and structural passes once, retaining
+  their actual read receipts; later scope exports combine it with only their own normalized shards.
+  Candidate selection still applies `seed_limit` after that combination, not before. Snapshot reuse
+  checks run root, manifest identities, scope/source identities and structural inclusion. There is no
+  process-global cache or cross-attempt reuse, and no whole-plan normalization barrier.
 * Mapping: the path is mapped to the database source root of each scope (scope root plus the
   accepted file list); a seed is assigned to every scope whose accepted files contain the path.
   Each export retains the **whole plan's** ownership map for `file_not_in_database` accounting,
@@ -143,8 +156,27 @@ The export manifest (`appsec-review/codeql-graph-export-manifest/1`, extra keys 
 }
 ```
 
-`status_counts` (`resolved`, `unresolved`, `file_not_in_database`, `over_limit`) counts every
-seed; `seeds` lists only resolved and unresolved ones and is bounded by `seed_limit`; `sources` per seed is bounded (first 8, sorted). A
+`status_counts` retains its existing keys, but **is not a set of additive finding counts**.
+`resolved`, `unresolved` and `over_limit` describe the selected scope; `file_not_in_database`
+counts distinct outside-scope locations across the extraction's inputs. `accounting.meaning` is
+`query_seeds_not_findings`. Its `shared` and `additional` records separately identify the shared
+plan/candidates and current observation-shard batch, each with `aggregation = "non_additive"`,
+`not_in_database` and `unlocated`. The same shared identity/counts repeat on multiple scope records:
+do not sum them. Shared and additional inputs can also overlap on an outside location, so their
+counts are not necessarily additive even within one extraction.
+The shared accounting identity describes semantic candidates and coverage, so moving identical
+inputs between private runs does not change it. The separate attempt-local snapshot admission key
+still binds the exact run root, manifest pins and scope/source identities; the accounting identity
+is not an evidence-admission token.
+
+The run's graph-export index records shared preparation once as `seed_accounting`; scope ledgers
+retain their additional-input accounting. This describes coverage, not proof of any final-report
+overcount. Compact records retain bounded `accounting` and a `seed_sources` array aligned with the
+existing compact seed rows; graph-card projection preserves these source origins and accounting
+without promoting historical records that lack them. The existing card limits still apply.
+
+`seeds` lists only resolved and unresolved locations and is bounded by `seed_limit`; `sources` per
+seed is bounded (first 8, sorted). A
 `whole_program` record has `"seeded": {"mode": "whole_program", "depth": null, ...}` with empty
 `seeds`.
 
