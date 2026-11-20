@@ -1156,6 +1156,9 @@ See the [handler](../../src/appsec_review/jobs/job_review_data_indexing/job.py),
    Retain conflicting shard identities for the audit rather than choosing an arbitrary winner.
 3. Record declarations, consumption contracts, unit states, feed pin/freshness identities and
    accepted OWASP status in `accepted_input_summary`.
+4. Read the sanitizer summary only through its admitted producer and declared summary input.
+   Verify attempt/source/run identities, payload hash and language-build lineage, recording the
+   actual summary receipt. Disabled or absent supply stays unavailable; no protected binary is read.
 
 ### `links`
 
@@ -1204,10 +1207,15 @@ See the [handler](../../src/appsec_review/jobs/job_review_data_indexing/job.py),
 
 1. In `publish.inventory_index`, merge audited producer rows with this job's completed outputs.
    Build inventory entities, audit facts and coverage cells from the verified records.
+   Add sanitized per-unit/per-sanitizer readiness from the accepted sanitizer summary, bounded by
+   `max_facts_per_product`. Preserve unknown counts as null, measured zeros, nonnative/omitted
+   dispositions and named gaps. Readiness is runtime-reference build evidence, not a runtime test.
 2. Fingerprint inventory/audit/matrix/FTS content, publish the immutable inventory shard, and
    assemble a combined manifest from accepted, restored, link and product shards.
+   The sanitizer summary identity, projection version and fact bound also enter that fingerprint.
 3. Verify the manifest and publish `dataset_inventory`, matrices and references. Retain each
-   noncomplete product disposition in the handoff summary.
+   noncomplete product disposition and sanitizer gap in the handoff summary. Sanitizer telemetry
+   counts indexed readiness rows, not merely the existence of a handoff.
 
 ## Dataflow
 
@@ -1227,7 +1235,10 @@ flowchart LR
   auditdata --> matrix["matrix.coverage"]
   matrix --> matrices["coverage_matrices"]
   matrices --> publish["publish.inventory_index"]
+  sanitizer["admitted sanitizer_build_summary"] --> load
+  input --> publish
   publish --> inventory["dataset_inventory"]
+  inventory --> readiness["query_sanitizer_readiness"]
   pre -. "partial / unavailable" .-> gaps["product gaps"]
   gaps --> publish
   audit -. "audit violations" .-> reject["reject publication"]

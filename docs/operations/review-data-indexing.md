@@ -459,6 +459,13 @@ patterns are counted as a gap against the producing shard.
   duplicate filters need the accepted `scanner_correlation` shard; without it the response is empty
   with a named gap.
 - `query_precomputed` for every stage-1 set; `find`/`trace` with `indexes=["links"]` for links.
+- `query_sanitizer_readiness` — bounded per-build-unit/per-sanitizer build readiness from the
+  admitted, hash-verified sanitizer summary projected into `inventory`. Generic dataset metadata
+  is not per-unit readiness. Rows preserve run/attempt/source, upstream and receipt hashes, counts,
+  dispositions and gaps; protected workspaces are neither read nor exposed. `asan`/`ubsan` map to
+  `address`/`undefined`. Unknown counts stay null, measured zero stays zero. Disabled or unadmitted
+  producers yield a named coverage gap. `ready` is instrumentation evidence only, never runtime
+  sanitizer verification; see [sanitizer results](sanitizer-build.md#reading-the-result).
 
 ## Reuse
 

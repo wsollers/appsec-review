@@ -230,6 +230,51 @@ def threat_model_status(run_root: Path) -> dict[str, Any]:
     }
 
 
+def sanitizer_status(run_root: Path, snapshot: str, *, disabled: bool = False) -> dict[str, Any]:
+    """Read only the admitted summary, never the protected build tree or a floating handoff."""
+    from appsec_review.jobs.engineering_contracts import SANITIZER_BUILD_HANDOFF_SCHEMA
+    from appsec_review.runtime.inputs import observe_output
+    from appsec_review.storage.shared import safe_path
+
+    job_id = "job_sanitizer_build"
+    if disabled:
+        return {"status": "disabled", "reason": "sanitizer build is disabled in this run"}
+    accepted = accepted_handoff(run_root, job_id)
+    if accepted is None:
+        return {"status": "unavailable", "reason": "no admitted sanitizer build handoff"}
+    handoff = accepted.handoff
+    if handoff["source_fingerprint"] != snapshot or handoff["target_snapshot"] != snapshot:
+        raise ValueError("sanitizer summary target snapshot differs from indexing")
+    reference = (handoff["outputs"].get("acceptance.publish_handoff") or {}).get("artifact")
+    if not isinstance(reference, Mapping):
+        return {"status": "unavailable", "reason": "accepted sanitizer handoff has no summary artifact"}
+    path = safe_path(run_root, reference["path"])
+    if (safe_path(run_root, accepted.path).parent not in path.parents
+            or not any(ref["path"] == reference["path"] and ref["sha256"] == reference["sha256"]
+                       for ref in handoff["artifacts"])):
+        raise ValueError("sanitizer summary is not pinned to its accepted attempt")
+    observe_output(run_root, job_id, "sanitizer_build_summary", reference)
+    summary = _read(run_root, reference)
+    if summary.get("schema") != SANITIZER_BUILD_HANDOFF_SCHEMA:
+        raise ValueError("sanitizer summary schema mismatch")
+    identity = {"run_id": handoff["run_id"], "attempt_id": handoff["attempt_id"],
+                "source_fingerprint": snapshot}
+    for key, value in identity.items():
+        if key in summary and summary[key] != value:
+            raise ValueError(f"sanitizer summary {key} mismatch")
+    language_hash = (summary.get("upstream") or {}).get("language_build_handoff_sha256")
+    if language_hash != handoff["upstream_handoff_sha256"].get("job_language_build"):
+        raise ValueError("sanitizer summary language-build lineage mismatch")
+    units = [item for key in ("units", "omitted_units", "not_applicable_units")
+             for item in summary.get(key, ())]
+    ids = [item.get("build_unit_id") for item in units]
+    if any(not isinstance(value, str) or not value for value in ids) or len(ids) != len(set(ids)):
+        raise ValueError("sanitizer summary has invalid or duplicate build units")
+    return {"status": "accepted", **identity, "handoff_sha256": accepted.sha256,
+            "summary_reference": dict(reference), "language_build_handoff_sha256": language_hash,
+            "summary": summary}
+
+
 def _unit_statuses(run_root: Path, handoff: AcceptedHandoff) -> dict[str, str]:
     attempt = (run_root / handoff.path).parent
     statuses: dict[str, str] = {}
@@ -342,6 +387,8 @@ def build_job(*, providers: Providers = registry_providers,
                 "sha256": value.sha256, "path": value.path, "attempt_id": value.handoff.get("attempt_id"),
                 "completion_status": value.handoff.get("completion_status")} for job_id, value in handoffs.items()},
             "feeds": feeds, "owasp": owasp_status(run_root), "threat_model": threat_model_status(run_root),
+            "sanitizer": sanitizer_status(run_root, manifest["target_snapshot"],
+                                           disabled="job_sanitizer_build" in disabled),
             "unit_statuses": {job_id: _unit_statuses(run_root, value) for job_id, value in handoffs.items()
                               if value is not None},
         }
@@ -594,6 +641,8 @@ def build_job(*, providers: Providers = registry_providers,
         product_outputs = [unit.output(f"precompute.{name}") for name in PRODUCT_SETS]
         link_outputs = unit.output("links.cross_domain")["links"]
         fts_summary = unit.output("fts.image_validation")["summary"]
+        readiness = products.sanitizer_readiness(
+            snapshot, document.get("sanitizer") or {}, int(settings_of(unit)["max_facts_per_product"]))
         completed_self_artifacts = {"accepted_input_summary", "derived_checkpoints", "fts_image_validation"}
         rows = [row for row in inventory["rows"] if row["job_id"] != JOB_ID or
                 (row["output_kind"] in completed_self_artifacts and row["disposition"] != "unavailable")]
@@ -602,7 +651,8 @@ def build_job(*, providers: Providers = registry_providers,
                             "coverage_matrices": unit.output("matrix.coverage")["artifact"]})
 
         def build() -> Derived:
-            derived = Derived()
+            derived = Derived(entities=list(readiness.entities), coverage=list(readiness.coverage),
+                              gaps=list(readiness.gaps))
             for row in rows:
                 identity = LogicalIdentity.derive(EntityKind.DATASET, snapshot, {"dataset_id": row["dataset_id"]})
                 coverage_state = (row.get("coverage") or {}).get("state")
@@ -648,7 +698,9 @@ def build_job(*, providers: Providers = registry_providers,
             run_root, index="inventory", shard_id="dataset-inventory", job_id=JOB_ID, unit_id=unit.unit_id,
             rule="dataset_inventory", rule_version=INVENTORY_RULE, snapshot=snapshot,
             inputs={"inventory": digest(rows), "audit": digest(inventory["audit"]), "matrices": digest(matrices),
-                    "fts": digest(fts_summary)},
+                    "fts": digest(fts_summary), "sanitizer": digest(document.get("sanitizer")),
+                    "sanitizer_projection": "per-unit-readiness/1",
+                    "max_readiness_facts": int(settings_of(unit)["max_facts_per_product"])},
             build=build, shared=SharedArtifacts.for_job(unit.job))
         manifest_reference = document["accepted_manifest"]
         upstream, _ = load_verified_manifest(run_root, run_root / manifest_reference["path"], manifest_reference["sha256"])
@@ -662,6 +714,7 @@ def build_job(*, providers: Providers = registry_providers,
                        upstream_manifests=(manifest_reference,))
         load_verified_manifest(run_root, manifest_path, file_sha256(manifest_path))
         summary = {"schema": SCHEMA, "audit_status": inventory["audit"]["status"],
+                   "sanitizer_readiness": dict(readiness.counts),
                    "fts_image_validation": fts_summary, "rows": len(rows), "restored_shards": len(document["restored_shards"]),
                    "products": {item["query_set"]: {key: item[key] for key in ("status", "fact_count", "reused")}
                                 for item in product_outputs},
@@ -679,10 +732,11 @@ def build_job(*, providers: Providers = registry_providers,
                     (int(item.get("fact_count", 0)) for item in product_outputs if item["query_set"] == "threat_boundaries"),
                     0,
                 ),
-                "build_security.sanitizer_readiness_indexed": 1 if (document.get("handoffs") or {}).get("job_sanitizer_build") else 0,
+                "build_security.sanitizer_readiness_indexed": len(readiness.entities),
             },
         )
-        gaps = [f"{item['query_set']}: {item['status']}" for item in product_outputs if item["status"] != "complete"]
+        gaps = [*readiness.gaps, *(f"{item['query_set']}: {item['status']}"
+                                 for item in product_outputs if item["status"] != "complete")]
         return {"schema": SCHEMA, "index_manifest": _artifact(run_root, manifest_path),
                 "index_identity": published["index_identity"], "item_count": len(rows), "summary": summary,
                 "gaps": gaps, "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}

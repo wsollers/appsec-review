@@ -16,7 +16,8 @@ DATASETS = (
         "sanitizer runtime evidence read from each ELF and every named gap.",
         artifacts=(_A + "/steps/acceptance/tasks/publish_handoff/*.json",),
         reason="instrumented binaries are artifact-only evidence for a later execution stage; "
-               "the summary is the sanitized view and nothing here is indexed as text",
+               "indexing projects only sanitized per-unit readiness from the accepted summary",
+        route="query_dataset_inventory; query_sanitizer_readiness (sanitized per-unit build evidence only)",
     ),
     protected(
         "sanitizer_build_workspaces", "build", "build", "application/octet-stream",

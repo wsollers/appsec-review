@@ -6,7 +6,7 @@ separate run-owned workspace with sanitizer flags injected through the environme
 configure and build commands) inside the same build container policy as the normal build; it never
 loads or executes a produced binary. Instrumentation is proven by reading the produced ELF for
 sanitizer runtime references, and every unit that is not provably instrumented is a named gap.
-The instrumented tree is catalogued in a hash-bound handoff and consumed by no existing job; a
+The instrumented tree is catalogued in a hash-bound handoff; indexing reads only its summary. A
 later, separately authorized execution stage is the only thing that may run it
 (docs/operations/sanitizer-build.md).
 """
@@ -461,7 +461,9 @@ def build_job(*, executor_factory: Callable[[UnitContext, BuildProfile], Any] | 
                   "instrumented_outputs": len(outputs), "gap_count": len(built["gaps"])}
         summary = unit.unit_root / "sanitizer-build-summary.json"
         atomic_json(summary, {
-            "schema": SANITIZER_BUILD_HANDOFF_SCHEMA, "upstream": loaded["upstream"],
+            "schema": SANITIZER_BUILD_HANDOFF_SCHEMA, "run_id": unit.job.run_root.name,
+            "attempt_id": unit.job.attempt_id, "source_fingerprint": unit.job.source_fingerprint,
+            "upstream": loaded["upstream"],
             "execution_policy": "build tools only; no produced binary was loaded or executed",
             "flags": list(settings.flags), "settings": settings.identity(),
             "build_outputs_policy": _build_output_policy(unit).identity, "counts": counts,

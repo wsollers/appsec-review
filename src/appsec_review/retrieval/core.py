@@ -2198,7 +2198,7 @@ class RetrievalCore:
         self, *, build_unit: str | None = None, sanitizer: str | None = None,
         status: str | None = None, limit: int = 20, cursor: str | None = None,
     ) -> dict[str, Any]:
-        """Query sanitizer build readiness and post-build mitigation shards without touching workspaces."""
+        """Query indexed build evidence, not runtime verification; never open protected workspaces."""
         for label, val in (("build_unit", build_unit), ("sanitizer", sanitizer), ("status", status)):
             if val is not None and (not isinstance(val, str) or not val or len(val) > 512):
                 raise ValueError(f"invalid sanitizer readiness filter: {label}")
@@ -2207,57 +2207,73 @@ class RetrievalCore:
         params = {"build_unit": build_unit, "sanitizer": sanitizer, "status": status,
                   "limit": limit, "cursor": cursor}
         request_hash = self._request_hash("query_sanitizer_readiness", params)
-        offset = self._offset(cursor, request_hash)
+        state = self._cursor_state(cursor, request_hash)
+        offset = state["offset"]
+        position = state.get("position", ["", "", ""])
+        if (not isinstance(position, list) or len(position) != 3
+                or any(not isinstance(part, str) for part in position)
+                or (offset and "position" not in state)):
+            raise ValueError("invalid sanitizer-query cursor; restart pagination")
+        aliases = {"asan": "address", "ubsan": "undefined"}
+        selected_sanitizer = aliases.get(sanitizer.lower(), sanitizer.lower()) if sanitizer else None
 
         def operation(deadline: float):
             found: list[dict[str, Any]] = []
             gaps: list[str] = []
-            bs_shards = list(self.indexes.get("build_security", ()))
-            inv_shards = list(self.indexes.get("inventory", ()))
-            if not bs_shards and not inv_shards:
-                gaps.append("sanitizer readiness and build_security shards are unavailable")
-            for shard in bs_shards:
+            readiness_coverage = False
+            shards = [(index, shard) for index in ("build_security", "inventory")
+                      for shard in self.indexes.get(index, ())]
+            for index, shard in shards:
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
                 with self._database(shard, deadline) as database:
+                    coverage = list(database.execute(
+                        "SELECT area, status, gap FROM coverage WHERE area='sanitizer-readiness'"
+                        if index == "inventory" else "SELECT area, status, gap FROM coverage"))
+                    if index == "inventory" and coverage:
+                        readiness_coverage = True
+                    gaps.extend(f"{index}/{shard_id}: {row['status']}: {row['gap']}"
+                                for row in coverage if row["status"] != "complete")
+                    if [index, shard_id] < position[:2]:
+                        continue
+                    clauses, values = [], []
+                    if index == "inventory":
+                        clauses += ["json_extract(e.payload_json, '$.job_id')='job_sanitizer_build'",
+                                    "json_extract(e.payload_json, '$.record_type')='sanitizer_readiness'"]
+                    if [index, shard_id] == position[:2]:
+                        clauses.append("e.identity > ?")
+                        values.append(position[2])
+                    if build_unit is not None:
+                        clauses.append("COALESCE(json_extract(e.payload_json, '$.build_unit_id'), "
+                                       "json_extract(e.payload_json, '$.build_action_id'), "
+                                       "json_extract(e.payload_json, '$.project')) = ?")
+                        values.append(build_unit)
+                    if selected_sanitizer is not None:
+                        clauses.append("LOWER(json_extract(e.payload_json, '$.sanitizer')) IN (?, ?)")
+                        short = {"address": "asan", "undefined": "ubsan"}.get(selected_sanitizer, selected_sanitizer)
+                        values.extend((selected_sanitizer, short))
+                    if status is not None:
+                        clauses.append("COALESCE(json_extract(e.payload_json, '$.status'), "
+                                       "json_extract(e.payload_json, '$.readiness')) = ?")
+                        values.append(status)
                     for row in database.execute(
                         "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
-                        "ORDER BY e.identity"
-                    ):
-                        payload = json.loads(row["payload_json"])
-                        bu = str(payload.get("build_unit_id") or payload.get("build_action_id") or payload.get("project") or "")
-                        san = str(payload.get("sanitizer") or "")
-                        st = str(payload.get("status") or payload.get("readiness") or "")
-                        if build_unit is not None and bu != build_unit:
-                            continue
-                        if sanitizer is not None and sanitizer.lower() not in san.lower():
-                            continue
-                        if status is not None and st != status:
-                            continue
-                        item = self._entity(row, "build_security")
+                        + ("WHERE " + " AND ".join(clauses) if clauses else "")
+                        + " ORDER BY e.identity LIMIT ?", [*values, limit + 1]):
+                        self._check_deadline(deadline)
+                        item = self._entity(row, index)
                         item["shard_id"] = shard_id
                         found.append(item)
-            for shard in inv_shards:
-                self._check_deadline(deadline)
-                shard_id = str(shard.get("shard_id", "default"))
-                with self._database(shard, deadline) as database:
-                    for row in database.execute(
-                        "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
-                        "WHERE json_extract(e.payload_json, '$.job_id') = 'job_sanitizer_build' "
-                        "ORDER BY e.identity"
-                    ):
-                        payload = json.loads(row["payload_json"])
-                        cov_state = str((payload.get("coverage") or {}).get("state") or payload.get("coverage_state") or "")
-                        if build_unit is not None and str(payload.get("build_unit_id") or "") != build_unit:
-                            continue
-                        if sanitizer is not None and sanitizer.lower() not in json.dumps(payload).lower():
-                            continue
-                        if status is not None and cov_state != status:
-                            continue
-                        item = self._entity(row, "inventory")
-                        item["shard_id"] = shard_id
-                        found.append(item)
+            if not readiness_coverage:
+                gaps.append("per-unit sanitizer readiness is unavailable")
             found.sort(key=lambda item: (item["index"], item["shard_id"], item["identity"]))
-            return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
+            page = found[:limit]
+            for item in page:
+                gaps.extend(str(gap) for gap in item["payload"].get("gaps", ()))
+            page_cursors = [self._cursor(offset, request_hash, position=position)]
+            page_cursors.extend(self._cursor(
+                offset + ordinal, request_hash, position=[item["index"], item["shard_id"], item["identity"]])
+                for ordinal, item in enumerate(page, 1))
+            return page, gaps, len(found) > limit, offset, False, page_cursors
 
         return self._execute("query_sanitizer_readiness", params, operation)

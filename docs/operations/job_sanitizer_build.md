@@ -142,8 +142,9 @@ reads follow the [input contract](../architecture/job-input-contracts.md).
 
 1. Re-read accepted language-build authority and require the same handoff hash. Rebuild only
    the selected receipts through the configured bounded worker pool.
-2. For each native unit, require a successful accepted build outcome and an enabled build system
-   (a built receipt can still have provenance gaps). Resolve
+2. For each native unit, require `build_succeeded(receipt)` (typed `build_outcome=built`) and an
+   enabled build system, not literal prior `terminal_status=SUCCEEDED`: a built receipt can still
+   have provenance gaps. Resolve
    the complete configure/build replay set and hash-check protected argv documents, working
    directories, image IDs and argv hashes. Missing/redacted/invalid commands are unreplayable;
    changed accepted command identity raises `FrameworkIntegrityError`.
@@ -179,11 +180,14 @@ reads follow the [input contract](../architecture/job-input-contracts.md).
 1. Gather unit results, omitted units and nonnative dispositions. Count instrumented units
    separately from individually instrumented outputs: some outputs can have runtime evidence
    while their unit remains incomplete.
-2. Write `sanitizer-build-summary.json` with upstream handoff, flags/settings identity,
+2. Write `sanitizer-build-summary.json` with run, attempt, source and upstream handoff identities, flags/settings identity,
    build-output policy, per-output evidence/control records, counts and gaps.
 3. Publish dataset `sanitizer_build_summary` as artifact-only metadata and retain
    `sanitizer_build_workspaces` as protected bytes. Nothing here becomes indexed source text
    or proof of a runtime test. Framework publication failure is not partial acceptance.
+4. The admitted indexing consumer projects only sanitized per-unit/per-sanitizer readiness into
+   its existing inventory dataset. It preserves receipt/hash identities, unknown versus zero
+   counts, omitted/nonnative units and named gaps; protected binaries remain private.
 
 ## Dataflow
 
@@ -198,6 +202,8 @@ flowchart LR
   normal["normal-build output control"] --> evidence
   evidence --> summary["acceptance.publish_handoff"]
   summary --> published["sanitizer_build_summary"]
+  published --> index["admitted inventory projection"]
+  index --> readiness["query_sanitizer_readiness: build evidence, not execution"]
   rebuild --> work["sanitizer_build_workspaces"]
   rebuild -. "unreplayable / failed / bounded" .-> gaps["legacy gaps"]
   evidence -. "unproven runtime references" .-> gaps

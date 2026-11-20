@@ -523,11 +523,9 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
         }, loc)
     ], shard_id="precomputed-sca", producer={"job": "job_review_data_indexing", "query_set": "dependency_advisories"})
 
-    bs_id = LogicalIdentity.derive(EntityKind.BUILD_ACTION, SNAPSHOT, {"native": "san:asan"}).value
-    add_shard("build_security", [
-        EntityRecord(LogicalIdentity.parse(bs_id), "san:asan", "asan build", "AddressSanitizer instrumented",
-                     {"build_unit_id": "unit-native", "sanitizer": "asan", "status": "ready"})
-    ], shard_id="sanitizer-main", producer={"job": "job_sanitizer_build"})
+    from tests.unit.job_sanitizer_build.test_readiness_publication import readiness_core
+
+    sanitizer_core, _ = readiness_core(tmp_path / "sanitizer")
 
     manifest_path = run_root / "data" / "indices" / "manifests" / "fixture.json"
     write_manifest(manifest_path, run_id=RUN_ID, target_snapshot=SNAPSHOT, target_root=target, indexes=index_values)
@@ -576,7 +574,7 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
     assert envelope["truncated"] is True
     assert len(core.query_engineering_signals(path="src/auth.py", signal_family="priority")["results"]) == 1
     assert len(core.query_sca_reachability(package="pyjwt", reachability_class="call_graph_reachable")["results"]) == 1
-    assert len(core.query_sanitizer_readiness(build_unit="unit-native", sanitizer="asan")["results"]) == 1
+    assert len(sanitizer_core.query_sanitizer_readiness(build_unit="unit-1", sanitizer="asan")["results"]) == 1
 
     adapter = RetrievalMcpAdapter(core)
     mcp_tb = adapter.mcp_result("query_precomputed", {"query_set": "threat_boundaries", "limit": 10})

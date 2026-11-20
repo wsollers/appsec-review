@@ -167,6 +167,25 @@ identity), `gaps`, and:
 - `not_applicable_units[]`: accepted units of other families (`SKIPPED_NA`, not gaps);
 - `omitted_units[]`: native units beyond `max_units`.
 
+The summary also records the application `run_id`, `attempt_id` and `source_fingerprint`.
+`job_review_data_indexing` reads this artifact through its admitted handoff and records the
+`sanitizer_build_summary` input receipt. It projects bounded per-unit, per-sanitizer readiness into
+the existing `inventory` shard; it does not read the protected workspaces. Query it with
+`query_sanitizer_readiness(build_unit="<accepted unit>", sanitizer="address")`; `asan` and `ubsan`
+are aliases for `address` and `undefined`. Rows retain the accepted handoff, summary and
+language-build hashes, recipe/receipt identity, output digest, counts and gaps.
+
+Readiness `ready` means the build's runtime-reference evidence meets that sanitizer's criteria,
+not that the binary ran or passed a sanitizer test. Rows explicitly say
+`runtime_verification: not_performed`. The `instrumented` boolean retains the original unit
+verdict against `required_evidence`; `status` and reference counts are per sanitizer, so an
+optional sanitizer can remain partial even when the unit qualifies. `partial` and `unavailable`
+retain their reasons; omitted
+native units and nonnative `not_applicable` units remain visible. Unknown counts are `null`;
+a catalogued empty output set or measured absence of references is `0`. Disabled or unadmitted
+builds produce no per-unit rows and a named coverage gap, not a clean result. The indexing fact
+bound and query pagination apply, with counted truncation.
+
 The job status is `SUCCEEDED` only when every planned unit is instrumented and no native unit was
 omitted by the bound. Otherwise it is
 `COMPLETED_WITH_GAPS`; with no native unit it is `NOT_APPLICABLE`. A unit is `instrumented` when it
@@ -226,8 +245,20 @@ not extend to a stage that is authorized to run code.
 Offline tests (fake Docker CLI under the real `BuildContainerExecutor`):
 
 ```bash
-scripts/run-tests.sh --parallel --test-workers 2 --shuffle-seed 5181 -- tests/unit/job_sanitizer_build
+scripts/run-tests.sh --parallel --test-workers 2 --shuffle-seed 5182 -- \
+  tests/test_000_unit_environment_guard.py \
+  tests/unit/job_sanitizer_build/test_contract.py \
+  tests/unit/job_sanitizer_build/test_settings_and_evidence.py \
+  tests/unit/job_sanitizer_build/test_handlers.py \
+  tests/unit/job_sanitizer_build/test_attempt_regressions.py \
+  tests/unit/job_sanitizer_build/test_readiness_publication.py \
+  tests/unit/job_review_data_indexing/test_sanitizer_readiness.py
 ```
+
+The publication regression in `tests/unit/job_sanitizer_build/test_readiness_publication.py`
+exercises the actual handlers, canonical runner projection, admitted indexing and retrieval;
+`tests/unit/job_review_data_indexing/test_sanitizer_readiness.py` checks the summary's
+permission and identity boundary. Only external build execution is simulated.
 
 The live tier skips unless Docker and `audit-buildenv-cpp:local` are present. It builds
 `targets/cpp-multivuln` with and without the environment and reads both `relay` binaries:

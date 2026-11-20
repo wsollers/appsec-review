@@ -24,7 +24,7 @@ from appsec_review.indexing.links import (
     LinkContext,
 )
 from appsec_review.indexing.store import ShardSet, digest
-from appsec_review.retrieval.model import RelationKind, RelationRecord
+from appsec_review.retrieval.model import EntityKind, EntityRecord, LogicalIdentity, RelationKind, RelationRecord
 from appsec_review.retrieval.precomputed import QUERY_SETS, RETIRED_GRAPH_SETS
 from appsec_review.storage import file_sha256
 
@@ -111,6 +111,92 @@ def _finish(derived: Derived, query_set: str, *, unavailable: str | None = None)
 def _link_shard(context: ProductContext, family: str) -> tuple[Mapping[str, Any], ...]:
     shard = context.links.get(family)
     return (shard,) if shard is not None else ()
+
+
+def sanitizer_readiness(snapshot: str, accepted: Mapping[str, Any], max_facts: int) -> Derived:
+    """Whitelist build evidence into the existing inventory, not runtime sanitizer verification."""
+    derived = Derived()
+    area = "sanitizer-readiness"
+    if accepted.get("status") != "accepted":
+        reason = str(accepted.get("reason") or "no admitted sanitizer summary")
+        derived.gap(reason)
+        derived.coverage.append((area, "unavailable", reason))
+        derived.count("rows", 0)
+        return derived
+    summary = accepted["summary"]
+    sanitizers = sorted({name for flag in summary["flags"] if flag.startswith("-fsanitize=")
+                         for name in flag.split("=", 1)[1].split(",")})
+    if not sanitizers or not set(sanitizers) <= {"address", "undefined"}:
+        raise ValueError("sanitizer summary has no supported instrumentation selection")
+    required = summary["settings"]["required_evidence"]
+    units = sorted([(item, "built") for item in summary["units"]]
+                   + [(item, "omitted") for item in summary["omitted_units"]]
+                   + [(item, "not_applicable") for item in summary["not_applicable_units"]],
+                   key=lambda pair: pair[0]["build_unit_id"])
+    for unit, disposition in units:
+        unit_id = unit["build_unit_id"]
+        catalogued = disposition == "built" and "outputs_sha256" in unit
+        outputs = unit.get("outputs", ()) if catalogued else ()
+        for sanitizer in sanitizers:
+            if len(derived.entities) >= max_facts:
+                continue
+            gaps = list(unit.get("gaps", ()))
+            resolved = [output for output in outputs if output["evidence"]["evidence_status"] == "resolved"]
+            referenced = [output for output in resolved
+                          if output["evidence"]["sanitizers"][sanitizer]["runtime_referenced"]]
+            linked = [output for output in outputs if output["kind"] in {"executable", "shared-library"}]
+            proven = all(output["evidence"]["evidence_status"] == "resolved"
+                         and output["evidence"]["sanitizers"][sanitizer]["runtime_referenced"]
+                         for output in linked) if linked else bool(referenced)
+            if disposition == "not_applicable":
+                status = "not_applicable"
+            elif disposition == "omitted":
+                status = "unavailable"
+                gaps.append("native build unit was not rebuilt because the configured unit bound was reached")
+            elif not catalogued:
+                status = "unavailable"
+            elif unit["instrumented"] and proven:
+                status = "ready"
+            else:
+                status = "partial"
+                if not proven:
+                    gaps.append(f"{sanitizer} runtime references do not establish instrumentation for this unit")
+            if status in {"partial", "unavailable"} and not gaps:
+                gaps.append("sanitizer build evidence is incomplete")
+            identity = LogicalIdentity.derive(EntityKind.COVERAGE_CELL, snapshot, {
+                "record_type": "sanitizer_readiness", "build_unit_id": unit_id, "sanitizer": sanitizer,
+                "handoff_sha256": accepted["handoff_sha256"]})
+            payload = {
+                "record_type": "sanitizer_readiness", "job_id": "job_sanitizer_build",
+                "build_unit_id": unit_id, "sanitizer": sanitizer, "required": sanitizer in required,
+                "status": status, "terminal_status": unit.get("terminal_status"),
+                "instrumented": unit.get("instrumented"), "runtime_verification": "not_performed",
+                "output_count": len(outputs) if catalogued else None,
+                "runtime_referenced_output_count": len(referenced) if catalogued and len(resolved) == len(outputs)
+                else None,
+                "unresolved_output_count": len(outputs) - len(resolved) if catalogued else None,
+                "outputs_sha256": unit.get("outputs_sha256"), "receipt_fingerprint": unit.get("receipt_fingerprint"),
+                "recipe_identity": unit.get("recipe_identity"), "family": unit.get("family"),
+                "image_id": (unit.get("image") or {}).get("image_id"),
+                "reason": unit.get("reason"), "gaps": bounded_gaps(gaps),
+                **{key: accepted[key] for key in ("run_id", "attempt_id", "source_fingerprint", "handoff_sha256",
+                                                  "summary_reference", "language_build_handoff_sha256")},
+            }
+            derived.entities.append(EntityRecord(identity, f"{unit_id}:{sanitizer}",
+                                                 f"{unit_id} {sanitizer} build readiness",
+                                                 f"sanitizer build {unit_id} {sanitizer} {status}", payload))
+            for gap in gaps:
+                derived.gap(f"{unit_id}/{sanitizer}: {gap}")
+    omitted = len(units) * len(sanitizers) - len(derived.entities)
+    if omitted:
+        derived.gap(f"truncated: {omitted} sanitizer readiness row(s) exceeded the configured fact bound")
+    if not units:
+        derived.gap("accepted sanitizer summary contains no build units")
+    derived.coverage.append((area, "partial" if derived.gaps else "complete",
+                             "; ".join(bounded_gaps(derived.gaps, limit=5)) or None))
+    derived.count("rows", len(derived.entities))
+    derived.count("omitted_rows", omitted)
+    return derived
 
 
 # --- artifact inventory ---------------------------------------------------------------------------------
