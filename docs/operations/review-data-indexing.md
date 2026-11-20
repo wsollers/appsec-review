@@ -51,13 +51,24 @@ presence or observation counts. All-unavailable scopes stay unavailable; mixed, 
 incomplete coverage stays partial, with scoped reasons. An empty observation shard with complete
 scope coverage is distinct from an empty shard published after a failed scan.
 
-The current CodeQL normalizer does not put build-unit IDs in shard producer metadata. For those
-shards, the matrix joins the admitted handoff's `execution.scopes` output to the exact index
-name, shard ID, schema, hash, fingerprint and path, then reads the scope's explicit build-unit ID.
-The shard must be a handoff artifact, and its execution evidence must agree on scope, language
-and query profile. Foreign target/run metadata and conflicting bindings fail closed. Scope IDs,
-storage basenames and languages are never guessed to be build-unit IDs; source-only scopes
-remain language coverage without inventing a build unit.
+The current CodeQL normalizer does not put build-unit IDs in shard producer metadata, and the
+runner's closed control projection removes inline `scopes`. `execution.scopes` therefore publishes
+an immutable `artifacts/codeql/execution-result-<sha256>.json` **inside its own attempt**, under the existing
+`codeql_plan_and_summary` declaration, and returns its hash-pinned `artifact` reference. This domain
+payload retains one small binding per normalized scope/query, its status and full row counts;
+it excludes source inventories, argv, environment, native-output references and streams. Full
+normalized outputs are unchanged. Identical retries reuse these bytes; changed normalized identities
+produce another content-addressed file. Another attempt publishes its own file without overwriting
+the older attempt.
+
+The matrix follows only that admitted artifact, recording a `codeql_plan_and_summary` read. It
+checks schema, run, attempt, target and counts, then joins the exact index name, shard ID, schema,
+hash, fingerprint and path to the scope's explicit build-unit ID. Each shard must also be an
+admitted handoff artifact; its read receipt and execution evidence must agree on scope, language
+and query profile. Missing or changed payloads and conflicting bindings fail closed—there is no
+fallback to inline control fields, private task files or a floating pointer. Scope IDs, storage
+basenames and languages are never guessed to be build-unit IDs; source-only scopes remain
+language coverage without inventing a build unit.
 
 `max_links_per_rule` limits emitted relationships across all candidates, including ambiguous
 fan-out. An advisory match reserves its `AFFECTED_BY` edge and both provenance edges together;

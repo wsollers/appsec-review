@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+import json
 from typing import Any
 
 from appsec_review.graph.contract import GRAPH_INDEX, Coverage, Family
@@ -219,7 +220,33 @@ def _codeql_scope_units(shards: ShardSet, accepted: AcceptedHandoff | None,
                 for shard in shards.select(index="observations", job="job_codeql_analysis")}
     artifacts = {(item["path"], item["sha256"]) for item in accepted.handoff.get("artifacts", ())}
     outputs = accepted.handoff.get("outputs") or {}
-    normalized = (outputs.get("execution.scopes") or {}).get("scopes") or ()
+    reference = (outputs.get("execution.scopes") or {}).get("artifact")
+    if not isinstance(reference, Mapping):
+        raise ValueError("CodeQL scope binding domain payload is unavailable or not admitted")
+    expected_path = (f"data/jobs/job_codeql_analysis/attempts/{accepted.handoff['attempt_id']}"
+                     f"/artifacts/codeql/execution-result-{reference.get('sha256')}.json")
+    if (reference.get("path") != expected_path
+            or (reference.get("path"), reference.get("sha256")) not in artifacts):
+        raise ValueError("CodeQL scope binding domain payload is unavailable or not admitted")
+    from appsec_review.runtime.inputs import observe_output
+    from appsec_review.storage.shared import verify_reference
+    observe_output(shards.run_root, "job_codeql_analysis", "codeql_plan_and_summary", reference)
+    domain = json.loads(verify_reference(shards.run_root, reference).read_bytes())
+    if (not isinstance(domain, Mapping) or domain.get("schema") != "appsec-review/codeql-analysis-handoff/1"
+            or domain.get("record_type") != "scope_index_bindings"
+            or domain.get("run_id") != accepted.handoff["run_id"]
+            or domain.get("attempt_id") != accepted.handoff["attempt_id"]
+            or domain.get("source_fingerprint") != target_snapshot):
+        raise ValueError("CodeQL scope binding domain schema/run/attempt/snapshot mismatch")
+    normalized = domain.get("scopes")
+    if (not isinstance(normalized, list) or any(not isinstance(item, Mapping) for item in normalized)
+            or any(item.get("index_identity") is not None and not isinstance(item["index_identity"], Mapping)
+                   for item in normalized)
+            or type(domain.get("scope_count")) is not int or domain["scope_count"] != len(normalized)
+            or type(domain.get("indexed_scope_count")) is not int
+            or domain["indexed_scope_count"] != sum(isinstance(item.get("index_identity"), Mapping)
+                                                    for item in normalized)):
+        raise ValueError("CodeQL scope binding domain counts or records are invalid")
     bindings: dict[tuple[Any, ...], str | None] = {}
     for item in normalized:
         if not isinstance(item, Mapping) or not isinstance(item.get("index_identity"), Mapping):

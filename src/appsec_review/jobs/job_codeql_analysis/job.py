@@ -1705,8 +1705,36 @@ def build_job() -> Job:
             unit.job.attempt_root / "artifacts" / "codeql" / "graph-exports.json",
             {"schema": GRAPH_EXPORTS_SCHEMA, "source_fingerprint": unit.job.source_fingerprint,
              "settings": asdict(settings.export_queries), "exports": exports})
+        # The runner projects away normalized scopes. Publish only the bounded binding
+        # metadata consumers need, never the full source inventory, commands or tool streams.
+        bindings = []
+        for item in normalized:
+            identity = item.get("index_identity")
+            bindings.append({
+                "scope": {key: item["scope"].get(key) for key in ("scope_id", "language", "build_unit_id")},
+                "terminal_status": item.get("terminal_status"),
+                "index_identity": None if not isinstance(identity, Mapping) else {
+                    **{key: identity[key] for key in (
+                        "name", "shard_id", "schema", "sha256", "fingerprint", "relative_path")},
+                    "producer": {key: identity["producer"].get(key)
+                                 for key in ("job", "unit", "language", "query_profile")},
+                },
+            })
+        domain = {"schema": SCHEMA, "record_type": "scope_index_bindings",
+                  "run_id": unit.job.run_id, "attempt_id": unit.job.attempt_id,
+                  "source_fingerprint": unit.job.source_fingerprint, "scopes": bindings,
+                  "scope_count": len(bindings),
+                  "indexed_scope_count": sum(item["index_identity"] is not None for item in bindings)}
+        from appsec_review.storage.shared import immutable_bytes
+        domain_bytes = canonical_json(domain)
+        domain_path = (unit.job.attempt_root / "artifacts" / "codeql" /
+                       f"execution-result-{hashlib.sha256(domain_bytes).hexdigest()}.json")
+        immutable_bytes(unit.job.run_root, domain_path.relative_to(unit.job.run_root).as_posix(),
+                        domain_bytes)
+        execution_artifact = _artifact(unit.job.run_root, domain_path)
         gaps = list(dict.fromkeys(gap for item in [*normalized, *exports] for gap in item.get("gaps", ())))
         return {"scopes": normalized, "exports": exports, "graph_export_artifact": artifact,
+                "artifact": execution_artifact,
                 "databases": results["database"], "queries": results["query"],
                 **({"predecessor_import": imported} if imported is not None else {}),
                 "observation_count": sum(int(item.get("observation_count", 0)) for item in normalized),
