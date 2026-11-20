@@ -86,7 +86,8 @@ A chain seed, when one claim's outcome is what another step needs (a leak that d
 a later step relies on): `chain_seeds` is a top-level list beside `claims`, at most 4 seeds, each with an
 `objective`, 2 to 8 `steps` (`id`, `claim` naming one of your claim ids or null, `description`, `prerequisite`,
 `resulting_state`, `anchors` labels) and `links` between steps (`from`, `to`, `continuity_dimensions`, `cites`,
-`questions`). A seed is a hypothesis for the attack-chain analyst, never a claim; without a seed no chain is composed.
+`questions`). A seed is a hypothesis for the attack-chain analyst, never a claim; post-adjudication chain composition
+uses admitted supported/confirmed claims with optional seed hints.
 
 ```json
 {"action": "final", "result": {"claims": [{"id": "c1", "leads": ["L1"], "cwe": "CWE-125",

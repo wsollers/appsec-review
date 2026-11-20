@@ -68,7 +68,7 @@ When a claim's outcome enables a later step (leak defeats mitigation, write enab
 `chain_seeds` beside `claims` lists up to 4 seeds: `objective`, 2 to 8 `steps` (`id`, `claim`: own claim
 id or null, `description`, `prerequisite`, `resulting_state`, `anchors`: labels), and `links`
 (`from`, `to`, `continuity_dimensions`, `cites`, `questions`). Seeds are attack-chain analyst hypotheses,
-not claims; without seeds no chain is composed.
+not claims; post-adjudication chain composition uses admitted supported/confirmed claims with optional seed hints.
 
 ```json
 {"action":"final","result":{"claims":[{"id":"c1","leads":["L1"],"cwe":"CWE-125","security_predicate":"out_of_bounds_read","statement":"parse_header echoes 8 bytes past out.name, including the saved return address.","support":{"affected_construct":["K1","S1"],"attacker_input_control":["E1"]}}],"chain_seeds":[{"objective":"Turn the stack leak into control of the saved return address under ASLR.","steps":[{"id":"s1","claim":"c1","description":"Read the stack address through the over-read.","prerequisite":"The attacker reaches E1 with a crafted header.","resulting_state":"The attacker knows the stack layout.","anchors":["K1"]},{"id":"s2","claim":null,"description":"Overwrite the saved return address through the memcpy at K1.","prerequisite":"The state of s1.","resulting_state":"Attacker-chosen control flow.","anchors":["K1","G2"]}],"links":[{"from":"s1","to":"s2","continuity_dimensions":["identity","temporal"],"cites":["E1"],"questions":["Does the same connection stay open between the two requests?"]}]}],"no_claim":[],"blocked":[]}}
