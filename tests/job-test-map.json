@@ -163,6 +163,7 @@
     },
     "job_codeql_analysis": {
       "unit": [
+        "tests/unit/job_codeql_analysis/test_coverage_closure.py",
         "tests/unit/job_codeql_analysis/test_contract.py",
         "tests/unit/job_codeql_analysis/test_datasets.py",
         "tests/unit/job_codeql_analysis/test_first_party_results.py",

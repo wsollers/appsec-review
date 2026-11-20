@@ -233,6 +233,10 @@ operator context is in [source-history operations](source-history-analysis.md).
 5. Rank file and symbol populations separately using transformed, min-max-normalized metrics.
    Missing metrics reduce `weight_coverage`, not zero-fill the inputs. Break ties deterministically;
    derive component priority from its best file and retain only configured top hotspot counts.
+   Shipped configuration uses fixed `hotspot_count`: `proportional_ratio` is unset and defaults
+   to `None`. Proportional selection is opt-in; when configured, its population-derived cap
+   uses the optional `min_hotspots`/`max_hotspots` bounds. The helper's proportional default
+   does not override the job's explicit settings.
 
 ### `publish`
 

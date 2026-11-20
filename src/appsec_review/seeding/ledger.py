@@ -3,14 +3,19 @@
 Contract: ``docs/architecture/seeded-neighborhoods.md`` and
 ``docs/architecture/seeded-codeql-neighborhoods.md`` sections 3, 4 and 6.
 
-A *seed* is the line range of a finding that an earlier job already located. A seeded producer
+A *seed* is a source range from an admitted observation or structural candidate, not by itself a
+confirmed finding. A seeded producer
 (CodeQL, Clang AST/IR, Clang static analysis, CPG) runs outward from the functions containing the
 seeds, so this module decides which locations seed which scope, and afterwards reports how each seed
-resolved. It reads only accepted, hash verified ``observations`` index shards; it never scans the
-target tree and never runs an analyzer. This is the only implementation of the ledger statuses.
+resolved. It reads hash-verified observation shards and explicitly enabled admitted structural
+inputs; it never scans the target tree or runs an analyzer. This is the only implementation of
+the ledger statuses.
 
-Every seeded producer's own observations are excluded from the seed set, so the set is identical for
-all producers and does not depend on which of them already ran.
+The shared upstream pass excludes seeded producers' own observations. CodeQL export can also
+supply its verified current observation shards and enable structural fallback candidates.
+Candidate inclusion changes query scope only; it confers no evidence or execution authority.
+Selection is deterministic for the supplied inputs; different supplied inputs need not produce
+identical seed sets.
 """
 
 from __future__ import annotations
@@ -37,7 +42,7 @@ CODEQL_JOB = "job_codeql_analysis"
 CLANG_STATIC_JOB = "job_clang_static_analysis"
 CPG_JOB = "job_cpg_analysis"
 COMPILED_JOB = "job_cpp_compiled_analysis"
-# Jobs whose own observations never seed: the set must not depend on the producer being seeded.
+# Seeded-producer observations excluded from the shared upstream pass.
 SEEDED_PRODUCER_JOBS = frozenset({CODEQL_JOB, CLANG_STATIC_JOB, CPG_JOB, COMPILED_JOB})
 SEEDED_PRODUCER_SCANNERS = frozenset({"codeql"})
 OBSERVATION_INDEX = "observations"

@@ -30,15 +30,15 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_codeql_analysis/job.py#L1744) |
-| `execution` | `execution.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_codeql_analysis/job.py#L1613) |
-| `plan` | `plan.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_codeql_analysis/job.py#L1525) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_codeql_analysis/job.py#L1745) |
+| `execution` | `execution.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_codeql_analysis/job.py#L1614) |
+| `plan` | `plan.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_codeql_analysis/job.py#L1526) |
 
 ### Accepted input declarations
 
 | Producer | Dataset | Schema | Channel | Availability | Missing policy |
 | --- | --- | --- | --- | --- | --- |
-| `job_artifact_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_artifact_indexing` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_artifact_indexing` | `artifact_catalog` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `archive_members` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_artifact_indexing` | `artifact_relationships` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
@@ -62,7 +62,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_cpg_analysis` | `cpg_scope_coverage` | `appsec-review/cpp-index-coverage/1` | handoff | optional | gap |
 | `job_cpg_analysis` | `cpg_summary` | `appsec-review/cpg-analysis/1` | handoff | optional | gap |
 | `job_cpg_analysis` | `cpg_binary` | `application/octet-stream` | handoff | optional | gap |
-| `job_cpp_compiled_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_cpp_compiled_analysis` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_cpp_compiled_analysis` | `cpp_build_graph` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_cpp_compiled_analysis` | `clang_ast` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_cpp_compiled_analysis` | `llvm_ir` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
@@ -87,11 +87,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_evidence_collection` | `static_tool_observations` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_evidence_collection` | `static_tool_evidence` | `appsec-review/static-tool-evidence/2` | handoff | optional | gap |
 | `job_evidence_collection` | `static_tool_io` | `appsec-review/container-execution/1` | handoff | optional | gap |
-| `job_language_build` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_language_build` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_language_build` | `topology_refinement_inputs` | `appsec-review/build-topology-refinement/1` | handoff | optional | gap |
 | `job_language_build` | `build_actions` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_language_build` | `jvm_build_actions` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_language_build` | `language_build_receipts` | `appsec-review/language-build-handoff/2` | handoff | optional | gap |
+| `job_language_build` | `language_build_receipts` | `appsec-review/language-build-handoff/2` | handoff | required | reject |
 | `job_language_build` | `build_workspaces` | `application/octet-stream` | handoff | optional | gap |
 | `job_post_build_security_assessment` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_post_build_security_assessment` | `build_security` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
@@ -114,14 +114,14 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_target_analysis_plan` | `planning_feedback_cache` | `appsec-review/target-analysis-proposal/3` | handoff | optional | gap |
 | `job_target_analysis_plan` | `analysis_plan` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_analysis_plan` | `analysis_plan_documents` | `appsec-review/target-analysis-plan/1` | handoff | optional | gap |
-| `job_target_catalog` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
+| `job_target_catalog` | `handoff` | `appsec-review/job-handoff/2` | handoff | required | reject |
 | `job_target_catalog` | `target_artifact_inputs` | `appsec-review/target-artifact-intake/1` | handoff | optional | gap |
 | `job_target_catalog` | `source_files` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `declaration_symbols` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `components` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `target_documents` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_target_catalog` | `build_units` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
-| `job_target_catalog` | `catalog_documents` | `appsec-review/target-catalog/1` | handoff | optional | gap |
+| `job_target_catalog` | `catalog_documents` | `appsec-review/target-catalog/1` | handoff | required | reject |
 | `job_tree_sitter_ast` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
@@ -153,7 +153,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_codeql_analysis/test_codeql_jobrunner.py` |
 | live | `tests/live/test_codeql_analysis_wave1_live.py`<br>`tests/integration/test_codeql_derived_images.py` |
-| unit | `tests/unit/job_codeql_analysis/test_contract.py`<br>`tests/unit/job_codeql_analysis/test_datasets.py`<br>`tests/unit/job_codeql_analysis/test_first_party_results.py`<br>`tests/unit/job_codeql_analysis/test_handlers.py`<br>`tests/unit/job_codeql_analysis/test_planning.py`<br>`tests/unit/job_codeql_analysis/test_sarif.py`<br>`tests/test_codeql_analysis.py`<br>`tests/test_codeql_derived_csharp.py`<br>`tests/test_codeql_derived_go.py`<br>`tests/test_codeql_derived_java.py`<br>`tests/test_codeql_derived_jspy.py`<br>`tests/test_codeql_derived_native.py`<br>`tests/test_codeql_execution_metrics.py`<br>`tests/test_codeql_export_step.py`<br>`tests/test_codeql_predecessor.py`<br>`tests/test_codeql_runtime_preflight.py`<br>`tests/test_codeql_seeded_export.py`<br>`tests/test_codeql_shipped_config_coverage.py` |
+| unit | `tests/unit/job_codeql_analysis/test_coverage_closure.py`<br>`tests/unit/job_codeql_analysis/test_contract.py`<br>`tests/unit/job_codeql_analysis/test_datasets.py`<br>`tests/unit/job_codeql_analysis/test_first_party_results.py`<br>`tests/unit/job_codeql_analysis/test_handlers.py`<br>`tests/unit/job_codeql_analysis/test_planning.py`<br>`tests/unit/job_codeql_analysis/test_sarif.py`<br>`tests/test_codeql_analysis.py`<br>`tests/test_codeql_derived_csharp.py`<br>`tests/test_codeql_derived_go.py`<br>`tests/test_codeql_derived_java.py`<br>`tests/test_codeql_derived_jspy.py`<br>`tests/test_codeql_derived_native.py`<br>`tests/test_codeql_execution_metrics.py`<br>`tests/test_codeql_export_step.py`<br>`tests/test_codeql_predecessor.py`<br>`tests/test_codeql_runtime_preflight.py`<br>`tests/test_codeql_seeded_export.py`<br>`tests/test_codeql_shipped_config_coverage.py` |
 
 ### Dagster placement
 

@@ -14,6 +14,12 @@ This plan implements **T-171** (`docs/TODO.md`): wiring orphaned engineering-sig
 repository size, and introducing an explicit **SAST-silence hunt boost** so Lane B focuses on
 high-exposure, under-tested code where static rules went silent.
 
+**History as-built clarification (T-5229):** the proportional default proposed below was not
+made the job's shipped default. `HistorySettings.proportional_ratio` defaults to `None`, the
+shipped TOML profiles leave it unset, and the job explicitly passes that value to selection.
+Fixed `hotspot_count` therefore remains the default; proportional selection is opt-in.
+This clarification changes no configuration or behavior and does not reopen T-171.
+
 ## Problem and motivation
 
 - Our 47-job functional audit found three producers executing without influencing prioritization:

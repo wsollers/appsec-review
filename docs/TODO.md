@@ -351,9 +351,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5117 | [Replay static analysis in the accepted compile working directory](#t-5117-replay-static-analysis-in-the-accepted-compile-working-directory) | graph | open |
 | T-5118 | [Preserve bounded resolving Clang diagnostic traces and valid spans](#t-5118-preserve-bounded-resolving-clang-diagnostic-traces-and-valid-spans) | graph | open |
 | T-5119 | [Distinguish failed unsupported and missing Clang scopes](#t-5119-distinguish-failed-unsupported-and-missing-clang-scopes) | graph | open |
-| T-5120 | [Retain missing-build and per-scope CodeQL coverage decisions](#t-5120-retain-missing-build-and-per-scope-codeql-coverage-decisions) | codeql | open |
-| T-5121 | [Preserve meaningful leading dots in CodeQL source paths](#t-5121-preserve-meaningful-leading-dots-in-codeql-source-paths) | codeql | open |
-| T-5122 | [Return scoped CodeQL export timeout outcomes without KeyError](#t-5122-return-scoped-codeql-export-timeout-outcomes-without-keyerror) | codeql | open |
+| T-5120 | [Retain missing-build and per-scope CodeQL coverage decisions](#t-5120-retain-missing-build-and-per-scope-codeql-coverage-decisions) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
+| T-5121 | [Preserve meaningful leading dots in CodeQL source paths](#t-5121-preserve-meaningful-leading-dots-in-codeql-source-paths) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
+| T-5122 | [Return scoped CodeQL export timeout outcomes without KeyError](#t-5122-return-scoped-codeql-export-timeout-outcomes-without-keyerror) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
 | T-5123 | [Normalize only selected CPG facts with stable identities and parse gaps](#t-5123-normalize-only-selected-cpg-facts-with-stable-identities-and-parse-gaps) | graph | open |
 | T-5124 | [Do not cache failed CPG exports or retain failed intermediates](#t-5124-do-not-cache-failed-cpg-exports-or-retain-failed-intermediates) | graph | open |
 | T-5125 | [Preserve debug range lookup bounds and public-only PDB symbols](#t-5125-preserve-debug-range-lookup-bounds-and-public-only-pdb-symbols) | binary | open |
@@ -451,17 +451,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5217 | [Observe exact accepted build payload reads](#t-5217-observe-exact-accepted-build-payload-reads) | evidence | open |
 | T-5218 | [Observe exact private analysis payload reads](#t-5218-observe-exact-private-analysis-payload-reads) | evidence | open |
 | T-5219 | [Observe exact completion payload reads](#t-5219-observe-exact-completion-payload-reads) | evidence | open |
-| T-5220 | [Align CodeQL optional declarations with required loader inputs](#t-5220-align-codeql-optional-declarations-with-required-loader-inputs) | pipeline | open |
+| T-5220 | [Align CodeQL optional declarations with required loader inputs](#t-5220-align-codeql-optional-declarations-with-required-loader-inputs) | pipeline | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
 | T-5221 | [Reject missing claimed acquisitions and inconsistent intake identities](#t-5221-reject-missing-claimed-acquisitions-and-inconsistent-intake-identities) | pipeline | open |
 | T-5222 | [Reconcile actual payload shapes declarations and schema versions](#t-5222-reconcile-actual-payload-shapes-declarations-and-schema-versions) | evidence | blocked |
 | T-5223 | [Repair the four audited stale unit cases against current contracts](#t-5223-repair-the-four-audited-stale-unit-cases-against-current-contracts) | testing | done (2026-11-19, 100dfd75fdeb5e0b0cb4f34341691e970cac7454) |
 | T-5224 | [Grant querying capabilities only for admitted evidence](#t-5224-grant-querying-capabilities-only-for-admitted-evidence) | review | open |
-| T-5225 | [Honor the resolved structural fallback policy](#t-5225-honor-the-resolved-structural-fallback-policy) | codeql | open |
+| T-5225 | [Honor the resolved structural fallback policy](#t-5225-honor-the-resolved-structural-fallback-policy) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
 | T-5226 | [Emit dependency gaps only for applicable required evidence](#t-5226-emit-dependency-gaps-only-for-applicable-required-evidence) | evidence | open |
 | T-5227 | [Count canonical report gaps once without erasing distinct scopes](#t-5227-count-canonical-report-gaps-once-without-erasing-distinct-scopes) | review | open |
 | T-5228 | [Read build environment inputs through the public admitted boundary](#t-5228-read-build-environment-inputs-through-the-public-admitted-boundary) | pipeline | done (2026-11-20, ca5ad85f953d2ceccbb12db11811ecb772cc6517) |
 | T-5229 | [Reconcile audit-identified as-built prose and test navigation](#t-5229-reconcile-audit-identified-as-built-prose-and-test-navigation) | pipeline | open |
-| T-5230 | [Resolve clang static analysis conditional audit boundaries](#t-5230-resolve-clang-static-analysis-conditional-audit-boundaries) | pipeline | blocked |
+| T-5230 | [Resolve clang static analysis conditional audit boundaries](#t-5230-resolve-clang-static-analysis-conditional-audit-boundaries) | pipeline | open |
 | T-5231 | [Resolve code graph index conditional audit boundaries](#t-5231-resolve-code-graph-index-conditional-audit-boundaries) | pipeline | open |
 | T-5232 | [Resolve cpp compiled analysis conditional audit boundaries](#t-5232-resolve-cpp-compiled-analysis-conditional-audit-boundaries) | pipeline | blocked |
 | T-5233 | [Resolve cpp symbol index conditional audit boundaries](#t-5233-resolve-cpp-symbol-index-conditional-audit-boundaries) | pipeline | open |
@@ -4361,29 +4361,41 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5120 — Retain missing-build and per-scope CodeQL coverage decisions
 
-- **State:** open
+- **State:** done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359)
 - **Area:** codeql
 - **Why:** Archived audit/feedback cases: CQ-01, CQ-04, CQ-05. Compiled source without a matching build receipt disappears from the plan; Plan-only coverage gaps do not affect acceptance terminal status.
 - **Scope:** `src/appsec_review/jobs/job_codeql_analysis/job.py`, `src/appsec_review/jobs/job_codeql_analysis/planning.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 170 cases passed/23.62 s and 114 passed/6.51 s, two workers, seeds 9120/9121,
+  no skips or slow cases. The unique union is 281 (278 affected cases plus three guards).
+  Compiled files without matching receipts retain source-bound decisions; plan-only gaps
+  affect acceptance. Whole-plan seed ownership avoids false other-scope absence while each
+  scope uses its own normalization. Admitted immutable domain bindings remain intact.
+  No real CodeQL engine, query, image or live validation was executed.
 - **Refs:** `audit-results/job-audit-job_codeql_analysis.md`; follow-up to closed T-169 (not reopened).
 
 ### T-5121 — Preserve meaningful leading dots in CodeQL source paths
 
-- **State:** open
+- **State:** done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359)
 - **Area:** codeql
 - **Why:** Archived audit/feedback cases: CQ-02. SARIF mapping strips meaningful leading dots, losing Actions locations or binding the wrong source.
 - **Scope:** `src/appsec_review/jobs/job_codeql_analysis/sarif.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5120's verification. Exact `./` and known workspace-prefix handling preserves
+  `.github`, `.hidden` and `..hidden` source/hash identities; traversal, foreign authorities
+  and unknown absolute paths remain refused.
 - **Refs:** `audit-results/job-audit-job_codeql_analysis.md`.
 
 ### T-5122 — Return scoped CodeQL export timeout outcomes without KeyError
 
-- **State:** open
+- **State:** done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359)
 - **Area:** codeql
 - **Why:** Archived audit/feedback cases: CQ-03. Export admission timeout raises KeyError instead of returning the scoped failure.
 - **Scope:** `src/appsec_review/jobs/job_codeql_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5120's verification. Export reservation timeout retains its scoped failed outcome
+  instead of raising `KeyError`; independent successful SARIF remains available when fail-stop
+  is inactive. The real active guard still raises `ReviewStopped`.
 - **Refs:** `audit-results/job-audit-job_codeql_analysis.md`.
 
 ### T-5123 — Normalize only selected CPG facts with stable identities and parse gaps
@@ -5546,11 +5558,14 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5220 — Align CodeQL optional declarations with required loader inputs
 
-- **State:** open
+- **State:** done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359)
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: CQ-D02. Align optional declarations with required CodeQL loader reads.
 - **Scope:** `src/appsec_review/jobs/job_codeql_analysis/datasets.py`, `src/appsec_review/jobs/job_codeql_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5120's 281-case main union. Four already-mandatory envelopes and two mandatory
+  payload kinds now declare required/reject semantics matching real readers. Optional inputs
+  remain optional; schema/hash errors are not defaulted and no grants are broadened.
 - **Refs:** `audit-results/job-audit-job_codeql_analysis.md`.
 
 ### T-5221 — Reject missing claimed acquisitions and inconsistent intake identities
@@ -5594,11 +5609,17 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5225 — Honor the resolved structural fallback policy
 
-- **State:** open
+- **State:** done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359)
 - **Area:** codeql
 - **Why:** Archived audit/feedback cases: FB-STRUCTURAL-FALLBACK. Honor the configured CodeQL structural fallback policy.
 - **Scope:** `src/appsec_review/jobs/job_codeql_analysis/job.py`
 - **Done when:** A focused seeded-dispatch test proves enabled and disabled configured fallback paths differ correctly without running CodeQL.
+  Resolution: that criterion assumed a typed switch which does not exist; unknown settings
+  are rejected, so an ignored configuration was not demonstrated. The user explicitly chose
+  to keep current behavior on 2026-11-20. Structural candidates widen graph-export query scope,
+  not evidence or authority, and remain bounded by typed `seed_limit`, `seed_depth` and
+  `max_seed_depth`. No new switch or default change is introduced. Existing structural seed
+  behavior passes in T-5120's main selection. The separate query-grant issue remains T-5224.
 - **Refs:** user feedback attachment, 2026-11-19 (exact excerpt and lines in session inventory).
 
 ### T-5226 — Emit dependency gaps only for applicable required evidence
@@ -5652,14 +5673,23 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   lead-candidate publication; sanitizer prose distinguishes accepted built receipts, independent
   readiness and separately authorized execution, with current explicit unit selectors.
   CI-D2's lead-promotion selector is restored in the test map; broader T-113 remains open.
+  The CodeQL CQ-D01 scheduling/seed-source prose and shared ledger docstring now distinguish
+  the upstream exclusion pass from explicit current CodeQL observations and structural seeds.
+  History L130's proposed proportional default is qualified as opt-in: shipped configuration
+  leaves `proportional_ratio` unset. Its proportional-test selector is already present, also
+  resolving the scoped history L131 navigation record without closing broader T-113 work.
 - **Refs:** `audit-results/job-audit-cumulative.md` and the documentation/conditional sections in all 47 linked per-job reports, including the final-gate pinned-input/pointer-stability distinction; follow-up to closed T-168, T-169, T-170, T-171, T-172, T-173, T-176 (not reopened).
 
 ### T-5230 — Resolve clang static analysis conditional audit boundaries
 
-- **State:** blocked
+- **State:** open
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: L184, L185, L186. Decide whether missing per-TU outcome records remain supported legacy output; Align accepted Clang diagnostic settings with wrapper limits.
-- **Scope:** `src/appsec_review/jobs/job_clang_static_analysis/job.py` Blocked decision: Decide whether legacy zero-exit output without per-TU records is accepted or explicitly incomplete.
+- **Scope:** `src/appsec_review/jobs/job_clang_static_analysis/job.py`.
+  User decision, 2026-11-20: require per-source-file outcomes. Missing outcome evidence is
+  incomplete even when the tool exits zero; affected seeds remain unresolved and no success
+  checkpoint is accepted. Preserve unaffected evidence and existing failure/cancellation policy.
+  Outcome validation and the other diagnostic-setting/configuration cases remain to be verified.
 - **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`.
 
