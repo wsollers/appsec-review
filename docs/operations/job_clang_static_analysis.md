@@ -29,9 +29,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L654) |
-| `analyze` | `analyze.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L628) |
-| `load` | `load.accepted_cpp` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L620) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L717) |
+| `analyze` | `analyze.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L691) |
+| `load` | `load.accepted_cpp` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L683) |
 
 ### Accepted input declarations
 
@@ -81,7 +81,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | `tests/live/test_seeded_clang_live.py` |
-| unit | `tests/unit/job_clang_static_analysis/test_diagnostic_fidelity.py`<br>`tests/unit/job_clang_static_analysis/test_outcomes_and_reuse.py`<br>`tests/unit/job_clang_static_analysis/test_clang_static_analysis.py`<br>`tests/unit/job_clang_static_analysis/test_clang_static_tool.py`<br>`tests/unit/job_clang_static_analysis/test_contract.py`<br>`tests/unit/job_clang_static_analysis/test_seeded_clang_static.py` |
+| unit | `tests/unit/job_clang_static_analysis/test_diagnostic_fidelity.py`<br>`tests/unit/job_clang_static_analysis/test_outcomes_and_reuse.py`<br>`tests/unit/job_clang_static_analysis/test_plist_fidelity.py`<br>`tests/unit/job_clang_static_analysis/test_source_admission.py`<br>`tests/unit/job_clang_static_analysis/test_clang_static_analysis.py`<br>`tests/unit/job_clang_static_analysis/test_clang_static_tool.py`<br>`tests/unit/job_clang_static_analysis/test_contract.py`<br>`tests/unit/job_clang_static_analysis/test_seeded_clang_static.py`<br>`tests/unit/job_code_graph_index/test_producers.py::test_diagnostic_rows_empty_filtering_sorting_and_truncation` |
 
 ### Dagster placement
 

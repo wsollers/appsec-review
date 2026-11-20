@@ -488,8 +488,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5254 | [Keep recovery-map selection checks independently bounded](#t-5254-keep-recovery-map-selection-checks-independently-bounded) | testing | done (2026-11-19, d3603a204ab144bc04ec61da441a82c65d6e60dc) |
 | T-5255 | [Preserve exact accepted SARIF paths before workspace aliases](#t-5255-preserve-exact-accepted-sarif-paths-before-workspace-aliases) | codeql | done (2026-11-20, 9e5874a2310c5469706f98638d15c0a67ebd3e78) |
 | T-5256 | [Separate semantic CPG identity from export-local node numbers](#t-5256-separate-semantic-cpg-identity-from-export-local-node-numbers) | graph | done (2026-11-20, ca2b9b0d10e5d428997100159cf498ec2be676e8) |
-| T-5257 | [Preserve native Clang plist notes and verify format fidelity](#t-5257-preserve-native-clang-plist-notes-and-verify-format-fidelity) | scanners | open |
-| T-5258 | [Classify unmapped Clang compile rows before execution](#t-5258-classify-unmapped-clang-compile-rows-before-execution) | scanners | open |
+| T-5257 | [Preserve native Clang plist notes and verify format fidelity](#t-5257-preserve-native-clang-plist-notes-and-verify-format-fidelity) | scanners | done (2026-11-20, 8d6cd37c0a811060443a52d0d3c2373588596fe0) |
+| T-5258 | [Classify unmapped Clang compile rows before execution](#t-5258-classify-unmapped-clang-compile-rows-before-execution) | scanners | done (2026-11-20, 8d6cd37c0a811060443a52d0d3c2373588596fe0) |
 | T-5259 | [Verify CodeQL SARIF base and scope-relative URI semantics](#t-5259-verify-codeql-sarif-base-and-scope-relative-uri-semantics) | codeql | open |
 | T-5260 | [Attribute structural seed origins and scope accounting](#t-5260-attribute-structural-seed-origins-and-scope-accounting) | codeql | open |
 
@@ -6125,7 +6125,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5257 — Preserve native Clang plist notes and verify format fidelity
 
-- **State:** open
+- **State:** done (2026-11-20, 8d6cd37c0a811060443a52d0d3c2373588596fe0)
 - **Area:** scanners
 - **Why:** LLVM 18 emits flattened call events, piece-level ranges and separate diagnostic
   `notes`. The synthetic nested-call/diagnostic-range fixture is not native-format evidence.
@@ -6136,6 +6136,15 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Done when:** Real-format notes, events and ranges survive the wrapper and admitted reader,
   with exact omission accounting under existing bounds. Record fixture provenance and distinguish
   offline parser proof from any separately authorized native capture/acceptance.
+  Offline repair introduced at `5a61544f`, completed at `8d6cd37c`: main 114 passed/5.53 s,
+  two workers, seed 321132, no skips or slow cases. Standalone notes, flat events, ranges and
+  control edges retain source/hash/byte identity through actual publication and graph reads.
+  Inclusive byte ends validate the boundary after the final byte; UTF-8 continuation starts,
+  split ends and invalid diagnostic points remain rejected. Exact upstream omission counters
+  remain distinct from graph-display clipping. Adapter /9 prevents reuse of older checkpoints.
+  Positive fixtures explicitly follow the LLVM 18.1.8 emitter schema; they are constructed,
+  not diagnostic-bearing native captures. Available Clang 18.1.3 plists have no diagnostics
+  and do not establish positive format compatibility. Native acceptance remains unverified.
   The wrapper is baked into its tool image: an old image cannot satisfy the new compile-unit
   outcome contract and will leave scopes incomplete/unavailable. Rebuild, verification, binding
   refresh and native acceptance remain required before live use, not performed here.
@@ -6146,7 +6155,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5258 — Classify unmapped Clang compile rows before execution
 
-- **State:** open
+- **State:** done (2026-11-20, 8d6cd37c0a811060443a52d0d3c2373588596fe0)
 - **Area:** scanners
 - **Why:** Compile-unit identity construction raises on a row missing from accepted file
   mappings before the per-engine handling. The error path is confirmed; reachability from
@@ -6156,6 +6165,13 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Done when:** Real producer/reader fixtures distinguish invalid admission from permitted
   partial materialization. Invalid data fails closed; if partial input is valid, retain independent
   valid TU results and name the omitted-unit gap rather than aborting unrelated work.
+  Existing fail-closed behavior verified, not relaxed: the actual project preparation and
+  compile-database normalizer require exactly one mapped source per command. Missing mapping
+  produces `INVALID_COMPILE_DATABASE`, excluded by accepted scope loading; later source loss
+  fails hash/custody verification before execution. A corrupted scope still fails the caller guard.
+  Three admission regressions passed before the fidelity changes and within main's 114-case
+  selection. They use real producer/normalizer/scope functions and serialized catalog artifacts
+  with accepted-handoff I/O replaced, not a full JobRunner or live admission run.
 - **Refs:** T-5230; `src/appsec_review/jobs/cpp_index_scopes.py`,
   `src/appsec_review/jobs/job_clang_static_analysis/job.py`; user feedback, 2026-11-20.
 

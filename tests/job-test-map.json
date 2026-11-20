@@ -134,10 +134,13 @@
       "unit": [
         "tests/unit/job_clang_static_analysis/test_diagnostic_fidelity.py",
         "tests/unit/job_clang_static_analysis/test_outcomes_and_reuse.py",
+        "tests/unit/job_clang_static_analysis/test_plist_fidelity.py",
+        "tests/unit/job_clang_static_analysis/test_source_admission.py",
         "tests/unit/job_clang_static_analysis/test_clang_static_analysis.py",
         "tests/unit/job_clang_static_analysis/test_clang_static_tool.py",
         "tests/unit/job_clang_static_analysis/test_contract.py",
-        "tests/unit/job_clang_static_analysis/test_seeded_clang_static.py"
+        "tests/unit/job_clang_static_analysis/test_seeded_clang_static.py",
+        "tests/unit/job_code_graph_index/test_producers.py::test_diagnostic_rows_empty_filtering_sorting_and_truncation"
       ],
       "integration": [],
       "acceptance": [],
