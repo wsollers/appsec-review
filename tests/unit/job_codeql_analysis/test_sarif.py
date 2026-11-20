@@ -21,6 +21,69 @@ FILES = (
 )
 
 
+def _normalize_location(physical, files, root):
+    return normalize_sarif(
+        {"version": "2.1.0", "runs": [{"results": [{
+            "ruleId": "fixture/location", "locations": [{"physicalLocation": physical}],
+            "codeFlows": [{"threadFlows": [{"locations": [{"location": {"physicalLocation": physical}}]}]}],
+        }]}]},
+        files=files, root=root, query_identity="query", result_limit=10,
+    )
+
+
+@pytest.mark.parametrize(("uri", "path", "alias", "root"), [
+    ("workspace/a.cpp", "workspace/a.cpp", "a.cpp", "."),
+    ("scratch/workspace/a.cpp", "scratch/workspace/a.cpp", "a.cpp", "."),
+    ("./workspace/.hidden/a.cpp", "workspace/.hidden/a.cpp", ".hidden/a.cpp", "."),
+    ("././scratch/workspace/.github/ci.yml", "scratch/workspace/.github/ci.yml", ".github/ci.yml", "."),
+    ("workspace/./a.cpp", "workspace/a.cpp", "a.cpp", "."),
+    ("scratch/workspace/./.hidden/a.cpp", "scratch/workspace/.hidden/a.cpp", ".hidden/a.cpp", "."),
+    ("workspace/a.cpp", "project/workspace/a.cpp", "project/a.cpp", "project"),
+    ("./scratch/workspace/.hidden/a.cpp", "project/scratch/workspace/.hidden/a.cpp",
+     "project/.hidden/a.cpp", "project"),
+], ids=["workspace", "scratch", "dot-hidden", "dots-github", "inner-dot", "inner-dot-hidden",
+        "rooted-workspace", "rooted-scratch"])
+def test_exact_relative_workspace_identity_precedes_virtual_alias(uri, path, alias, root):
+    files = ({"path": path, "sha256": "a" * 64}, {"path": alias, "sha256": "b" * 64})
+    physical = {"artifactLocation": {"uri": uri}, "region": {"startLine": 2}}
+    mapped = map_location(physical, files=files, root=root)
+    observations, gaps = _normalize_location(physical, files, root)
+    assert (mapped.path, mapped.file_sha256, mapped.confidence, mapped.ambiguous) == (
+        path, "a" * 64, 1.0, False)
+    assert mapped.candidates == (path,)
+    assert gaps == []
+    for location in (observations[0]["location"], observations[0]["flows"][0]["location"]):
+        assert location["path"] == path and location["file_sha256"] == "a" * 64
+
+
+@pytest.mark.parametrize(("uri", "paths", "expected"), [
+    ("workspace/a.cpp", ("a.cpp",), "a.cpp"),
+    ("./scratch/workspace/.hidden/a.cpp", (".hidden/a.cpp",), ".hidden/a.cpp"),
+    ("/workspace/a.cpp", ("workspace/a.cpp", "a.cpp"), "a.cpp"),
+    ("file:///scratch/workspace/.hidden/a.cpp",
+     ("scratch/workspace/.hidden/a.cpp", ".hidden/a.cpp"), ".hidden/a.cpp"),
+    ("/workspace/./workspace/a.cpp", ("workspace/a.cpp", "a.cpp"), "workspace/a.cpp"),
+    ("scratch/workspace/a.cpp", ("one/a.cpp", "two/a.cpp"), None),
+], ids=["relative-alias", "relative-hidden-alias", "absolute-workspace", "absolute-file",
+        "absolute-literal-child", "ambiguous-alias"])
+def test_workspace_alias_compatibility_and_ambiguity(uri, paths, expected):
+    files = tuple({"path": path, "sha256": str(index + 1) * 64} for index, path in enumerate(paths))
+    physical = {"artifactLocation": {"uri": uri}, "region": {"startLine": 2}}
+    mapped = map_location(physical, files=files, root=".")
+    observations, gaps = _normalize_location(physical, files, ".")
+    if expected is None:
+        assert mapped.path is None and mapped.file_sha256 is None and mapped.ambiguous
+        assert mapped.candidates == paths and mapped.confidence == 0.5
+        assert any("no uniquely mapped source location" in gap for gap in gaps)
+        assert any("unmapped or ambiguous" in gap for gap in gaps)
+    else:
+        digest = next(item["sha256"] for item in files if item["path"] == expected)
+        assert (mapped.path, mapped.file_sha256, mapped.ambiguous) == (expected, digest, False)
+        assert not gaps
+        for location in (observations[0]["location"], observations[0]["flows"][0]["location"]):
+            assert location["path"] == expected and location["file_sha256"] == digest
+
+
 @pytest.mark.parametrize("prefix", ["", "./", "././", "/workspace/", "file:///scratch/workspace/"])
 @pytest.mark.parametrize("path", [".github/workflows/ci.yml", ".hidden/tool.py", "..hidden/tool.py"])
 def test_leading_dot_locations_keep_exact_source_identity(prefix: str, path: str) -> None:

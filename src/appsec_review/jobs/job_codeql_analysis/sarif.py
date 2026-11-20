@@ -58,6 +58,15 @@ def map_location(physical: Mapping[str, Any], *, files: Sequence[Mapping[str, An
     raw = unquote(parsed.path if parsed.scheme == "file" else uri).replace("\\", "/")
     if ".." in PurePosixPath(raw).parts or raw.startswith("//"):
         return MappedLocation(None, None, *region, 0.0, False, (), producer)
+    accepted = {str(item["path"]): str(item["sha256"]) for item in files}
+    if not PurePosixPath(raw).is_absolute():
+        # Literal relative source names outrank compatibility workspace aliases.
+        relative = PurePosixPath(raw).as_posix()
+        rooted = (f"{root.rstrip('/')}/{relative}"
+                  if root != "." and not relative.startswith(root.rstrip("/") + "/") else relative)
+        for candidate in (relative, rooted):
+            if candidate in accepted:
+                return MappedLocation(candidate, accepted[candidate], *region, 1.0, False, (candidate,), producer)
     while raw.startswith("./"):
         raw = raw[2:]
     for prefix in ("/scratch/workspace/", "scratch/workspace/", "/workspace/", "workspace/"):
@@ -68,7 +77,6 @@ def map_location(physical: Mapping[str, Any], *, files: Sequence[Mapping[str, An
         raw = raw[2:]
     if PurePosixPath(raw).is_absolute():
         return MappedLocation(None, None, *region, 0.0, False, (), producer)
-    accepted = {str(item["path"]): str(item["sha256"]) for item in files}
     candidates: list[str] = []
     confidence = 0.0
     if raw in accepted:

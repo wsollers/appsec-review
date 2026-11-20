@@ -570,9 +570,13 @@ and code-flow steps are normalized into immutable `observations` shards. Each st
 SARIF `code_flow` index (normalizer `appsec-review/codeql-sarif-normalizer/3`), so alternative paths
 for one result stay separable; `job_review_prioritization` keeps the shortest flow per source and
 sink as a verified semantic path. Exact path matches are
-distinguished from suffix matches; ambiguity and unmapped locations remain gaps. Exact `./` and
-known workspace prefixes are removed without stripping meaningful filename dots, preserving
-`.github` and hidden-source hashes. Parent traversal, foreign authorities and unrecognized
+distinguished from suffix matches; ambiguity and unmapped locations remain gaps. Exact admitted
+relative paths, including scope-root-relative paths, take precedence over compatibility aliases:
+literal `workspace/` and `scratch/workspace/` source directories cannot be stripped to bind a
+different file. Benign `./` segments do not change that identity. Known absolute workspace
+prefixes still map into the source scope; relative workspace-prefix aliases are used only when
+no exact relative identity matches. Meaningful filename dots are preserved, including `.github`
+and hidden-source hashes. Parent traversal, foreign authorities and unrecognized
 absolute paths do not bind to accepted source files. The publisher's
 manifest lists this job's own observation shards and references the current accepted manifest and
 the accepted sibling manifests as verified `upstream_manifests`; it does not copy their shards into
