@@ -131,6 +131,8 @@
     },
     "job_clang_static_analysis": {
       "unit": [
+        "tests/unit/job_clang_static_analysis/test_diagnostic_fidelity.py",
+        "tests/unit/job_clang_static_analysis/test_outcomes_and_reuse.py",
         "tests/unit/job_clang_static_analysis/test_clang_static_analysis.py",
         "tests/unit/job_clang_static_analysis/test_clang_static_tool.py",
         "tests/unit/job_clang_static_analysis/test_contract.py",

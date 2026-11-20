@@ -348,8 +348,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5114 | [Reject incomplete CI scanner output and bound reads before execution](#t-5114-reject-incomplete-ci-scanner-output-and-bound-reads-before-execution) | scanners | done (2026-11-19, fb969549b24fb7d733622a9031d5038a1cd874be) |
 | T-5115 | [Honor CI provider tool framework and identity settings](#t-5115-honor-ci-provider-tool-framework-and-identity-settings) | scanners | done (2026-11-19, fb969549b24fb7d733622a9031d5038a1cd874be) |
 | T-5116 | [Preserve exact CI locations and real job hierarchy](#t-5116-preserve-exact-ci-locations-and-real-job-hierarchy) | scanners | done (2026-11-20, b41d62d0e1be972789eea1bd6500cba1bd095dfc) |
-| T-5117 | [Replay static analysis in the accepted compile working directory](#t-5117-replay-static-analysis-in-the-accepted-compile-working-directory) | graph | open |
-| T-5118 | [Preserve bounded resolving Clang diagnostic traces and valid spans](#t-5118-preserve-bounded-resolving-clang-diagnostic-traces-and-valid-spans) | graph | open |
+| T-5117 | [Replay static analysis in the accepted compile working directory](#t-5117-replay-static-analysis-in-the-accepted-compile-working-directory) | graph | done (2026-11-20, 39c905cad22774c00a7dfa35226e52697d3ab9be) |
+| T-5118 | [Preserve bounded resolving Clang diagnostic traces and valid spans](#t-5118-preserve-bounded-resolving-clang-diagnostic-traces-and-valid-spans) | graph | done (2026-11-20, 39c905cad22774c00a7dfa35226e52697d3ab9be) |
 | T-5119 | [Distinguish failed unsupported and missing Clang scopes](#t-5119-distinguish-failed-unsupported-and-missing-clang-scopes) | graph | open |
 | T-5120 | [Retain missing-build and per-scope CodeQL coverage decisions](#t-5120-retain-missing-build-and-per-scope-codeql-coverage-decisions) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
 | T-5121 | [Preserve meaningful leading dots in CodeQL source paths](#t-5121-preserve-meaningful-leading-dots-in-codeql-source-paths) | codeql | done (2026-11-20, 583b25283ed5485b0230a87892504ca23d57d359) |
@@ -461,7 +461,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5227 | [Count canonical report gaps once without erasing distinct scopes](#t-5227-count-canonical-report-gaps-once-without-erasing-distinct-scopes) | review | open |
 | T-5228 | [Read build environment inputs through the public admitted boundary](#t-5228-read-build-environment-inputs-through-the-public-admitted-boundary) | pipeline | done (2026-11-20, ca5ad85f953d2ceccbb12db11811ecb772cc6517) |
 | T-5229 | [Reconcile audit-identified as-built prose and test navigation](#t-5229-reconcile-audit-identified-as-built-prose-and-test-navigation) | pipeline | open |
-| T-5230 | [Resolve clang static analysis conditional audit boundaries](#t-5230-resolve-clang-static-analysis-conditional-audit-boundaries) | pipeline | open |
+| T-5230 | [Resolve clang static analysis conditional audit boundaries](#t-5230-resolve-clang-static-analysis-conditional-audit-boundaries) | pipeline | done (2026-11-20, 39c905cad22774c00a7dfa35226e52697d3ab9be) |
 | T-5231 | [Resolve code graph index conditional audit boundaries](#t-5231-resolve-code-graph-index-conditional-audit-boundaries) | pipeline | open |
 | T-5232 | [Resolve cpp compiled analysis conditional audit boundaries](#t-5232-resolve-cpp-compiled-analysis-conditional-audit-boundaries) | pipeline | blocked |
 | T-5233 | [Resolve cpp symbol index conditional audit boundaries](#t-5233-resolve-cpp-symbol-index-conditional-audit-boundaries) | pipeline | open |
@@ -4334,20 +4334,32 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5117 — Replay static analysis in the accepted compile working directory
 
-- **State:** open
+- **State:** done (2026-11-20, 39c905cad22774c00a7dfa35226e52697d3ab9be)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CSA-F01. Static Analyzer ignores accepted compile working directory.
-- **Scope:** `src/appsec_review/jobs/job_clang_static_analysis/job.py`
+- **Scope:** `containers/tools/clang-static-analysis/clang-static.py` and
+  `src/appsec_review/jobs/job_clang_static_analysis/job.py`.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 96 cases passed/6.43 s, two workers, seed 9117, no skips or slow tests.
+  The wrapper uses the accepted compile cwd and resolves relative diagnostic paths in it.
+  Each clang-tidy context uses a one-row compilation database.
+  The wrapper is baked into the tool image: operator rebuild/verification/binding refresh
+  and authorized native acceptance remain required and were not run. Mounted application
+  changes separately need normal signed-source reload, not an application-image rebuild.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`.
 
 ### T-5118 — Preserve bounded resolving Clang diagnostic traces and valid spans
 
-- **State:** open
+- **State:** done (2026-11-20, 39c905cad22774c00a7dfa35226e52697d3ab9be)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CSA-F02, CSA-F03, CSA-F08, CSA-F09. Diagnostic traces lose resolving information and silently truncate; Out-of-range diagnostic coordinates become false exact source locations.
 - **Scope:** `containers/tools/clang-static-analysis/clang-static.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Shares T-5117's 96-case selection. Cross-file notes/ranges retain resolving identities and
+  counted omissions through observations and graph projection. Physical line/byte/UTF-8
+  boundaries are checked without clamping malformed spans into exact locations.
+  Incremental capture, plist reads and diagnostic accumulation obey byte/count bounds;
+  malformed optional spans produce named gaps. Native-engine acceptance remains unrun.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`.
 
 ### T-5119 — Distinguish failed unsupported and missing Clang scopes
@@ -4357,6 +4369,11 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** Archived audit/feedback cases: CSA-F06, CSA-F07. Every translation unit can fail while coverage remains partial; Unsupported-only scopes vanish from the summary and look unavailable in coverage.
 - **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Clang CSA-F06/F07 completed at `39c905cad22774c00a7dfa35226e52697d3ab9be`:
+  no successful selected-TU outcomes means unavailable; unsupported-only scopes retain
+  applicability/counts without false unavailable-input or complete-analysis coverage.
+  Main's 96-case selection passed/6.43 s. Sibling clangd record CSI-K02 is not established
+  as fixed by this Clang-only change and remains to be verified/repaired; this entry stays open.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`.
 
 ### T-5120 — Retain missing-build and per-scope CodeQL coverage decisions
@@ -5504,6 +5521,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** Archived audit/feedback cases: CSA-F04, CSI-K01, CPG-F06, SVF-F03. Scope cache reuses observations whose native evidence is missing; raw evidence omitted from scope-checkpoint verification.
 - **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`; paired callers/tests identified by those cases.
 - **Done when:** Delete or alter each caller's distinct raw artifact and prove real checkpoint rejection; a helper-only test is insufficient. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Clang CSA-F04 completed at `39c905cad22774c00a7dfa35226e52697d3ab9be`, verified in
+  main's 96-case selection. Raw wrapper documents/streams and detached native references bind
+  the checkpoint; missing or changed evidence raises `CheckpointIntegrityError` rather than
+  silently reusing or regenerating it. CPG, clangd and SVF callers remain open.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`, `audit-results/job-audit-job_cpg_analysis.md`, `audit-results/job-audit-job_cpp_symbol_index.md`, `audit-results/job-audit-job_svf_alias_analysis.md`; follow-up to closed T-159 (not reopened).
 
 ### T-5215 — Bind seed omission and provenance accounting into native checkpoint reuse
@@ -5513,6 +5534,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** Archived audit/feedback cases: CSA-F05, CPG-F07. Unchanged selected seed keys hide changed omitted-seed counts on resume; Same selected seed keys reuse stale omission/provenance metadata.
 - **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`; paired callers/tests identified by those cases.
 - **Done when:** Unchanged selected seeds with changed omitted/provenance inputs cannot reuse stale accounting; test each caller separately. Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Clang CSA-F05 completed at `39c905cad22774c00a7dfa35226e52697d3ab9be`, verified in
+  main's 96-case selection. Seed provenance and total/dropped/shared omitted populations
+  participate in identity; identical reordered identities reuse while changed accounting
+  refreshes the ledger without overwriting prior evidence. The CPG caller remains open.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`, `audit-results/job-audit-job_cpg_analysis.md`.
 
 ### T-5216 — Bind dossier Markdown and HTML through publication and the gate
@@ -5678,19 +5703,27 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   History L130's proposed proportional default is qualified as opt-in: shipped configuration
   leaves `proportional_ratio` unset. Its proportional-test selector is already present, also
   resolving the scoped history L131 navigation record without closing broader T-113 work.
+  Clang L193 now names current unit selectors and accurately describes its wrapper/outcome,
+  trace, reuse and configuration behavior. Its required tool-image rollout remains unperformed.
 - **Refs:** `audit-results/job-audit-cumulative.md` and the documentation/conditional sections in all 47 linked per-job reports, including the final-gate pinned-input/pointer-stability distinction; follow-up to closed T-168, T-169, T-170, T-171, T-172, T-173, T-176 (not reopened).
 
 ### T-5230 — Resolve clang static analysis conditional audit boundaries
 
-- **State:** open
+- **State:** done (2026-11-20, 39c905cad22774c00a7dfa35226e52697d3ab9be)
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: L184, L185, L186. Decide whether missing per-TU outcome records remain supported legacy output; Align accepted Clang diagnostic settings with wrapper limits.
 - **Scope:** `src/appsec_review/jobs/job_clang_static_analysis/job.py`.
   User decision, 2026-11-20: require per-source-file outcomes. Missing outcome evidence is
   incomplete even when the tool exits zero; affected seeds remain unresolved and no success
   checkpoint is accepted. Preserve unaffected evidence and existing failure/cancellation policy.
-  Outcome validation and the other diagnostic-setting/configuration cases remain to be verified.
 - **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+  Main's 96-case selection passed/6.43 s. Every expected command/cwd/accepted-source identity
+  must appear exactly once; duplicated same-file MODE=A outcomes cannot stand in for MODE=B.
+  Missing, duplicate, malformed or substituted outcomes leave affected seeds unresolved and
+  block checkpoints while independent positive evidence survives. Adapter /7 invalidates older
+  checkpoints. Accepted diagnostic counts now match the wrapper maximum of 100000; explicit
+  non-inheriting clang-tidy config and `-*` preserve centrally selected checks. These are offline
+  wrapper/reader/argv checks; pinned native-engine acceptance and rollout remain unrun.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`.
 
 ### T-5231 — Resolve code graph index conditional audit boundaries
