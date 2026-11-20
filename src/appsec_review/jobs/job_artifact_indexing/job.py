@@ -52,6 +52,11 @@ MAX_ARTIFACTS_PER_SHARD = 5_000
 MAX_ROWS_PER_SHARD = 100_000  # Relations plus entities.
 _SHARD_ID = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 _LINKER_KINDS = frozenset({"linker", "linker-driver", "archiver", "compiler-driver-link"})
+# The product kinds checked by captured_enforcement; generated sources/packages are not native products.
+_NATIVE_PRODUCT_ROLES = {
+    "executable": "executable", "shared-library": "runtime_shared",
+    "static-library": "static_archive", "object": "native_object",
+}
 _RECEIPT_SCHEMAS = {
     "appsec-review/language-build-receipt/1",
     "appsec-review/wasm-build-receipt/1",
@@ -461,6 +466,8 @@ def _validate_receipts(run_root: Path, source_fingerprint: str,
             continue
         if artifacts and receipt.get("rejected_artifacts"):
             raise ArtifactIndexIntegrityError("build receipt publishes enforcement-rejected artifacts")
+        native_proof = None
+        native_bindings: dict[tuple[str, str], list[Mapping[str, Any]]] | None = None
         if artifacts and status != "SUCCEEDED" and receipt.get("family", receipt.get("source_family")) == "native":
             from jsonschema.exceptions import ValidationError
             from appsec_review.jobs.job_project_build.enforcement import validate_enforcement
@@ -472,6 +479,7 @@ def _validate_receipts(run_root: Path, source_fingerprint: str,
                 validate_enforcement(proofs[0], dispatch=receipt)
             except (ValidationError, KeyError, TypeError, ValueError) as exc:
                 raise ArtifactIndexIntegrityError("native build artifact enforcement identity is invalid") from exc
+            native_proof = proofs[0]
         workspace = normalize_relative_path(str(receipt.get("workspace", "")))
         manifest_files = _load_workspace_manifest(run_root, receipt)
         package_integrity: dict[str, Mapping[str, Any]] = {}
@@ -516,7 +524,7 @@ def _validate_receipts(run_root: Path, source_fingerprint: str,
             if not isinstance(raw_artifact, Mapping):
                 raise ArtifactIndexIntegrityError("produced artifact identity is invalid")
             artifact = dict(raw_artifact)
-            workspace_path, digest, _ = _artifact_fields(artifact)
+            workspace_path, digest, artifact_kind = _artifact_fields(artifact)
             if str(receipt.get("family", receipt.get("source_family", ""))) == "node":
                 if artifact.get("build_unit_id") != unit_id:
                     raise ArtifactIndexIntegrityError("Node artifact build-unit identity changed")
@@ -536,6 +544,20 @@ def _validate_receipts(run_root: Path, source_fingerprint: str,
                     raise ArtifactIndexIntegrityError("retained produced artifact integrity is invalid") from exc
             elif path != expected:
                 raise ArtifactIndexIntegrityError("produced artifact is not bound to its workspace manifest")
+            native_role = _NATIVE_PRODUCT_ROLES.get(artifact_kind)
+            if native_proof is not None and native_role is not None:
+                if native_bindings is None:
+                    rows = native_proof["closure_manifest"].get("native_artifacts", [])
+                    if not isinstance(rows, list) or any(
+                            not isinstance(row, Mapping) or not isinstance(row.get("path"), str)
+                            or not isinstance(row.get("sha256"), str) for row in rows):
+                        raise ArtifactIndexIntegrityError("native artifact closure inventory is invalid")
+                    native_bindings = defaultdict(list)
+                    for row in rows:
+                        native_bindings[(row["path"], row["sha256"])].append(row)
+                bindings = native_bindings.get((artifact["path"], digest), ())
+                if not bindings or any(row.get("role") != native_role or "rejection" in row for row in bindings):
+                    raise ArtifactIndexIntegrityError("native artifact is not admitted by its target closure")
             if artifact.get("kind") == "package" and workspace_path in package_integrity:
                 artifact["package_integrity"] = dict(package_integrity[workspace_path])
             identity = canonical_artifact_identity(source_fingerprint, unit_id, artifact)

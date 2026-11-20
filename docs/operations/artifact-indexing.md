@@ -22,6 +22,11 @@ identity, paths, hashes and sizes still verify; native partial receipts also nee
 enforcement. Failed/not-run or inconsistent receipts cannot publish artifacts, and
 `rejected_artifacts` never enter the catalog. An enforcement-rejected receipt with no admitted
 artifacts needs no rolled-back workspace and contributes only its existing gaps.
+For partial native receipts, each executable, object, static library and shared library must
+also match the closure's `native_artifacts` inventory by exact retained path, hash and native
+role, without a rejection (including conflicting duplicate records). A valid proof hash alone
+does not establish product coverage. Generated sources and other non-native artifacts do not
+require native inventory entries.
 
 Bounded NUL-containing target files are retained separately from the text inventory as
 `appsec-review/target-artifact-intake/1` records. They share the inventory's file/byte bounds,
