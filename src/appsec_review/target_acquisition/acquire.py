@@ -293,7 +293,8 @@ def _review_export(request: TargetRequest, settings: TargetAcquisitionSettings, 
             raise AcquisitionError("review export bundle is not valid JSON", status="REFUSED") from exc
         responses = review_exports.read_bundle(document, source.provider, source.change)
     metadata = review_exports.normalize(source.provider, responses, change=source.change, revision=source.revision,
-                                        patchset=source.patchset, iteration=source.iteration)
+                                        patchset=source.patchset, iteration=source.iteration,
+                                        max_commits=settings.max_review_commits)
     gaps.extend(metadata.gaps)
     bundle = review_exports.bundle_document(source.provider, source.change, responses)
     artifacts.append(_write(records / "review-export-bundle.json", _canonical(bundle)))
@@ -312,9 +313,10 @@ def _review_export(request: TargetRequest, settings: TargetAcquisitionSettings, 
         patch, changed, diff_gaps = git_source.change_diff(git, staging, metadata.base, source.revision,
                                                            settings.max_diff_bytes)
         gaps.extend(diff_gaps)
-        artifacts.append(_write(records / "changed-paths.json", _canonical(
-            {"schema": "appsec-review/review-changed-paths/1", "base": metadata.base, "head": source.revision,
-             "changes": changed})))
+        if changed is not None:
+            artifacts.append(_write(records / "changed-paths.json", _canonical(
+                {"schema": "appsec-review/review-changed-paths/1", "base": metadata.base, "head": source.revision,
+                 "changes": changed})))
         if patch is not None:
             artifacts.append(_write(records / "change.diff", patch))
     identity = {"kind": "review_export", "provider": source.provider, "change": source.change,

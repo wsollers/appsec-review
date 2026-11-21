@@ -205,14 +205,18 @@ def lfs_pointer_gaps(root: Path, gaps: list[dict[str, str]]) -> None:
                     _gap(gaps, "git_lfs_object_not_fetched", path.relative_to(root).as_posix())
 
 
-def change_diff(git: Git, repo: Path, base: str, head: str, max_bytes: int) -> tuple[bytes | None, list[dict[str, Any]], list[dict[str, str]]]:
+def change_diff(git: Git, repo: Path, base: str, head: str, max_bytes: int) -> tuple[bytes | None, list[dict[str, Any]] | None, list[dict[str, str]]]:
     """The base-to-head patch and changed paths for a review revision, or named gaps."""
     gaps: list[dict[str, str]] = []
     if not git.has_commit(repo, base):
         _gap(gaps, "change_base_unavailable", ".", f"base {base} was not fetched")
-        return None, [], gaps
-    names = git("diff", "--no-color", "--no-ext-diff", "--no-textconv", "--name-status", "-z", "-M",
-                base, head, "--", cwd=repo).stdout.split(b"\0")
+        return None, None, gaps
+    listing = git("diff", "--no-color", "--no-ext-diff", "--no-textconv", "--name-status", "-z", "-M",
+                  base, head, "--", cwd=repo, check=False)
+    if listing.returncode != 0:
+        _gap(gaps, "change_diff_failed", ".", "changed paths: " + scrub(tail(listing.stderr, 400), ()))
+        return None, None, gaps
+    names = listing.stdout.split(b"\0")
     changed: list[dict[str, Any]] = []
     index = 0
     while index < len(names) and names[index]:

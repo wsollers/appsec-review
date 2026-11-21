@@ -171,12 +171,21 @@ def _commit_items(responses: Mapping[str, Any]) -> tuple[list[Any], bool]:
 
 
 def normalize(provider: str, responses: Mapping[str, Any], *, change: int, revision: str,
-              patchset: int | None, iteration: int | None) -> ReviewMetadata:
+              patchset: int | None, iteration: int | None, max_commits: int) -> ReviewMetadata:
+    """Bound normalized records for API and bundle inputs without changing the source responses."""
+    if type(max_commits) is not int or max_commits < 1:
+        raise ValueError("max_commits must be a positive integer")
     if provider == "gitlab":
-        return _gitlab(responses, change, revision)
+        return _gitlab(responses, change, revision, max_commits)
     if provider == "gerrit":
-        return _gerrit(responses, change, revision, patchset)
-    return _azure(responses, change, revision, iteration)
+        return _gerrit(responses, change, revision, patchset, max_commits)
+    return _azure(responses, change, revision, iteration, max_commits)
+
+
+def _bounded_commits(commit_ids: list[str | None], revision: str, limit: int) -> tuple[list[str], bool]:
+    # Reserve the pin only when it was actually supplied; absence remains a coverage gap.
+    ordered = sorted({item for item in commit_ids if item}, key=lambda item: (item != revision, item))
+    return ordered[:limit], len(ordered) > limit
 
 
 _RECORD_KEYS = ("pull_request", "created_at", "merged_at", "head_sha", "head_committed_at", "approvals",
@@ -201,7 +210,7 @@ def _records(commits: list[str], raw: Mapping[str, Any]) -> dict[str, dict[str, 
     return {commit: json.loads(json.dumps(record)) for commit in sorted(set(commits))}
 
 
-def _gitlab(responses: Mapping[str, Any], change: int, revision: str) -> ReviewMetadata:
+def _gitlab(responses: Mapping[str, Any], change: int, revision: str, max_commits: int) -> ReviewMetadata:
     mr = responses.get("merge_request")
     if not isinstance(mr, Mapping) or mr.get("iid") != change:
         raise AcquisitionError("GitLab merge request does not match the configured change", status="REFUSED")
@@ -223,17 +232,19 @@ def _gitlab(responses: Mapping[str, Any], change: int, revision: str) -> ReviewM
            "merged_at": mr.get("merged_at") if state == "merged" else None, "head_sha": revision,
            "head_committed_at": head_date, "approvals": approvals,
            "self_merged": (merged_by == author) if state == "merged" and merged_by is not None else None}
-    gaps = _common_gaps(raw, approvals, truncated, commit_ids)
+    selected, omitted = _bounded_commits(commit_ids, revision, max_commits)
+    gaps = _common_gaps(raw, approvals, truncated or omitted, commit_ids)
     if approvals:
         gaps.append({"path": ".", "reason": "review_approval_times_unavailable",
                      "detail": "GitLab approvals carry no time or commit; stale approval cannot be assessed"})
     diff_refs = mr.get("diff_refs") if isinstance(mr.get("diff_refs"), Mapping) else {}
     return ReviewMetadata("gitlab", change, revision, _object_id(diff_refs.get("base_sha")),
                           f"refs/merge-requests/{change}/head", state,
-                          _records([item for item in commit_ids if item], raw), tuple(gaps))
+                          _records(selected, raw), tuple(gaps))
 
 
-def _gerrit(responses: Mapping[str, Any], change: int, revision: str, patchset: int | None) -> ReviewMetadata:
+def _gerrit(responses: Mapping[str, Any], change: int, revision: str, patchset: int | None,
+            max_commits: int) -> ReviewMetadata:
     doc = responses.get("change")
     if not isinstance(doc, Mapping) or doc.get("_number") != change:
         raise AcquisitionError("Gerrit change does not match the configured change", status="REFUSED")
@@ -256,18 +267,38 @@ def _gerrit(responses: Mapping[str, Any], change: int, revision: str, patchset: 
                      if _identity(item, "value") == top and _identity(item, "_account_id") not in (None, owner)]
     status = str(doc.get("status", "UNKNOWN"))
     submitter = _identity(doc.get("submitter"), "_account_id")
-    raw = {"pull_request": change, "created_at": _gerrit_time(doc.get("created")),
-           "merged_at": _gerrit_time(doc.get("submitted")) if status == "MERGED" else None, "head_sha": revision,
-           "head_committed_at": _gerrit_time(_identity(commit.get("committer"), "date")), "approvals": approvals,
-           "self_merged": (submitter == owner) if status == "MERGED" and submitter is not None else None}
     commit_ids = [_object_id(key) for key in revisions]
-    gaps = _common_gaps(raw, approvals, False, commit_ids)
+    selected, truncated = _bounded_commits(commit_ids, revision, max_commits)
+    current = _object_id(doc.get("current_revision"))
+    records: dict[str, dict[str, Any]] = {}
+    for item in selected:
+        item_commit = _identity(revisions[item], "commit")
+        is_current = item == current
+        raw = {"pull_request": change, "created_at": _gerrit_time(doc.get("created")),
+               "merged_at": _gerrit_time(doc.get("submitted")) if is_current and status == "MERGED" else None,
+               "head_sha": item,
+               "head_committed_at": _gerrit_time(_identity(_identity(item_commit, "committer"), "date")),
+               "approvals": approvals if is_current else None,
+               "self_merged": (submitter == owner)
+               if is_current and status == "MERGED" and submitter is not None else None}
+        records.update(_records([item], raw))
+    pinned_record = records[revision]
+    gaps = _common_gaps(pinned_record, pinned_record["approvals"], truncated, commit_ids,
+                        merge_state_known=revision == current)
+    if current is None:
+        gaps.append({"path": ".", "reason": "review_current_revision_unavailable",
+                     "detail": "Gerrit current_revision is missing or invalid; revision review state is unknown"})
+    elif any(item != current for item in selected):
+        gaps.append({"path": ".", "reason": "review_revision_state_unavailable",
+                     "detail": f"Gerrit labels and change status describe only current revision {current}; "
+                               "historical patchset review state is unknown"})
     shard = f"{change % 100:02d}"
     return ReviewMetadata("gerrit", change, revision, base, f"refs/changes/{shard}/{change}/{patchset}",
-                          status.lower(), _records([item for item in commit_ids if item], raw), tuple(gaps))
+                          status.lower() if revision == current else "unknown", records, tuple(gaps))
 
 
-def _azure(responses: Mapping[str, Any], change: int, revision: str, iteration: int | None) -> ReviewMetadata:
+def _azure(responses: Mapping[str, Any], change: int, revision: str, iteration: int | None,
+           max_commits: int) -> ReviewMetadata:
     pr = responses.get("pull_request")
     if not isinstance(pr, Mapping) or pr.get("pullRequestId") != change:
         raise AcquisitionError("Azure DevOps pull request does not match the configured change", status="REFUSED")
@@ -296,16 +327,17 @@ def _azure(responses: Mapping[str, Any], change: int, revision: str, iteration: 
            "merged_at": pr.get("closedDate") if status == "completed" else None, "head_sha": revision,
            "head_committed_at": head_date, "approvals": approvals,
            "self_merged": (closed_by == author) if status == "completed" and closed_by is not None else None}
-    gaps = _common_gaps(raw, approvals, truncated, commit_ids)
+    selected, omitted = _bounded_commits(commit_ids, revision, max_commits)
+    gaps = _common_gaps(raw, approvals, truncated or omitted, commit_ids)
     if approvals:
         gaps.append({"path": ".", "reason": "review_approval_times_unavailable",
                      "detail": "Azure DevOps reviewer votes carry no time or commit; stale approval cannot be assessed"})
     return ReviewMetadata("azure_devops", change, revision, base, f"refs/pull/{change}/merge", status,
-                          _records([item for item in commit_ids if item], raw), tuple(gaps))
+                          _records(selected, raw), tuple(gaps))
 
 
 def _common_gaps(raw: Mapping[str, Any], approvals: list[Any] | None, truncated: bool,
-                 commit_ids: list[str | None]) -> list[dict[str, str]]:
+                 commit_ids: list[str | None], *, merge_state_known: bool = True) -> list[dict[str, str]]:
     gaps: list[dict[str, str]] = []
     if approvals is None:
         gaps.append({"path": ".", "reason": "review_approvals_unavailable"})
@@ -315,7 +347,7 @@ def _common_gaps(raw: Mapping[str, Any], approvals: list[Any] | None, truncated:
         gaps.append({"path": ".", "reason": "review_commit_ids_rejected"})
     if raw.get("head_sha") not in commit_ids:
         gaps.append({"path": ".", "reason": "review_head_not_in_commit_list"})
-    if raw.get("merged_at") is None:
+    if merge_state_known and raw.get("merged_at") is None:
         gaps.append({"path": ".", "reason": "review_not_merged",
                      "detail": "open or abandoned review; merge-time metrics are unavailable"})
     return gaps

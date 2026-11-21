@@ -209,11 +209,38 @@ Materialization goes through these checks:
   - No `P4CONFIG` or `P4ENVIRO` file, a temporary trust and ticket file, and no client.
   - Reads only: `info`, `describe`, `changes`, `fstat`, and `print`.
 - Review-API requests use https only. Redirects are refused. Responses are size-bounded
-  (`max_http_response_bytes`) and the commit list is capped (`max_review_commits`). The reported
-  head must equal the pinned revision, and for Gerrit the patch set must too; otherwise the request
-  is `REFUSED`.
+  (`max_http_response_bytes`). Normalized records from every provider, including Gerrit and
+  hash-pinned bundles, are capped by `max_review_commits`. Normalization retains the requested
+  revision when supplied, then selects additional commit ids deterministically; missing heads are
+  not invented. API pagination can already have omitted commits, which remains a coverage gap.
+  Original collected responses are preserved in the bundle, not rewritten to hide omissions.
+  The reported GitLab head, selected Azure DevOps iteration or selected Gerrit patchset must match
+  the configured revision; otherwise the request is `REFUSED`. A selected historical Gerrit
+  patchset need not equal the change's current revision.
 - Review titles, descriptions, comments, and names are never copied into review records. Only typed
   fields are kept: timestamps, identifiers, and approval facts.
+
+### Gerrit revision evidence
+
+Gerrit patchsets are alternative revisions, not commits all merged by the same change. Each exported
+record names its own head and commit timestamp. Change-level labels, submitter and merge timestamp
+apply only to a record matching the reported `current_revision`. Acquiring a supported older pin
+still materializes that exact revision and fetch ref; its review state is `unknown`, with unknown
+approvals and merge facts, not the current patchset's facts and not a claim that it was unapproved.
+Missing or invalid `current_revision` leaves those facts unknown for every retained record.
+Original provider data stays in the hash-bound bundle. No historical state is reconstructed.
+
+### Qualified diff limitations
+
+After independent head materialization, a nonzero changed-path diff exit yields `change_diff_failed`
+and retains the source as `PARTIAL`. Neither `changed-paths.json` nor `change.diff` is published in
+that case; unavailable base commits likewise produce no diff artifacts. If only the binary patch
+fails or exceeds its byte bound, the successful changed-path listing is retained but the patch is
+absent. An empty successful diff is distinct from these unavailable outputs.
+
+This does not catch or downgrade acquisition exceptions, integrity refusals, cancellation or
+`ReviewStopped`; existing process/admission and publication policy still applies. It does not
+establish that the base objects are healthy, or authorize execution of acquired content.
 
 ## Gaps
 
@@ -233,6 +260,8 @@ target is clean.
 | `perforce_symlink_skipped`, `perforce_revision_unavailable` | symlink type, or purged/archived revision |
 | `review_approvals_unavailable`, `review_approval_times_unavailable` | approvals, or their times, are not reported by the provider |
 | `review_commits_truncated`, `review_commit_ids_rejected`, `review_head_not_in_commit_list` | incomplete commit coverage |
+| `review_current_revision_unavailable` | Gerrit did not supply a valid current revision; current review facts cannot be assigned |
+| `review_revision_state_unavailable` | retained historical Gerrit patchsets have no revision-bound approval or merge facts |
 | `review_not_merged` | open or abandoned review; merge-time metrics are unavailable |
 | `change_base_unavailable`, `change_diff_failed`, `change_diff_too_large` | no reviewed diff |
 | `component_acquisition_failed` | a component was `REFUSED` or `FAILED`; the rest of the system is still reviewed |
@@ -240,6 +269,13 @@ target is clean.
 | `component_not_acquired` | a configured component was not selected (`--component`) and is absent |
 | `unconfigured_system_entry` | `targets/<system>` contains an entry that is not a configured component |
 | `target_changed_since_acquisition` | the tree a run reviewed differs from the acquired tree (added by intake or `--verify-only`) |
+
+Focused offline regressions in
+`tests/unit/job_target_acquisition/test_review_evidence.py` exercise these bounds, revision
+distinctions and diff failures through the real acquisition engine, component/system manifests,
+read-only reverification receipts and job control serializers. External Git/provider boundaries
+are faked with inert unit data; this is not real-provider, full runner-admission, integration,
+acceptance or live review validation.
 
 ## Use in a review
 

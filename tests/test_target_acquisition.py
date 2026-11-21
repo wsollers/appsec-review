@@ -526,7 +526,7 @@ def test_gitlab_review_export_feeds_change_context(workspace: Path, tmp_path: Pa
 
 
 def gerrit_change(base: str, head: str, patchset: int) -> dict[str, Any]:
-    return {"_number": 31, "status": "MERGED", "created": "2024-01-02 03:00:00.000000000",
+    return {"_number": 31, "current_revision": head, "status": "MERGED", "created": "2024-01-02 03:00:00.000000000",
             "submitted": "2024-01-02 04:00:00.000000000", "owner": {"_account_id": 100},
             "submitter": {"_account_id": 200},
             "labels": {"Code-Review": {"values": {"-2": "", "-1": "", " 0": "", "+1": "", "+2": ""},
