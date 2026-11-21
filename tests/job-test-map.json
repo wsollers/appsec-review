@@ -819,6 +819,8 @@
     },
     "job_target_acquisition": {
       "unit": [
+        "tests/unit/job_target_acquisition/test_review_evidence.py",
+        "tests/unit/job_target_acquisition/test_signal_termination.py",
         "tests/unit/job_target_acquisition/test_configuration.py",
         "tests/unit/job_target_acquisition/test_contract.py",
         "tests/unit/job_target_acquisition/test_handlers.py",
@@ -912,6 +914,8 @@
     },
     "job_threat_model_generation": {
       "unit": [
+        "tests/test_threat_model_interaction_fidelity.py",
+        "tests/test_threat_model_projection.py",
         "tests/unit/job_threat_model_generation/test_contract.py",
         "tests/unit/job_threat_model_generation/test_handlers.py",
         "tests/test_threat_model_assembly.py",

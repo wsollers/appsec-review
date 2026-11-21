@@ -63,7 +63,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_target_acquisition/test_target_acquisition.py` |
 | live | None declared |
-| unit | `tests/unit/job_target_acquisition/test_configuration.py`<br>`tests/unit/job_target_acquisition/test_contract.py`<br>`tests/unit/job_target_acquisition/test_handlers.py`<br>`tests/unit/job_target_acquisition/test_job_graph.py`<br>`tests/unit/runtime/test_wave1a_contracts.py` |
+| unit | `tests/unit/job_target_acquisition/test_review_evidence.py`<br>`tests/unit/job_target_acquisition/test_signal_termination.py`<br>`tests/unit/job_target_acquisition/test_configuration.py`<br>`tests/unit/job_target_acquisition/test_contract.py`<br>`tests/unit/job_target_acquisition/test_handlers.py`<br>`tests/unit/job_target_acquisition/test_job_graph.py`<br>`tests/unit/runtime/test_wave1a_contracts.py` |
 
 ### Dagster placement
 

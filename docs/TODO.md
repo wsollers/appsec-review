@@ -422,11 +422,11 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5188 | [Publish schema-consistent proportional hotspot counts](#t-5188-publish-schema-consistent-proportional-hotspot-counts) | history | done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170) |
 | T-5189 | [Preserve incomplete SVF operands before alias contradiction decisions](#t-5189-preserve-incomplete-svf-operands-before-alias-contradiction-decisions) | graph | open |
 | T-5190 | [Preserve SVF resource bounds nested validation and partial outcomes](#t-5190-preserve-svf-resource-bounds-nested-validation-and-partial-outcomes) | graph | open |
-| T-5191 | [Bound Gerrit and bundle reviews without assigning current facts to old patchsets](#t-5191-bound-gerrit-and-bundle-reviews-without-assigning-current-facts-to-old-patchsets) | history | open |
-| T-5192 | [Retain materializable acquisitions when changed-path diff fails](#t-5192-retain-materializable-acquisitions-when-changed-path-diff-fails) | pipeline | open |
+| T-5191 | [Bound Gerrit and bundle reviews without assigning current facts to old patchsets](#t-5191-bound-gerrit-and-bundle-reviews-without-assigning-current-facts-to-old-patchsets) | history | done (2026-11-20, 0f4bc0ab33cb591ea01ed4f3c6fb615538395fe7) |
+| T-5192 | [Retain materializable acquisitions when changed-path diff fails](#t-5192-retain-materializable-acquisitions-when-changed-path-diff-fails) | pipeline | done (2026-11-20, 0f4bc0ab33cb591ea01ed4f3c6fb615538395fe7) |
 | T-5193 | [Reject malformed nested planning values through bounded repair](#t-5193-reject-malformed-nested-planning-values-through-bounded-repair) | build | open |
 | T-5194 | [Carry real prebuilt artifact intake into plan selection](#t-5194-carry-real-prebuilt-artifact-intake-into-plan-selection) | build | open |
-| T-5195 | [Align dotnet planning guidance with the accepted recipe contract](#t-5195-align-dotnet-planning-guidance-with-the-accepted-recipe-contract) | build | open |
+| T-5195 | [Align dotnet planning guidance with the accepted recipe contract](#t-5195-align-dotnet-planning-guidance-with-the-accepted-recipe-contract) | build | in-progress |
 | T-5196 | [Preserve CRLF source offsets and declaration coverage gaps](#t-5196-preserve-crlf-source-offsets-and-declaration-coverage-gaps) | evidence | done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5) |
 | T-5197 | [Handle malformed npm and preserve Android descriptor facts](#t-5197-handle-malformed-npm-and-preserve-android-descriptor-facts) | topology | done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5) |
 | T-5198 | [Parse bounded OpenAPI JSON structurally with exact operations](#t-5198-parse-bounded-openapi-json-structurally-with-exact-operations) | evidence | done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5) |
@@ -440,8 +440,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5206 | [Validate actual cve-bin-tool range rows against declared counts](#t-5206-validate-actual-cve-bin-tool-range-rows-against-declared-counts) | data | open |
 | T-5207 | [Keep feed redirects within configured HTTPS source identity](#t-5207-keep-feed-redirects-within-configured-https-source-identity) | data | open |
 | T-5208 | [Return snapshot identities from the publisher transaction actually completed](#t-5208-return-snapshot-identities-from-the-publisher-transaction-actually-completed) | data | open |
-| T-5209 | [Index the real threat-model schema without dropping owners and threats](#t-5209-index-the-real-threat-model-schema-without-dropping-owners-and-threats) | evidence | open |
-| T-5210 | [Retain graph eligibility language restrictions and distinct threat sites](#t-5210-retain-graph-eligibility-language-restrictions-and-distinct-threat-sites) | evidence | open |
+| T-5209 | [Index the real threat-model schema without dropping owners and threats](#t-5209-index-the-real-threat-model-schema-without-dropping-owners-and-threats) | evidence | done (2026-11-20, 575260351792605f17111abd77afa3349e72fba6) |
+| T-5210 | [Retain graph eligibility language restrictions and distinct threat sites](#t-5210-retain-graph-eligibility-language-restrictions-and-distinct-threat-sites) | evidence | done (2026-11-20, 575260351792605f17111abd77afa3349e72fba6) |
 | T-5211 | [Preserve language control flow and explicit CFG incompleteness](#t-5211-preserve-language-control-flow-and-explicit-cfg-incompleteness) | graph | done (2026-11-19, 6e91ad8a10f208d3b1f7b0de347147d01240dbab) |
 | T-5212 | [Bind CFG cache semantics and apply bounds before materialization](#t-5212-bind-cfg-cache-semantics-and-apply-bounds-before-materialization) | graph | done (2026-11-19, 5b92dae8befb957b3413595eaeb9af0ea28d507e) |
 | T-5213 | [Align optional intake declarations and Tree-sitter loader behavior](#t-5213-align-optional-intake-declarations-and-tree-sitter-loader-behavior) | pipeline | open |
@@ -5345,21 +5345,34 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5191 — Bound Gerrit and bundle reviews without assigning current facts to old patchsets
 
-- **State:** open
+- **State:** done (2026-11-20, 0f4bc0ab33cb591ea01ed4f3c6fb615538395fe7)
 - **Area:** history
 - **Why:** Archived audit/feedback cases: TA-01, TA-02. Review-count bound is ignored for Gerrit and bypassed by bundles; Gerrit current approvals/merge state are attributed to superseded patchsets.
 - **Scope:** `src/appsec_review/target_acquisition/review_exports.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Introduced at `fe4e30f2`, verified with the signal follow-up at `0f4bc0ab`.
+  Main: 145 passed/6.65 s, two workers, seed 30265192, exact owner node-set parity,
+  no skips or slow cases. Provider/API and bundle normalization apply the configured record cap
+  while retaining supplied pins and truncation evidence; raw bundles remain unchanged.
+  Records retain their own revision/timestamp, and only the current revision receives current
+  approval/merge facts. Historical or unidentified-current facts stay unknown with explicit gaps.
+  Real provider/network and legacy loopback acquisition validation were not run.
 - **Refs:** `audit-results/job-audit-job_target_acquisition.md`.
 
 ### T-5192 — Retain materializable acquisitions when changed-path diff fails
 
-- **State:** open
+- **State:** done (2026-11-20, 0f4bc0ab33cb591ea01ed4f3c6fb615538395fe7)
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: TA-03. Changed-path diff failure discards an otherwise materializable review component.
 - **Scope:** `src/appsec_review/target_acquisition/git_source.py`, with the acquisition cleanup
   boundary and the registered job's focused consumer tests.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  T-5191's main selection preserves qualified acquisitions after ordinary positive diff/base
+  errors without inventing empty-success patch/list artifacts. Negative subprocess return codes
+  are rejected before optional handling: SIGINT/SIGTERM/SIGKILL results fail closed across base
+  probing and both diff phases even without a latched global stop. Exceptions, refusals and
+  `ReviewStopped` still propagate. Tests replace only subprocess/provider replies at the boundary,
+  not the Git adapter or acquisition handlers; no real signals or remote requests were used.
 - **Refs:** `audit-results/job-audit-job_target_acquisition.md`.
 
 ### T-5193 — Reject malformed nested planning values through bounded repair
@@ -5382,10 +5395,15 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5195 — Align dotnet planning guidance with the accepted recipe contract
 
-- **State:** open
+- **State:** in-progress
 - **Area:** build
 - **Why:** Archived audit/feedback cases: TA-F05. .NET planning guidance contradicts the recipe validator.
-- **Scope:** `src/appsec_review/jobs/job_target_analysis_plan/planning.py`
+- **Scope:** `src/appsec_review/jobs/job_target_analysis_plan/planning.py` and the shared
+  `pipeline/prompt-fragments/roles/build-engineer-dotnet.md` used for planning and repair.
+  User decision, 2026-11-20: retain mandatory project-image dependency preparation for accepted
+  `PackageReference`/`PackageDownload` declarations and correct the guidance, not the validator.
+  `network_required` triggers that preparation; it neither proves a download occurred nor
+  controls .NET build-container egress. No network policy, tool grant or SDK change is authorized.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
 - **Refs:** `audit-results/job-audit-job_target_analysis_plan.md`.
 
@@ -5545,20 +5563,30 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5209 — Index the real threat-model schema without dropping owners and threats
 
-- **State:** open
+- **State:** done (2026-11-20, 575260351792605f17111abd77afa3349e72fba6)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: TM-01. indexed consumer drops actual generated threats and loses boundary/source ownership.
 - **Scope:** `src/appsec_review/indexing/products.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 95 passed/12.64 s, two workers, seed 44055, exact owner node-set parity, no skips or
+  slow cases. Actual serialized boundary membership, component/process ownership and generated
+  threats survive derived publication and retrieval with digest-bound source/citation identity.
+  Candidate state and unspecified severity stay qualified. Product rule `threat-boundaries/3`
+  invalidates older derived projections. No live model accuracy or native evidence is claimed.
 - **Refs:** `audit-results/job-audit-job_threat_model_generation.md`; follow-up to closed T-172 (not reopened).
 
 ### T-5210 — Retain graph eligibility language restrictions and distinct threat sites
 
-- **State:** open
+- **State:** done (2026-11-20, 575260351792605f17111abd77afa3349e72fba6)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: TM-02, TM-03, TM-04. inexact analyzer-only graph records are promoted to verified semantic interactions; interaction catalog language restrictions are ignored.
 - **Scope:** `src/appsec_review/threat_model/lanes/interactions.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  T-5209's main selection verifies existing ineligibility and direct-eligibility checks before
+  semantic interaction use, language filtering before bounds and explicit gaps for unknown or
+  inexact/analyzer-only records. Physical identity includes digest, span, enclosing symbol,
+  build unit, component and scope; line-only observations remain separate instead of merging
+  distinct sites. Fully matching observations may merge without losing owners or source facts.
 - **Refs:** `audit-results/job-audit-job_threat_model_generation.md`.
 
 ### T-5211 — Preserve language control flow and explicit CFG incompleteness
