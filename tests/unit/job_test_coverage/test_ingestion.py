@@ -283,8 +283,13 @@ def test_ingestion_enforces_artifact_origin_and_custody(tmp_path: Path) -> None:
     ("coverage.json", b'{"type":"llvm.coverage.json.export","data":[{"files":[{"filename":"a.c","summary":{"lines":{"count":-0.5}}}]}]}'),
     ("coverage.xml", b'<coverage><class filename="a.c"><line number="1" hits="1" branch="true"/></class></coverage>'),
     ("lcov.info", b"FN:1,ghost\nFNDA:1,ghost\nSF:a.c\nDA:1,1\n"),
-    ("jacoco.xml", b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd"><report name="jacoco"><package name="p"><sourcefile name="A.java"><counter type="LINE" missed="0" covered="1"/></sourcefile></package></report>'),
-], ids=["overflow", "fraction", "unknown-branches", "orphan-function", "jacoco-doctype-policy"])
+    ("jacoco.xml", b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd" [<!ENTITY forbidden "1">]><report name="jacoco"><package name="p"><sourcefile name="A.java"><counter type="LINE" missed="0" covered="1"/></sourcefile></package></report>'),
+    ("coverage.json", b'{"type":"llvm.coverage.json.export","data":[{"files":[{"filename":"a.c","summary":{"lines":{"count":' + b"9" * 5000 + b'}}}]}]}'),
+    ("coverage.json", b'{"type":"llvm.coverage.json.export","data":' + b"[" * 10000 + b"]" * 10000 + b"}"),
+    ("coverage.xml", b'<coverage><class filename="a.c"><line number="1" hits="0" branch="true" condition-coverage="0% (0/2)"/></class><class filename="a.c"><line number="1" hits="1" branch="true" condition-coverage="100% (2/2)"/></class></coverage>'),
+    ("coverage.xml", b'<coverage><class name="A" filename="a.c"><line number="1" hits="1" branch="true" condition-coverage="50% (1/2)"/></class><class name="A" filename="a.c"><line number="1" hits="1" branch="true" condition-coverage="50% (1/2)"/></class></coverage>'),
+], ids=["overflow", "fraction", "unknown-branches", "orphan-function", "jacoco-doctype-policy",
+        "oversized-json-integer", "json-depth", "unidentified-class-branches", "duplicate-partial-branches"])
 def test_malformed_report_is_a_gap_not_zero_and_other_reports_survive(
     tmp_path: Path, name: str, payload: bytes,
 ) -> None:
@@ -297,6 +302,8 @@ def test_malformed_report_is_a_gap_not_zero_and_other_reports_survive(
     assert unit["totals"]["lines_rate"] is None
     assert unit["files"] == []
     assert len(unit["gaps"]) == 1 and unit["gaps"][0].startswith("malformed_coverage:")
+    if payload.startswith(b'{"type":"llvm.coverage.json.export","data":[[['):
+        assert "recursion" in unit["gaps"][0]
     good = _artifact(tmp_path, "data/good/lcov.info", b"SF:a.c\nDA:1,0\nend_of_record\n")
     receipt["artifacts"] = [bad, good]
     partial = ingest_coverage_artifacts(tmp_path, [receipt], {"a.c": "1" * 64})["units"][0]
@@ -305,3 +312,41 @@ def test_malformed_report_is_a_gap_not_zero_and_other_reports_survive(
     assert len(partial["files"]) == 1
     assert partial["files"][0]["artifact_sha256"] == good["sha256"]
     assert partial["gaps"] == unit["gaps"]
+    assert (tmp_path / bad["path"]).read_bytes() == payload
+    assert file_sha256(tmp_path / bad["path"]) == bad["sha256"]
+
+
+
+@pytest.mark.parametrize("declaration", [
+    b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd" []>',
+    b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd" [<!ENTITY x "expanded">]>',
+    b'<!DOCTYPE report [<!ENTITY % x SYSTEM "file:///not-allowed">%x;]>',
+    b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "https://invalid.example/report.dtd">',
+    b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "file:///not-allowed/report.dtd">',
+    b'<!DOCTYPE report PUBLIC "-//UNKNOWN//DTD Report 1.1//EN" "report.dtd">',
+    b'<!DOCTYPE report SYSTEM "report.dtd">',
+    b'<!DOCTYPE coverage PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">',
+    b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd"'
+    b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">',
+    b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">'
+    b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">',
+    b'<!ENTITY x "expanded">',
+], ids=["empty-subset", "internal-entity", "parameter-entity", "external-url", "external-file", "unknown-public",
+        "system-only", "wrong-root", "malformed", "duplicate-doctype", "bare-entity"])
+def test_unknown_jacoco_declarations_remain_artifact_scoped_gaps(tmp_path, declaration):
+    bad_payload = declaration + (
+        b'<report name="jacoco"><package name=""><sourcefile name="a.c">'
+        b'<counter type="LINE" missed="0" covered="1"/></sourcefile></package></report>')
+    bad = _artifact(tmp_path, "data/bad/jacoco.xml", bad_payload)
+    good = _artifact(tmp_path, "data/good/lcov.info", b"SF:a.c\nDA:1,0\nend_of_record\n")
+    result = ingest_coverage_artifacts(tmp_path, [{
+        "build_unit_id": "u1", "family": "native", "terminal_status": "SUCCEEDED",
+        "artifacts": [bad, good],
+    }], {"a.c": "1" * 64})
+    unit = result["units"][0]
+    assert unit["coverage_state"] == "partial"
+    assert unit["totals"]["lines_rate"] == 0.0
+    assert len(unit["files"]) == 1 and unit["files"][0]["artifact_sha256"] == good["sha256"]
+    assert len(unit["gaps"]) == 1 and unit["gaps"][0].startswith("malformed_coverage:")
+    assert (tmp_path / bad["path"]).read_bytes() == bad_payload
+    assert file_sha256(tmp_path / bad["path"]) == bad["sha256"]

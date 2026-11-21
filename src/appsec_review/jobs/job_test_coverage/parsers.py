@@ -8,6 +8,7 @@ import math
 import re
 from typing import Any, Mapping
 import xml.etree.ElementTree as ET
+from xml.parsers import expat
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,16 +156,56 @@ def _lcov(data: bytes, max_rows: int) -> CoverageDocument:
         CoverageFile(path, sources[path].totals()) for path in sorted(sources)))
 
 
-def _xml_root(data: bytes, max_rows: int) -> ET.Element:
-    if b"<!DOCTYPE" in data.upper() or b"<!ENTITY" in data.upper():
+def _xml_root(data: bytes, max_rows: int, *, allow_jacoco_doctype: bool = False) -> ET.Element:
+    guard = expat.ParserCreate()
+    count = 0
+    declaration: tuple[int, int] | None = None
+
+    def element(_name: str, _attributes: Mapping[str, str]) -> None:
+        nonlocal count
+        count += 1
+        if count > max_rows:
+            raise ValueError(f"coverage XML node bound exceeded ({max_rows})")
+
+    def reject_declaration(*_args: Any) -> None:
         raise ValueError("coverage XML declarations are not allowed")
+
+    def doctype(name: str, system: str | None, public: str | None, internal: int) -> None:
+        nonlocal declaration
+        if not (allow_jacoco_doctype and name == "report" and not internal
+                and public == "-//JACOCO//DTD Report 1.1//EN" and system == "report.dtd"):
+            reject_declaration()
+        # With no internal subset, Expat reports the closing '>' byte offset. Only the
+        # validated declaration is removed from the tree input, retaining its byte encoding.
+        end = guard.CurrentByteIndex
+        openings = []
+        for encoding in ("ascii", "utf-16-le", "utf-16-be"):
+            token = "<!DOCTYPE".encode(encoding)
+            closing = ">".encode(encoding)
+            start = data.rfind(token, 0, end)
+            if start >= 0 and data[end:end + len(closing)] == closing:
+                openings.append((start, len(closing)))
+        if not openings:
+            raise ValueError("coverage XML declaration encoding is unsupported")
+        start, width = max(openings)
+        declaration = (start, end + width)
+
+    # Inspect actual declarations in the declared encoding before building a tree. The one
+    # allowed external identifier is inert metadata: neither parser resolves external DTDs.
+    guard.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+    guard.StartElementHandler = element
+    guard.StartDoctypeDeclHandler = doctype
+    guard.EntityDeclHandler = reject_declaration
+    guard.ExternalEntityRefHandler = reject_declaration
+    guard.SkippedEntityHandler = reject_declaration
     try:
-        root = ET.fromstring(data)
-    except ET.ParseError as exc:
+        guard.Parse(data, True)
+        # An unprocessed external DTD lets Expat silently omit unknown attribute entities.
+        # Without that header the tree parser rejects them; the evidence buffer stays intact.
+        tree_data = data if declaration is None else data[:declaration[0]] + data[declaration[1]:]
+        return ET.fromstring(tree_data)
+    except (expat.ExpatError, ET.ParseError) as exc:
         raise ValueError("coverage XML is malformed") from exc
-    if sum(1 for _ in root.iter()) > max_rows:
-        raise ValueError(f"coverage XML node bound exceeded ({max_rows})")
-    return root
 
 
 _CONDITION = re.compile(r"\((\d+)\s*/\s*(\d+)\)")
@@ -174,7 +215,7 @@ def _cobertura(data: bytes, max_rows: int) -> CoverageDocument:
     root = _xml_root(data, max_rows)
     if root.tag.rsplit("}", 1)[-1] != "coverage":
         raise ValueError("Cobertura root element is not coverage")
-    sources: dict[str, tuple[dict[int, int], dict[int, tuple[int, int]],
+    sources: dict[str, tuple[dict[int, int], dict[int, dict[str | None, tuple[int, int]]],
                              dict[tuple[str, str, str], bool]]] = {}
     for class_index, cls in enumerate(root.iter()):
         if cls.tag.rsplit("}", 1)[-1] != "class" or not cls.get("filename"):
@@ -209,24 +250,32 @@ def _cobertura(data: bytes, max_rows: int) -> CoverageDocument:
                 method_hits = [_checked_int(line.get("hits", "0"), "Cobertura method hits")
                                for line in child.iter() if line.tag.rsplit("}", 1)[-1] == "line"]
                 methods[key] = methods.get(key, False) or any(method_hits)
+        class_name = cls.get("name")
+        if class_name is not None and not class_name.strip():
+            class_name = None
         for number, counts in line_branches.items():
-            previous = source_branches.get(number)
+            classes = source_branches.setdefault(number, {})
+            if classes and (class_name is None or None in classes):
+                raise ValueError("overlapping Cobertura branch summaries lack class identity")
+            previous = classes.get(class_name)
             if previous is not None:
-                # Fractions alone cannot identify which branches two classes covered.
+                # Only the same class/line can overlap. Fractions cannot identify a union of
+                # two partial observations; equal denominators alone never identify branches.
                 total, covered = counts
                 old_total, old_covered = previous
                 if total != old_total or (0 < covered < total and 0 < old_covered < total):
                     raise ValueError("overlapping Cobertura branch summaries cannot be unioned")
                 counts = (total, max(covered, old_covered))
-            source_branches[number] = counts
+            classes[class_name] = counts
     if not sources:
         raise ValueError("Cobertura contains no class source records")
     files = []
     for path, (line_hits, branches, methods) in sorted(sources.items()):
         files.append(CoverageFile(path, CoverageTotals(
             len(line_hits), sum(value > 0 for value in line_hits.values()),
-            sum(total for total, _ in branches.values()),
-            sum(covered for _, covered in branches.values()), len(methods), sum(methods.values()))))
+            sum(total for classes in branches.values() for total, _ in classes.values()),
+            sum(covered for classes in branches.values() for _, covered in classes.values()),
+            len(methods), sum(methods.values()))))
     return CoverageDocument("cobertura", tuple(files))
 
 
@@ -240,7 +289,7 @@ def _counter(element: ET.Element, kind: str) -> tuple[int, int]:
 
 
 def _jacoco(data: bytes, max_rows: int) -> CoverageDocument:
-    root = _xml_root(data, max_rows)
+    root = _xml_root(data, max_rows, allow_jacoco_doctype=True)
     if root.tag.rsplit("}", 1)[-1] != "report":
         raise ValueError("JaCoCo root element is not report")
     files: list[CoverageFile] = []

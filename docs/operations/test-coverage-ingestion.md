@@ -45,6 +45,17 @@ supported format, the job records `unsupported_coverage_format`. Receipts whose 
 `applicable_families` are skipped and get no shard. The parser, normalizer and mapping identities
 in the settings must equal the code constants; any other value fails configuration loading.
 
+JaCoCo's standard `report` PUBLIC declaration with public identifier
+`-//JACOCO//DTD Report 1.1//EN` and system identifier `report.dtd` is accepted without loading the
+DTD. Internal subsets, user-defined entity declarations/expansion, unknown identifiers and
+malformed declarations
+remain refused. This exception does not apply to Cobertura. Detection and declaration preflight
+use original bytes under the existing artifact/node bounds. The validated header is removed only
+from the in-memory tree input, preventing silently omitted unresolved attribute entities; neither
+report bytes nor their hashes are rewritten.
+Oversized JSON integer tokens and excessive JSON nesting produce artifact-scoped
+`malformed_coverage` gaps without aborting valid siblings.
+
 The accepted output is under the job attempt's `artifacts/test-coverage/` directory. Retrieval
 shards use the `analysis` index and `test-coverage-` prefix, exposed through
 `query_engineering_signals signal_family=test_coverage` with optional exact source-path filtering.

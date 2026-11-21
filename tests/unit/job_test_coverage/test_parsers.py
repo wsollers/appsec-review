@@ -276,7 +276,7 @@ def test_cobertura_refuses_ambiguous_cross_class_branch_union() -> None:
     payload = (
         b'<coverage><class name="A" filename="a.py"><line number="1" hits="1" '
         b'branch="true" condition-coverage="50% (1/2)"/></class>'
-        b'<class name="B" filename="a.py"><line number="1" hits="1" '
+        b'<class name="A" filename="a.py"><line number="1" hits="1" '
         b'branch="true" condition-coverage="50% (1/2)"/></class></coverage>'
     )
     with pytest.raises(ValueError, match="overlapping Cobertura branch"):
@@ -318,3 +318,74 @@ def test_cobertura_conflicting_method_and_class_branches_are_not_silently_maximi
     )
     with pytest.raises(ValueError, match="overlapping Cobertura branch annotations disagree"):
         parse_coverage(payload, "cobertura")
+
+
+
+@pytest.mark.parametrize("header", [
+    b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">',
+    b"<!DOCTYPE report\n PUBLIC '-//JACOCO//DTD Report 1.1//EN'\n 'report.dtd'>",
+    b'\xef\xbb\xbf<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">',
+], ids=["standard", "single-quotes-whitespace", "utf8-bom"])
+def test_standard_jacoco_doctype_never_resolves_external_resources(header, monkeypatch):
+    import builtins
+    import io
+    import socket
+    import urllib.request
+
+    payload = header + (
+        b'<report name="fixture &amp; safe"><package name="p"><sourcefile name="A.java">'
+        b'<counter type="LINE" missed="0" covered="1"/></sourcefile></package></report>')
+
+    def no_resolution(*args, **kwargs):
+        raise AssertionError("coverage XML attempted external resolution")
+
+    with monkeypatch.context() as blocked:
+        blocked.setattr(builtins, "open", no_resolution)
+        blocked.setattr(io, "open", no_resolution)
+        blocked.setattr(socket, "create_connection", no_resolution)
+        blocked.setattr(urllib.request, "urlopen", no_resolution)
+        document = parse_coverage(payload, "jacoco")
+        assert document.files[0].source_path == "p/A.java"
+        assert _totals(document)["lines_rate"] == 1.0
+        with pytest.raises(ValueError, match="node bound exceeded"):
+            parse_coverage(payload, "jacoco", max_rows=2)
+        with pytest.raises(ValueError, match="declarations are not allowed"):
+            parse_coverage(payload, "cobertura")
+
+
+@pytest.mark.parametrize("format_name", ["jacoco", "cobertura"])
+def test_utf16_cannot_hide_internal_entity_declarations(format_name):
+    if format_name == "jacoco":
+        text = (
+            '<!DOCTYPE report [<!ENTITY count "1">]><report><package name="p">'
+            '<sourcefile name="A.java"><counter type="LINE" missed="0" covered="&count;"/>'
+            '</sourcefile></package></report>')
+    else:
+        text = (
+            '<!DOCTYPE coverage [<!ENTITY count "1">]><coverage><class filename="a.c">'
+            '<line number="1" hits="&count;"/></class></coverage>')
+    with pytest.raises(ValueError, match="declarations are not allowed"):
+        parse_coverage(text.encode("utf-16"), format_name)
+
+
+
+@pytest.mark.parametrize("report", [b'<report name="&unresolved;"/>', b'<report>&unresolved;</report>'],
+                         ids=["attribute", "text"])
+def test_standard_jacoco_header_does_not_enable_unresolved_entity_expansion(report):
+    payload = b'<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">' + report
+    with pytest.raises(ValueError, match="coverage XML (declarations|is malformed)"):
+        parse_coverage(payload, "jacoco")
+
+
+
+@pytest.mark.parametrize("encoding", ["utf-16-le", "utf-16-be"])
+def test_jacoco_header_filter_preserves_utf16_and_rejects_unknown_attribute_entities(encoding):
+    text = (
+        '<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">'
+        '<report name="fixture &amp; safe"><package name="p"><sourcefile name="A.java">'
+        '<counter type="LINE" missed="0" covered="1"/></sourcefile></package></report>')
+    bom = b"\xff\xfe" if encoding == "utf-16-le" else b"\xfe\xff"
+    document = parse_coverage(bom + text.encode(encoding), "jacoco")
+    assert _totals(document)["lines_rate"] == 1.0
+    with pytest.raises(ValueError, match="coverage XML is malformed"):
+        parse_coverage(bom + text.replace("&amp;", "&unresolved;").encode(encoding), "jacoco")

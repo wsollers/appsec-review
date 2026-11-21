@@ -128,17 +128,28 @@ language-build receipt and must still match their accepted SHA-256. The parser a
 | JaCoCo | XML source-file counters and class method counters |
 | LLVM | `llvm-cov export` JSON file summaries |
 
-XML external entities and DTD/entity declarations are rejected, including the ordinary JaCoCo
-report DOCTYPE. Supporting that declaration remains an unresolved safety/format decision, not
-permission to relax XML policy. LCOV observations for the same source union line, branch, and
-function-name identities before totals are computed; repeated missed hits cannot erase covered hits.
-Cobertura unions physical lines and identifiable methods across classes, deduplicating method/class
-line copies. Cross-class branch summaries are combined only when their union is determined
-(matching denominators with zero or fully covered observations); ambiguous partial overlap is a
-`malformed_coverage` gap. Duplicate JaCoCo/LLVM source summaries lack the identities needed for a
+XML DTD/entity declarations are rejected except the standard JaCoCo external declaration
+`<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">`. The declaration is inert
+metadata: no DTD fetch, filesystem/network resolution, or user-defined entity expansion occurs.
+Internal subsets (even empty), unknown identifiers, entity declarations and malformed XML are
+rejected in the XML's actual encoding. Cobertura gains no DOCTYPE exception. The existing artifact
+byte and XML node budgets remain enforced; a streaming preflight applies the node budget before
+tree construction, also bounding nesting by that budget. Only the validated declaration is
+removed from the in-memory tree input so unresolved attribute entities cannot be silently omitted.
+Original report bytes and hashes are never rewritten.
+
+LCOV observations for the same source union line, branch, and function-name identities before
+totals are computed; repeated missed hits cannot erase covered hits. Cobertura unions physical
+lines and identifiable methods across classes, deduplicating method/class line copies. Branch
+counts retain class identity: distinct classes at the same physical line have separate branch
+denominators. Repeated summaries of the same class/line are unioned only when their union is
+determined (matching denominators with zero or fully covered observations). Ambiguous partial
+overlap or overlapping branches without class identity produces a `malformed_coverage` gap.
+Duplicate JaCoCo/LLVM source summaries lack the identities needed for a
 union and are likewise rejected rather than added as unique source lines. Missing/malformed
-Cobertura branch fractions and invalid LLVM integer counts also produce `malformed_coverage`;
-other valid reports continue to be processed. Each source row normalizes line,
+Cobertura branch fractions and invalid LLVM integer counts also produce `malformed_coverage`.
+JSON decoding failures during format detection, including integer/depth limits, remain scoped to
+that artifact; other valid reports continue to be processed. Each source row normalizes line,
 branch, and function covered/total counts; rates are derived and remain `null` for a zero
 denominator. Producer paths are data, not source identities: the binder accepts an exact
 target-relative catalog path, otherwise one unique suffix match, and retains unresolved or

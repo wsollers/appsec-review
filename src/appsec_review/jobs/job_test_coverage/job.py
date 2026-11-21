@@ -247,13 +247,15 @@ def ingest_coverage_artifacts(
                 unit_gaps.append(f"artifact_byte_bound: {label} exceeds {bounds.max_artifact_bytes} bytes")
                 continue
             data = path.read_bytes()
-            format_name = _format(label, data)
-            if format_name is None:
-                unit_gaps.append(f"unsupported_coverage_format: {label}")
-                continue
             try:
+                format_name = _format(label, data)
+                if format_name is None:
+                    unit_gaps.append(f"unsupported_coverage_format: {label}")
+                    continue
                 document = parse_coverage(data, format_name, max_rows=bounds.max_rows_per_artifact)
-            except ValueError as exc:
+            except CoverageIntegrityError:
+                raise
+            except (ValueError, RecursionError) as exc:
                 unit_gaps.append(f"malformed_coverage: {label}: {exc}")
                 continue
             if len(document.files) > bounds.max_files_per_artifact:
