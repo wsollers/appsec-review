@@ -253,6 +253,8 @@ Source: [handler and record normalization](../../src/appsec_review/jobs/job_svf_
    bounded driver document. Validate nested object values/references, target members/counts,
    completion flags and source-point primitives before normalization. Reject
    missing/failed/escaping/malformed output for that module without dropping usable siblings.
+   Invalid path syntax, symlink loops and filesystem path-resolution failures are module gaps;
+   this local handling does not catch accepted-evidence or checkpoint integrity failures.
 5. Map pointer sites and indirect calls to accepted source locations; count outside-source sites
    instead of giving them locations. Preserve target/object sets, truncation, incomplete reasons,
    module closed-world state and unmodeled externals. Add bounded memory-object relations;
@@ -329,8 +331,10 @@ The walk must separately approve any expected coverage loss.
 Checkpoint identity includes scope/source/compile state, link commands, adapter, settings and tool
 identity. A changed link topology invalidates that scope even with unchanged source. Matching
 checkpoints verify raw plans, compile databases, run/driver JSON, receipts, stdout/stderr and index
-metadata. Missing, changed or symlinked matching evidence fails closed. New identities use separate
-scratch generations so prior evidence is not overwritten. Checkpoints may retain failed/partial results,
+metadata. Missing, changed or symlinked matching evidence fails closed. Checkpoints are retained
+per identity, so returning from identity A to B to A verifies and reuses A. Every cache miss,
+including a removed or invalidated checkpoint, allocates a fresh scratch generation; it never
+overwrites a prior generation. Checkpoints may retain failed/partial results,
 so an unchanged retry need not rerun SVF. Manifest composition follows
 [accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
 Task binding omissions remain [T-147](../TODO.md);

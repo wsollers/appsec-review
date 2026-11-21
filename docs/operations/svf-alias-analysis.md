@@ -119,8 +119,9 @@ A scope checkpoint is reused only when its identity matches and every referenced
 verifies, including raw plan, result, driver documents, compile database, receipt and streams.
 Missing, changed or symlinked matching evidence raises an integrity error, not a cache miss or
 producer gap. The identity covers the accepted scope, link commands, settings, tool identity
-(including the image pin) and adapter version. Changed identities use separate scope scratch
-generations, preserving prior raw evidence.
+(including the image pin) and adapter version. Checkpoints are identity-addressed: A→B→A reuses
+verified A rather than replacing its evidence. Every cache miss allocates a fresh scope scratch
+generation, including after checkpoint removal/invalidation, preserving all prior raw evidence.
 
 ## Verification
 

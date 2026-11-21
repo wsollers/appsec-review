@@ -17,6 +17,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping
+from uuid import uuid4
 
 from appsec_review.jobs.cpp_index_scopes import (
     IndexScope, accepted_cpp_scopes, artifact, checkpoint_identity, execute_scope_tool,
@@ -42,7 +43,7 @@ DRIVER_SCHEMA = "appsec-review/svf-alias-output/1"
 FACT_SCHEMA = "appsec-review/svf-alias-record/1"
 OBJECT_SCHEMA = "appsec-review/svf-memory-object/1"
 OBJECT_RULE = "svf-memory-object/1"
-ADAPTER = "svf-alias-adapter/2"
+ADAPTER = "svf-alias-adapter/3"
 MAPPING_METHOD = "llvm-dilocation"
 ARGV = ("/opt/appsec/svf.py", "run", "/scratch/plan.json", "/scratch/result.json")
 SHARD_PREFIX = "svf"
@@ -408,7 +409,8 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
         "tool": tool_identity(unit.job.repository_root, TOOL_ID) if executor_factory is None
         else {"tool_id": TOOL_ID, "injected_executor": True},
     })
-    reused = scope_checkpoint(root / "checkpoint.json", identity, unit.job.run_root, scope)
+    checkpoint = root / identity / "checkpoint.json"
+    reused = scope_checkpoint(checkpoint, identity, unit.job.run_root, scope)
     if reused is not None:
         return dict(reused)
 
@@ -417,7 +419,9 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
     execution: dict[str, Any] = {}
     outcomes: dict[str, Mapping[str, Any]] = {}
     tool_version = "unknown"
-    scratch = root / identity / "run"
+    generation = checkpoint.parent / uuid4().hex
+    generation.mkdir(parents=True)
+    scratch = generation / "run"
     try:
         execution = execute_scope_tool(unit, scope, TOOL_ID, ARGV, scratch, executor_factory,
                                        file_size_limit_bytes=max(settings[key] for key in (
@@ -490,6 +494,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
     totals = {"modules": len(plan.modules), "analyzed": 0, "closed_world": 0, "sites": 0, "indirect_calls": 0,
               "outside_accepted_sources": 0, "memory_objects": 0}
     missing_detail = gaps[-1] if gaps else "missing from the SVF run result"
+    resolved_scratch = scratch.resolve()
     for planned in plan.modules:
         outcome = outcomes.get(planned.module_id)
         label = f"{SHARD_PREFIX}:{scope.project_id}:{planned.label}"
@@ -505,11 +510,23 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
             gaps.append(f"module {planned.label}: {reason[:1024]}")
             continue
         output = scratch / str(outcome.get("output", ""))
-        if scratch.resolve() not in output.resolve().parents:
-            module_rows.append((label, "unavailable", "analysis output path escapes the scope scratch"))
-            gaps.append(f"module {planned.label}: analysis output path escapes the scope scratch")
+        path_error = None
+        if "\0" in str(output):
+            path_error = "analysis output path was malformed"
+        else:
+            try:
+                resolved_output = output.resolve()
+                if resolved_scratch not in resolved_output.parents:
+                    path_error = "analysis output path escapes the scope scratch"
+                else:
+                    output_is_file = output.is_file()
+            except (OSError, ValueError, RuntimeError):
+                path_error = "analysis output path could not be resolved"
+        if path_error:
+            module_rows.append((label, "unavailable", path_error))
+            gaps.append(f"module {planned.label}: {path_error}")
             continue
-        if output.is_file() and not output.is_symlink():
+        if output_is_file and not output.is_symlink():
             raw_artifacts.append(artifact(unit.job.run_root, output))
         document, error = _read_bounded_json(output, settings["max_module_output_bytes"], "analysis output")
         error = error or _valid_driver_document(document, settings)
@@ -568,7 +585,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
               "plan": plan.as_dict(), "counts": totals, "record_count": len(records),
               "index_identity": asdict(index), "gaps": gaps, "terminal_status": status,
               "not_applicable_inputs": scope.not_applicable_inputs()}
-    save_scope_checkpoint(root / "checkpoint.json", identity, result)
+    save_scope_checkpoint(checkpoint, identity, result)
     return result
 
 

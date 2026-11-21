@@ -333,6 +333,80 @@ def test_changed_scope_identity_preserves_prior_raw_evidence(tmp_path: Path) -> 
     assert all(path.read_bytes() == data for path, data in pinned.items())
 
 
+def test_return_to_prior_scope_identity_reuses_its_verified_checkpoint(tmp_path: Path) -> None:
+    from appsec_review.storage import verify_run_artifact
+    root, accepted, executor, first = _run(tmp_path)
+    prior_bytes = {root / item["path"]: (root / item["path"]).read_bytes() for item in first["raw_artifacts"]}
+    _analyze_scope(unit(root, {**SETTINGS, "max_pts_size": 63}), accepted, LINK_COMMANDS, lambda _unit: executor)
+    returned = _analyze_scope(unit(root), accepted, LINK_COMMANDS, lambda _unit: executor)
+    assert len(executor.requests) == 2
+    assert returned["checkpoint_reused"] is True
+    assert returned["raw_artifacts"] == first["raw_artifacts"]
+    assert returned["index_identity"] == json.loads(json.dumps(first["index_identity"]))
+    for item in first["raw_artifacts"]:
+        verify_run_artifact(root, item)
+    assert all(path.read_bytes() == data for path, data in prior_bytes.items())
+
+
+def test_return_to_prior_scope_identity_refuses_tampered_evidence(tmp_path: Path) -> None:
+    from appsec_review.jobs.cpp_index_scopes import CheckpointIntegrityError
+    root, accepted, executor, _ = _run(tmp_path)
+    prior_result = executor.requests[0].scratch_root / "result.json"
+    _analyze_scope(unit(root, {**SETTINGS, "max_pts_size": 63}), accepted, LINK_COMMANDS, lambda _unit: executor)
+    damaged = prior_result.read_bytes() + b" "
+    prior_result.write_bytes(damaged)
+    with pytest.raises(CheckpointIntegrityError):
+        _analyze_scope(unit(root), accepted, LINK_COMMANDS, lambda _unit: executor)
+    assert len(executor.requests) == 2
+    assert prior_result.read_bytes() == damaged
+
+
+@pytest.mark.parametrize("invalidation", ["delete", "different-identity"])
+def test_checkpoint_cache_miss_allocates_fresh_raw_generation(tmp_path: Path, invalidation: str) -> None:
+    from appsec_review.storage import verify_run_artifact
+    root, accepted, executor, first = _run(tmp_path)
+    first_scratch = executor.requests[0].scratch_root
+    checkpoints = list((root / "data" / "svf").rglob("checkpoint.json"))
+    assert len(checkpoints) == 1
+    checkpoint = checkpoints[0]
+    if invalidation == "delete":
+        checkpoint.unlink()
+    else:
+        document = json.loads(checkpoint.read_text())
+        document["identity"] = "0" * 64
+        checkpoint.write_text(json.dumps(document), encoding="utf-8")
+    rerun = _analyze_scope(unit(root), accepted, LINK_COMMANDS, lambda _unit: executor)
+    assert len(executor.requests) == 2
+    assert executor.requests[1].scratch_root != first_scratch
+    assert rerun["raw_artifacts"] != first["raw_artifacts"]
+    for item in first["raw_artifacts"]:
+        verify_run_artifact(root, item)
+    verify_run_artifact(root, first["index_identity"], path_key="relative_path")
+
+
+@pytest.mark.parametrize("path_kind", ["nul", "symlink-loop", "too-long"])
+def test_unresolvable_module_path_does_not_abort_valid_sibling(tmp_path: Path, path_kind: str) -> None:
+    """Inert executor-generated paths exercise real filesystem resolution, not a mocked parser."""
+    def invalid_path(document, _outputs):
+        app = next(item for item in document["modules"] if item["kind"] == "link")
+        app["output"] = {"nul": "bad\0path", "symlink-loop": "loop/alias.json", "too-long": "x" * 300}[path_kind]
+
+    class PathExecutor(ReplayExecutor):
+        def execute(self, request):
+            result = super().execute(request)
+            if path_kind == "symlink-loop":
+                (request.scratch_root / "loop").symlink_to("loop")
+            return result
+
+    root = tmp_path / "run"
+    _, _, _, result = _run(tmp_path, PathExecutor(root, mutate=invalid_path))
+    assert result["counts"]["analyzed"] == 1
+    assert _coverage(root, result)["svf:cpp:native:build/app"][0] == "unavailable"
+    assert _coverage(root, result)["svf:cpp:native:native/plugin.c"][0] == "partial"
+    assert all(item["payload"]["module_kind"] == "translation_unit" for item in _entities(root, result))
+    assert any("analysis output path" in gap for gap in result["gaps"])
+
+
 @pytest.mark.parametrize("signal", ["stop", "interrupt"])
 def test_scope_control_flow_is_not_converted_into_a_module_gap(tmp_path: Path, signal: str) -> None:
     from appsec_review.runtime.execution_safety import ReviewStopped
