@@ -100,6 +100,10 @@ read-only in process and decides corroborated native releases against its NVD `c
 [native advisory lookup](dependency-intelligence.md#native-advisory-lookup-nvd-cpe-ranges)). Both
 record `snapshot_id`, `manifest_sha256` and the `nvd_snapshot_id` the database derives from in their
 provenance, and both must treat CVE matches as applicability leads rather than findings.
+Database verification counts actual NVD `cve_range` rows, requires the range columns used by
+consumers, rejects foreign/null sources and orphan CVE references, and compares nonnegative
+integer counts with `build.json`. Replay record counts cannot be below the number of stored CVEs.
+These checks validate database consistency, not compatibility with an unexecuted native release.
 
 With the opt-in `[signing] image_enforcement = "required"`, a pre-existing `image` is launched by ID
 only after its signature verifies (see [signing](signing.md)); a freshly built one is derived and
@@ -129,6 +133,9 @@ these records are not third-party signatures or acceptance decisions.
 Consumers use per-attempt `feed-snapshot` receipts pointing to small run-local proofs and the
 global records. The consumer's hash-pinned configuration allowlists the exact feed root under
 repository `data/`. Snapshot selection is pinned permanently, independently of `current.json`.
+OSV, MITRE, KEV, EPSS and cve-bin-tool publication tasks verify their returned immutable pointer,
+not a second read of `current.json`; an interleaved publisher cannot substitute its snapshot into
+the first task's verification receipt or global metadata. Global metadata can lag a newer pointer.
 Acceptance and resume verify records, manifests and files again, including NVD parent/blob
 chains. A new manifest requiring provenance cannot be treated as legacy when a record is missing.
 Legacy snapshots retain explicit unknown-original-producer labels. The Grype consumer requires the
@@ -167,6 +174,12 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   so a late-year transport failure does not require downloading earlier verified years again.
   A failed refresh still leaves the previous published pointer unchanged. An NVD API key is
   optional and changes incremental API pacing; it does not repair truncated yearly feed files.
+  The bootstrap cursor is the oldest verified yearly `.meta.lastModifiedDate`, not download
+  wall-clock time. The next incremental refresh includes the uncovered snapshot-to-clock interval.
+  Yearly parsing validates the complete JSON envelope, separators, format/version and any declared
+  total before publication. API pages must match the requested size and remaining total, preserve
+  one total within each window, and contain no repeated CVEs within that window. Inclusive
+  boundaries may repeat a CVE across different windows.
   Every snapshot (manifest schema `nvd-snapshot-manifest/2`) also publishes `index/nvd.sqlite`, keyed
   by CVE id with the English description, CWE weakness ids, CVSS metrics (family, version, vector,
   base score, base severity), `vulnStatus`, published and last-modified timestamps, and the raw
@@ -199,7 +212,11 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   291,048 records and 573 MB uncompressed (npm alone 218 MB compressed, 230,351 records), inside the
   configured `max_archive_bytes`, `max_uncompressed_bytes`, and `max_records` bounds. An advisory
   published in several ecosystem archives (for example a GHSA record) is stored and counted once
-  with the affected packages of every copy.
+  using the newest offset-qualified `modified` timestamp. Its raw record, withdrawal, aliases and
+  package associations are replaced together; older copies cannot resurrect stale associations.
+  Identical revisions are deduplicated; conflicting equal-time revisions or unorderable duplicate
+  timestamps fail indexing without publication. Both scanner consumers resolve the publisher's
+  `feed_root` from the run's frozen configuration, never a hard-coded default store.
 - MITRE requires Enterprise ATT&CK, CAPEC, and CWE in `source_selections`; configuration that omits
   any of them is rejected. Mobile and ICS ATT&CK are optional: they remain fully configured but
   become active only when added to `source_selections`.
@@ -215,8 +232,18 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
 - Each MITRE source may carry an optional `sha256` pin; a downloaded file that does not match fails
   the fetch. Without a pin the hash is recorded but not verified. The ATT&CK and CAPEC sources are
   pinned; CWE is currently unpinned, so its download is not hash-verified.
+  CWE normalization requires the `http://cwe.mitre.org/cwe-7` `Weakness_Catalog` root and a
+  nonempty version exactly matching configuration. XML declaration rejection is parser-driven
+  over the whole bounded member, including UTF-8 and UTF-16 encodings, not a byte-prefix search.
+  No DTD is allowed (the coverage-only JaCoCo exception does not apply). Character truncation,
+  as well as term/consequence-count truncation, contributes to `consequence_truncated_weaknesses`.
+  A required source that normalizes to zero entries is rejected rather than published as complete.
 - Every download has a transport bound, source URL, retrieval timestamp, size, and SHA-256. Archive
-  expansion and record counts are bounded, and archive member paths are validated.
+  member paths are validated. General feed redirects must retain the initial HTTPS host and port,
+  without credentials, at every hop; receipts record effective URL and redirect destinations.
+  Grype continues to prohibit all redirects. NVD expanded-byte and cumulative cve-bin-tool replay
+  bounds remain tracked under [T-5247](../TODO.md#t-5247--resolve-third-party-data-sync-conditional-audit-boundaries); compressed-byte limits are not
+  independent decompression limits.
 - KEV and EPSS snapshot identities exclude retrieval timestamps and HTTP validators, so republishing
   identical content yields the same content-addressed snapshot.
 
@@ -303,7 +330,7 @@ This section records the state of [T-013](../TODO.md#t-013-match-osv-advisories-
 
 | Table | Columns | Use |
 | --- | --- | --- |
-| `advisory` | `id`, `modified`, `published`, `withdrawn`, `summary`, `raw_json` | One row per advisory id. `raw_json` is the whole OSV record of the first archive that held it, so its `affected[].ranges[].events` and `affected[].versions` are in the index. |
+| `advisory` | `id`, `modified`, `published`, `withdrawn`, `summary`, `raw_json` | One row per advisory id. `raw_json` is the newest unambiguous OSV revision across the configured archives, including its `affected[].ranges[].events` and `affected[].versions`. |
 | `package` | `advisory_id`, `ecosystem`, `name` | One row per affected package of every copy of the advisory. Indexed by `(ecosystem, name, advisory_id)`. |
 | `alias` | `advisory_id`, `alias` | Advisory aliases, indexed by alias. |
 | `metadata` | `key`, `value` | `record_count`, `max_lookup_results`, and since `appsec-review/osv-index/2` `index_schema` and `ecosystems`. |

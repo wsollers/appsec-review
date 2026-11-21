@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any, Mapping
 import xml.etree.ElementTree as ET
+from xml.parsers import expat
 import zipfile
 
 from appsec_review.jobs.job_third_party_data_sync.publication import HttpDownloader, publish_snapshot, verify_current
@@ -117,9 +118,17 @@ def _xml_bytes(path: Path, bound: int) -> bytes:
         if relative.is_absolute() or ".." in relative.parts or member.file_size > bound:
             raise ValueError("unsafe CWE archive member")
         payload = archive.read(member)
-    upper = payload[:65536].upper()
-    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+    def reject(*args: Any) -> None:
         raise ValueError("CWE XML contains a prohibited DTD or entity declaration")
+
+    parser = expat.ParserCreate()
+    parser.StartDoctypeDeclHandler = reject
+    parser.EntityDeclHandler = reject
+    parser.ExternalEntityRefHandler = reject
+    try:
+        parser.Parse(payload, True)
+    except expat.ExpatError as error:
+        raise ValueError("invalid CWE XML document or unsupported encoding") from error
     return payload
 
 
@@ -130,13 +139,16 @@ def _local(tag: str) -> str:
 def _terms(element: ET.Element, name: str) -> tuple[list[str], bool]:
     """Distinct, whitespace-normalized child texts named ``name`` in document order, bounded."""
     found: list[str] = []
+    truncated = False
     for child in element:
         if _local(child.tag) != name or not child.text:
             continue
-        text = " ".join(child.text.split())[:MAX_TERM_CHARS]
+        text = " ".join(child.text.split())
+        truncated = truncated or len(text) > MAX_TERM_CHARS
+        text = text[:MAX_TERM_CHARS]
         if text and text not in found:
             found.append(text)
-    return found[:MAX_CONSEQUENCE_TERMS], len(found) > MAX_CONSEQUENCE_TERMS
+    return found[:MAX_CONSEQUENCE_TERMS], truncated or len(found) > MAX_CONSEQUENCE_TERMS
 
 
 def weakness_consequences(element: ET.Element) -> tuple[list[tuple[list[str], list[str]]], bool]:
@@ -204,12 +216,16 @@ def normalize(settings: MitreSettings, fetched: Mapping[str, Any], work: Path) -
                 payload = _xml_bytes(Path(source["path"]), settings.max_uncompressed_bytes)
                 root = ET.parse(io.BytesIO(payload)).getroot()
                 version = root.attrib.get("Version")
-                if version and version != source["version"]:
+                if version != settings.sources[name].version:
                     raise ValueError(f"CWE version mismatch: expected {source['version']}, received {version}")
+                if root.tag != "{http://cwe.mitre.org/cwe-7}Weakness_Catalog":
+                    raise ValueError("CWE catalog root or namespace mismatch")
                 for element in root.iter():
                     local = element.tag.rsplit("}", 1)[-1]
                     if local not in ("Weakness", "Category", "View") or "ID" not in element.attrib:
                         continue
+                    if not element.tag.startswith("{http://cwe.mitre.org/cwe-7}"):
+                        raise ValueError("CWE catalog entry has a foreign namespace")
                     identifier = ("CWE-" if local == "Weakness" else f"CWE-{local.upper()}-") + element.attrib["ID"]
                     # Weakness abstraction (Pillar/Class/Base/Variant) and status travel as bounded attributes.
                     attributes = {key.lower(): str(element.attrib[key])[:64] for key in ("Abstraction", "Status")
@@ -234,6 +250,8 @@ def normalize(settings: MitreSettings, fetched: Mapping[str, Any], work: Path) -
             if total > settings.max_records:
                 raise ValueError("MITRE record count exceeded configured bound")
             counts[name] = connection.execute("SELECT COUNT(*) FROM entry WHERE source = ?", (name,)).fetchone()[0]
+            if name in REQUIRED_DEFAULTS and counts[name] == 0:
+                raise ValueError(f"required MITRE source contains no entries: {name}")
         total = connection.execute("SELECT COUNT(*) FROM entry").fetchone()[0]
         consequence_count = connection.execute("SELECT COUNT(*) FROM cwe_consequence").fetchone()[0]
         connection.executemany("INSERT INTO metadata VALUES (?, ?)",
@@ -265,8 +283,8 @@ def publish(settings: MitreSettings, fetched: Mapping[str, Any], normalized: Map
                                              "limitations": ["MITRE references classify claims; they are not finding evidence."]})
 
 
-def verify(settings: MitreSettings) -> dict[str, Any]:
-    identity = verify_current(settings.feed_root, "mitre")
+def verify(settings: MitreSettings, *, pointer: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    identity = verify_current(settings.feed_root, "mitre", pointer=pointer)
     database = Path(identity["directory"]) / "index" / "mitre.sqlite"
     with sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True) as connection:
         if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":

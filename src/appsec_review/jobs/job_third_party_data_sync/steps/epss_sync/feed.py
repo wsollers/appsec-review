@@ -178,8 +178,8 @@ def publish(settings: EpssSettings, fetched: Mapping[str, Any], normalized: Mapp
                                                              "evidence about this target."]})
 
 
-def verify(settings: EpssSettings) -> dict[str, Any]:
-    identity = verify_current(settings.feed_root, FEED_ID)
+def verify(settings: EpssSettings, *, pointer: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    identity = verify_current(settings.feed_root, FEED_ID, pointer=pointer)
     database = Path(identity["directory"]) / LOGICAL_PATH
     with sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True) as connection:
         if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":

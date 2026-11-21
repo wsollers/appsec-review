@@ -239,13 +239,28 @@ def _check(directory: Path, tool_version: str) -> dict[str, Any]:
         if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
             raise ValueError("cve-bin-tool cve.db quick_check failed")
         count = connection.execute("SELECT COUNT(*) FROM cve_severity WHERE data_source = 'NVD'").fetchone()[0]
-        others = connection.execute("SELECT COUNT(*) FROM cve_severity WHERE data_source != 'NVD'").fetchone()[0]
+        others = connection.execute("SELECT COUNT(*) FROM cve_severity WHERE data_source IS NOT 'NVD'").fetchone()[0]
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(cve_range)")}
+        required = {"cve_number", "vendor", "product", "version", "data_source",
+                    "versionStartIncluding", "versionStartExcluding", "versionEndIncluding", "versionEndExcluding"}
+        if not required <= columns:
+            raise ValueError("cve-bin-tool cve_range schema is incomplete")
+        ranges = connection.execute("SELECT COUNT(*) FROM cve_range WHERE data_source = 'NVD'").fetchone()[0]
+        invalid_ranges = connection.execute(
+            "SELECT COUNT(*) FROM cve_range r WHERE data_source IS NOT 'NVD' OR NOT EXISTS "
+            "(SELECT 1 FROM cve_severity s WHERE s.cve_number = r.cve_number AND s.data_source = 'NVD')"
+        ).fetchone()[0]
     with sqlite3.connect(f"file:{directory / 'version_map.db'}?mode=ro&immutable=1", uri=True) as connection:
         if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
             raise ValueError("cve-bin-tool version_map.db quick_check failed")
     if count < 1 or others or count != build_record.get("cve_count"):
         raise ValueError("cve-bin-tool database is empty or contains an unexpected data source")
-    return {"cve_count": count, "range_count": build_record.get("range_count"),
+    if (any(type(build_record.get(key)) is not int or build_record[key] < 0
+            for key in ("cve_count", "range_count", "layer_records"))
+            or invalid_ranges or ranges != build_record["range_count"]
+            or build_record["layer_records"] < count):
+        raise ValueError("cve-bin-tool range counts or replay facts disagree with the database")
+    return {"cve_count": count, "range_count": ranges,
             "layer_records": build_record.get("layer_records")}
 
 
@@ -317,8 +332,9 @@ def verify_consumer(settings: CveBinToolSettings, *, tool_version: str) -> dict[
             "nvd_manifest_sha256": manifest.get("nvd_manifest_sha256"), "tool": dict(tool)}
 
 
-def verify(settings: CveBinToolSettings, expected_nvd: Mapping[str, Any]) -> dict[str, Any]:
-    identity = verify_current(settings.feed_root, "cve-bin-tool")
+def verify(settings: CveBinToolSettings, expected_nvd: Mapping[str, Any], *,
+           pointer: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    identity = verify_current(settings.feed_root, "cve-bin-tool", pointer=pointer)
     directory = Path(identity["directory"])
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
     if (manifest.get("nvd_snapshot_id"), manifest.get("nvd_manifest_sha256")) != (

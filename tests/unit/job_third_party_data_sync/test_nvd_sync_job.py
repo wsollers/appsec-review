@@ -312,9 +312,9 @@ def test_nvd_models_and_incremental_validation_cover_remaining_edges(tmp_path: P
         nvd_feed.parse_meta(b"size:10\n")
     with pytest.raises(ValueError, match="invalid NVD metadata sha256"):
         nvd_feed.parse_meta(b"lastModifiedDate:2026-10-12T00:00:00Z\nsize:1\ngzSize:1\nsha256:bad\n")
-    with pytest.raises(ValueError, match="has no vulnerabilities array"):
+    with pytest.raises(ValueError, match="missing vulnerabilities array"):
         list(nvd_feed.iter_vulnerabilities(io.BytesIO(b'{"other": 1}')))
-    with pytest.raises(ValueError, match="truncated NVD vulnerabilities array"):
+    with pytest.raises(ValueError, match="truncated NVD JSON"):
         list(nvd_feed.iter_vulnerabilities(io.BytesIO(b'{"vulnerabilities": [{"cve":')))
     with pytest.raises(ValueError, match="must be an object"):
         list(nvd_feed.iter_vulnerabilities(io.BytesIO(b'{"vulnerabilities": [123]}')))
@@ -322,7 +322,7 @@ def test_nvd_models_and_incremental_validation_cover_remaining_edges(tmp_path: P
         nvd_feed._cve_id({"cve": {"id": "BAD"}})
 
     settings = NvdSettings.from_mapping(tmp_path, {"feed_root": "nvd_sync_edge", "first_year": 2026})
-    pub = NvdPublisher(settings, client=FakeClient(b'{"vulnerabilities":[]}'),
+    pub = NvdPublisher(settings, client=FakeClient(b'{"format":"NVD_CVE","version":"2.0","vulnerabilities":[]}'),
                        clock=lambda: datetime(2026, 10, 21, tzinfo=timezone.utc), pause=lambda _: None)
     with pytest.raises(ValueError, match="coordinator identity is required"):
         pub.sync("   ")
@@ -358,7 +358,7 @@ def test_nvd_models_and_incremental_validation_cover_remaining_edges(tmp_path: P
         ({"format": "OTHER", "version": "2.0"}, "unexpected NVD API format/version"),
         ({"format": "NVD_CVE", "version": "2.0", "startIndex": 9, "vulnerabilities": []}, "pagination discontinuity"),
         ({"format": "NVD_CVE", "version": "2.0", "startIndex": 0, "vulnerabilities": [], "totalResults": -1, "resultsPerPage": 0}, "invalid NVD API pagination"),
-        ({"format": "NVD_CVE", "version": "2.0", "startIndex": 0, "vulnerabilities": [], "totalResults": 5, "resultsPerPage": 0}, "empty nonterminal page"),
+        ({"format": "NVD_CVE", "version": "2.0", "startIndex": 0, "vulnerabilities": [], "totalResults": 5, "resultsPerPage": 0}, "invalid NVD API pagination"),
     ):
         class BadApiClient(FakeClient):
             doc = api_doc

@@ -114,6 +114,9 @@ cve-bin-tool branch depends on this execution's NVD publication.
 2. For bootstrap, fetch fresh `.meta` identities and reuse a yearly download only after
    rechecking compressed/uncompressed sizes and hash. Transport retries are bounded and
    identity-aware; protocol/integrity errors fail instead of publishing partial bytes.
+   Retain the oldest verified metadata date as the cursor, so subsequent API windows cannot
+   skip the interval before download time. Parse the entire yearly envelope and require exact,
+   stable API pagination counts with no within-window duplicates.
 3. Parse raw CVEs into metadata layers, reject invalid/duplicate identities and construct
    `index/nvd.sqlite` from the parent index or replayable metadata chain plus new layers.
 4. Publish the immutable snapshot and advance its pointer only after verification. In
@@ -127,11 +130,14 @@ cve-bin-tool branch depends on this execution's NVD publication.
 1. Fetch each explicitly configured ecosystem archive from the fixed allowed HTTPS source
    under archive-byte and transport bounds.
 2. In `index`, reject unsafe archive names and expansion/record bounds. Parse advisory IDs;
-   store a multi-ecosystem advisory once while merging distinct package associations.
+   store a multi-ecosystem advisory once at its newest validated `modified` revision, replacing
+   raw data, withdrawal, aliases and package associations together. Ambiguous equal-time
+   revisions fail rather than selecting by archive order.
 3. Build advisory, package and alias tables and retain the set of whole ecosystems fetched.
    Package rows mentioning another ecosystem do not prove that ecosystem's complete coverage.
 4. Check SQLite integrity; publish source archives and `index/osv.sqlite` as one snapshot,
-   verify it and write global feed metadata.
+   verify the returned immutable publication pointer and write matching global feed metadata.
+   Scanners resolve the publisher root from their run's frozen settings.
 
 ### `grype_db_sync`
 
@@ -151,9 +157,10 @@ cve-bin-tool branch depends on this execution's NVD publication.
 1. Fetch the configured, hash-pinned source selections. Reject missing required selections,
    invalid source definitions, hash mismatches and source-byte violations.
 2. Normalize ATT&CK/CAPEC STIX bundles and CWE XML into keyed entries. Bound archive/XML
-   expansion, reject DTD/entity declarations and check the declared CWE version.
+   expansion, reject DTD/entity declarations throughout the XML document in supported encodings,
+   and require the namespaced CWE catalog root and exact nonempty configured version.
 3. Retain bounded CWE consequence scopes/impacts and count truncated weaknesses explicitly;
-   enforce total-record bounds and SQLite integrity.
+   including character truncation; enforce total-record bounds and SQLite integrity.
 4. Publish source bytes, normalized `index/mitre.sqlite`, counts and consequence-truncation
    metadata; verify the snapshot and publish its global feed identity.
 
@@ -161,7 +168,8 @@ cve-bin-tool branch depends on this execution's NVD publication.
 
 1. Resolve the exact NVD snapshot from `nvd_sync.publish`; require current pointer and manifest
    hash to match. Verify the acyclic parent chain and raw layers in oldest-first replay order.
-2. Copy and rehash those layers into bounded build input. Use the configured builder/tool
+2. Copy and rehash those layers into build input (independent decompression/replay bounds remain
+   [T-5247](../TODO.md#t-5247--resolve-third-party-data-sync-conditional-audit-boundaries)). Use the configured builder/tool
    image and record its observed identity; this database build does not download NVD again.
 3. The Docker path can build an unpinned missing builder image, but an explicit missing or
    mismatched image pin refuses that fallback. Run database construction without network and

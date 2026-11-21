@@ -164,8 +164,8 @@ def publish(settings: KevSettings, fetched: Mapping[str, Any], normalized: Mappi
                                                              "affected, reachable or exploitable."]})
 
 
-def verify(settings: KevSettings) -> dict[str, Any]:
-    identity = verify_current(settings.feed_root, FEED_ID)
+def verify(settings: KevSettings, *, pointer: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    identity = verify_current(settings.feed_root, FEED_ID, pointer=pointer)
     database = Path(identity["directory"]) / LOGICAL_PATH
     with sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True) as connection:
         if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":

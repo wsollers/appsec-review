@@ -44,16 +44,30 @@ class HttpDownloader:
         total = 0
         destination.parent.mkdir(parents=True, exist_ok=True)
         context = ssl.create_default_context()
-        if self.allow_redirects:
-            response = urllib.request.urlopen(request, timeout=self.timeout_seconds, context=context)
-        else:
-            class NoRedirect(urllib.request.HTTPRedirectHandler):
-                def redirect_request(self, request, file, code, message, headers, newurl):
-                    raise ValueError("feed download redirects are disabled")
+        allow_redirects = self.allow_redirects
+        redirects: list[str] = []
 
-            opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context), NoRedirect())
-            response = opener.open(request, timeout=self.timeout_seconds)
+        def validate_source(value: str) -> None:
+            target = urllib.parse.urlsplit(value)
+            if (target.scheme != "https" or target.hostname != parsed.hostname
+                    or (target.port or 443) != (parsed.port or 443) or target.username or target.password):
+                raise ValueError("feed redirect is outside the configured HTTPS source identity")
+
+        class SourceRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, request, file, code, message, headers, newurl):
+                if not allow_redirects:
+                    raise ValueError("feed download redirects are disabled")
+                validate_source(newurl)
+                redirected = super().redirect_request(request, file, code, message, headers, newurl)
+                if redirected is not None:
+                    redirects.append(newurl)
+                return redirected
+
+        opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context), SourceRedirect())
+        response = opener.open(request, timeout=self.timeout_seconds)
         with response, destination.open("xb") as output:
+            effective_url = response.geturl()
+            validate_source(effective_url)
             status = getattr(response, "status", 200)
             if status != 200:
                 raise RuntimeError(f"download returned HTTP {status}: {url}")
@@ -75,6 +89,8 @@ class HttpDownloader:
             os.fsync(output.fileno())
             return {
                 "url": url,
+                "effective_url": effective_url,
+                "redirects": redirects,
                 "sha256": digest.hexdigest(),
                 "size_bytes": total,
                 "etag": response.headers.get("ETag"),
@@ -175,15 +191,21 @@ POINTER_SCHEMAS = ("appsec-review/feed-pointer/1", "appsec-review/nvd-current-po
 
 def verify_current(root: Path, expected_feed: str, *,
                    manifest_validator: Callable[[Mapping[str, Any]], None] | None = None,
-                   max_manifest_bytes: int | None = None) -> dict[str, Any]:
-    """Verify the snapshot; claimed jobs also pin immutable consumption provenance."""
+                   max_manifest_bytes: int | None = None,
+                   pointer: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Verify a returned publication pointer, or current; record immutable consumption provenance."""
     from appsec_review.storage.feed_provenance import check_root, record_snapshot
     from appsec_review.storage.shared import safe_path
     check_root(root, expected_feed)
-    pointer_path = safe_path(root, "current.json")
-    if max_manifest_bytes is not None and pointer_path.stat().st_size > max_manifest_bytes:
-        raise ValueError(f"{expected_feed} pointer exceeds its byte bound")
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    if pointer is None:
+        pointer_path = safe_path(root, "current.json")
+        if max_manifest_bytes is not None and pointer_path.stat().st_size > max_manifest_bytes:
+            raise ValueError(f"{expected_feed} pointer exceeds its byte bound")
+        pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    else:
+        pointer = dict(pointer)
+        if max_manifest_bytes is not None and len(canonical_json(pointer)) > max_manifest_bytes:
+            raise ValueError(f"{expected_feed} pointer exceeds its byte bound")
     if pointer.get("schema") not in POINTER_SCHEMAS or pointer.get("feed_id") != expected_feed:
         raise ValueError(f"invalid {expected_feed} current pointer")
     directory = safe_path(root, f"snapshots/{pointer['snapshot_id']}")

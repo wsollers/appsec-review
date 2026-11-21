@@ -39,6 +39,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, tool_input_json
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
+from appsec_review.jobs.job_third_party_data_sync.steps.osv_sync import feed as osv_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.grype_db_sync import feed as grype_feed
 from appsec_review.rulepacks.sei_cert.pack import PackError, PackIdentity, verify_pack
 from appsec_review.jobs.job_evidence_collection.datasets import CONTRACT, DATASETS
@@ -347,7 +348,8 @@ def _prerequisites(unit: UnitContext, adapter: ToolAdapter, selection: Applicabi
                                   tuple(gaps), selection.families)
     if adapter.tool_id == "tool-osv-scanner":
         try:
-            identity = verify_current(unit.job.repository_root / "data" / "feeds" / "osv", "osv")
+            settings = osv_feed.consumer_settings(unit.job.repository_root, unit.job.run_root)
+            identity = verify_current(settings.feed_root, "osv")
             ecosystems = snapshot_ecosystems(Path(identity["directory"]))
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
             return selection, (), {}, f"verified immutable OSV database snapshot is unavailable ({type(exc).__name__})"

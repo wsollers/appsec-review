@@ -236,42 +236,91 @@ def parse_meta(payload: bytes) -> dict[str, Any]:
 
 
 def iter_vulnerabilities(stream: Any) -> Iterator[dict[str, Any]]:
-    """Incrementally decode the top-level vulnerabilities array."""
-    decoder = json.JSONDecoder()
+    """Stream records while validating the entire NVD envelope, including its suffix."""
+    def invalid_constant(value: str) -> None:
+        raise ValueError(f"invalid NVD JSON constant: {value}")
+
+    decoder = json.JSONDecoder(parse_constant=invalid_constant)
     text = io.TextIOWrapper(stream, encoding="utf-8-sig")
     buffer = ""
-    marker = re.compile(r'"vulnerabilities"\s*:\s*\[')
-    while True:
-        chunk = text.read(1024 * 1024)
+    eof = False
+
+    def more() -> None:
+        nonlocal buffer, eof
+        chunk = text.read(64 * 1024)
         buffer += chunk
-        match = marker.search(buffer)
-        if match:
-            buffer = buffer[match.end():]
+        eof = not chunk
+
+    def peek() -> str:
+        nonlocal buffer
+        while True:
+            buffer = buffer.lstrip(" \t\r\n")
+            if buffer or eof:
+                return buffer[:1]
+            more()
+
+    def take(token: str) -> None:
+        nonlocal buffer
+        if peek() != token:
+            raise ValueError(f"invalid NVD JSON: expected {token!r}")
+        buffer = buffer[1:]
+
+    def value() -> Any:
+        nonlocal buffer
+        peek()
+        while True:
+            try:
+                result, end = decoder.raw_decode(buffer)
+            except json.JSONDecodeError:
+                if eof:
+                    raise ValueError("invalid or truncated NVD JSON") from None
+                more()
+            else:
+                # A numeric token can straddle a read boundary.
+                if not eof and (end == len(buffer) or (
+                        type(result) in (int, float) and buffer[end] not in " \t\r\n,]}")):
+                    more()
+                    continue
+                buffer = buffer[end:]
+                return result
+
+    take("{")
+    fields: dict[str, Any] = {}
+    count = 0
+    while peek() != "}":
+        key = value()
+        if not isinstance(key, str) or key in fields:
+            raise ValueError("invalid or duplicate NVD JSON field")
+        take(":")
+        if key == "vulnerabilities":
+            fields[key] = True
+            take("[")
+            while peek() != "]":
+                record = value()
+                if not isinstance(record, dict):
+                    raise ValueError("NVD vulnerability entry must be an object")
+                count += 1
+                yield record
+                if peek() == "]":
+                    break
+                take(",")
+                if peek() == "]":
+                    raise ValueError("invalid NVD JSON trailing comma")
+            take("]")
+        else:
+            fields[key] = value()
+        if peek() == "}":
             break
-        if not chunk:
-            raise ValueError("NVD JSON has no vulnerabilities array")
-        if len(buffer) > 4 * 1024 * 1024:
-            buffer = buffer[-1024:]
-    while True:
-        buffer = buffer.lstrip()
-        if buffer.startswith("]"):
-            while text.read(1024 * 1024):
-                pass
-            return
-        if buffer.startswith(","):
-            buffer = buffer[1:].lstrip()
-        try:
-            value, end = decoder.raw_decode(buffer)
-        except json.JSONDecodeError:
-            chunk = text.read(1024 * 1024)
-            if not chunk:
-                raise ValueError("truncated NVD vulnerabilities array") from None
-            buffer += chunk
-            continue
-        if not isinstance(value, dict):
-            raise ValueError("NVD vulnerability entry must be an object")
-        yield value
-        buffer = buffer[end:]
+        take(",")
+        if peek() == "}":
+            raise ValueError("invalid NVD JSON trailing comma")
+    take("}")
+    if peek():
+        raise ValueError("invalid NVD JSON trailing data")
+    if fields.get("format") != "NVD_CVE" or fields.get("version") != "2.0" or "vulnerabilities" not in fields:
+        raise ValueError("unexpected NVD JSON format/version or missing vulnerabilities array")
+    if "totalResults" in fields and (type(fields["totalResults"]) is not int or fields["totalResults"] != count):
+        raise ValueError("NVD yearly record count mismatch")
 
 
 def _cve_id(wrapper: Mapping[str, Any]) -> str:
@@ -546,7 +595,7 @@ class NvdPublisher:
             "parent_snapshot_id": None,
             "captured_at": timestamp(instant),
             "coverage": {"first_year": self.settings.first_year, "last_year": instant.year},
-            "cursor": timestamp(instant),
+            "cursor": timestamp(min(parse_time(layer["source_metadata"]["lastModifiedDate"]) for layer in layers)),
             "record_count": len(all_ids),
             "layers": layers,
             "limitations": [LIMITATION],
@@ -585,6 +634,8 @@ class NvdPublisher:
             window_end = min(window_start + timedelta(days=self.settings.max_window_days), finish)
             index = 0
             pages = []
+            window_total = None
+            window_ids: set[str] = set()
             while True:
                 url = self._api_url(window_start, window_end, index)
                 payload = self.client.get_bytes(url, api_key)
@@ -593,6 +644,19 @@ class NvdPublisher:
                     raise ValueError("unexpected NVD API format/version")
                 if value.get("startIndex") != index or not isinstance(value.get("vulnerabilities"), list):
                     raise ValueError("NVD API pagination discontinuity")
+                total = value.get("totalResults")
+                returned = value.get("resultsPerPage")
+                if (type(total) is not int or total < 0 or type(returned) is not int
+                        or type(value.get("startIndex")) is not int
+                        or returned != len(value["vulnerabilities"])
+                        or returned != min(self.settings.page_size, total - index)
+                        or (window_total is not None and total != window_total)):
+                    raise ValueError("invalid NVD API pagination values or incomplete page")
+                window_total = total
+                page_ids = {_cve_id(item) for item in value["vulnerabilities"]}
+                if window_ids.intersection(page_ids):
+                    raise ValueError("NVD API repeats a CVE within one pagination window")
+                window_ids.update(page_ids)
                 raw_path = staging / f"api-{len(layers):04d}-{index:09d}.json.gz"
                 with raw_path.open("xb") as raw:
                     with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as output:
@@ -609,10 +673,6 @@ class NvdPublisher:
                     "raw_blob": self._put_blob(raw_path, ".json.gz"),
                     "metadata_blob": self._put_blob(metadata_path, ".metadata.jsonl.gz"),
                 })
-                total = value.get("totalResults")
-                returned = value.get("resultsPerPage")
-                if not isinstance(total, int) or total < 0 or not isinstance(returned, int) or returned < 0:
-                    raise ValueError("invalid NVD API pagination values")
                 index += returned
                 if index >= total:
                     break

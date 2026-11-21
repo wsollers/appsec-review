@@ -146,7 +146,7 @@ def build_job(
     def osv_publish(unit: UnitContext) -> Mapping[str, Any]:
         settings = _osv(unit.job)
         pointer = osv_feed.publish(settings, unit.output("osv_sync.fetch"), unit.output("osv_sync.index"))
-        identity = osv_feed.verify(settings)
+        identity = osv_feed.verify(settings, pointer=pointer)
         path = publish_metadata(unit.job.metadata_root, "feeds", "osv", {
             "schema": "appsec-review/global-feed-metadata/1", "feed_id": "osv", "updated_at": stamp(),
             "run_id": unit.job.run_id, "attempt_id": unit.job.attempt_id, "pointer": pointer, "identity": identity,
@@ -163,7 +163,7 @@ def build_job(
     def mitre_publish(unit: UnitContext) -> Mapping[str, Any]:
         settings = _mitre(unit.job)
         pointer = mitre_feed.publish(settings, unit.output("mitre_sync.fetch"), unit.output("mitre_sync.normalize"))
-        identity = mitre_feed.verify(settings)
+        identity = mitre_feed.verify(settings, pointer=pointer)
         path = publish_metadata(unit.job.metadata_root, "feeds", "mitre", {
             "schema": "appsec-review/global-feed-metadata/1", "feed_id": "mitre", "updated_at": stamp(),
             "run_id": unit.job.run_id, "attempt_id": unit.job.attempt_id, "pointer": pointer, "identity": identity,
@@ -184,7 +184,7 @@ def build_job(
         def publish(unit: UnitContext) -> Mapping[str, Any]:
             settings = settings_of(unit.job)
             pointer = module.publish(settings, unit.output(f"{step}.fetch"), unit.output(f"{step}.normalize"))
-            identity = module.verify(settings)
+            identity = module.verify(settings, pointer=pointer)
             path = publish_metadata(unit.job.metadata_root, "feeds", feed_id, {
                 "schema": "appsec-review/global-feed-metadata/1", "feed_id": feed_id, "updated_at": stamp(),
                 "run_id": unit.job.run_id, "attempt_id": unit.job.attempt_id, "pointer": pointer,
@@ -238,7 +238,7 @@ def build_job(
         settings = _cve(unit.job)
         built = unit.output("cve_bin_tool_db_build.build")
         pointer = cve_db.publish(settings, built)
-        identity = cve_db.verify(settings, unit.output("cve_bin_tool_db_build.resolve_nvd_snapshot"))
+        identity = cve_db.verify(settings, unit.output("cve_bin_tool_db_build.resolve_nvd_snapshot"), pointer=pointer)
         path = publish_metadata(unit.job.metadata_root, "feeds", "cve-bin-tool", {
             "schema": "appsec-review/global-feed-metadata/1", "feed_id": "cve-bin-tool", "updated_at": stamp(),
             "run_id": unit.job.run_id, "attempt_id": unit.job.attempt_id, "pointer": pointer, "identity": identity,

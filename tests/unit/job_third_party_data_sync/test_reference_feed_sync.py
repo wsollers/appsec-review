@@ -550,7 +550,7 @@ def test_kev_epss_mitre_and_nvd_index_cover_settings_lookups_and_validation_edge
     ) == ([], False)
     cat_zip = tmp_path / "cat.zip"
     with zipfile.ZipFile(cat_zip, "w") as zf:
-        zf.writestr("cwe.xml", b'<Weakness_Catalog Version="4.20"><Categories><Category ID="1" Name="Cat" Status="Stable"/></Categories></Weakness_Catalog>')
+        zf.writestr("cwe.xml", b'<Weakness_Catalog xmlns="http://cwe.mitre.org/cwe-7" Version="4.20"><Categories><Category ID="1" Name="Cat" Status="Stable"/></Categories></Weakness_Catalog>')
     cat_norm = mitre_feed.normalize(ms, {"sources": {"cwe": {"kind": "cwe", "version": "4.20", "path": str(cat_zip)}}}, tmp_path / "mw_cat")
     assert cat_norm["record_count"] == 1
 

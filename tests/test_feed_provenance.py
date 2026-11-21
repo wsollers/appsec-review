@@ -296,7 +296,7 @@ def test_nvd_separate_publisher_and_actual_database_consumer(tmp_path):
     from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.feed import NvdPublisher
     from appsec_review.jobs.job_third_party_data_sync.steps.nvd_sync.models import NvdSettings
     from appsec_review.jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.database import resolve_nvd_snapshot
-    from tests.test_nvd_sync_job import FakeClient, vulnerability
+    from tests.unit.job_third_party_data_sync.test_nvd_sync_job import FakeClient, vulnerability
     producer = owner(tmp_path, "nvd-producer")
     raw = json.dumps({"format": "NVD_CVE", "version": "2.0",
                       "vulnerabilities": [vulnerability("CVE-2026-1000")]}).encode()

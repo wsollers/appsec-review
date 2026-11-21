@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -91,21 +92,29 @@ def index(settings: OsvSettings, fetched: Mapping[str, Any], work: Path) -> dict
                     identifier = document.get("id")
                     if not isinstance(identifier, str) or not identifier:
                         raise ValueError(f"OSV record has no id: {member.filename}")
-                    # An advisory affecting several ecosystems (e.g. a GHSA record) is published in
-                    # each ecosystem's archive: it is stored and counted once, and its affected
-                    # packages from every copy are indexed without duplicates.
-                    inserted = connection.execute(
-                        "INSERT OR IGNORE INTO advisory VALUES (?, ?, ?, ?, ?, ?)",
+                    raw = json.dumps(document, sort_keys=True, separators=(",", ":"))
+                    previous = connection.execute("SELECT modified, raw_json FROM advisory WHERE id = ?",
+                                                  (identifier,)).fetchone()
+                    if previous:
+                        modified = _modified(document.get("modified"))
+                        prior_modified = _modified(previous[0])
+                        if modified == prior_modified and raw != previous[1]:
+                            raise ValueError(f"OSV conflicting advisory revision: {identifier}")
+                        if modified <= prior_modified:
+                            continue
+                        connection.execute("DELETE FROM package WHERE advisory_id = ?", (identifier,))
+                        connection.execute("DELETE FROM alias WHERE advisory_id = ?", (identifier,))
+                    connection.execute(
+                        "INSERT OR REPLACE INTO advisory VALUES (?, ?, ?, ?, ?, ?)",
                         (identifier, document.get("modified"), document.get("published"), document.get("withdrawn"),
-                         document.get("summary"), json.dumps(document, sort_keys=True, separators=(",", ":"))),
-                    ).rowcount
-                    if inserted:
+                         document.get("summary"), raw),
+                    )
+                    if not previous:
                         count += 1
                         if count > settings.max_records:
                             raise ValueError("OSV record count exceeded configured bound")
-                        for alias in document.get("aliases", []):
-                            if isinstance(alias, str):
-                                connection.execute("INSERT INTO alias VALUES (?, ?)", (identifier, alias))
+                    for alias in sorted({item for item in document.get("aliases", []) if isinstance(item, str)}):
+                        connection.execute("INSERT INTO alias VALUES (?, ?)", (identifier, alias))
                     packages: set[tuple[str, str]] = set()
                     for affected in document.get("affected", []):
                         package = affected.get("package") if isinstance(affected, dict) else None
@@ -130,6 +139,23 @@ def index(settings: OsvSettings, fetched: Mapping[str, Any], work: Path) -> dict
             "max_lookup_results": settings.max_lookup_results, "expanded_bytes": expanded}
 
 
+def _modified(value: Any) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            raise ValueError("missing offset")
+        return parsed.astimezone(timezone.utc)
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ValueError("OSV duplicate advisory requires a valid modified timestamp") from error
+
+
+def consumer_settings(repository_root: Path, run_root: Path) -> OsvSettings:
+    """Resolve the publisher root only from this run's frozen configuration."""
+    document = json.loads((run_root / "data/configuration/resolved.json").read_bytes())
+    values = document["jobs"]["job_third_party_data_sync"]["steps"]["osv_sync"]["settings"]
+    return OsvSettings.from_mapping(repository_root, values)
+
+
 def publish(settings: OsvSettings, fetched: Mapping[str, Any], indexed: Mapping[str, Any]) -> dict[str, Any]:
     files = {f"sources/{urllib.parse.quote(name, safe='')}.zip": Path(entry["path"])
              for name, entry in fetched["archives"].items()}
@@ -143,8 +169,8 @@ def publish(settings: OsvSettings, fetched: Mapping[str, Any], indexed: Mapping[
                                              "limitations": ["OSV matches are applicability leads, not findings."]})
 
 
-def verify(settings: OsvSettings) -> dict[str, Any]:
-    identity = verify_current(settings.feed_root, "osv")
+def verify(settings: OsvSettings, *, pointer: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    identity = verify_current(settings.feed_root, "osv", pointer=pointer)
     database = Path(identity["directory"]) / "index" / "osv.sqlite"
     with sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True) as connection:
         if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":

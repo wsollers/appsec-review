@@ -105,6 +105,9 @@ def test_http_transport_enforces_bounds_and_refuses_redirects(tmp_path, monkeypa
         status = 200
         headers = {} if case == "stream-large" else {"Content-Length": "7" if case == "declared-large" else "6"}
 
+        def geturl(self):
+            return "https://grype.anchore.io/db"
+
     def opener(*handlers):
         def open_request(request, timeout):
             assert timeout == 3

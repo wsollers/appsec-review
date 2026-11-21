@@ -33,7 +33,10 @@ def write_databases(directory: Path, *, tool_version: str = "3.4", cve_count: in
                                [(f"CVE-2026-{index:04d}",) for index in range(cve_count)])
         if extra_source:
             connection.execute("INSERT INTO cve_severity VALUES ('CVE-2026-9999', ?)", (extra_source,))
-        connection.execute("CREATE TABLE cve_range(cve_number TEXT, data_source TEXT)")
+        connection.execute("""CREATE TABLE cve_range(
+            cve_number TEXT, data_source TEXT, vendor TEXT, product TEXT, version TEXT,
+            versionStartIncluding TEXT, versionStartExcluding TEXT,
+            versionEndIncluding TEXT, versionEndExcluding TEXT)""")
     with sqlite3.connect(directory / "version_map.db") as connection:
         connection.execute("CREATE TABLE latest_update_sqlite(datestamp DATETIME PRIMARY KEY)")
     (directory / "build.json").write_text(json.dumps({"tool_version": tool_version, "sources": list(sources),

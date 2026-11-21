@@ -135,6 +135,7 @@ def test_http_downloader_covers_allowlist_redirects_and_status_errors(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import io
     import urllib.request
+    from types import SimpleNamespace
 
     dl = publication.HttpDownloader(timeout_seconds=5, allow_redirects=True)
     for bad_url in (
@@ -151,11 +152,16 @@ def test_http_downloader_covers_allowlist_redirects_and_status_errors(
             self.status = status
             self.headers = headers or {}
 
-    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout, context: Resp(b"hello", 200, {"ETag": '"1"'}))
+        def geturl(self):
+            return "https://allowed.example/ok"
+
+    monkeypatch.setattr(urllib.request, "build_opener",
+                        lambda *handlers: SimpleNamespace(open=lambda req, timeout: Resp(b"hello", 200, {"ETag": '"1"'})))
     rec = dl.download("https://allowed.example/ok", tmp_path / "ok.bin", max_bytes=16, allowed_hosts=("allowed.example",))
     assert rec["size_bytes"] == 5 and rec["etag"] == '"1"' and (tmp_path / "ok.bin").read_bytes() == b"hello"
 
-    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout, context: Resp(b"nope", 503))
+    monkeypatch.setattr(urllib.request, "build_opener",
+                        lambda *handlers: SimpleNamespace(open=lambda req, timeout: Resp(b"nope", 503)))
     with pytest.raises(RuntimeError, match="download returned HTTP 503"):
         dl.download("https://allowed.example/err", tmp_path / "err.bin", max_bytes=16, allowed_hosts=("allowed.example",))
 

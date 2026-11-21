@@ -19,6 +19,7 @@ import xml.etree.ElementTree as ET
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
 from appsec_review import blint_report
 from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
+from appsec_review.jobs.job_third_party_data_sync.steps.osv_sync import feed as osv_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build import (
     database as cve_bin_tool_feed,
 )
@@ -350,7 +351,8 @@ class ContainerScannerRunner:
                     settings = cve_bin_tool_feed.consumer_settings(self.repository_root, self.run_root)
                     current = cve_bin_tool_feed.verify_consumer(settings, tool_version=tool.version)
                 else:
-                    current = verify_current(self.repository_root / "data" / "feeds" / feed, feed)
+                    settings = osv_feed.consumer_settings(self.repository_root, self.run_root)
+                    current = verify_current(settings.feed_root, feed)
                 self._feeds[capability] = current
                 if capability == "osv":
                     self._osv_ecosystems = snapshot_ecosystems(Path(str(current["directory"])))
