@@ -54,9 +54,11 @@ def _catalog(count=14, padding=8000):
 
 
 def _resolve(tmp_path, catalog, *, limits=None, max_input_tokens=200000, abstain=False,
-             enabled=True, custom_infer="default", target_root=None, repository_root=None):
+             enabled=True, custom_infer="default", target_root=None, repository_root=None,
+             summary=None):
     limits = limits or PlanningFeedbackSettings()
-    summary = summarize_catalog(catalog, max_items=2000, max_bytes=524288, sample_per_prefix=20)
+    if summary is None:
+        summary = summarize_catalog(catalog, max_items=2000, max_bytes=524288, sample_per_prefix=20)
     plan = deterministic_plan(catalog, summary)
     plan["build_environment"] = None
     outputs = {
@@ -114,6 +116,96 @@ def _combined_request(requests):
     return replace(requests[0], summary={**requests[0].summary, "build_units": units},
                    allowed_build_units=tuple(unit["build_unit_id"] for unit in units),
                    allowed_paths=tuple(sorted({path for request in requests for path in request.allowed_paths})))
+
+
+def test_item_trim_preserves_descriptors_and_accounts_for_every_retained_unit():
+    catalog = _catalog(2, padding=0)
+    original = copy.deepcopy(catalog)
+    summary = summarize_catalog(catalog, max_items=2, max_bytes=524288, sample_per_prefix=1)
+    assert summary["build_units"] == catalog["build_units"]
+    assert summary["bounds"]["items_emitted"] == 2
+    assert summary["bounds"]["actual_bytes"] == len(canonical_json(summary))
+    assert summary["bounds"]["truncated"] is True
+    assert catalog == original
+    with pytest.raises(ValueError, match="summary item budget"):
+        summarize_catalog(catalog, max_items=1, max_bytes=524288, sample_per_prefix=1)
+
+
+def test_fitting_summary_has_exact_accounting_without_false_truncation():
+    catalog = _catalog(1, padding=0)
+    summary = summarize_catalog(catalog, max_items=4, max_bytes=524288, sample_per_prefix=1)
+    assert summary["bounds"]["truncated"] is False
+    assert summary["bounds"]["items_emitted"] == 4
+    assert summary["bounds"]["actual_bytes"] == len(canonical_json(summary))
+    bounded = summarize_catalog(catalog, max_items=4, max_bytes=len(canonical_json(summary)),
+                                sample_per_prefix=1)
+    assert bounded["build_units"] == catalog["build_units"]
+    assert bounded["bounds"]["truncated"] is False
+    assert bounded["bounds"]["actual_bytes"] == len(canonical_json(bounded))
+
+
+def test_byte_trimmed_descriptor_is_retrievable_in_real_planning_feedback(tmp_path):
+    catalog = _catalog(1, padding=0)
+    text = json.dumps({"compilerOptions": {"target": "ES2020"}, "description": "x " * 2000})
+    document = {"path": "node-00/tsconfig.json", "sha256": hashlib.sha256(text.encode()).hexdigest(),
+                "content": text}
+    catalog["build_units"][0]["descriptor_package"]["documents"].append(document)
+    catalog["files"].append({"path": document["path"], "sha256": document["sha256"],
+                             "size_bytes": len(text.encode()), "language": "JSON"})
+    original = copy.deepcopy(catalog)
+    target = tmp_path / "target"
+    (target / "node-00").mkdir(parents=True)
+    (target / document["path"]).write_text(text, encoding="utf-8")
+    summary = summarize_catalog(catalog, max_items=20, max_bytes=1800, sample_per_prefix=2)
+    assert all(item["path"] != document["path"] for unit in summary["build_units"]
+               for item in unit["descriptor_package"]["documents"])
+    calls = []
+
+    def infer(request, **_kwargs):
+        calls.append(request)
+        if len(calls) == 1:
+            assert document["path"] in request.allowed_paths
+            assert {k: document[k] for k in ("path", "sha256")} | {
+                "size_bytes": len(text.encode())} in request.summary["evidence_inventory"]
+            return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "need_evidence", "requests": [{
+                "path": document["path"], "sha256": document["sha256"], "reason": "accepted compiler options"}]})
+        assert request.summary["evidence"] == [document]
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "final", "component_proposals": [],
+                            "hints": [], "build_recipes": [], "abstentions": [{
+                                "build_unit_id": request.allowed_build_units[0], "reason": "no compiler proof"}]})
+
+    result, _ = _resolve(tmp_path / "run", catalog, summary=summary, custom_infer=infer,
+                         max_input_tokens=32000, target_root=target)
+    assert result["model_calls"] == 2
+    assert result["plan"]["planning_evidence"] == [document]
+    assert catalog == original
+
+
+def test_nested_node_rejection_preserves_descriptor_backed_command_normalization(tmp_path):
+    catalog = _catalog(1, padding=0)
+    calls = []
+
+    def infer(request, **_kwargs):
+        calls.append(request)
+        unit = request.summary["build_units"][0]
+        if len(calls) == 2:
+            assert request.repair_errors and request.prior_response is None
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "final", "component_proposals": [],
+            "hints": [], "abstentions": [], "build_recipes": [{
+                "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
+                "image_profile": "node", "source_dir": unit["root"], "build_dir": unit["root"] + "/build",
+                "system_packages": [], "environment": {},
+                "dependency_files": None if len(calls) == 1 else [item["path"] for item in unit["markers"]],
+                "configure_commands": [], "build_commands": [],
+                "expected_outputs": [unit["root"] + "/build"], "network_required": False,
+                "reason": "accepted package build script",
+            }]})
+
+    result, _ = _resolve(tmp_path, catalog, custom_infer=infer, max_input_tokens=32000)
+    assert result["model_calls"] == 2 and result["gaps"] == []
+    action = result["plan"]["build_topology"]["build_actions"][0]
+    assert action["recipe"]["build_commands"] == [["npm", "run", "build"]]
+    assert action["executable"] is False
 
 
 def test_initial_byte_overflow_partitions_before_any_model_call_without_losing_units(tmp_path, record_property):

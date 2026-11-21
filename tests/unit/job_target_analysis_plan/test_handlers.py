@@ -307,6 +307,28 @@ def test_job_runner_executes_isolated_planner_succeeded_and_index_attest_reuse(t
     accepted = load_accepted_plan(run_root)
     assert accepted["schema"] == PLAN_SCHEMA
     assert accepted["model"]["status"] == "ACCEPTED"
+    from appsec_review.jobs.job_project_build.datasets import CONTRACT as BUILD_CONTRACT
+    from appsec_review.runtime.inputs import input_read_scope
+
+    plan_handoff = run_root / outcome["handoff"]["resolving_paths"]["attempt"] / "handoff.json"
+    plan_sha = file_sha256(plan_handoff)
+    consumer = SimpleNamespace(
+        config=config.job("job_project_build"), contract=BUILD_CONTRACT, run_root=run_root,
+        upstream_handoffs={**upstream, "job_target_analysis_plan": plan_sha})
+    with input_read_scope(consumer) as reads:
+        assert load_accepted_plan(run_root) == accepted
+    observed = [row for row in reads.document()["reads"] if row["producer"] == "job_target_analysis_plan"]
+    assert {row["output_kind"] for row in observed} == {"handoff", "analysis_plan_documents"}
+    payload = next(row for row in observed if row["output_kind"] == "analysis_plan_documents")
+    ref = outcome["result"]["outputs"]["plan_acceptance.publish_handoff"]["artifact"]
+    assert (payload["path"], payload["sha256"], payload["handoff_sha256"]) == (
+        ref["path"], ref["sha256"], plan_sha)
+    assert payload["read"] is True and payload["cited"] is None
+    consumer.contract = replace(BUILD_CONTRACT, inputs=tuple(
+        item for item in BUILD_CONTRACT.inputs if item.output_kind != "analysis_plan_documents"))
+    with pytest.raises(ValueError, match="undeclared consumption"):
+        with input_read_scope(consumer):
+            load_accepted_plan(run_root)
 
     # Exercise index_plan reused=True branch calling IndexBuilder(...).attest_existing() (a3d4831c0)
     index_unit = next(u for u in build_job(infer=infer).units if u.unit_id == "plan_acceptance.index_plan")

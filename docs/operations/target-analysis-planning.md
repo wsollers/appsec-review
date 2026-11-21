@@ -43,6 +43,9 @@ new artifacts or model context; sensitive additive evidence is withheld, not sil
 
 Recognized model-output errors, call timeouts, budget exhaustion and explicit abstentions produce
 named gaps. Unexpected provider/application errors propagate rather than being converted to success.
+Nested proposal JSON types are checked against the published schema before recipe normalization;
+malformed identities, profiles or argv values spend the same bounded repair budget, not an
+uncaught type-error abort. Descriptor-backed recipe corrections still precede semantic validation.
 For proposal/3, the single inference dispatch strips rejected messages, raw/rejected output and
 exception chains before diagnostic retention. A recognized rejection is recorded and spends the
 same finite call budget; the admission permit's final cancellation check still runs before repair.
@@ -55,6 +58,9 @@ catalog and plan identities allow unaffected jobs and shards to be reused.
 
 The accepted plan is directly retrievable from the `analysis` index through the bounded MCP tools.
 No new glob, regex, SQL, shell, or filesystem endpoint is needed.
+Typed consumers of `load_accepted_plan` record both the admitted handoff read and the exact
+`analysis_plan_documents` payload read. A handoff grant alone does not grant payload consumption;
+these observations retain the accepted artifact path/hash and do not imply citation.
 
 The model sees only a bounded catalog summary (`appsec-review/target-analysis-summary/1`, written
 as `catalog-summary.json` beside the accepted plan). Its bounds are integers in
@@ -65,6 +71,13 @@ as `catalog-summary.json` beside the accepted plan). Its bounds are integers in
 | `summary_max_items` | 2000 | maximum summarized catalog items; at least 1 |
 | `summary_max_bytes` | 524288 | maximum summary bytes; at least 1024 |
 | `summary_sample_per_prefix` | 20 | sampled files per path prefix; 1 to `summary_max_items` |
+
+`items_emitted` counts all retained summary records (including build units), not only sampled
+files. Descriptor documents within those units are bounded by serialized bytes. Illustrative
+records are trimmed before descriptor evidence; a bound smaller than the required build-unit
+count is rejected explicitly. The byte count describes the final serialized summary. Trimming
+never mutates the accepted catalog; omitted descriptor documents remain eligible for the existing
+bounded evidence inventory and request loop, whose omitted count still names unavailable visibility.
 
 ## Build-topology interpretation
 
@@ -156,8 +169,9 @@ complete-success cache hits. Availability follows the
 [environment lifecycle](build-environment-analysis.md), including stale optional prior evidence.
 
 Catalog handoffs, the full target catalog and repository partition have explicit 32 MiB readers;
-other catalog children remain bounded at 16 MiB. Whole plans/handoffs and topology inputs/
-refinements are capped at 32 MiB; the canonical graph itself remains capped at 16 MiB. This
+other catalog children remain bounded at 16 MiB. Whole plans/handoffs and accepted-refinement
+documents are capped at 32 MiB; topology evidence inputs and the canonical graph are capped at
+16 MiB. This
 corrects the feature predecessor's 16 MiB intake conflict without removing integrity checks
 or relaxing the global 32 MiB ceiling. The accepted-refinements index has the same 32 MiB
 pre-read/post-length bound in both consumers, and canonical replacement is size-checked under

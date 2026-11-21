@@ -109,6 +109,38 @@ def test_proposal3_final_uses_actual_validator_and_immutable_complete_cache(tmp_
     assert cached["proposal"] == result["proposal"]
 
 
+@pytest.mark.parametrize("field,value", [
+    ("abstention", []),
+    ("abstention", {}),
+    ("image_profile", {}),
+    ("configure_commands", None),
+    ("build_commands", [["clang", []]]),
+], ids=["list-unit", "object-unit", "object-profile", "null-commands", "nested-argv"])
+def test_nested_model_values_reach_bounded_repair(tmp_path, field, value):
+    from appsec_review.inference.claude_cli import parse_model_payload
+
+    catalog, request, final, _ = _inputs()
+    malformed = copy.deepcopy(final)
+    if field == "abstention":
+        malformed["build_recipes"] = []
+        malformed["abstentions"] = [{"build_unit_id": value, "reason": "unknown"}]
+    else:
+        malformed["build_recipes"][0][field] = value
+    parsed = parse_model_payload(json.dumps(malformed), request.schema)
+    assert validate_proposal(parsed, catalog=catalog)
+    result, calls = _run(tmp_path, [parsed, final],
+                         limits=replace(PlanningFeedbackSettings(), max_calls=2))
+    assert result["status"] == "ACCEPTED"
+    assert len(calls) == result["calls"] == 2
+    assert calls[1].repair_errors and calls[1].prior_response is None
+    exhausted, rejected = _run(tmp_path / "exhausted", [parsed, parsed],
+                               limits=replace(PlanningFeedbackSettings(), max_calls=2))
+    assert exhausted["status"] == "BUDGET_EXCEEDED"
+    assert exhausted["proposal"] is None and exhausted["errors"]
+    assert len(rejected) == exhausted["calls"] == 2
+    assert not list((tmp_path / "exhausted" / "cache").glob("*.json"))
+
+
 def _component_inputs():
     texts = {
         "CMakeLists.txt": "project(control)\n",

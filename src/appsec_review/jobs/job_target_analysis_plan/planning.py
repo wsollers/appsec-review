@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from collections.abc import Collection, Mapping
 import copy
+from functools import lru_cache
 import hashlib
 import json
 from pathlib import PurePosixPath
@@ -60,20 +61,17 @@ def summarize_catalog(catalog: Mapping[str, Any], *, max_items: int, max_bytes: 
         grouped[prefix].append(item)
     prefixes = []
     emitted = 0
-    used_bytes = 0
     truncated = False
     for prefix in sorted(grouped):
         values = grouped[prefix]
         samples = []
         for item in values:
-            encoded = len(str(item["path"]).encode("utf-8")) + 96
-            if len(samples) >= sample_per_prefix or emitted >= max_items or used_bytes + encoded > max_bytes:
+            if len(samples) >= sample_per_prefix or emitted >= max_items:
                 truncated = True
                 break
             samples.append({"path": item["path"], "sha256": item["sha256"],
                             "language": item.get("language"), "size_bytes": item["size_bytes"]})
             emitted += 1
-            used_bytes += encoded
         prefixes.append({"prefix": prefix, "file_count": len(values), "sample": samples})
     languages = Counter(str(item.get("language") or "Other") for item in files)
     component_paths = _component_paths(files, components)
@@ -105,12 +103,7 @@ def summarize_catalog(catalog: Mapping[str, Any], *, max_items: int, max_bytes: 
                 len(summary["compile_databases"]) + len(summary["accepted_artifacts"]) +
                 len(summary["build_units"]) + len(summary["catalog_gaps"]))
 
-    def trim_one() -> bool:
-        for unit in reversed(summary["build_units"]):
-            documents = unit.get("descriptor_package", {}).get("documents", [])
-            if documents:
-                documents.pop()
-                return True
+    def trim_illustration() -> bool:
         for key in ("catalog_gaps", "accepted_artifacts", "recognized_build_files",
                     "compile_databases", "components"):
             if summary[key]:
@@ -129,19 +122,25 @@ def summarize_catalog(catalog: Mapping[str, Any], *, max_items: int, max_bytes: 
         return False
 
     while item_count() > max_items:
-        if not trim_one():
-            break
+        if not trim_illustration():
+            raise ValueError("summary item budget is too small for accepted build-unit identities")
         summary["bounds"]["truncated"] = True
     while True:
-        summary["bounds"]["actual_bytes"] = len(canonical_json(summary))
-        actual = len(canonical_json(summary))
+        summary["bounds"]["items_emitted"] = item_count()
+        while summary["bounds"]["actual_bytes"] != len(canonical_json(summary)):
+            summary["bounds"]["actual_bytes"] = len(canonical_json(summary))
+        actual = summary["bounds"]["actual_bytes"]
         if actual <= max_bytes:
-            summary["bounds"]["actual_bytes"] = actual
             break
-        if not trim_one():
-            raise ValueError("summary byte budget is too small for required identity metadata")
+        if not trim_illustration():
+            for unit in reversed(summary["build_units"]):
+                documents = unit.get("descriptor_package", {}).get("documents", [])
+                if documents:
+                    documents.pop()
+                    break
+            else:
+                raise ValueError("summary byte budget is too small for required identity metadata")
         summary["bounds"]["truncated"] = True
-    summary["bounds"]["items_emitted"] = sum(len(item["sample"]) for item in summary["prefixes"])
     hash_payload = dict(summary)
     hash_payload.pop("summary_sha256")
     summary["summary_sha256"] = hashlib.sha256(canonical_json(hash_payload)).hexdigest()
@@ -338,15 +337,50 @@ def _publish_build_graph(plan: dict[str, Any]) -> None:
     ]))
 
 
+@lru_cache(maxsize=1)
+def _proposal_validator():
+    from jsonschema import Draft202012Validator
+    from referencing import Registry, Resource
+    from urllib.parse import urljoin
+    from appsec_review.application_paths import application_root
+
+    root = application_root("docs/schemas/target-analysis-proposal.schema.json") / "docs" / "schemas"
+    proposal = json.loads((root / "target-analysis-proposal.schema.json").read_bytes())
+    recipe = json.loads((root / "build-recipe.schema.json").read_bytes())
+    registry = Registry().with_resources([
+        (urljoin(proposal["$id"], "build-recipe.schema.json"), Resource.from_contents(recipe)),
+        (recipe["$id"], Resource.from_contents(recipe)),
+    ])
+    return Draft202012Validator(proposal, registry=registry)
+
+
+def _proposal_type_errors(proposal) -> list[str]:
+    """Check nested JSON shapes before descriptor-backed normalization or membership tests."""
+    errors = []
+    for error in _proposal_validator().iter_errors(proposal):
+        # Semantic and cardinality checks still follow normalization: e.g. accepted Node
+        # descriptors can replace empty/restore-only build commands with the actual build.
+        if len(error.path) >= 3 and (error.validator == "type" or
+                error.validator == "enum" and not isinstance(error.instance, str)):
+            path = ".".join(map(str, error.path))[:256]
+            errors.append(f"{path}: invalid nested JSON type")
+            if len(errors) == 20:
+                break
+    return errors
+
+
 def validate_proposal(proposal: Mapping[str, Any], *, catalog: Mapping[str, Any],
                       allowed_components: Collection[str] | None = None,
                       allowed_paths: Collection[str] | None = None,
                       allowed_scanners: Collection[str] | None = None,
                       allowed_build_systems: Collection[str] | None = None) -> list[str]:
     errors: list[str] = []
-    if (set(proposal) != {"schema", "action", "component_proposals", "build_recipes", "hints", "abstentions"}
+    if (not isinstance(proposal, Mapping) or
+            set(proposal) != {"schema", "action", "component_proposals", "build_recipes", "hints", "abstentions"}
             or proposal.get("schema") != PROPOSAL_SCHEMA or proposal.get("action") != "final"):
         return ["proposal must be a closed proposal/3 final response"]
+    if errors := _proposal_type_errors(proposal):
+        return errors
     graph = compile_build_topology(catalog.get("build_units", ()),
                                    source_fingerprint=catalog["source_fingerprint"])
     fact_ids = {fact["fact_id"] for fact in graph["facts"]}
@@ -578,7 +612,7 @@ def feedback_request(request, catalog, limits):
     """Offer exact additional inventory identities within the existing request-byte budget."""
     from dataclasses import asdict, replace
     roots = [unit["root"] for unit in catalog.get("build_units", ())]
-    captured = {document["path"] for unit in catalog.get("build_units", ())
+    captured = {document["path"] for unit in request.summary.get("build_units", ())
                 for document in unit.get("descriptor_package", {}).get("documents", ())}
     eligible = sorted((item for item in catalog["files"]
                        if item["path"] not in captured and any(_under(item["path"], root) for root in roots)),
@@ -792,6 +826,12 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
                         repair_errors=(), prior_response=None)
                     continue
         else:
+            errors = _proposal_type_errors(proposal)
+            if errors:
+                if not repair_allowed():
+                    break
+                current = replace(current, repair_errors=tuple(errors), prior_response=None)
+                continue
             augmented = evidence_catalog(catalog, documents.values())
             units = {unit["build_unit_id"]: unit for unit in augmented.get("build_units", ())}
             recipes = proposal.get("build_recipes")
