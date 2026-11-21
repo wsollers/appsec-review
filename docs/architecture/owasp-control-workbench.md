@@ -251,8 +251,11 @@ requirements in the job's dataset module. It narrows producer/index identities w
 access. The original manifest hash is preserved separately from the view identity; ancestry
 envelopes/descriptors are authenticated without opening obsolete payloads. Selected payloads and
 generated/binary backing dependencies retain exact admitted-owner and byte checks, and relations
-must close over selected, admitted endpoints. Selected verification and query opens isolate their
+must close over selected, admitted endpoints. Selected verification, query and retained `AcceptedScope.store` opens isolate their
 digest/admission state from full or other-view caches; cursor identities also bind the view.
+Entity, relation, coverage and entity-ID iteration rechecks the current claim and backing bytes
+when opening a selected shard. A retained store carries the view, not its creator's permissions.
+Unselected stores retain their existing behavior.
 
 Attempted or reused, subject-bound results become PRECOMPUTED `control_evidence`, then provisional `owasp_control` leads and
 lead/hunt packages. Deep custody and obligations stay lossless in the hash-pinned workbench

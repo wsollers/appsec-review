@@ -16,7 +16,9 @@ from typing import Any
 
 from appsec_review.interchange import HANDOFF_SCHEMA, decode_handoff
 from appsec_review.observability.spans import count_work
-from appsec_review.retrieval.index import MANIFEST_SCHEMA, IndexIdentity, load_verified_manifest
+from appsec_review.retrieval.index import (
+    MANIFEST_SCHEMA, IndexIdentity, IndexSelection, load_verified_manifest, open_selected_shard,
+)
 from appsec_review.retrieval.model import canonical_json
 from appsec_review.storage import file_sha256
 
@@ -82,7 +84,12 @@ def as_identity(shard: Mapping[str, Any]) -> IndexIdentity:
         "gaps": tuple(shard.get("gaps", ())), "shard_id": str(shard.get("shard_id", "default"))})
 
 
-def open_shard(run_root: Path, shard: Mapping[str, Any]) -> sqlite3.Connection:
+def open_shard(run_root: Path, shard: Mapping[str, Any], *, selection: IndexSelection | None = None,
+               manifest: Mapping[str, Any] | None = None) -> sqlite3.Connection:
+    if selection is not None:
+        if manifest is None:
+            raise ValueError("selected store requires its verified manifest context")
+        return open_selected_shard(run_root, shard, selection=selection, manifest=manifest)
     from appsec_review.runtime.inputs import observe_shard
     observe_shard(run_root, shard)
     path = (run_root / str(shard["relative_path"])).resolve()
@@ -93,16 +100,19 @@ def open_shard(run_root: Path, shard: Mapping[str, Any]) -> sqlite3.Connection:
     return database
 
 
-def shard_summary(run_root: Path, shard: Mapping[str, Any]) -> dict[str, Any]:
+def shard_summary(run_root: Path, shard: Mapping[str, Any], *, selection: IndexSelection | None = None,
+                  manifest: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Counts and coverage straight from one shard; row counts are recomputed, not trusted."""
     from copy import deepcopy
     from appsec_review.storage.validation import current_validation
     validation = current_validation(run_root)
-    if validation is not None:
+    if validation is not None and selection is None:
         summary = validation.records.get(("admitted-summary", shard["sha256"], validation.target_snapshot))
         if summary is not None:
             return deepcopy(summary)
-    with open_shard(run_root, shard) as database:
+    opened = (open_shard(run_root, shard) if selection is None else
+              open_shard(run_root, shard, selection=selection, manifest=manifest))
+    with opened as database:
         metadata = dict(database.execute("SELECT key, value FROM metadata"))
         entities = int(database.execute("SELECT COUNT(*) FROM entities").fetchone()[0])
         relations = int(database.execute("SELECT COUNT(*) FROM relations").fetchone()[0])
@@ -124,9 +134,19 @@ _LOCATION = ("path", "file_sha256", "start_byte", "end_byte", "start_line", "end
 class ShardSet:
     """A fixed list of accepted shards with bounded, deterministic row iteration."""
 
-    def __init__(self, run_root: Path, shards: Iterable[Mapping[str, Any]]):
+    def __init__(self, run_root: Path, shards: Iterable[Mapping[str, Any]], *,
+                 selection: IndexSelection | None = None, manifest: Mapping[str, Any] | None = None):
         self.run_root = Path(run_root)
         self.shards = tuple(sorted(shards, key=shard_key))
+        self.selection, self.manifest = selection, manifest
+        self._selected_shards = frozenset(canonical_json(shard) for shard in self.shards) if selection is not None else ()
+
+    def _open_shard(self, shard: Mapping[str, Any]) -> sqlite3.Connection:
+        if self.selection is None:
+            return open_shard(self.run_root, shard)
+        if canonical_json(shard) not in self._selected_shards:
+            raise ValueError("index is outside the selected store")
+        return open_shard(self.run_root, shard, selection=self.selection, manifest=self.manifest)
 
     def select(self, *, index: str | Sequence[str] | None = None, job: str | Sequence[str] | None = None,
                prefix: str | Sequence[str] | None = None,
@@ -162,7 +182,7 @@ class ShardSet:
             if remaining is not None:
                 sql += " LIMIT ?"
                 parameters.append(remaining)
-            with open_shard(self.run_root, shard) as database:
+            with self._open_shard(shard) as database:
                 for row in database.execute(sql, parameters):
                     location = None if row["path"] is None else {name: row[name] for name in _LOCATION}
                     yield {"identity": row["identity"], "kind": row["kind"], "native_id": row["native_id"],
@@ -182,7 +202,7 @@ class ShardSet:
             if kinds:
                 sql += " WHERE kind IN (" + ",".join("?" for _ in kinds) + ")"
                 parameters.extend(kinds)
-            with open_shard(self.run_root, shard) as database:
+            with self._open_shard(shard) as database:
                 for row in database.execute(sql + " ORDER BY relation_id", parameters):
                     yield {"kind": row["kind"], "source_id": row["source_id"], "target_id": row["target_id"],
                            "exact": bool(row["exact"]), "confidence": float(row["confidence"]),
@@ -192,7 +212,7 @@ class ShardSet:
     def coverage(self, shards: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         for shard in sorted(shards, key=shard_key):
-            with open_shard(self.run_root, shard) as database:
+            with self._open_shard(shard) as database:
                 rows.extend({"index": shard["name"], "shard_id": str(shard.get("shard_id", "default")),
                              "area": row["area"], "status": row["status"], "gap": row["gap"]}
                             for row in database.execute("SELECT area, status, gap FROM coverage ORDER BY area, status, gap"))
@@ -201,6 +221,6 @@ class ShardSet:
     def entity_ids(self) -> set[str]:
         found: set[str] = set()
         for shard in self.shards:
-            with open_shard(self.run_root, shard) as database:
+            with self._open_shard(shard) as database:
                 found.update(str(row[0]) for row in database.execute("SELECT identity FROM entities"))
         return found

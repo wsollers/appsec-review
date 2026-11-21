@@ -396,11 +396,14 @@ class RetrievalCore:
 
     def _database(self, identity: Mapping[str, Any], deadline: float) -> sqlite3.Connection:
         if self.selection is not None:
-            if not self.selection.includes(identity):
-                raise RetrievalIntegrityError("index is outside the selected source view")
-            from appsec_review.storage.validation import isolated_validation_scope
-            with isolated_validation_scope(self.run_root, policy_identity="index-selection:" + self.selection.sha256):
-                return self._verified_database(identity, deadline)
+            from appsec_review.retrieval.index import open_selected_shard
+            try:
+                database = open_selected_shard(self.run_root, identity, selection=self.selection,
+                                               manifest=self.manifest)
+            except ValueError as exc:
+                raise RetrievalIntegrityError(str(exc)) from exc
+            database.set_progress_handler(lambda: 1 if self.clock() > deadline else 0, 1000)
+            return database
         return self._verified_database(identity, deadline)
 
     def _verified_database(self, identity: Mapping[str, Any], deadline: float) -> sqlite3.Connection:
@@ -429,13 +432,6 @@ class RetrievalCore:
                 identity["schema"], name, identity["fingerprint"], identity.get("shard_id", "default")):
             database.close()
             raise RetrievalIntegrityError(f"index metadata mismatch: {name}/{identity.get('shard_id', 'default')}")
-        if self.selection is not None:
-            from appsec_review.retrieval.index import _verify_selected_custody
-            try:
-                _verify_selected_custody(self.run_root, self.manifest, database, self.selection)
-            except Exception:
-                database.close()
-                raise
         database.set_progress_handler(lambda: 1 if self.clock() > deadline else 0, 1000)
         return database
 

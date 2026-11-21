@@ -238,6 +238,7 @@ class AcceptedScope:
     dispositions: SourceDispositions = field(default_factory=SourceDispositions)
     selection: IndexSelection | None = None
     excluded_shards: tuple[Mapping[str, Any], ...] = ()
+    _manifest: Mapping[str, Any] | None = field(default=None, repr=False)
 
     @property
     def view_identity(self) -> str:
@@ -246,7 +247,9 @@ class AcceptedScope:
 
     @property
     def store(self) -> ShardSet:
-        return ShardSet(self.run_root, self.shards)
+        if self.selection is None:
+            return ShardSet(self.run_root, self.shards)
+        return ShardSet(self.run_root, self.shards, selection=self.selection, manifest=self._manifest)
 
     def producer(self, name: str) -> ProducerCoverage:
         for item in self.producers:
@@ -361,10 +364,12 @@ def _verified(run_root: Path, manifest_path: Path | None = None,
     return manifest_path, actual, manifest
 
 
-def _check_embedded(run_root: Path, shards: Iterable[Mapping[str, Any]], snapshot: str) -> None:
+def _check_embedded(run_root: Path, shards: Iterable[Mapping[str, Any]], snapshot: str, *,
+                    selection: IndexSelection | None = None, manifest: Mapping[str, Any] | None = None) -> None:
     for shard in shards:
         try:
-            summary = shard_summary(run_root, shard)
+            summary = (shard_summary(run_root, shard) if selection is None else
+                       shard_summary(run_root, shard, selection=selection, manifest=manifest))
         except Exception as exc:  # unreadable shard content is an integrity failure
             raise IntegrityError(f"accepted shard is unreadable: {shard['name']}/{_sid(shard)}") from exc
         if not summary["counts_agree"]:
@@ -416,8 +421,12 @@ def accept_manifest(run_root: Path, *, manifest_path: Path | None = None,
     excluded = tuple(item for item in shards if selection is not None and not selection.includes(item))
     if selection is not None:
         shards = tuple(item for item in shards if selection.includes(item))
-    _check_embedded(run_root, shards, snapshot)
-    store = ShardSet(run_root, shards)
+    if selection is None:
+        _check_embedded(run_root, shards, snapshot)
+        store = ShardSet(run_root, shards)
+    else:
+        _check_embedded(run_root, shards, snapshot, selection=selection, manifest=manifest)
+        store = ShardSet(run_root, shards, selection=selection, manifest=manifest)
     producers = tuple(_coverage(store, name, tuple(shard for shard in shards if select(shard)))
                       for name, select in sorted(PRODUCERS.items()))
     by_name = {item.producer: item for item in producers}
@@ -457,5 +466,6 @@ def accept_manifest(run_root: Path, *, manifest_path: Path | None = None,
         build_units=tuple(units[key] for key in sorted(units)),
         source_files=tuple(sources[key] for key in sorted(sources)), producers=producers,
         selection=selection, excluded_shards=excluded,
+        _manifest=manifest if selection is not None else None,
         freshness=freshness, gaps=sorted_gaps(gaps),
         _sha={shard_key(shard): str(shard["sha256"]) for shard in shards}, dispositions=policy)

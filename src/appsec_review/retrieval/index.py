@@ -621,6 +621,37 @@ def _load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | N
     return document, actual
 
 
+def open_selected_shard(run_root: Path, shard: Mapping[str, Any], *,
+                        selection: IndexSelection, manifest: Mapping[str, Any]) -> sqlite3.Connection:
+    """Open selected data under the current read scope, never a retained admission context."""
+    from appsec_review.runtime.inputs import observe_shard
+    from appsec_review.storage.shared import safe_path
+    from appsec_review.storage.validation import isolated_validation_scope, verified_digest
+    if not selection.includes(shard):
+        raise ValueError("index is outside the selected source view")
+    if manifest.get("run_id") != Path(run_root).name:
+        raise ValueError("selected shard manifest belongs to another run")
+    with isolated_validation_scope(run_root, policy_identity="index-selection:" + selection.sha256):
+        observe_shard(run_root, shard)
+        path = safe_path(run_root, shard["relative_path"])
+        verified_digest(run_root, path, shard["sha256"])
+        database = sqlite3.connect(f"file:{path.as_posix()}?mode=ro&immutable=1", uri=True, timeout=0.1)
+        try:
+            database.row_factory = sqlite3.Row
+            database.execute("PRAGMA query_only=ON")
+            metadata = dict(database.execute("SELECT key, value FROM metadata"))
+            if (metadata.get("schema"), metadata.get("name"), metadata.get("fingerprint"),
+                    metadata.get("shard_id", "default"), metadata.get("target_snapshot")) != (
+                    shard["schema"], shard["name"], shard["fingerprint"],
+                    shard.get("shard_id", "default"), manifest["target_snapshot"]):
+                raise ValueError("selected index metadata or target snapshot mismatch")
+            _verify_selected_custody(run_root, manifest, database, selection)
+        except Exception:
+            database.close()
+            raise
+        return database
+
+
 def _verify_selected_custody(run_root: Path, manifest: Mapping[str, Any],
                               database: sqlite3.Connection, selection: IndexSelection) -> None:
     from appsec_review.retrieval.source_resolution import read_source_bytes, source_native
