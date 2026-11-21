@@ -18,6 +18,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
 import tempfile
 from typing import Any, Mapping, Protocol, TYPE_CHECKING
 
@@ -280,15 +281,39 @@ def adopt_private_file(root: Path, source: Path, digest: str) -> dict[str, Any]:
 
 
 def _verified_bytes(root: Path, ref: Mapping[str, Any]) -> bytes:
+    size = ref.get("size_bytes")
+    if type(size) is not int or size < 0:
+        raise ValueError("shared artifact size must be a nonnegative integer")
+    expected = _hash(ref["sha256"])
     path = safe_path(root, ref["path"])
+    signature = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
     try:
+        before = path.stat()
+        if not stat.S_ISREG(before.st_mode) or before.st_size != size:
+            raise ValueError(f"shared artifact size mismatch: {ref['path']}")
+        remaining, chunks, digest = size, [], hashlib.sha256()
         with path.open("rb") as stream:
-            raw = stream.read(ref["size_bytes"] + 1)
+            if signature(os.fstat(stream.fileno())) != signature(before):
+                raise ValueError(f"shared artifact changed before read: {ref['path']}")
+            while True:
+                # Match storage hashing's existing 1 MiB block size, not the advertised allocation.
+                chunk = stream.read(min(1024 * 1024, remaining + 1))
+                if not chunk:
+                    break
+                if len(chunk) > remaining:
+                    raise ValueError(f"shared artifact grew during read: {ref['path']}")
+                digest.update(chunk)
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            after = os.fstat(stream.fileno())
+        safe_path(root, ref["path"])
+        current = path.stat()
     except OSError as error:
         raise ValueError(f"shared artifact unavailable: {ref['path']}") from error
-    if len(raw) != ref["size_bytes"] or hashlib.sha256(raw).hexdigest() != _hash(ref["sha256"]):
+    if (remaining or digest.hexdigest() != expected
+            or signature(before) != signature(after) or signature(before) != signature(current)):
         raise ValueError(f"shared artifact integrity mismatch: {ref['path']}")
-    return raw
+    return b"".join(chunks)
 
 
 def _read(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:

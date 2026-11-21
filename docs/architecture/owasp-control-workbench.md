@@ -264,6 +264,10 @@ The common selected verifier also checks declared row counts, so scope construct
 repeat that same verification through a second opener.
 Derived checkpoint objects are recognized through the authenticated producer's declaration and
 validated against the exact selected shard, not through a file suffix or a payload's claimed label.
+Indexed-payload paths and content hashes are both excluded from control metadata, including
+alternate-path aliases. Selected metadata reads require an exact nonnegative integer size matching
+the safe regular file before allocation, stream in the existing storage hashing block size, and
+reject growth, replacement or custody changes rather than returning truncated bytes.
 Explicitly selected/admitted custody-only index dependencies contribute to integrity checks and
 read receipts without entering the query surface. Unknown or excluded dependencies fail closed.
 

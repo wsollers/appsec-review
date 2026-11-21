@@ -146,7 +146,8 @@ class _SelectedReceiptPolicy:
         self._execute(root, self._plan(root, ref))
 
     def admit_metadata(self, root: Path, ref: Mapping[str, Any]) -> None:
-        if any(raw["relative_path"] == ref["path"] for raw in self.manifest["indexes"]):
+        if any(raw["relative_path"] == ref["path"] or raw["sha256"] == ref.get("sha256")
+               for raw in self.manifest["indexes"]):
             raise ValueError("indexed payload cannot be consumed as receipt control metadata")
 
     def admit_receipt(self, root: Path, value: Mapping[str, Any], *,
@@ -163,8 +164,9 @@ class _SelectedReceiptPolicy:
             and any(item.schema == DERIVED_SCHEMA and any(
                 compile_glob(pattern).fullmatch(origin_ref["path"]) for pattern in item.artifacts)
                 for item in declarations)
-            and not any(raw["relative_path"] == value["object"]["path"] for raw in self.manifest["indexes"])
         )
+        if metadata_object:
+            self.admit_metadata(root, value["object"])
         plans = []
         for position, ref in enumerate((value["object"], *value["dependencies"])):
             if position == 0 and metadata_object:
