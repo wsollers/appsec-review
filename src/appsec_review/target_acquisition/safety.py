@@ -132,6 +132,10 @@ def run_command(argv: Sequence[str], *, env: Mapping[str, str], cwd: Path | None
     except subprocess.TimeoutExpired as exc:
         raise AcquisitionError(f"{Path(argv[0]).name} {argv[1] if len(argv) > 1 else ''} "
                                f"timed out after {timeout}s") from exc
+    if result.returncode < 0:
+        # check=False permits ordinary command failures, never signal termination.
+        raise AcquisitionError(f"{Path(argv[0]).name} {describe(argv)} "
+                               f"terminated by signal {-result.returncode}")
     if stdout_limit is not None and len(result.stdout) > stdout_limit:
         raise AcquisitionError(f"{Path(argv[0]).name} output exceeded {stdout_limit} bytes")
     if check and result.returncode != 0:

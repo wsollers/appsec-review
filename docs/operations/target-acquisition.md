@@ -232,7 +232,7 @@ Original provider data stays in the hash-bound bundle. No historical state is re
 
 ### Qualified diff limitations
 
-After independent head materialization, a nonzero changed-path diff exit yields `change_diff_failed`
+After independent head materialization, an ordinary positive changed-path diff exit yields `change_diff_failed`
 and retains the source as `PARTIAL`. Neither `changed-paths.json` nor `change.diff` is published in
 that case; unavailable base commits likewise produce no diff artifacts. If only the binary patch
 fails or exceeds its byte bound, the successful changed-path listing is retained but the patch is
@@ -241,6 +241,9 @@ absent. An empty successful diff is distinct from these unavailable outputs.
 This does not catch or downgrade acquisition exceptions, integrity refusals, cancellation or
 `ReviewStopped`; existing process/admission and publication policy still applies. It does not
 establish that the base objects are healthy, or authorize execution of acquired content.
+Negative subprocess return codes identify signal termination and fail the affected component even when a
+command's ordinary exit status is optional. This includes base probing and both diff phases, without
+requiring a previously latched global stop; no partial output from the interrupted process is used.
 
 ## Gaps
 
@@ -276,6 +279,9 @@ distinctions and diff failures through the real acquisition engine, component/sy
 read-only reverification receipts and job control serializers. External Git/provider boundaries
 are faked with inert unit data; this is not real-provider, full runner-admission, integration,
 acceptance or live review validation.
+`test_signal_termination.py` additionally returns inert negative subprocess results through the real
+command runner, Git adapter and acquisition handlers, verifying publication refusal while preserving
+ordinary positive-exit gap behavior. It starts no process and delivers no real signal.
 
 ## Use in a review
 
