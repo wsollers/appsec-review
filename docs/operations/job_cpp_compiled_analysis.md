@@ -363,6 +363,15 @@ file-elided foreign declarations are filtered before the node-detail budget, whi
 transitions still require the existing cwd, source-hash, coordinate and custody checks. The
 regressions for this rule are schema-derived fixtures, not claimed compiler recordings.
 
+Node admission also retains the provenance of each supplied `loc`/`range` point, including both
+macro branches, separately from the final stream filename. A node is excluded before detail
+accounting only when every relevant branch is known foreign. Valid bare-point filename elision
+uses the emitter state at that point; a missing/empty/malformed branch or unknown filename
+prevents exclusion, as does any accepted source branch. Mixed and uncertain macros therefore
+remain unlocated with their raw evidence and gaps. Neither `includedFrom` nor the final stream
+filename establishes whole-node ownership. Filtering a foreign node does not prune its children
+or skip filename-state advancement: accepted descendants can still use the detail budget.
+
 ### `infer`
 
 1. For a usable project, invoke `tool-infer` using the accepted normalized compile database, not

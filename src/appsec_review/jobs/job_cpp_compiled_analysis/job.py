@@ -39,7 +39,7 @@ AST_CALLABLE_KINDS = frozenset({"FunctionDecl", "CXXMethodDecl", "CXXConversionD
                                "CXXConstructorDecl", "CXXDestructorDecl"})
 AST_ENTITY_KINDS = AST_CALLABLE_KINDS | {"VarDecl", "RecordDecl", "CallExpr", "DeclRefExpr",
                                         "FieldDecl", "ParmVarDecl", "TypedefDecl"}
-BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/4", "ast": "clang-ast/6",
+BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/4", "ast": "clang-ast/7",
                    "ir": "llvm-ir/4",
                    "infer": "infer-cpp-adapter/2",
                    "binary": "elf-symbols/3"}
@@ -734,6 +734,7 @@ class _AstLocations:
         self.files = mapping["files"]
         self.current_file: str | None = None
         self.last_file: str | None = None
+        self.node_files: list[str | None] = []
         self.cache: dict[str, tuple[Mapping[str, Any], bytes] | None] = {}
 
     def _source(self, raw: str) -> tuple[Mapping[str, Any], bytes] | None:
@@ -755,29 +756,68 @@ class _AstLocations:
             self.cache[path] = result
         return self.cache[path]
 
-    def _advance_ast_file(self, point: Mapping[str, Any]) -> bool:
-        """Track emitted bare filenames without choosing a macro's evidence location."""
+    def _advance_ast_file(self, point: Any) -> bool:
+        """Advance the stream and retain each node-local provenance branch, including unknowns."""
+        if not isinstance(point, Mapping):
+            self.current_file = None
+            self.node_files.append(None)
+            return False
         macro = "spellingLoc" in point or "expansionLoc" in point
         # JSONNodeDumper writes spelling before expansion; either can elide its filename.
         emitted = (point.get("spellingLoc"), point.get("expansionLoc")) if macro else (point,)
+        if macro and any(key in point for key in ("file", "offset", "line", "col", "tokLen")):
+            self.node_files.append(None)  # Conflicting macro and bare-location forms.
         for bare in emitted:
-            if isinstance(bare, Mapping) and isinstance(bare.get("file"), str):
-                self.current_file = bare["file"]
+            if not isinstance(bare, Mapping):
+                self.current_file = None
+                self.node_files.append(None)
+                continue
+            if "file" in bare:
+                filename = bare["file"]
+                self.current_file = (filename if isinstance(filename, str) and filename
+                                     and "\x00" not in filename else None)
+            positioned = "offset" in bare or ("line" in bare and "col" in bare)
+            valid = positioned and all(
+                type(bare[key]) is int and bare[key] >= minimum
+                for key, minimum in (("offset", 0), ("line", 1), ("col", 1), ("tokLen", 0))
+                if key in bare)
+            valid = valid and not ("spellingLoc" in bare or "expansionLoc" in bare)
+            self.node_files.append(self.current_file if valid else None)
         return macro
+
+    def wholly_foreign(self, accepted_paths: set[str]) -> bool:
+        """Only known foreign branches permit exclusion; the stream's final filename is not ownership."""
+        if not self.node_files:
+            return False
+        for raw in self.node_files:
+            if raw is None:
+                return False
+            if not raw.startswith("/"):
+                directory = self.command.get("directory")
+                if not isinstance(directory, str) or not directory.startswith("/") or "\x00" in directory:
+                    return False
+                raw = posixpath.join(directory, raw)
+            if posixpath.normpath(raw) in accepted_paths:
+                return False
+        return True
 
     def resolve(self, node: Mapping[str, Any]) -> tuple[SourceLocation | None, str | None]:
         loc = node.get("loc") if isinstance(node.get("loc"), Mapping) else {}
         span = node.get("range") if isinstance(node.get("range"), Mapping) else {}
         begin = span.get("begin") if isinstance(span.get("begin"), Mapping) else {}
-        end = span.get("end") if isinstance(span.get("end"), Mapping) else {}
-        points = [loc, begin, end]
         selected = loc or begin
+        points = [(node.get("loc"), "loc" in node, selected is loc),
+                  (span.get("begin"), "range" in node, selected is begin),
+                  (span.get("end"), "range" in node, False)]
         selected_file = None
         macro = False
-        for point in points:
+        self.node_files = []
+        for point, relevant, is_selected in points:
+            if not relevant:
+                continue
             point_macro = self._advance_ast_file(point)
             macro |= point_macro
-            if point is selected:
+            if is_selected:
                 selected_file = None if point_macro else self.current_file
         self.last_file = selected_file
         if macro:
@@ -883,13 +923,9 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
             kind = str(node.get("kind", ""))
             if kind not in AST_ENTITY_KINDS:
                 continue
-            if not command.get("ast_filters") and locations.last_file:
-                raw = locations.last_file
-                normalized = posixpath.normpath(raw if raw.startswith("/") else
-                                                posixpath.join(command["directory"], raw))
-                if normalized not in accepted_paths:
-                    filtered += 1
-                    continue
+            if not command.get("ast_filters") and locations.wholly_foreign(accepted_paths):
+                filtered += 1
+                continue
             if retained >= AST_NODE_LIMIT:
                 gaps.append(f"ast_truncated: {command['target_path']}: node detail cut at {AST_NODE_LIMIT}")
                 if bounded_units is not None:

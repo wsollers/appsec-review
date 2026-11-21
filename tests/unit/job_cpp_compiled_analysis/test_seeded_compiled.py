@@ -389,6 +389,104 @@ def test_macro_emitter_state_filters_elided_foreign_nodes_without_crowding_accep
     assert any("ast_truncated" in gap for gap in output["gaps"]) is (limit == 1)
 
 
+@pytest.mark.parametrize("case", [
+    "explicit", "elided", "range", "mixed-spelling", "mixed-expansion", "unknown-initial",
+    "missing-expansion", "empty-spelling", "empty-expansion", "invalid-name", "invalid-position",
+    "missing-end", "parent",
+])
+def test_macro_node_is_filtered_only_when_all_emitted_provenance_is_known_foreign(tmp_path, monkeypatch, case):
+    from appsec_review.jobs.job_cpp_compiled_analysis import job
+    from appsec_review.storage import canonical_json
+
+    staged = sc.stage(tmp_path)
+    accepted, spelling, expansion = "/scratch/source/include/util.h", "/foreign/definition.h", "/foreign/use.h"
+    definition = b"#define DECL int macro_generated\nDECL;\n"
+    sources = {
+        accepted: definition + b"int accepted_after;\nint accepted_child;\n",
+        spelling: definition + b"int foreign_prime;\n",
+        expansion: definition + b"int foreign_after;\n",
+    }
+    for path in (staged.target / "proj/include/util.h", staged.case_root / "source/include/util.h"):
+        path.write_bytes(sources[accepted])
+    source = next(row for row in staged.mapping["files"] if row["target_path"] == "proj/include/util.h")
+    source["sha256"] = hashlib.sha256(sources[accepted]).hexdigest()
+    staged.mapping["case_snapshot"] = hashlib.sha256(canonical_json(staged.mapping["files"])).hexdigest()
+    command = next(row for row in staged.rows if row["target_path"] == "proj/src/util.cpp")
+    command["compile_unit_id"] = job._tu_identity(staged.mapping, command)
+    staged.rows[:] = [command]
+    database = staged.case_root / "normalized-compile-commands.json"
+    database.write_text(json.dumps(staged.rows))
+    staged.cataloged["compile_database"] = job._artifact(staged.run_root, database)
+
+    # These are schema-derived location streams, not newly captured compiler output.
+    emitter = _Clang18LocationFixture(sources, spelling, accepted)
+    nodes = []
+    if case == "elided":
+        spelling = expansion
+        nodes.append(emitter.declaration(expansion, "foreign_after"))
+    macro = {"id": "0x100", "kind": "VarDecl", "name": "macro_generated"}
+    if case == "range":
+        macro.update(kind="DeclRefExpr", referencedDecl={
+            "id": "0x101", "kind": "VarDecl", "name": "macro_generated"})
+        macro.pop("name")
+    else:
+        macro["loc"] = emitter.macro(spelling, expansion)
+    macro["range"] = {
+        "begin": emitter.macro(spelling, accepted if case == "mixed-expansion" else expansion),
+        "end": emitter.macro(accepted if case == "mixed-spelling" else spelling, expansion),
+    }
+    if case == "elided":
+        assert all("file" not in bare for point in [macro["loc"], *macro["range"].values()]
+                   for bare in point.values())
+    elif case == "unknown-initial":
+        del macro["loc"]["spellingLoc"]["file"]
+    elif case == "missing-expansion":
+        del macro["loc"]["expansionLoc"]
+    elif case == "empty-spelling":
+        macro["loc"]["spellingLoc"] = {}
+    elif case == "empty-expansion":
+        macro["loc"]["expansionLoc"] = {}
+    elif case == "invalid-name":
+        macro["loc"]["spellingLoc"]["file"] = None
+    elif case == "invalid-position":
+        macro["loc"]["spellingLoc"]["offset"] = -1
+    elif case == "missing-end":
+        del macro["range"]["end"]
+    if case == "parent":
+        macro.update(kind="FunctionDecl", mangledName="macro_generated")
+        first = emitter.declaration(accepted, "accepted_after")
+        second = emitter.declaration(accepted, "accepted_child")
+        assert "file" not in second["loc"]
+        macro["inner"] = [{"kind": "CompoundStmt", "inner": [first, second]}]
+        nodes.extend([macro, emitter.declaration(expansion, "foreign_after")])
+    else:
+        nodes.extend([macro, emitter.declaration(accepted, "accepted_after")])
+    monkeypatch.setattr(job, "AST_NODE_LIMIT", 2 if case == "parent" else 1)
+    output, _ = _run(staged, DamagedExecutor(staged, "ast", json.dumps({
+        "kind": "TranslationUnitDecl", "inner": nodes})), "ast", seeded_settings=None)
+    with _indexed(staged, output) as db:
+        rows = {row["name"]: row for row in db.execute(
+            "select e.name, e.payload_json, l.* from entities e left join locations l on e.identity=l.entity_id")}
+    wholly_foreign = case in {"explicit", "elided", "range", "parent"}
+    if wholly_foreign:
+        expected = {"accepted_after", "accepted_child"} if case == "parent" else {"accepted_after"}
+        assert set(rows) == expected
+        for name, location in rows.items():
+            assert location["path"] == "proj/include/util.h"
+            assert location["file_sha256"] == source["sha256"]
+            assert sources[accepted][location["start_byte"]:location["end_byte"]] == name.encode()
+        assert any("ast_source_filtered" in gap for gap in output["gaps"])
+        assert not any("ast_truncated" in gap for gap in output["gaps"])
+    else:
+        assert set(rows) == {"macro_generated"}
+        assert rows["macro_generated"]["path"] is None
+        payload = json.loads(rows["macro_generated"]["payload_json"])
+        assert "macro spelling/expansion" in payload["location_gap"]
+        assert payload["clang_location"]["loc"] == macro["loc"]
+        assert payload["clang_location"]["range"] == macro["range"]
+        assert any("ast_truncated" in gap for gap in output["gaps"])
+
+
 @pytest.mark.parametrize("mode", ["ir", "ast"])
 def test_whole_program_missing_or_malformed_payload_cannot_be_cached(tmp_path, mode):
     staged = sc.stage(tmp_path)
