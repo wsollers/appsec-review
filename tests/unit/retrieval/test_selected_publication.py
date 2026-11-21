@@ -145,7 +145,8 @@ def test_valid_private_publication_reopens_preserve_rows(tmp_path, layout):
     with input_read_scope(value.context) as reads:
         for method in READERS:
             assert len(consume(store, core, value, method)) == (0 if method == "relations" else 1)
-    assert {row["output_kind"] for row in reads.document()["reads"]} == {"precomputed_products"}
+    assert {row["output_kind"] for row in reads.document()["reads"]} == {
+        "precomputed_products", *(("handoff",) if layout == "named" else ())}
     assert all(row["cited"] is None for row in reads.document()["reads"])
 
 

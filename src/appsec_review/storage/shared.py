@@ -49,6 +49,8 @@ class ReceiptReadPolicy(Protocol):
 
     def admit_metadata(self, root: Path, ref: Mapping[str, Any]) -> None: ...
 
+    def metadata_reference(self, root: Path, relative: str) -> Mapping[str, Any] | None: ...
+
     def admit_receipt(self, root: Path, value: Mapping[str, Any], *,
                       origin: Mapping[str, Any], origin_claim: Mapping[str, Any],
                       origin_ref: Mapping[str, Any]) -> None: ...
@@ -91,10 +93,36 @@ def _admit_target(root: Path, path: Path, expected: str | None = None) -> None:
         policy.admit_reference(root, {"path": path.relative_to(root).as_posix(), "sha256": expected})
 
 
-def _metadata_target(root: Path, path: Path) -> None:
+def _metadata_write_target(root: Path, path: Path) -> None:
     policy = _read_policy(root)
     if policy is not None:
         policy.admit_metadata(root, {"path": path.relative_to(root).as_posix()})
+
+
+def _control_reference(root: Path, path: Path, *,
+                       expected: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    policy = _read_policy(root)
+    if policy is None:
+        return reference(root, path)
+    relative = path.relative_to(root).as_posix()
+    owner = current()
+    if owner is not None and owner.run_root != root:
+        raise ValueError("control discovery belongs to another run")
+    pinned = expected or (owner._control_refs.get(relative) if owner is not None else None)
+    if pinned is None:
+        pinned = policy.metadata_reference(root, relative)
+    if pinned is None or pinned["path"] != relative:
+        raise ValueError(f"selected control identity is unavailable before discovery: {relative}")
+    policy.admit_metadata(root, pinned)
+    return dict(pinned)
+
+
+def _binding_reference(root: Path, namespace: str, obj: Mapping[str, Any]) -> dict[str, Any]:
+    relative = _binding_path(namespace, obj)
+    payload = canonical_json({"schema": "appsec-review/shared-named/1", "namespace": namespace,
+                              "object": dict(obj)})
+    expected = {"path": relative, "sha256": hashlib.sha256(payload).hexdigest(), "size_bytes": len(payload)}
+    return _control_reference(root, safe_path(root, relative), expected=expected)
 NAMED_LAYOUTS = {
     "index-shard": ("data/indices/",),
     "owasp-shard": ("data/indexes/owasp/",),
@@ -457,9 +485,7 @@ def _verify_receipt(root: Path, ref: Mapping[str, Any], *,
         if artifact["path"].startswith(OBJECTS + "/") and artifact["path"] != f"{OBJECTS}/{artifact['sha256']}":
             raise ValueError("shared object filename differs from exact byte hash")
     if value["mode"] == "computed" and value.get("layout") == "named-immutable":
-        binding_path = safe_path(root, _binding_path(namespace, value["object"]))
-        _metadata_target(root, binding_path)
-        binding = reference(root, binding_path)
+        binding = _binding_reference(root, namespace, value["object"])
         if verify_binding(root, binding)["object"] != value["object"]:
             raise ValueError("named immutable object changed after publication")
     if value.get("layout") == "public-feed":
@@ -480,6 +506,7 @@ class SharedArtifacts:
     attempt_root: Path
     actor: Mapping[str, Any]
     _named_refs: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
+    _control_refs: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
 
     @classmethod
     def for_job(cls, context: JobContext) -> SharedArtifacts:
@@ -504,21 +531,40 @@ class SharedArtifacts:
         return (self.attempt_root.relative_to(self.run_root).as_posix()
                 + f"/shared/{namespace}/{_hash(fingerprint)}.json")
 
-    def _record(self, namespace: str, fingerprint: str, obj: Mapping[str, Any], *,
+    def _claim(self) -> dict[str, Any]:
+        ref = self.actor["claim"]
+        if _read_policy(self.run_root) is None:
+            return json.loads(verify_reference(self.run_root, ref).read_bytes())
+        expected = (self.attempt_root / "claim.json").relative_to(self.run_root).as_posix()
+        _metadata_reference(self.run_root, ref, re.escape(expected))
+        return json.loads(_verified_bytes(self.run_root, ref))
+
+    def _receipt_value(self, namespace: str, fingerprint: str, obj: Mapping[str, Any], *,
                 computation: Mapping[str, Any], dependencies: tuple[Mapping[str, Any], ...] = (),
                 mode: str, producer: Mapping[str, Any] | None = None, legacy: str | None = None,
                 layout: str | None = None,
-                ) -> tuple[dict[str, Any], dict[str, Any]]:
+                ) -> dict[str, Any]:
         value = {"schema": RECEIPT_SCHEMA, "namespace": namespace, "fingerprint": fingerprint,
                  "actor": dict(self.actor), "mode": mode, "object": dict(obj),
                  "dependencies": list(dependencies), "computation": dict(computation),
                  "producer_receipt": producer, "legacy": legacy}
         if layout is not None:
             value["layout"] = layout
+        return value
+
+    def _record(self, namespace: str, fingerprint: str, obj: Mapping[str, Any], *,
+                computation: Mapping[str, Any], dependencies: tuple[Mapping[str, Any], ...] = (),
+                mode: str, producer: Mapping[str, Any] | None = None, legacy: str | None = None,
+                layout: str | None = None,
+                ) -> tuple[dict[str, Any], dict[str, Any]]:
+        value = self._receipt_value(namespace, fingerprint, obj, computation=computation,
+                                    dependencies=dependencies, mode=mode, producer=producer,
+                                    legacy=legacy, layout=layout)
         slot = self._slot(namespace, fingerprint)
-        _metadata_target(self.run_root, self.run_root / slot)
+        _metadata_write_target(self.run_root, self.run_root / slot)
         ref = immutable_bytes(self.run_root, slot, canonical_json(value))
         verify_receipt(self.run_root, ref)
+        self._control_refs[ref["path"]] = dict(ref)
         return value, ref
 
     def computed(self, namespace: str, fingerprint: str, obj: Mapping[str, Any], *,
@@ -528,19 +574,43 @@ class SharedArtifacts:
         _, receipt = self._record(namespace, fingerprint, obj, computation=computation,
                                   dependencies=dependencies, mode="computed", layout=layout)
         request_path = f"{REQUESTS}/{namespace}/{fingerprint}/{receipt['sha256']}.json"
-        _metadata_target(self.run_root, self.run_root / request_path)
-        immutable_bytes(self.run_root, request_path,
-                        canonical_json({"schema": REQUEST_SCHEMA, "receipt": receipt}))
+        _metadata_write_target(self.run_root, self.run_root / request_path)
+        request = immutable_bytes(self.run_root, request_path,
+                                  canonical_json({"schema": REQUEST_SCHEMA, "receipt": receipt}))
+        self._control_refs[request["path"]] = dict(request)
         return receipt
+
+    def _requests(self, namespace: str, fingerprint: str):
+        directory = safe_path(self.run_root, f"{REQUESTS}/{namespace}/{_hash(fingerprint)}")
+        if not directory.exists():
+            return
+        for path in sorted(directory.iterdir()):
+            candidate = verify_request(self.run_root, _control_reference(
+                self.run_root, path, expected=self._control_refs.get(path.relative_to(self.run_root).as_posix())))
+            yield candidate, verify_receipt(self.run_root, candidate)
 
     def lookup(self, namespace: str, fingerprint: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
         from appsec_review.runtime.repair import ComputationAdmission, IncompatibleComputation
-        claim = json.loads(verify_reference(self.run_root, self.actor["claim"]).read_bytes())
+        claim = self._claim()
         admission = ComputationAdmission.for_repair(self.run_root, claim)
         slot = safe_path(self.run_root, self._slot(namespace, fingerprint))
         if slot.exists():
-            _metadata_target(self.run_root, slot)
-            ref = reference(self.run_root, slot)
+            relative = slot.relative_to(self.run_root).as_posix()
+            policy = _read_policy(self.run_root)
+            expected = self._control_refs.get(relative)
+            if policy is not None and expected is None:
+                expected = policy.metadata_reference(self.run_root, relative)
+                if expected is None:
+                    sources = list(self._requests(namespace, fingerprint))
+                    if len(sources) == 1:
+                        producer, original = sources[0]
+                        payload = canonical_json(self._receipt_value(
+                            namespace, fingerprint, original["object"], computation=original["computation"],
+                            dependencies=tuple(original["dependencies"]), mode="reused", producer=producer,
+                            layout=original.get("layout")))
+                        expected = {"path": relative, "sha256": hashlib.sha256(payload).hexdigest(),
+                                    "size_bytes": len(payload)}
+            ref = _control_reference(self.run_root, slot, expected=expected)
             value = verify_receipt(self.run_root, ref)
             if admission is not None:
                 admission.verify(self.run_root, value)
@@ -548,14 +618,8 @@ class SharedArtifacts:
                 self.computed(namespace, fingerprint, value["object"], computation=value["computation"],
                               dependencies=tuple(value["dependencies"]), layout=value.get("layout"))
             return value, ref
-        directory = safe_path(self.run_root, f"{REQUESTS}/{namespace}/{_hash(fingerprint)}")
-        if not directory.exists():
-            return None
         candidates = []
-        for path in sorted(directory.iterdir()):
-            _metadata_target(self.run_root, path)
-            candidate = verify_request(self.run_root, reference(self.run_root, path))
-            value = verify_receipt(self.run_root, candidate)
+        for candidate, value in self._requests(namespace, fingerprint):
             if admission is not None:
                 try:
                     admission.verify(self.run_root, value)
@@ -616,15 +680,14 @@ class SharedArtifacts:
                                  dependencies=(content,), layout="named-immutable")
         binding = safe_path(self.run_root, _binding_path(namespace, obj))
         if binding.exists():
-            _metadata_target(self.run_root, binding)
-            if verify_binding(self.run_root, reference(self.run_root, binding))["object"] != obj:
+            if verify_binding(self.run_root, _binding_reference(self.run_root, namespace, obj))["object"] != obj:
                 raise ValueError("named immutable object changed after publication")
         hit = self.lookup(namespace, fingerprint)
         if hit is not None:
             if policy is not None:
                 self._named_refs[(namespace, fingerprint)] = dict(hit[1])
             return hit[1]
-        claim = json.loads(verify_reference(self.run_root, self.actor["claim"]).read_bytes())
+        claim = self._claim()
         if (claim.get("repair_admission_sha256")
                 and safe_path(self.run_root, f"{REQUESTS}/{namespace}/{fingerprint}").exists()):
             raise ValueError("repair cannot relabel an unresolved or incompatible named computation as legacy; "
@@ -694,7 +757,7 @@ def attempt_artifacts(root: Path, attempt_root: Path) -> list[dict[str, Any]]:
         for artifact in (ref, value["actor"]["claim"], value["object"], *value["dependencies"]):
             artifacts[artifact["path"]] = dict(artifact)
         if value.get("layout") == "named-immutable":
-            binding = reference(root, safe_path(root, _binding_path(value["namespace"], value["object"])))
+            binding = _binding_reference(root, value["namespace"], value["object"])
             artifacts[binding["path"]] = binding
         if value["producer_receipt"]:
             collect(value["producer_receipt"])
@@ -707,7 +770,7 @@ def attempt_artifacts(root: Path, attempt_root: Path) -> list[dict[str, Any]]:
             if not namespace.is_dir() or not _NAME.fullmatch(namespace.name):
                 raise ValueError("invalid shared receipt directory")
             for path in sorted(namespace.iterdir()):
-                collect(reference(root, path))
+                collect(_control_reference(root, path))
     return list(artifacts.values())
 
 
@@ -842,8 +905,7 @@ def consume_named(root: Path, path: Path, *, namespace: str,
     obj = reference(root, path, expected_sha256=expected_sha256)
     binding = safe_path(root, _binding_path(namespace, obj))
     if binding.exists():
-        _metadata_target(root, binding)
-        if verify_binding(root, reference(root, binding))["object"] != obj:
+        if verify_binding(root, _binding_reference(root, namespace, obj))["object"] != obj:
             raise ValueError("named immutable object changed after publication")
         fingerprint = hashlib.sha256(canonical_json(
             {"namespace": namespace, "path": obj["path"], "sha256": obj["sha256"]})).hexdigest()
@@ -853,8 +915,7 @@ def consume_named(root: Path, path: Path, *, namespace: str,
             if not paths:
                 raise ValueError("named immutable publication has no complete producer receipt")
             for candidate in paths:
-                _metadata_target(root, candidate)
-                verify_request(root, reference(root, candidate))
+                verify_request(root, _control_reference(root, candidate))
     if owner is not None:
         if owner.run_root != root:
             raise ValueError("immutable consumption belongs to another run")

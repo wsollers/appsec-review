@@ -150,6 +150,29 @@ class _SelectedReceiptPolicy:
                for raw in self.manifest["indexes"]):
             raise ValueError("indexed payload cannot be consumed as receipt control metadata")
 
+    def metadata_reference(self, root: Path, relative: str) -> Mapping[str, Any] | None:
+        from appsec_review.runtime.consume import accepted_upstream
+        from appsec_review.storage.shared import REQUEST_SCHEMA, canonical_json as control_json
+        source = self.stack[-1] if self.stack else self.requested
+        accepted = accepted_upstream(root, source["producer"]["job"], required=False)
+        if accepted is None:
+            return None
+        refs = accepted.handoff["artifacts"]
+        exact = [ref for ref in refs if ref["path"] == relative]
+        if len(exact) == 1:
+            return exact[0]
+        request = re.fullmatch(
+            r"data/shared/requests/([a-zA-Z0-9_-]+)/([0-9a-f]{64})/([0-9a-f]{64})\.json", relative)
+        if request is None:
+            return None
+        namespace, fingerprint, receipt_sha = request.groups()
+        receipts = [ref for ref in refs if ref["sha256"] == receipt_sha and re.fullmatch(
+            rf"data/jobs/[^/]+/attempts/[^/]+/shared/{re.escape(namespace)}/{fingerprint}\.json", ref["path"])]
+        if len(receipts) != 1:
+            return None
+        payload = control_json({"schema": REQUEST_SCHEMA, "receipt": receipts[0]})
+        return {"path": relative, "sha256": hashlib.sha256(payload).hexdigest(), "size_bytes": len(payload)}
+
     def admit_receipt(self, root: Path, value: Mapping[str, Any], *,
                       origin: Mapping[str, Any], origin_claim: Mapping[str, Any],
                       origin_ref: Mapping[str, Any]) -> None:

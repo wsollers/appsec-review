@@ -268,6 +268,16 @@ Indexed-payload paths and content hashes are both excluded from control metadata
 alternate-path aliases. Selected metadata reads require an exact nonnegative integer size matching
 the safe regular file before allocation, stream in the existing storage hashing block size, and
 reject growth, replacement or custody changes rather than returning truncated bytes.
+Named control discovery authenticates identity before hashing or opening the lookup path:
+bindings use the existing canonical binding document and admitted object identity; request
+identities are reconstructed with the publication serializer from an accepted producer receipt
+reference. Looking up those producer references is a declared handoff read, never a citation.
+Control references returned by verified publication may also be retained; subsequent opens still
+revalidate bytes, provenance and current grants. A fresh unit's consumer receipt can be reconstructed
+using the same receipt builder as publication when one authenticated producing request identifies
+its origin. Unknown or ambiguous identities are refused before opening the consumer slot, not
+recovered by hashing it. No publication fields change, and unfiltered verification retains its
+existing discovery behavior.
 Explicitly selected/admitted custody-only index dependencies contribute to integrity checks and
 read receipts without entering the query surface. Unknown or excluded dependencies fail closed.
 
