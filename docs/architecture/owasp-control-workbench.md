@@ -256,6 +256,24 @@ digest/admission state from full or other-view caches; cursor identities also bi
 Entity, relation, coverage and entity-ID iteration rechecks the current claim and backing bytes
 when opening a selected shard. A retained store carries the view, not its creator's permissions.
 Unselected stores retain their existing behavior.
+Selected payload validation is shared by ROOT verification and every later open. Named index
+publications and receipt-backed shared shards revalidate their exact publication and recursive
+producer receipts. `storage.shared.receipt_read_scope` admits dependencies before payload I/O
+and before receipt memo/admission shortcuts; it never turns availability into permission.
+The common selected verifier also checks declared row counts, so scope construction does not
+repeat that same verification through a second opener.
+Derived checkpoint objects are recognized through the authenticated producer's declaration and
+validated against the exact selected shard, not through a file suffix or a payload's claimed label.
+Explicitly selected/admitted custody-only index dependencies contribute to integrity checks and
+read receipts without entering the query surface. Unknown or excluded dependencies fail closed.
+
+Bounded application lookups retain the existing authoritative-index preference and fall back only
+when that index supplies no admissible original record. Retained record data is byte-pinned:
+reuse reopens every searched shard through the current grant/receipt/custody checks. Parsed paths
+and named receipt identities may be retained, but filesystem state and read permissions are not.
+Unsupported, undispatched batches do not construct an unused resolver. Supported work still
+requires accepted evidence resolution before inference; independent reviews share only the
+unit's accepted-source resolver, never an assessor's conclusions or transcript.
 
 Attempted or reused, subject-bound results become PRECOMPUTED `control_evidence`, then provisional `owasp_control` leads and
 lead/hunt packages. Deep custody and obligations stay lossless in the hash-pinned workbench

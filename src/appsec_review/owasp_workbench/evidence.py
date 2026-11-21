@@ -1,6 +1,7 @@
 """Run-pinned evidence bundles and citation re-resolution using the shared retrieval boundary."""
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from pathlib import Path
 import re
@@ -116,6 +117,7 @@ class EvidenceResolver:
         self.core, self.scope = core, scope
         self.max_source_lines = max_source_lines
         self._subject_cache: dict[str, tuple[SourceSubject, ...]] = {}
+        self._entity_cache: dict[str, tuple[Mapping[str, Any], tuple[Mapping[str, Any], ...]]] = {}
         self.metrics = {"attempts": 0, "denials": 0, "truncations": 0, "missing": 0}
         self.shards = {(item["name"], item["shard_id"]): item for item in scope.shards
                        if item["name"] in UPSTREAM_INDEXES
@@ -130,31 +132,47 @@ class EvidenceResolver:
         return response
 
     def _entity(self, identity: str) -> Mapping[str, Any]:
+        cached = self._entity_cache.get(identity)
+        if cached is not None:
+            value, shards = cached
+            for shard in shards:
+                database = self.core._database(shard, self.core.clock() + self.core.limits.timeout_ms / 1000)
+                database.close()
+            return deepcopy(value)
         kind = LogicalIdentity.parse(identity).kind.value
-        values, cursor = [], None
-        # A logical identity occurs at most once in each physical shard. Pagination is not ambiguity.
-        for _ in range(len(self.scope.shards) + 1):
-            result = self.query("find", identity=identity, indexes=UPSTREAM_INDEXES,
-                                limit=min(self.core.limits.max_results, max(1, len(self.scope.shards))),
-                                cursor=cursor)
-            if result["truncated"]:
-                raise ValueError("citation lookup was truncated")
-            for item in result["results"]:
-                shard = self.shards.get((item["index"], item["shard_id"]))
-                if shard is None:
-                    continue
-                # Bind the original indexed record, not retrieval's lossy display sanitization.
-                with self.core._database(shard, self.core.clock() + self.core.limits.timeout_ms / 1000) as database:
-                    row = database.execute("SELECT payload_json FROM entities WHERE identity=?", (identity,)).fetchone()
-                item = {**item, "payload": json.loads(row["payload_json"])}
-                if self._original(item):
-                    values.append(item)
-            cursor = result.get("pagination", {}).get("next_cursor")
-            if not cursor:
-                break
-        else:
-            raise ValueError("citation lookup exceeded accepted shard bound")
         original = _AUTHORITATIVE_INDEX.get(kind)
+        phases = (((original,), tuple(index for index in UPSTREAM_INDEXES if index != original))
+                  if original is not None else (UPSTREAM_INDEXES,))
+        values = []
+        checked_indexes = set()
+        # The existing authoritative-index preference lets us avoid opening unrelated shards.
+        # Fall back only when that index supplies no admissible original record.
+        for indexes in phases:
+            checked_indexes.update(indexes)
+            cursor = None
+            for _ in range(len(self.scope.shards) + 1):
+                result = self.query("find", identity=identity, indexes=indexes,
+                                    limit=min(self.core.limits.max_results, max(1, len(self.scope.shards))),
+                                    cursor=cursor)
+                if result["truncated"]:
+                    raise ValueError("citation lookup was truncated")
+                for item in result["results"]:
+                    shard = self.shards.get((item["index"], item["shard_id"]))
+                    if shard is None:
+                        continue
+                    # Bind the original indexed record, not retrieval's lossy display sanitization.
+                    with self.core._database(shard, self.core.clock() + self.core.limits.timeout_ms / 1000) as database:
+                        row = database.execute("SELECT payload_json FROM entities WHERE identity=?", (identity,)).fetchone()
+                    item = {**item, "payload": json.loads(row["payload_json"])}
+                    if self._original(item):
+                        values.append(item)
+                cursor = result.get("pagination", {}).get("next_cursor")
+                if not cursor:
+                    break
+            else:
+                raise ValueError("citation lookup exceeded accepted shard bound")
+            if values:
+                break
         authoritative = [item for item in values if item["index"] == original]
         if authoritative:
             values = authoritative
@@ -170,6 +188,11 @@ class EvidenceResolver:
             "identity", "kind", "native_id", "name", "payload", "location")}
         if any(comparable(item) != comparable(values[0]) for item in values[1:]):
             raise ValueError("citation has conflicting accepted original records")
+        # Retain only byte-pinned record data. Every reuse reopens all searched shards through
+        # the live grant, publication-receipt and custody verifier above.
+        shards = tuple(shard for name in sorted(checked_indexes)
+                       for shard in self.core.indexes.get(name, ()))
+        self._entity_cache[identity] = (deepcopy(values[0]), shards)
         return values[0]
 
     @staticmethod

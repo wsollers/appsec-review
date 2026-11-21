@@ -494,7 +494,7 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
 
 
 def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] | None,
-                       resolver: EvidenceResolver) -> list[dict[str, Any]]:
+                       resolver: EvidenceResolver | None) -> list[dict[str, Any]]:
     proposals = {item["obligation_id"]: item for item in proposal["obligations"]} if proposal else {}
     accepted = []
     for obligation in package["proof_obligations"]:
@@ -507,6 +507,8 @@ def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] |
             value["evidence_requests"] = list(value["gaps"])
             accepted.append(value)
             continue
+        if resolver is None:
+            raise ValueError("supported obligation requires an accepted evidence resolver")
         value.update({key: item[key] for key in ("rationale", "assumptions", "evidence_requests", "limitations")})
         rule = procedure_for(package["control"])
         resolved_citations = []
@@ -588,12 +590,16 @@ def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] |
 def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any],
               packages: Sequence[Mapping[str, Any]], settings: OwaspSettings,
               worker_profile: Mapping[str, Any], reviewer_profile: Mapping[str, Any],
-              resolver: EvidenceResolver, infer: Infer, independent: bool = True,
+              resolver: EvidenceResolver | None, infer: Infer, independent: bool = True,
               worker_result: Mapping[str, Any] | None = None,
               validation_retrieval: Mapping[str, int] | None = None,
               attempt_id: str = "-", unit_id: str = "validation.assessment") -> dict[str, Any]:
-    retrieval_before = dict(resolver.metrics)
     ready = [package for package in packages if any(item.get("supported") for item in package["proof_obligations"])]
+    if ready and resolver is None:
+        raise ValueError("dispatchable obligations require an accepted evidence resolver")
+    retrieval_metrics = (resolver.metrics if resolver is not None else
+                         {"attempts": 0, "denials": 0, "truncations": 0, "missing": 0})
+    retrieval_before = dict(retrieval_metrics)
     ready_ids = {package["row_id"] for package in ready}
     empty = {"status": "not_dispatched", "proposal": None, "attempts": []}
     worker = dict(worker_result) if worker_result is not None else investigate(repository_root=repository_root, run_root=run_root, batch=batch, packages=ready,
@@ -677,7 +683,7 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
     known_input = [item["input_tokens_reported"] for item in attempts if item["input_tokens_reported"] is not None]
     known_output = [item["output_tokens_reported"] for item in attempts if item["output_tokens_reported"] is not None]
     retrieval = {key: value - retrieval_before.get(key, 0) + (validation_retrieval or {}).get(key, 0)
-                 for key, value in resolver.metrics.items()}
+                 for key, value in retrieval_metrics.items()}
     return {
         "schema": "appsec-review/validator-batch-result/1", "batch_id": batch["batch_id"],
         "fingerprint": batch["fingerprint"], "terminal_state": "succeeded"

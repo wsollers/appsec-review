@@ -74,6 +74,11 @@ authority and handoff pin. Generated-source and binary-source backing records ar
 custody dependencies; absent grants or unresolved relation endpoints fail closed. The input record
 keeps the original manifest hash, a separate view identity and named `not_selected` exclusions.
 Default retrieval callers without a selection retain full-manifest verification.
+Private publication receipts are checked again on later selected reads, including named bindings,
+producer-receipt chains and declared dependencies. A missing, replaced or mutated receipt is an
+integrity failure. A dependency outside the selected/admitted inputs is refused before its bytes
+are read; it is not silently added to the query surface or to the job's input grants. Required
+publication metadata is identified from authenticated producer contracts, never target labels.
 
 For assessment, retain `enabled = true`, `mode = "assessment"` and enabled worker/reviewer profiles,
 and configure the intended provider, models and budgets before freezing a new run. Set

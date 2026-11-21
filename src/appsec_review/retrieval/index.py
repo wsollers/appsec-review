@@ -5,7 +5,9 @@ from __future__ import annotations
 from appsec_review.storage.validation import validation_operation
 
 from collections import Counter
-from dataclasses import asdict, dataclass
+from contextvars import ContextVar
+from dataclasses import asdict, dataclass, field
+from functools import cached_property
 import hashlib
 import json
 import os
@@ -68,6 +70,130 @@ class IndexSelection:
     def view_identity(self, manifest_sha256: str) -> str:
         return hashlib.sha256(canonical_json({
             "manifest_sha256": manifest_sha256, "selection_sha256": self.sha256})).hexdigest()
+
+
+@dataclass
+class _SelectedReceiptPolicy:
+    selection: IndexSelection
+    manifest: Mapping[str, Any]
+    requested: Mapping[str, Any]
+    _stack: ContextVar[tuple[Mapping[str, Any], ...]] = field(
+        default_factory=lambda: ContextVar("selected_receipt_payloads", default=()))
+    _summaries: ContextVar[Mapping[tuple[str, str], Any]] = field(
+        default_factory=lambda: ContextVar("selected_receipt_summaries", default={}))
+
+    @property
+    def stack(self) -> tuple[Mapping[str, Any], ...]:
+        return self._stack.get()
+
+    @property
+    def active(self) -> set[tuple[str, str]]:
+        return {(raw["relative_path"], raw["sha256"]) for raw in self.stack}
+
+    @cached_property
+    def identity(self) -> str:
+        return hashlib.sha256(canonical_json({
+            "selection": self.selection.sha256, "manifest": self.manifest})).hexdigest()
+
+    def _plan(self, root: Path, ref: Mapping[str, Any]):
+        from appsec_review.runtime.consume import accepted_upstream, current_pins
+        from appsec_review.runtime.inputs import producer_contract
+        from appsec_review.runtime.datasets import shard_owner
+        from appsec_review.indexing.inventory import compile_glob
+        matches = [raw for raw in self.manifest["indexes"] if raw["relative_path"] == ref["path"]]
+        for raw in matches:
+            if ref.get("sha256") not in (None, raw["sha256"]):
+                continue
+            if self.selection.includes(raw):
+                return "shard", raw
+            producer = raw["producer"]["job"]
+            if not any(job == producer for job, _ in self.selection.custody_outputs):
+                continue
+            accepted = accepted_upstream(root, producer)
+            owned = shard_owner(producer_contract(root, accepted.handoff), raw["name"], raw["shard_id"])
+            if (producer, owned.output_kind) in self.selection.custody_outputs:
+                return "shard", raw
+        if not matches:
+            pins = current_pins(root)
+            for producer, output in self.selection.custody_outputs:
+                if pins is not None and producer not in pins:
+                    continue
+                accepted = accepted_upstream(root, producer, required=False)
+                if accepted is None:
+                    continue
+                declarations = producer_contract(root, accepted.handoff)
+                owned = next((item for item in declarations if item.output_kind == output), None)
+                if owned is None or not any(compile_glob(pattern).fullmatch(ref["path"]) for pattern in owned.artifacts):
+                    continue
+                bound = next((item for item in accepted.handoff["artifacts"]
+                              if item["path"] == ref["path"] and ref.get("sha256") in (None, item["sha256"])), None)
+                if bound is not None:
+                    return "output", (producer, output, bound)
+        raise ValueError(f"receipt dependency is not selected or declared as custody: {ref['path']}")
+
+    def _execute(self, root: Path, plan) -> None:
+        from appsec_review.runtime.inputs import observe_output, observe_shard
+        kind, value = plan
+        if kind == "output":
+            observe_output(root, *value)
+            return
+        observe_shard(root, value)
+        if (value["relative_path"], value["sha256"]) not in self.active:
+            database, _, _ = _selected_payload(root, value, self)
+            database.close()
+
+    def admit_reference(self, root: Path, ref: Mapping[str, Any]) -> None:
+        self._execute(root, self._plan(root, ref))
+
+    def admit_metadata(self, root: Path, ref: Mapping[str, Any]) -> None:
+        if any(raw["relative_path"] == ref["path"] for raw in self.manifest["indexes"]):
+            raise ValueError("indexed payload cannot be consumed as receipt control metadata")
+
+    def admit_receipt(self, root: Path, value: Mapping[str, Any], *,
+                      origin: Mapping[str, Any], origin_claim: Mapping[str, Any],
+                      origin_ref: Mapping[str, Any]) -> None:
+        from appsec_review.runtime.datasets import read_dataset_contract
+        from appsec_review.indexing.inventory import compile_glob
+        from appsec_review.indexing.derive import DERIVED_SCHEMA
+        from appsec_review.storage.shared import _read
+        declarations = (read_dataset_contract(origin_claim["dataset_contract"], origin["actor"]["job_id"])[1]
+                        if origin["namespace"] == "derived-index" else ())
+        metadata_object = (
+            origin["namespace"] == "derived-index"
+            and any(item.schema == DERIVED_SCHEMA and any(
+                compile_glob(pattern).fullmatch(origin_ref["path"]) for pattern in item.artifacts)
+                for item in declarations)
+            and not any(raw["relative_path"] == value["object"]["path"] for raw in self.manifest["indexes"])
+        )
+        plans = []
+        for position, ref in enumerate((value["object"], *value["dependencies"])):
+            if position == 0 and metadata_object:
+                continue
+            if (origin.get("layout") == "named-immutable"
+                    and ref["path"] == f"data/shared/objects/{origin['object']['sha256']}"
+                    and ref["sha256"] == origin["object"]["sha256"]):
+                plans.append(self._plan(root, origin["object"]))
+            else:
+                plans.append(self._plan(root, ref))
+        # Resolve all dependency permissions before any dependency payload is opened.
+        for plan in plans:
+            self._execute(root, plan)
+        if metadata_object:
+            document = _read(root, value["object"])
+            expected = self.stack[-1] if self.stack else self.requested
+
+            def identity(raw):
+                if not isinstance(raw, Mapping) or not isinstance(raw.get("producer"), Mapping):
+                    return None
+                result = dict(raw)
+                result["producer"] = {key: item for key, item in result["producer"].items()
+                                      if key != "shared_receipt"}
+                return canonical_json(result)
+
+            if (document.get("schema") != DERIVED_SCHEMA
+                    or document.get("fingerprint") != expected["fingerprint"]
+                    or identity(document.get("index_identity", {})) != identity(expected)):
+                raise ValueError("derived publication metadata does not bind the selected shard")
 
 
 @dataclass(frozen=True, slots=True)
@@ -542,26 +668,16 @@ def _load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | N
                 raise ValueError("selected manifest descriptor has no producer identity")
             if not _payloads or not selection.includes(raw):
                 continue
-            from appsec_review.runtime.inputs import observe_shard
-            observe_shard(run_root, raw)
-        if identity.relative_path.startswith("data/shared/"):
-            from appsec_review.storage.shared import safe_path, verify_receipt
-            candidate = safe_path(run_root, identity.relative_path)
-            receipt = verify_receipt(run_root, identity.producer["shared_receipt"])
-            from appsec_review.storage.shared import current
-            owner = current()
-            if owner is not None:
-                owner.consume_receipt(identity.producer["shared_receipt"])
-            if not any(item["path"] == identity.relative_path and item["sha256"] == identity.sha256
-                       for item in receipt["dependencies"]):
-                raise ValueError("shared index is not bound to its producing receipt")
-        if run_root not in candidate.parents or not candidate.is_file():
-            raise ValueError(f"index is unavailable: {identity.name}")
-        if verified_digest(run_root, candidate, identity.sha256) != identity.sha256:
-            raise ValueError(f"index integrity mismatch: {identity.name}")
-        if identity.relative_path.startswith("data/indices/"):
-            from appsec_review.storage.shared import consume_named
-            consume_named(run_root, candidate, namespace="index-shard", expected_sha256=identity.sha256)
+            from appsec_review.storage.shared import receipt_read_scope
+            policy = _SelectedReceiptPolicy(selection, document, raw)
+            with receipt_read_scope(run_root, policy):
+                database, shard_entities, shard_relations = _selected_payload(run_root, raw, policy)
+                database.close()
+            for shard_entities, shard_relations in policy._summaries.get().values():
+                entity_ids.update(shard_entities)
+                relations.extend(shard_relations)
+            continue
+        candidate = _verify_payload_publication(run_root, identity)
         summary_key = ("shard", canonical_json({
             "identity": raw, "target_snapshot": document.get("target_snapshot"),
             "swift_enabled": swift_enabled,
@@ -575,38 +691,8 @@ def _load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | N
         count_work("shard_validations")
         uri = f"file:{candidate.as_posix()}?mode=ro&immutable=1"
         with sqlite3.connect(uri, uri=True) as database:
-            metadata = dict(database.execute("SELECT key, value FROM metadata"))
-            if (metadata.get("schema"), metadata.get("name"), metadata.get("fingerprint"),
-                metadata.get("shard_id", "default")) != (
-                identity.schema, identity.name, identity.fingerprint, identity.shard_id,
-            ):
-                raise ValueError(f"index metadata mismatch: {identity.name}/{identity.shard_id}")
-            if metadata.get("target_snapshot") != document.get("target_snapshot"):
-                raise ValueError(f"index target snapshot mismatch: {identity.name}/{identity.shard_id}")
-            if selection is not None:
-                _verify_selected_custody(run_root, document, database, selection)
-            # The catalog is the sole durable inventory exception. Every derived shard is checked
-            # independently so a stale or externally presented Swift artifact fails closed.
-            if not swift_enabled and identity.producer.get("job") != "job_target_catalog":
-                if any(is_swift_path(str(row[0])) for row in database.execute("SELECT path FROM locations")):
-                    raise ValueError(
-                        f"index contains Swift-derived locations while tools.enable_swift=false: "
-                        f"{identity.name}/{identity.shard_id}")
-                for kind, payload_json in database.execute("SELECT kind, payload_json FROM entities"):
-                    payload = json.loads(str(payload_json))
-                    if kind == "coverage_cell" and swift_coverage_cell_is_gap(payload):
-                        continue
-                    reject_swift_derived(
-                        payload, enabled=False,
-                        context=f"index {identity.name}/{identity.shard_id}")
-                for (payload_json,) in database.execute("SELECT payload_json FROM relations"):
-                    reject_swift_derived(
-                        json.loads(str(payload_json)), enabled=False,
-                        context=f"index {identity.name}/{identity.shard_id}")
-            shard_entities = frozenset(str(row[0]) for row in database.execute("SELECT identity FROM entities"))
-            shard_relations = tuple((str(row[0]), str(row[1]), str(row[2]), identity.shard_id)
-                                   for row in database.execute(
-                                       "SELECT relation_id, source_id, target_id FROM relations"))
+            shard_entities, shard_relations = _validate_payload_database(
+                run_root, database, identity, document, swift_enabled=swift_enabled)
             entity_ids.update(shard_entities)
             relations.extend(shard_relations)
             if validation is not None:
@@ -624,32 +710,96 @@ def _load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | N
 def open_selected_shard(run_root: Path, shard: Mapping[str, Any], *,
                         selection: IndexSelection, manifest: Mapping[str, Any]) -> sqlite3.Connection:
     """Open selected data under the current read scope, never a retained admission context."""
-    from appsec_review.runtime.inputs import observe_shard
-    from appsec_review.storage.shared import safe_path
-    from appsec_review.storage.validation import isolated_validation_scope, verified_digest
+    from appsec_review.storage.shared import receipt_read_scope
     if not selection.includes(shard):
         raise ValueError("index is outside the selected source view")
     if manifest.get("run_id") != Path(run_root).name:
         raise ValueError("selected shard manifest belongs to another run")
-    with isolated_validation_scope(run_root, policy_identity="index-selection:" + selection.sha256):
-        observe_shard(run_root, shard)
-        path = safe_path(run_root, shard["relative_path"])
-        verified_digest(run_root, path, shard["sha256"])
+    policy = _SelectedReceiptPolicy(selection, manifest, shard)
+    with receipt_read_scope(run_root, policy):
+        database, _, _ = _selected_payload(run_root, shard, policy)
+        return database
+
+
+def _verify_payload_publication(run_root: Path, identity: IndexIdentity) -> Path:
+    from appsec_review.storage.shared import safe_path, verify_receipt, consume_named, current
+    from appsec_review.storage.validation import verified_digest
+    candidate = safe_path(run_root, identity.relative_path)
+    if identity.relative_path.startswith("data/shared/"):
+        receipt = verify_receipt(run_root, identity.producer["shared_receipt"])
+        owner = current()
+        if owner is not None:
+            owner.consume_receipt(identity.producer["shared_receipt"])
+        if not any(item["path"] == identity.relative_path and item["sha256"] == identity.sha256
+                   for item in receipt["dependencies"]):
+            raise ValueError("shared index is not bound to its producing receipt")
+    if not candidate.is_file():
+        raise ValueError(f"index is unavailable: {identity.name}")
+    if verified_digest(run_root, candidate, identity.sha256) != identity.sha256:
+        raise ValueError(f"index integrity mismatch: {identity.name}")
+    if identity.relative_path.startswith("data/indices/"):
+        consume_named(run_root, candidate, namespace="index-shard", expected_sha256=identity.sha256)
+    return candidate
+
+
+def _validate_payload_database(run_root: Path, database: sqlite3.Connection, identity: IndexIdentity,
+                               manifest: Mapping[str, Any], *, swift_enabled: bool,
+                               selection: IndexSelection | None = None):
+    metadata = dict(database.execute("SELECT key, value FROM metadata"))
+    if (metadata.get("schema"), metadata.get("name"), metadata.get("fingerprint"),
+            metadata.get("shard_id", "default")) != (
+            identity.schema, identity.name, identity.fingerprint, identity.shard_id):
+        raise ValueError(f"index metadata mismatch: {identity.name}/{identity.shard_id}")
+    if metadata.get("target_snapshot") != manifest.get("target_snapshot"):
+        raise ValueError(f"index target snapshot mismatch: {identity.name}/{identity.shard_id}")
+    if selection is not None:
+        _verify_selected_custody(run_root, manifest, database, selection)
+    if not swift_enabled and identity.producer.get("job") != "job_target_catalog":
+        if any(is_swift_path(str(row[0])) for row in database.execute("SELECT path FROM locations")):
+            raise ValueError(f"index contains Swift-derived locations while tools.enable_swift=false: "
+                             f"{identity.name}/{identity.shard_id}")
+        for kind, payload_json in database.execute("SELECT kind, payload_json FROM entities"):
+            payload = json.loads(str(payload_json))
+            if kind == "coverage_cell" and swift_coverage_cell_is_gap(payload):
+                continue
+            reject_swift_derived(payload, enabled=False, context=f"index {identity.name}/{identity.shard_id}")
+        for (payload_json,) in database.execute("SELECT payload_json FROM relations"):
+            reject_swift_derived(json.loads(str(payload_json)), enabled=False,
+                                 context=f"index {identity.name}/{identity.shard_id}")
+    entities = frozenset(str(row[0]) for row in database.execute("SELECT identity FROM entities"))
+    relations = tuple((str(row[0]), str(row[1]), str(row[2]), identity.shard_id)
+                      for row in database.execute("SELECT relation_id, source_id, target_id FROM relations"))
+    if selection is not None and (len(entities), len(relations)) != (
+            sum(json.loads(metadata.get("entity_kind_counts", "{}")).values()),
+            sum(json.loads(metadata.get("relation_kind_counts", "{}")).values())):
+        raise ValueError(f"selected index row counts contradict metadata: {identity.name}/{identity.shard_id}")
+    return entities, relations
+
+
+def _selected_payload(run_root: Path, raw: Mapping[str, Any], policy: _SelectedReceiptPolicy):
+    from appsec_review.runtime.inputs import observe_shard
+    from appsec_review.observability.spans import count_work
+    identity = IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))})
+    observe_shard(run_root, raw)
+    token = policy._stack.set((*policy.stack, raw))
+    try:
+        path = _verify_payload_publication(run_root, identity)
         database = sqlite3.connect(f"file:{path.as_posix()}?mode=ro&immutable=1", uri=True, timeout=0.1)
         try:
             database.row_factory = sqlite3.Row
             database.execute("PRAGMA query_only=ON")
-            metadata = dict(database.execute("SELECT key, value FROM metadata"))
-            if (metadata.get("schema"), metadata.get("name"), metadata.get("fingerprint"),
-                    metadata.get("shard_id", "default"), metadata.get("target_snapshot")) != (
-                    shard["schema"], shard["name"], shard["fingerprint"],
-                    shard.get("shard_id", "default"), manifest["target_snapshot"]):
-                raise ValueError("selected index metadata or target snapshot mismatch")
-            _verify_selected_custody(run_root, manifest, database, selection)
+            count_work("shard_validations")
+            entities, relations = _validate_payload_database(
+                run_root, database, identity, policy.manifest,
+                swift_enabled=swift_enabled_from_run(run_root), selection=policy.selection)
+            policy._summaries.set({**policy._summaries.get(), (identity.relative_path, identity.sha256):
+                                   (entities, relations)})
+            return database, entities, relations
         except Exception:
             database.close()
             raise
-        return database
+    finally:
+        policy._stack.reset(token)
 
 
 def _verify_selected_custody(run_root: Path, manifest: Mapping[str, Any],

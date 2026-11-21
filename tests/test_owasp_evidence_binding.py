@@ -279,14 +279,23 @@ def test_bounded_subspans_and_character_clipping_report_truncation(publication):
 
 
 @pytest.mark.parametrize("index", ["analysis", "source"])
-def test_duplicate_identity_uses_original_catalog_despite_other_index_copy(publication, index):
+def test_duplicate_identity_uses_original_catalog_despite_other_index_copy(publication, index, monkeypatch):
     item = EntityRecord(LogicalIdentity.parse(publication.ids[PATH]), PATH, PATH, PATH,
                         {"component_id": COMPONENT, "result": {"derived": "not original"}}, location(publication))
     publish(publication, index, "duplicate", [item], job="job_tree_sitter_ast")
     bound = resolver(publication)
+    queries = []
+    find = bound.core.find
+
+    def lookup(**parameters):
+        queries.append(tuple(parameters["indexes"]))
+        return find(**parameters)
+
+    monkeypatch.setattr(bound.core, "find", lookup)
     value = bound.materialize(publication.ids[PATH], component_id=COMPONENT)
     assert value["reference"]["publication"]["index"] == "source"
     assert bound.resolve(value["reference"], component_id=COMPONENT) == value
+    assert queries and set(queries) == {("source",)}
 
 
 @pytest.mark.parametrize("conflict", [False, True])

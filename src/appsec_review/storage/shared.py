@@ -5,10 +5,11 @@ contain immutable references to *computed* receipts, never a replaceable "winnin
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from contextlib import contextmanager
 from contextvars import ContextVar, copy_context
 from copy import deepcopy
+from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 import errno
 import hashlib
@@ -18,7 +19,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import tempfile
-from typing import Any, Mapping, TYPE_CHECKING
+from typing import Any, Mapping, Protocol, TYPE_CHECKING
 
 from .atomic import canonical_json, file_sha256, timed_fsync
 from .validation import (
@@ -37,6 +38,62 @@ NAMED = "data/shared/named"
 _HASH = re.compile(r"[0-9a-f]{64}")
 _NAME = re.compile(r"[a-zA-Z0-9_-]+")
 _ACTIVE: ContextVar[SharedArtifacts | None] = ContextVar("shared_artifact_attempt", default=None)
+_READ_POLICY: ContextVar[tuple[Path, ReceiptReadPolicy] | None] = ContextVar("receipt_read_policy", default=None)
+
+
+class ReceiptReadPolicy(Protocol):
+    identity: str
+
+    def admit_reference(self, root: Path, ref: Mapping[str, Any]) -> None: ...
+
+    def admit_metadata(self, root: Path, ref: Mapping[str, Any]) -> None: ...
+
+    def admit_receipt(self, root: Path, value: Mapping[str, Any], *,
+                      origin: Mapping[str, Any], origin_claim: Mapping[str, Any],
+                      origin_ref: Mapping[str, Any]) -> None: ...
+
+
+def _read_policy(root: Path) -> ReceiptReadPolicy | None:
+    selected = _READ_POLICY.get()
+    if selected is None:
+        return None
+    if selected[0] != root and selected[0] != Path(root).resolve():
+        raise ValueError("receipt read policy belongs to another run")
+    return selected[1]
+
+
+@contextmanager
+def receipt_read_scope(root: Path, policy: ReceiptReadPolicy | None):
+    if policy is None:
+        yield
+        return
+    from .validation import isolated_validation_scope
+    with isolated_validation_scope(root, policy_identity="receipt-read:" + policy.identity):
+        token = _READ_POLICY.set((Path(root).resolve(), policy))
+        try:
+            yield
+        finally:
+            _READ_POLICY.reset(token)
+
+
+def _metadata_reference(root: Path, ref: Mapping[str, Any], pattern: str) -> None:
+    policy = _read_policy(root)
+    if policy is not None:
+        if not re.fullmatch(pattern, str(ref.get("path", ""))):
+            raise ValueError("receipt metadata reference has an invalid control-record identity")
+        policy.admit_metadata(root, ref)
+
+
+def _admit_target(root: Path, path: Path, expected: str | None = None) -> None:
+    policy = _read_policy(root)
+    if policy is not None:
+        policy.admit_reference(root, {"path": path.relative_to(root).as_posix(), "sha256": expected})
+
+
+def _metadata_target(root: Path, path: Path) -> None:
+    policy = _read_policy(root)
+    if policy is not None:
+        policy.admit_metadata(root, {"path": path.relative_to(root).as_posix()})
 NAMED_LAYOUTS = {
     "index-shard": ("data/indices/",),
     "owasp-shard": ("data/indexes/owasp/",),
@@ -53,17 +110,27 @@ def _hash(value: str) -> str:
     return value
 
 
-def safe_path(root: Path, relative: str) -> Path:
-    """Reject noncanonical paths and every symlink, including links within the run."""
+@lru_cache(maxsize=512)
+def _path_components(root: Path, relative: str) -> tuple[Path, ...]:
+    """Cache immutable path parsing, never filesystem state or access decisions."""
     parts = PurePosixPath(relative).parts
     if (not parts or PurePosixPath(relative).is_absolute() or "\\" in relative
             or ":" in relative or any(part in {".", ".."} for part in parts)
             or "/".join(parts) != relative):
         raise ValueError("shared artifact path is not run-relative canonical POSIX")
-    root = Path(root).absolute()
     path = root
+    paths = [root]
     for part in parts:
         path /= part
+        paths.append(path)
+    return tuple(paths)
+
+
+def safe_path(root: Path, relative: str) -> Path:
+    """Reject noncanonical paths and every symlink, including links within the run."""
+    paths = _path_components(Path(root).absolute(), relative)
+    root, path = paths[0], paths[-1]
+    for path in paths[1:]:
         if path.is_symlink():
             raise ValueError(f"shared artifact symlink: {relative}")
     if root.is_symlink() or root.resolve() not in path.resolve().parents:
@@ -81,14 +148,21 @@ def reference(root: Path, path: Path, *, expected_sha256: str | None = None) -> 
         if expected_sha256 is not None and expected_sha256 != identity:
             raise ValueError("shared object path differs from expected identity")
         expected_sha256 = identity
-    digest = (verified_digest(root, path, _hash(expected_sha256)) if expected_sha256 is not None
-              else observed_digest(root, path))
+    if _read_policy(root) is not None:
+        digest = file_sha256(path)
+        if expected_sha256 is not None and digest != _hash(expected_sha256):
+            raise ValueError("shared artifact integrity mismatch")
+    else:
+        digest = (verified_digest(root, path, _hash(expected_sha256)) if expected_sha256 is not None
+                  else observed_digest(root, path))
     return {"path": relative, "sha256": digest, "size_bytes": path.stat().st_size}
 
 
 def verify_reference(root: Path, ref: Mapping[str, Any]) -> Path:
     path = safe_path(root, ref["path"])
-    if (not path.is_file() or verified_digest(root, path, _hash(ref["sha256"])) != ref["sha256"]
+    expected = _hash(ref["sha256"])
+    if (not path.is_file() or (file_sha256(path) if _read_policy(root) is not None
+                              else verified_digest(root, path, expected)) != expected
             or path.stat().st_size != ref["size_bytes"]):
         raise ValueError(f"shared artifact integrity mismatch: {ref['path']}")
     return path
@@ -205,8 +279,21 @@ def adopt_private_file(root: Path, source: Path, digest: str) -> dict[str, Any]:
     return reference(root, path, expected_sha256=digest)
 
 
+def _verified_bytes(root: Path, ref: Mapping[str, Any]) -> bytes:
+    path = safe_path(root, ref["path"])
+    try:
+        with path.open("rb") as stream:
+            raw = stream.read(ref["size_bytes"] + 1)
+    except OSError as error:
+        raise ValueError(f"shared artifact unavailable: {ref['path']}") from error
+    if len(raw) != ref["size_bytes"] or hashlib.sha256(raw).hexdigest() != _hash(ref["sha256"]):
+        raise ValueError(f"shared artifact integrity mismatch: {ref['path']}")
+    return raw
+
+
 def _read(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
-    raw = verify_reference(root, ref).read_bytes()
+    raw = (_verified_bytes(root, ref) if _read_policy(root) is not None
+           else verify_reference(root, ref).read_bytes())
     value = json.loads(raw)
     if not isinstance(value, dict) or canonical_json(value) != raw:
         raise ValueError("shared metadata must be canonical JSON")
@@ -218,12 +305,16 @@ def _binding_path(namespace: str, obj: Mapping[str, Any]) -> str:
 
 
 def verify_binding(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
+    _metadata_reference(root, ref, r"data/shared/named/[a-zA-Z0-9_-]+/[0-9a-f]{64}\.json")
     value = _read(root, ref)
     namespace, obj = value["namespace"], value["object"]
     if (value.get("schema") != "appsec-review/shared-named/1"
             or namespace not in NAMED_LAYOUTS or not obj["path"].startswith(NAMED_LAYOUTS[namespace])
             or ref["path"] != _binding_path(namespace, obj)):
         raise ValueError("invalid named immutable binding")
+    policy = _read_policy(root)
+    if policy is not None:
+        policy.admit_reference(root, obj)
     verify_reference(root, obj)
     return value
 
@@ -233,10 +324,16 @@ def verify_receipt(root: Path, ref: Mapping[str, Any], *,
                    seen: frozenset[str] = frozenset()) -> dict[str, Any]:
     if ref["path"] in seen:
         raise ValueError("shared receipt provenance cycle")
+    _metadata_reference(root, ref, r"data/jobs/[a-zA-Z0-9_-]+/attempts/[a-zA-Z0-9_-]+/shared/[a-zA-Z0-9_-]+/[0-9a-f]{64}\.json")
     from appsec_review.observability.spans import count_work
     count_work("receipt_references")
     context = current_validation(root)
     key = ("receipt", ref["path"], _hash(ref["sha256"]))
+    if _read_policy(root) is not None:
+        # Cached provenance never stands in for the current reader's dependency grants.
+        value = _verify_receipt(root, ref, seen=seen)
+        count_work("receipt_validations")
+        return value
     verify_reference(root, ref)
     if context is not None:
         with context.lock:
@@ -276,8 +373,12 @@ def _verify_receipt(root: Path, ref: Mapping[str, Any], *,
     expected = f"data/jobs/{actor['job_id']}/attempts/{actor['attempt_id']}"
     if ref["path"] != f"{expected}/shared/{namespace}/{fingerprint}.json":
         raise ValueError("shared receipt identity differs from its attempt path")
-    claim_path = verify_reference(root, actor["claim"])
-    claim = json.loads(claim_path.read_bytes())
+    policy = _read_policy(root)
+    if policy is not None and actor["claim"]["path"] != f"{expected}/claim.json":
+        raise ValueError("shared receipt claim is not its producing control record")
+    _metadata_reference(root, actor["claim"], re.escape(f"{expected}/claim.json"))
+    claim = json.loads(_verified_bytes(root, actor["claim"]) if policy is not None
+                       else verify_reference(root, actor["claim"]).read_bytes())
     if actor["claim"]["path"] != f"{expected}/claim.json" or any(
         claim.get(key) != actor[key] for key in ("run_id", "job_id", "attempt_id", "orchestration")
     ) or claim.get("attempt_path") != expected or actor["run_id"] != root.name:
@@ -290,29 +391,20 @@ def _verify_receipt(root: Path, ref: Mapping[str, Any], *,
         raise ValueError("shared receipt is not declared by its pinned attempt contract")
     if not isinstance(value["computation"], dict):
         raise ValueError("invalid shared computation identity")
-    for artifact in (value["object"], *value["dependencies"]):
-        verify_reference(root, artifact)
-        if artifact["path"].startswith(OBJECTS + "/") and artifact["path"] != f"{OBJECTS}/{artifact['sha256']}":
-            raise ValueError("shared object filename differs from exact byte hash")
     producer = value["producer_receipt"]
+    original = None
     if value["mode"] == "computed":
         if producer is not None or value["legacy"] is not None:
             raise ValueError("computed receipt cannot invent an earlier producer")
         if value.get("layout") == "named-immutable":
-            if namespace not in NAMED_LAYOUTS or any(
-                not artifact["path"].startswith(NAMED_LAYOUTS[namespace])
-                for artifact in (value["object"],)
-            ):
+            if namespace not in NAMED_LAYOUTS or not value["object"]["path"].startswith(NAMED_LAYOUTS[namespace]):
                 raise ValueError("shared named object is outside its registered immutable layout")
             if (len(value["dependencies"]) != 1
                     or value["dependencies"][0]["path"] != f"{OBJECTS}/{value['object']['sha256']}"
                     or value["dependencies"][0]["sha256"] != value["object"]["sha256"]):
                 raise ValueError("named object lacks its exact-byte content reference")
-            binding = reference(root, safe_path(root, _binding_path(namespace, value["object"])))
-            if verify_binding(root, binding)["object"] != value["object"]:
-                raise ValueError("named immutable object changed after publication")
         elif any(artifact["path"] != f"{OBJECTS}/{artifact['sha256']}"
-               for artifact in (value["object"], *value["dependencies"])):
+                 for artifact in (value["object"], *value["dependencies"])):
             raise ValueError("new computations must publish content-addressed objects")
     elif producer is not None:
         original = verify_receipt(root, producer, seen=seen | {ref["path"]})
@@ -328,11 +420,32 @@ def _verify_receipt(root: Path, ref: Mapping[str, Any], *,
             raise ValueError("reused receipt differs from producing computation")
     elif value["legacy"] != "unknown-original-producer" and value.get("layout") != "public-feed":
         raise ValueError("reused receipt lacks verified producer or explicit legacy provenance")
+    if policy is not None:
+        origin, origin_ref, origin_claim = value, ref, claim
+        context = current_validation(root)
+        if producer is not None:
+            origin, origin_claim, origin_ref = context.records[
+                ("receipt-origin:" + policy.identity, producer["path"], producer["sha256"])]
+        policy.admit_receipt(root, value, origin=origin, origin_claim=origin_claim, origin_ref=origin_ref)
+    for artifact in (value["object"], *value["dependencies"]):
+        verify_reference(root, artifact)
+        if artifact["path"].startswith(OBJECTS + "/") and artifact["path"] != f"{OBJECTS}/{artifact['sha256']}":
+            raise ValueError("shared object filename differs from exact byte hash")
+    if value["mode"] == "computed" and value.get("layout") == "named-immutable":
+        binding_path = safe_path(root, _binding_path(namespace, value["object"]))
+        _metadata_target(root, binding_path)
+        binding = reference(root, binding_path)
+        if verify_binding(root, binding)["object"] != value["object"]:
+            raise ValueError("named immutable object changed after publication")
     if value.get("layout") == "public-feed":
         if namespace != "feed-snapshot":
             raise ValueError("public-feed proof has an invalid namespace")
         from .feed_provenance import verify_feed_receipt
         verify_feed_receipt(root, value, claim)
+    if policy is not None:
+        context.records[("receipt-origin:" + policy.identity, ref["path"], ref["sha256"])] = (
+            origin, origin_claim, origin_ref)
+        context.records[("receipt-claim:" + policy.identity, ref["path"], ref["sha256"])] = claim
     return value
 
 
@@ -341,6 +454,7 @@ class SharedArtifacts:
     run_root: Path
     attempt_root: Path
     actor: Mapping[str, Any]
+    _named_refs: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
 
     @classmethod
     def for_job(cls, context: JobContext) -> SharedArtifacts:
@@ -376,7 +490,9 @@ class SharedArtifacts:
                  "producer_receipt": producer, "legacy": legacy}
         if layout is not None:
             value["layout"] = layout
-        ref = immutable_bytes(self.run_root, self._slot(namespace, fingerprint), canonical_json(value))
+        slot = self._slot(namespace, fingerprint)
+        _metadata_target(self.run_root, self.run_root / slot)
+        ref = immutable_bytes(self.run_root, slot, canonical_json(value))
         verify_receipt(self.run_root, ref)
         return value, ref
 
@@ -386,7 +502,9 @@ class SharedArtifacts:
                  ) -> dict[str, Any]:
         _, receipt = self._record(namespace, fingerprint, obj, computation=computation,
                                   dependencies=dependencies, mode="computed", layout=layout)
-        immutable_bytes(self.run_root, f"{REQUESTS}/{namespace}/{fingerprint}/{receipt['sha256']}.json",
+        request_path = f"{REQUESTS}/{namespace}/{fingerprint}/{receipt['sha256']}.json"
+        _metadata_target(self.run_root, self.run_root / request_path)
+        immutable_bytes(self.run_root, request_path,
                         canonical_json({"schema": REQUEST_SCHEMA, "receipt": receipt}))
         return receipt
 
@@ -396,6 +514,7 @@ class SharedArtifacts:
         admission = ComputationAdmission.for_repair(self.run_root, claim)
         slot = safe_path(self.run_root, self._slot(namespace, fingerprint))
         if slot.exists():
+            _metadata_target(self.run_root, slot)
             ref = reference(self.run_root, slot)
             value = verify_receipt(self.run_root, ref)
             if admission is not None:
@@ -409,6 +528,7 @@ class SharedArtifacts:
             return None
         candidates = []
         for path in sorted(directory.iterdir()):
+            _metadata_target(self.run_root, path)
             candidate = verify_request(self.run_root, reference(self.run_root, path))
             value = verify_receipt(self.run_root, candidate)
             if admission is not None:
@@ -435,6 +555,29 @@ class SharedArtifacts:
               computation: Mapping[str, Any] | None = None,
               expected_sha256: str | None = None) -> dict[str, Any]:
         """Record an explicitly registered immutable layout without copying its bytes."""
+        if not computed:
+            _admit_target(self.run_root, path, expected_sha256)
+        policy = _read_policy(self.run_root)
+        if not computed and policy is not None and expected_sha256 is not None:
+            relative = path.relative_to(self.run_root).as_posix()
+            fingerprint = hashlib.sha256(canonical_json({
+                "namespace": namespace, "path": relative, "sha256": expected_sha256})).hexdigest()
+            cached = self._named_refs.get((namespace, fingerprint))
+            if cached is not None:
+                # Only the receipt identity is retained. Its bytes, lineage and current grants
+                # are verified again on every read.
+                value = verify_receipt(self.run_root, cached)
+                if (value["namespace"], value["fingerprint"], value["object"]["path"],
+                        value["object"]["sha256"], value["actor"]) != (
+                        namespace, fingerprint, relative, expected_sha256, dict(self.actor)):
+                    raise ValueError("named receipt differs from the requested publication")
+                claim = current_validation(self.run_root).records[
+                    ("receipt-claim:" + policy.identity, cached["path"], cached["sha256"])]
+                from appsec_review.runtime.repair import ComputationAdmission
+                admission = ComputationAdmission.for_repair(self.run_root, claim)
+                if admission is not None:
+                    admission.verify(self.run_root, value)
+                return dict(cached)
         obj = reference(self.run_root, path, expected_sha256=expected_sha256)
         if namespace not in NAMED_LAYOUTS or not obj["path"].startswith(NAMED_LAYOUTS[namespace]):
             raise ValueError("unregistered named immutable publication")
@@ -448,10 +591,13 @@ class SharedArtifacts:
                                  dependencies=(content,), layout="named-immutable")
         binding = safe_path(self.run_root, _binding_path(namespace, obj))
         if binding.exists():
+            _metadata_target(self.run_root, binding)
             if verify_binding(self.run_root, reference(self.run_root, binding))["object"] != obj:
                 raise ValueError("named immutable object changed after publication")
         hit = self.lookup(namespace, fingerprint)
         if hit is not None:
+            if policy is not None:
+                self._named_refs[(namespace, fingerprint)] = dict(hit[1])
             return hit[1]
         claim = json.loads(verify_reference(self.run_root, self.actor["claim"]).read_bytes())
         if (claim.get("repair_admission_sha256")
@@ -460,7 +606,10 @@ class SharedArtifacts:
                              "regenerate it with a new computation identity or use a successor run")
         if binding.exists():
             raise ValueError("named immutable publication has no complete producer receipt")
-        return self.legacy(namespace, fingerprint, obj, computation=computation or {})[1]
+        receipt = self.legacy(namespace, fingerprint, obj, computation=computation or {})[1]
+        if policy is not None:
+            self._named_refs[(namespace, fingerprint)] = dict(receipt)
+        return receipt
 
     def legacy(self, namespace: str, fingerprint: str, obj: Mapping[str, Any], *,
                computation: Mapping[str, Any], dependencies: tuple[Mapping[str, Any], ...] = ()
@@ -498,6 +647,7 @@ class SharedArtifacts:
 
 
 def verify_request(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
+    _metadata_reference(root, ref, r"data/shared/requests/[a-zA-Z0-9_-]+/[0-9a-f]{64}/[0-9a-f]{64}\.json")
     request = _read(root, ref)
     if request.get("schema") != REQUEST_SCHEMA:
         raise ValueError("invalid shared request schema")
@@ -663,9 +813,11 @@ def consume_named(root: Path, path: Path, *, namespace: str,
     if namespace not in NAMED_LAYOUTS:
         raise ValueError("unregistered named immutable consumption")
     safe_path(root, path.relative_to(root).as_posix())
+    _admit_target(root, path, expected_sha256)
     obj = reference(root, path, expected_sha256=expected_sha256)
     binding = safe_path(root, _binding_path(namespace, obj))
     if binding.exists():
+        _metadata_target(root, binding)
         if verify_binding(root, reference(root, binding))["object"] != obj:
             raise ValueError("named immutable object changed after publication")
         fingerprint = hashlib.sha256(canonical_json(
@@ -676,6 +828,7 @@ def consume_named(root: Path, path: Path, *, namespace: str,
             if not paths:
                 raise ValueError("named immutable publication has no complete producer receipt")
             for candidate in paths:
+                _metadata_target(root, candidate)
                 verify_request(root, reference(root, candidate))
     if owner is not None:
         if owner.run_root != root:

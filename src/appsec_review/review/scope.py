@@ -425,7 +425,7 @@ def accept_manifest(run_root: Path, *, manifest_path: Path | None = None,
         _check_embedded(run_root, shards, snapshot)
         store = ShardSet(run_root, shards)
     else:
-        _check_embedded(run_root, shards, snapshot, selection=selection, manifest=manifest)
+        # The shared selected-payload verifier already checked counts and target identity.
         store = ShardSet(run_root, shards, selection=selection, manifest=manifest)
     producers = tuple(_coverage(store, name, tuple(shard for shard in shards if select(shard)))
                       for name, select in sorted(PRODUCERS.items()))

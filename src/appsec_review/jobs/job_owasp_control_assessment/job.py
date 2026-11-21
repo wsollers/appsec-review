@@ -268,12 +268,14 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                     obligation.get("supported") for package in packages_by_batch[batch["batch_id"]]
                     for obligation in package["proof_obligations"])]
             admitted = {batch["batch_id"] for batch in ready_batches[:typed.max_batches]}
-            resolver = _resolver(unit) if typed.mode is AssessmentMode.ASSESSMENT else None
+            resolver = None
             results = []
             log = PipelineLog(unit.job.run_root)
             for batch in assigned:
                 ready = batch in ready_batches
                 launched = ready and batch["batch_id"] in admitted and fail_cell != cell_id
+                if launched and typed.mode is AssessmentMode.ASSESSMENT and resolver is None:
+                    resolver = _resolver(unit)
                 log.write("OWASP_WORKER_STARTED" if launched else "OWASP_WORKER_NOT_DISPATCHED", run_id=unit.job.run_id,
                     job_id="job_owasp_control_assessment", attempt_id=unit.job.attempt_id,
                     step_id="validation", task_id=cell_id, details={"batch_id": batch["batch_id"],
@@ -287,7 +289,7 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                         reviewer_profile=settings["models"][typed.reviewer_profile],
                         resolver=resolver, infer=transport(), independent=False,
                         attempt_id=unit.job.attempt_id, unit_id=unit.unit_id))
-                    if resolver is not None else None)
+                    if typed.mode is AssessmentMode.ASSESSMENT else None)
                 if ready and batch["batch_id"] not in admitted:
                     result["terminal_state"] = "not_dispatched"
                     for row in result["results"]:
@@ -320,18 +322,22 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         typed = parse_settings(settings)
         batches = [batch for cell in CELLS for batch in unit.output(f"validation.{cell}")["batch_results"]]
         reviewed_batches = []
+        resolver = None
 
         def review(batch):
+            nonlocal resolver
             if "worker" not in batch or batch["worker"]["status"] == "not_dispatched":
                 reviewed_batches.append(batch)
                 return batch
+            if resolver is None:
+                resolver = _resolver(unit)
             bid = batch["batch_id"]
             original = next(item for item in unit.output("batching.partition_work")["work"]["batches"]
                             if item["batch_id"] == bid)
             value = run_batch(repository_root=unit.job.repository_root, run_root=unit.job.run_root,
                 batch=original, packages=unit.output("batching.build_packages")["packages"][bid],
                 settings=typed, worker_profile=settings["model"],
-                reviewer_profile=settings["models"][typed.reviewer_profile], resolver=_resolver(unit),
+                reviewer_profile=settings["models"][typed.reviewer_profile], resolver=resolver,
                 infer=transport(), worker_result=batch["worker"],
                 validation_retrieval=batch["metrics"].get("retrieval"),
                 attempt_id=unit.job.attempt_id, unit_id=unit.unit_id)
