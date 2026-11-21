@@ -132,6 +132,21 @@ The [handler](../../src/appsec_review/jobs/job_final_report_publication/job.py) 
    configured, invoke the pinned PDF tool. Unknown metrics remain N/A in the source; the receipt
    distinguishes rendered, disabled and failed outcomes.
 
+Optional SARIF enrichment is reported separately from completion gaps. The existing SARIF
+properties bag holds `optional_capability_limitations`: at most one `codeFlows` and one `fixes`
+limitation per supplied finding, each with `finding_id`, `capability` and a bounded reason
+(300 characters maximum). The list is deterministic and covered by the SARIF hash and
+publication's byte-for-byte reassembly. Removing its metadata fails publication verification.
+The export-result schema and telemetry counters are unchanged: measured emitted-codeflow/fix
+counts remain zero when none were exported, not counts of review failures.
+
+Absent ordered traces, unavailable or unqualified fixes, absent exact patches and intentionally
+redacted/truncated patch projections are optional limitations. Missing required validation/patch
+bindings, ambiguous validation records, unsupported required patch formats, omitted whole finding records and real gate gaps
+remain completion gaps; changed or incoherent bound material remains an integrity failure.
+This is an explicit classification at the adapter, not a filter suppressing every omission-like
+gap name. Qualified exact fixes still export with their original assurance.
+
 The current report is `final-report/4` with `security-radar-tracker/2` (T-5088, T-5139, T-5140). Unknown
 exposure/inspection/corroboration and undefined derived metrics are `null` with named reasons, displayed
 as **N/A** across formats and omitted from chart geometry. Measured zero remains numeric.

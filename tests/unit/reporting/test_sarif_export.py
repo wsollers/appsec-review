@@ -40,6 +40,51 @@ def test_absent_reachability_and_bare_digits_do_not_become_security_claims():
         validate_sarif_log(log)
 
 
+@pytest.mark.parametrize("case", ["optional", "declared-gap", "missing-record", "invalid-flow"])
+def test_optional_capabilities_never_reclassify_required_export_gaps(tmp_path, case):
+    finding = _sample_findings()[1]
+    limitations = [
+        {"finding_id": finding["finding_id"], "capability": "codeFlows", "reason": "ordered path unavailable"},
+        {"finding_id": finding["finding_id"], "capability": "fixes", "reason": "qualified exact fix unavailable"},
+    ]
+    if case == "missing-record":
+        finding["path"] = None
+    if case == "invalid-flow":
+        finding["taint_path_timeline"] = [{"path": "src/a.c", "line": 0}]
+    # An existing required gap with an omission-like name must not be filtered by its prefix.
+    upstream = ["sarif_fix_omitted:required certified patch missing"] if case == "declared-gap" else []
+    first = export_sarif_bundle([finding], upstream_gaps=upstream,
+                                optional_capability_limitations=limitations, output_dir=tmp_path)
+    second = export_sarif_bundle([finding], upstream_gaps=upstream,
+                                 optional_capability_limitations=[*reversed(limitations), limitations[0]])
+    assert first.sarif_bytes == second.sarif_bytes == (tmp_path / SARIF_DOCUMENT_NAME).read_bytes()
+    assert first.sarif_log["runs"][0]["properties"]["optional_capability_limitations"] == limitations
+    expected_gaps = int(case != "optional")
+    assert len(first.gaps) == expected_gaps
+    assert first.result["terminal_status"] == ("COMPLETED_WITH_GAPS" if expected_gaps else "SUCCEEDED")
+    assert first.telemetry["reporting.sarif_results_total"] == int(case not in {"missing-record", "invalid-flow"})
+    if upstream:
+        assert first.gaps[0]["reason"] == upstream[0]
+    elif expected_gaps:
+        assert first.gaps[0]["reason"].startswith("sarif_record_omitted:F-HARD-002:")
+
+
+@pytest.mark.parametrize("change", [
+    {"finding_id": "not-supplied"}, {"capability": "locations"}, {"reason": "x" * 301}, {"extra": "unbounded"},
+], ids=["identity", "required-capability", "reason-bound", "fields"])
+def test_optional_capability_metadata_is_bounded_to_supplied_findings(change):
+    limitation = {"finding_id": "F-HARD-002", "capability": "fixes", "reason": "no qualified fix", **change}
+    with pytest.raises(ValueError, match="invalid optional SARIF"):
+        export_sarif_bundle(_sample_findings(), optional_capability_limitations=[limitation])
+
+
+def test_optional_capability_metadata_rejects_conflicting_reasons():
+    limitation = {"finding_id": "F-HARD-002", "capability": "fixes", "reason": "no qualified fix"}
+    with pytest.raises(ValueError, match="conflicting optional SARIF"):
+        export_sarif_bundle(_sample_findings(), optional_capability_limitations=[
+            limitation, {**limitation, "reason": "a different reason"}])
+
+
 def _sample_findings() -> list[dict]:
     return [
         {

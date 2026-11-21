@@ -54,7 +54,16 @@ gate-derived JSON/SARIF and checks the Markdown and HTML renderings before accep
 SARIF source locations come only from gate-certified dossiers, never a target scan or the
 run-owned finding-package filename. Records missing a usable severity or location are omitted
 with explicit export gaps while valid siblings remain. Inspect `sarif-export-result.json`
-for omissions even when the gate permits publication. Reachability is not inferred from a
+for missing records and required-data gaps even when the gate permits publication. Optional
+codeflow/fix limitations are separate: `findings.sarif` retains them under
+`runs[0].properties.optional_capability_limitations`, keyed by finding and capability with
+the explicit omission reason. Missing ordered traces, unavailable/unqualified exact fixes
+and deliberately redacted/truncated patch projections do not by themselves lower completion.
+Missing validation/patch certification, ambiguous validation records, unsupported required patch formats and missing whole
+finding records still do; tampered bound artifacts still fail integrity validation.
+These are export-completeness semantics, not independent verification, runtime validation
+or a clean-target verdict. The gate's real review/coverage gaps remain status-affecting.
+Reachability is not inferred from a
 confirmed adjudication; chain severity is copied from the certified manifest, with missing
 ratings explicitly `unrated`. The executive release banner follows ship-block decisions;
 high severity alone does not impose a new release policy. Proposed patches and static checks
@@ -301,7 +310,7 @@ executive PDF's outcome from the receipt (`state` `rendered` with `file` and `sh
 or `not_rendered` by policy, always with a `reason`, the `latex` and the `receipt` references). All are
 hash-pinned by the accepted job handoff and are run-owned
 (`data/jobs/job_final_report_publication/attempts/<attempt>/steps/...`). The job is
-`COMPLETED_WITH_GAPS` whenever a `gap` limitation exists, SARIF records an export gap or the PDF
+`COMPLETED_WITH_GAPS` whenever a `gap` limitation exists, SARIF records a required export gap or the PDF
 unit recorded a named gap. Gate limitations reach publication through SARIF's scoped
 `producer-gap/1` records, without a second string copy. PDF-unit records also keep their identity
 when forwarded, avoiding a second count in runtime outcomes. Distinct limitation scopes and

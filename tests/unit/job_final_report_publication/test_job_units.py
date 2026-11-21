@@ -217,6 +217,18 @@ def run_units(fx: SimpleNamespace, built: Any) -> dict[str, Any]:
     return outputs
 
 
+def _runtime_outcomes(fx, outputs):
+    for unit_id, result in outputs.items():
+        unit = fx.unit(unit_id)
+        result_ref = put(fx.root, str((unit.unit_root / "result.json").relative_to(fx.root)), result)
+        put(fx.root, str((unit.unit_root / "status.json").relative_to(fx.root)), {
+            "status": "SUCCEEDED", "unit_id": unit_id, "step_id": unit.step_id, "task_id": unit.task_id,
+            "result_sha256": result_ref["sha256"],
+        })
+    return build_outcomes(fx.root, run_id=fx.root.name, job_id=JOB_ID, attempt_id="attempt_0001",
+                          target_snapshot=sha256_hex("target"), unit_ids=list(outputs))
+
+
 @pytest.mark.parametrize("distinct_scope", [False, True], ids=["repeated-canonical-gap", "distinct-scoped-gaps"])
 @pytest.mark.parametrize("pdf_failed", [False, True], ids=["pdf-disabled", "pdf-failed"])
 def test_publication_counts_gate_gaps_once_and_preserves_scoped_ledger_gaps(
@@ -241,15 +253,7 @@ def test_publication_counts_gate_gaps_once_and_preserves_scoped_ledger_gaps(
     report = read_bound_json(fx.root, outputs["report.assemble"]["artifact"])
     published = outputs["acceptance.publish_handoff"]
     sarif_gaps = read_bound_json(fx.root, published["sarif_result"])["gaps"]
-    for unit_id, result in outputs.items():
-        unit = fx.unit(unit_id)
-        result_ref = put(fx.root, str((unit.unit_root / "result.json").relative_to(fx.root)), result)
-        put(fx.root, str((unit.unit_root / "status.json").relative_to(fx.root)), {
-            "status": "SUCCEEDED", "unit_id": unit_id, "step_id": unit.step_id, "task_id": unit.task_id,
-            "result_sha256": result_ref["sha256"],
-        })
-    outcomes = build_outcomes(fx.root, run_id=fx.root.name, job_id=JOB_ID, attempt_id="attempt_0001",
-                              target_snapshot=sha256_hex("target"), unit_ids=list(outputs))
+    outcomes = _runtime_outcomes(fx, outputs)
     assert len(report["gap_ids"]) == 1 + distinct_scope
     assert report["gap_ids"] == fx.gate["gap_ids"] == verified["gap_ids"]
     limitations = [row for row in fx.gate["limitations"] if row["kind"] == "gap"]
@@ -266,6 +270,44 @@ def test_publication_counts_gate_gaps_once_and_preserves_scoped_ledger_gaps(
     assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
     assert outcomes["coverage"]["gap_count"] == len(outcomes["gaps"]) == 4
     assert {row["gap_id"] for row in outcomes["gaps"]} == {row["gap_id"] for row in published["gaps"]}
+
+
+@pytest.mark.parametrize("case", ["complete", "gate-gap", "missing-record"])
+def test_optional_sarif_enrichment_is_not_a_completion_gap(tmp_path, monkeypatch, case):
+    fx = _setup_run(tmp_path, monkeypatch, dossier=case != "missing-record", degraded=case == "gate-gap")
+    outputs = run_units(fx, build_job(executor_factory=fake_executor([])))
+    assembled, published = outputs["report.assemble"], outputs["acceptance.publish_handoff"]
+    accounting = read_bound_json(fx.root, published["sarif_result"])
+    sarif = read_bound_json(fx.root, published["sarif"])
+    run = sarif["runs"][0]
+    outcomes = _runtime_outcomes(fx, outputs)
+    expected = "SUCCEEDED" if case == "complete" else "COMPLETED_WITH_GAPS"
+    assert assembled["terminal_status"] == published["terminal_status"] == accounting["terminal_status"] == expected
+    assert accounting["gaps"] == assembled["gaps"] == published["gaps"]
+    assert outcomes["coverage"]["gap_count"] == len(accounting["gaps"]) == (case != "complete")
+    assert outcomes["coverage"]["disposition"] == ("complete" if case == "complete" else "partial")
+    if case == "missing-record":
+        assert run["results"] == []
+        assert accounting["gaps"][0]["reason"].startswith("sarif_record_omitted:")
+        assert "optional_capability_limitations" not in run["properties"]
+    else:
+        identity = fx.dossier["finding"]["finding_package_id"]
+        assert run["properties"]["optional_capability_limitations"] == [
+            {"finding_id": identity, "capability": "codeFlows",
+             "reason": f"sarif_codeflow_omitted:{identity}:ordered_trace_not_in_accepted_dossier_contract"},
+            {"finding_id": identity, "capability": "fixes",
+             "reason": f"sarif_fix_omitted:{identity}:qualified_remediation_not_available"},
+        ]
+        result, = run["results"]
+        assert result["properties"]["finding_id"] == identity
+        assert "codeFlows" not in result and "fixes" not in result
+        assert accounting["telemetry"]["reporting.sarif_results_total"] == 1
+        assert accounting["telemetry"]["reporting.sarif_codeflows_emitted"] == 0
+        assert accounting["telemetry"]["reporting.sarif_fixes_emitted"] == 0
+        if case == "gate-gap":
+            assert accounting["gaps"][0]["scope_id"] == "review_degraded"
+    assert published["package_counts"] == fx.gate["package_counts"]
+    assert outputs["report.render_pdf"]["status"] == "rendered"  # external runner double only
 
 
 def test_units_execute_clean_and_gapped_flows_and_claim_every_written_file(
@@ -518,7 +560,8 @@ def test_render_pdf_disabled_by_policy_keeps_latex_and_names_the_gap(
     assert sorted(p.name for p in unit_dir.iterdir()) == ["final-report.tex", "receipt.json"]
 
 
-def test_sarif_publication_uses_only_certified_findings_and_reproves_bytes(tmp_path, monkeypatch):
+@pytest.mark.parametrize("tamper", ["result", "metadata"])
+def test_sarif_publication_uses_only_certified_findings_and_reproves_bytes(tmp_path, monkeypatch, tamper):
     fx = _setup_run(tmp_path, monkeypatch, dossier=True, render_pdf=False)
     built = build_job(executor_factory=lambda *a: pytest.fail("PDF disabled"))
     outputs = run_units(fx, built)
@@ -535,13 +578,16 @@ def test_sarif_publication_uses_only_certified_findings_and_reproves_bytes(tmp_p
     assert "codeFlows" not in results[0] and "fixes" not in results[0]
     identity = fx.dossier["finding"]["finding_package_id"]
     accounting = read_bound_json(fx.root, published["sarif_result"])
-    assert accounting["terminal_status"] == "COMPLETED_WITH_GAPS"
-    assert [gap["reason"] for gap in accounting["gaps"]] == [
+    assert accounting["terminal_status"] == "SUCCEEDED" and accounting["gaps"] == []
+    assert [row["reason"] for row in sarif["runs"][0]["properties"]["optional_capability_limitations"]] == [
         f"sarif_codeflow_omitted:{identity}:ordered_trace_not_in_accepted_dossier_contract",
         f"sarif_fix_omitted:{identity}:qualified_remediation_not_available",
     ]
     path = fx.root / published["sarif"]["path"]
-    sarif["runs"][0]["results"][0]["level"] = "note"
+    if tamper == "metadata":
+        del sarif["runs"][0]["properties"]["optional_capability_limitations"]
+    else:
+        sarif["runs"][0]["results"][0]["level"] = "note"
     atomic_json(path, sarif)
     outputs["report.assemble"]["sarif"] = artifact_ref(fx.root, path)
     with pytest.raises(IntegrityError, match="SARIF does not match"):
@@ -562,11 +608,13 @@ def test_bound_dossier_narrative_reaches_the_pdf_source_without_its_excerpt(
     assert "lines 40{-}52" in tex and "CWE{-}120" in tex and "memory corruption" in tex
     assert EXCERPT not in tex and "SECRET_EXCERPT" not in tex
     published = outputs["acceptance.publish_handoff"]
-    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert published["terminal_status"] == "SUCCEEDED"
     sarif_gaps = read_bound_json(fx.root, published["sarif_result"])["gaps"]
     assert published["gaps"] == sarif_gaps
     identity = fx.dossier["finding"]["finding_package_id"]
-    assert [gap["reason"] for gap in sarif_gaps] == [
+    assert sarif_gaps == []
+    sarif = read_bound_json(fx.root, published["sarif"])
+    assert [row["reason"] for row in sarif["runs"][0]["properties"]["optional_capability_limitations"]] == [
         f"sarif_codeflow_omitted:{identity}:ordered_trace_not_in_accepted_dossier_contract",
         f"sarif_fix_omitted:{identity}:qualified_remediation_not_available",
     ]

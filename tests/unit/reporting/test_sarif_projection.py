@@ -34,6 +34,10 @@ def _finding(identity="finding-1", severity="low", **fields):
     }
 
 
+def _limitations(bundle):
+    return bundle.sarif_log["runs"][0]["properties"]["optional_capability_limitations"]
+
+
 def _render(root, model, name):
     item = render_dossier(root, root / name, model,
                           settings=settings(render_pdf=False), repository_root=ROOT,
@@ -125,7 +129,8 @@ def test_bound_exact_fix_is_exported_without_upgrading_its_assurance(tmp_path, m
     assert fix["properties"]["patch"] == patch_ref
     assert fix["properties"]["runtime_regression"] == "not_performed_by_policy"
     assert "not a resolved finding" in fix["description"]["text"]
-    assert [gap["reason"] for gap in bundle.gaps] == [
+    assert bundle.gaps == () and bundle.result["terminal_status"] == "SUCCEEDED"
+    assert [row["reason"] for row in _limitations(bundle)] == [
         f"sarif_codeflow_omitted:{env.binding['finding_package_id']}:ordered_trace_not_in_accepted_dossier_contract"]
     assert model["sources"][0]["excerpt"] not in bundle.sarif_bytes.decode()
 
@@ -136,8 +141,8 @@ def test_unqualified_remediation_is_an_explicit_fix_omission(tmp_path, monkeypat
     bundle = gate_sarif(env.root, gate, report)
     result = bundle.sarif_log["runs"][0]["results"][0]
     assert "fixes" not in result
-    assert any("sarif_fix_omitted:" in gap["reason"] for gap in bundle.gaps)
-    assert bundle.result["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any("sarif_fix_omitted:" in row["reason"] for row in _limitations(bundle))
+    assert bundle.gaps == () and bundle.result["terminal_status"] == "SUCCEEDED"
 
 
 @pytest.mark.parametrize("change", [
@@ -148,7 +153,8 @@ def test_success_label_does_not_override_actual_qualification_checks(tmp_path, m
     env, gate, report, _, _ = _bound(tmp_path, monkeypatch, check_change=change)
     bundle = gate_sarif(env.root, gate, report)
     assert "fixes" not in bundle.sarif_log["runs"][0]["results"][0]
-    assert any("validation_checks_do_not_qualify" in gap["reason"] for gap in bundle.gaps)
+    assert any("validation_checks_do_not_qualify" in row["reason"] for row in _limitations(bundle))
+    assert bundle.gaps == () and bundle.result["terminal_status"] == "SUCCEEDED"
 
 
 @pytest.mark.parametrize("private", [False, True], ids=["bounded", "redacted"])
@@ -161,7 +167,8 @@ def test_private_or_truncated_patch_is_never_an_applicable_sarif_fix(tmp_path, m
     env, gate, report, _, _ = _bound(tmp_path, monkeypatch, limits=limits, proposal=proposal)
     bundle = gate_sarif(env.root, gate, report)
     assert "fixes" not in bundle.sarif_log["runs"][0]["results"][0]
-    assert any("patch_projection_is_not_exact" in gap["reason"] for gap in bundle.gaps)
+    assert any("patch_projection_is_not_exact" in row["reason"] for row in _limitations(bundle))
+    assert bundle.gaps == () and bundle.result["terminal_status"] == "SUCCEEDED"
     assert b"PRIVATE_PATCH_SECRET" not in bundle.sarif_bytes
 
 
@@ -246,7 +253,8 @@ def test_legacy_timeline_and_remediation_guide_are_not_export_authority(tmp_path
     bundle = gate_sarif(env.root, gate, report)
     assert b"PRIVATE_LEGACY" not in bundle.sarif_bytes
     assert "codeFlows" not in bundle.sarif_log["runs"][0]["results"][0]
-    assert len(bundle.gaps) == 2
+    assert len(_limitations(bundle)) == 2
+    assert bundle.gaps == () and bundle.result["terminal_status"] == "SUCCEEDED"
 
 
 def test_poc_dossier_cannot_replace_the_confirmed_finding_projection(tmp_path, monkeypatch):
@@ -270,6 +278,34 @@ def test_gate_does_not_read_an_unbound_patch_or_accept_tampered_bytes(tmp_path, 
     bundle = gate_sarif(env.root, unbound, report)
     assert "fixes" not in bundle.sarif_log["runs"][0]["results"][0]
     assert any("patch_not_gate_bound" in gap["reason"] for gap in bundle.gaps)
+    assert bundle.result["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert [row["capability"] for row in _limitations(bundle)] == ["codeFlows"]
     atomic_json(env.root / patch_ref["path"], {"tampered": True})
     with pytest.raises(IntegrityError, match="hash|sha256|changed"):
         gate_sarif(env.root, gate, report)
+
+
+def test_missing_required_validation_binding_is_not_an_optional_fix_limitation(tmp_path, monkeypatch):
+    env, gate, report, model, _ = _bound(tmp_path, monkeypatch)
+    validation = next(row["artifact"] for row in model["remediation"] if row["stage"] == "Validation")
+    gate["bindings"].remove(validation)
+    (env.root / validation["path"]).unlink()
+    bundle = gate_sarif(env.root, gate, report)
+    assert bundle.result["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert len(bundle.gaps) == 1 and "validation_not_gate_bound" in bundle.gaps[0]["reason"]
+    assert [row["capability"] for row in _limitations(bundle)] == ["codeFlows"]
+    assert "fixes" not in bundle.sarif_log["runs"][0]["results"][0]
+
+
+def test_ambiguous_validation_rows_remain_a_required_gap(tmp_path, monkeypatch):
+    env, gate, report, model, _ = _bound(tmp_path, monkeypatch)
+    model["remediation"].append(copy.deepcopy(
+        next(row for row in model["remediation"] if row["stage"] == "Validation")))
+    item, refs = _render(env.root, model, "ambiguous")
+    report["dossiers"]["items"] = [item]
+    gate["bindings"].extend(refs)
+    bundle = gate_sarif(env.root, gate, report)
+    assert bundle.result["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert len(bundle.gaps) == 1 and "ambiguous_remediation_validation" in bundle.gaps[0]["reason"]
+    assert [row["capability"] for row in _limitations(bundle)] == ["codeFlows"]
+    assert "fixes" not in bundle.sarif_log["runs"][0]["results"][0]

@@ -59,7 +59,7 @@ Unmapped predicates/CWEs remain explicitly `unclassified`, without an invented O
 
 The job selects the confirmed-finding dossier, not a PoC dossier for the same finding. Current
 accepted dossier inputs provide no ordered source-to-sink path: the job records
-`sarif_codeflow_omitted` rather than converting excerpt/citation order or a legacy synthesized
+`sarif_codeflow_omitted` as optional capability metadata rather than converting excerpt/citation order or a legacy synthesized
 timeline into `codeFlows`. The lower exporter still supports explicitly supplied ordered paths;
 that capability does not establish their admission into a gate-certified dossier.
 
@@ -72,9 +72,15 @@ those check statuses, validation/patch references, baseline hashes and new-file 
 Their replacement regions use the producer's UTF-8 byte offsets/lengths, without invented line
 numbers. The protected projected edits must match the bound original patch exactly: redacted,
 normalized or truncated patches are omitted, never applied as modified text or replaced with
-private original text. Unavailable, unqualified, unbound or unsupported fix projections have
-explicit `sarif_fix_omitted` records in the export accounting; changed bound bytes fail integrity
-validation. No source excerpts, PoC source or raw diagnostic narratives are copied into SARIF.
+private original text. Unavailable/unqualified fixes, missing exact patches and deliberately
+redacted/truncated patch projections have explicit `sarif_fix_omitted` reasons alongside the
+codeflow limitation in `runs[0].properties.optional_capability_limitations`. This bounded SARIF
+properties list does not lower completion; it is not a missing finding record or a review gap.
+Unbound validation/patch references, ambiguous validation rows and unsupported required patch formats remain status-affecting
+`producer-gap/1` records in the export accounting; changed bound bytes fail integrity validation.
+Publication binds and reassembles both required results and optional metadata. It retains
+the previous canonical gap forwarding/deduplication, with no shared runner or closed-schema change.
+No source excerpts, PoC source or raw diagnostic narratives are copied into SARIF.
 
 ### Protected payloads and public summaries stay separate
 

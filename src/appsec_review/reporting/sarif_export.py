@@ -120,15 +120,44 @@ def validate_sarif_log(sarif_log: Mapping[str, Any]) -> None:
                     _validate_replacement_region(rep.get("deletedRegion"))
 
 
+def _optional_capabilities(
+    findings: Sequence[Mapping[str, Any]], limitations: Sequence[Mapping[str, str]],
+) -> list[dict[str, str]]:
+    if not limitations:
+        return []
+    identities = {
+        identity.strip() for finding in findings
+        if isinstance(identity := finding.get("finding_id") or finding.get("finding_package_id")
+                      or finding.get("claim_id"), str)
+    }
+    rows: dict[tuple[str, str], dict[str, str]] = {}
+    for limitation in limitations:
+        if (not isinstance(limitation, Mapping)
+                or set(limitation) != {"finding_id", "capability", "reason"}
+                or any(not isinstance(value, str) or not value.strip() or "\x00" in value
+                       for value in limitation.values())
+                or limitation["finding_id"] not in identities
+                or limitation["capability"] not in {"codeFlows", "fixes"}
+                or len(limitation["reason"]) > 300):
+            raise ValueError("invalid optional SARIF capability limitation")
+        key = (limitation["finding_id"], limitation["capability"])
+        if key in rows and rows[key] != limitation:
+            raise ValueError("conflicting optional SARIF capability limitations")
+        rows[key] = dict(limitation)
+    return [rows[key] for key in sorted(rows)]
+
+
 def export_sarif_bundle(
     findings: Sequence[Mapping[str, Any]],
     *,
     run_id: str = "run-local",
     exporter_release: str = "1",
     upstream_gaps: Sequence[Mapping[str, Any] | str] = (),
+    optional_capability_limitations: Sequence[Mapping[str, str]] = (),
     output_dir: Path | None = None,
 ) -> SarifExportBundle:
-    """Assemble, validate, and optionally persist deterministic SARIF 2.1.0 output."""
+    """Export required records; optional capability metadata never reclassifies declared gaps."""
+    limitations = _optional_capabilities(findings, optional_capability_limitations)
     valid = []
     export_gaps = []
     for finding in findings:
@@ -142,6 +171,8 @@ def export_sarif_bundle(
         else:
             valid.append(finding)
     sarif_log, telemetry = build_sarif_log(valid, exporter_release=exporter_release, run_id=run_id)
+    if limitations:
+        sarif_log["runs"][0]["properties"]["optional_capability_limitations"] = limitations
     validate_sarif_log(sarif_log)
     sarif_bytes = canonical_sarif_bytes(sarif_log)
     sarif_sha256 = hashlib.sha256(sarif_bytes).hexdigest()

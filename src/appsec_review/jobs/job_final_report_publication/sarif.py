@@ -15,12 +15,21 @@ from .pdf import bind_dossiers
 
 _CHECK_DIMENSIONS = ("patch_applicability", "policy", "semantic_review", "static_checks", "build",
                      "regression_compile", "runtime_regression")
+# Missing certification or unsupported required artifacts are not optional enrichment limits.
+_OPTIONAL_FIX_LIMITATIONS = frozenset({
+    "qualified_remediation_not_available",
+    "validation_checks_do_not_qualify",
+    "exact_patch_not_available",
+    "patch_projection_is_not_exact",
+})
 
 
 def _qualified_fix(run_root: Path, gate: Mapping[str, Any], dossier: Mapping[str, Any]
                    ) -> tuple[dict[str, Any] | None, str | None]:
     candidates = [row for row in dossier.get("remediation", ()) if row.get("stage") == "Validation"]
-    if len(candidates) != 1 or candidates[0].get("status") not in {"static_checked", "build_checked"}:
+    if len(candidates) > 1:
+        return None, "ambiguous_remediation_validation"
+    if not candidates or candidates[0].get("status") not in {"static_checked", "build_checked"}:
         return None, "qualified_remediation_not_available"
     row = candidates[0]
     bound = {(ref["path"], ref["sha256"]) for ref in gate["bindings"]}
@@ -87,6 +96,7 @@ def gate_sarif(run_root: Path, gate: Mapping[str, Any], report: Mapping[str, Any
     by_finding = {row.finding["finding_package_id"]: row.document for row in dossiers
                   if row.document and row.kind == "confirmed_finding"}
     findings = []
+    limitations = []
     gaps = [
         producer_gap(GapCode.PRODUCER_REPORTED_GAP, row["statement"], scope_id=row["limitation_id"])
         for row in report["limitations"] if row["kind"] == "gap"
@@ -109,16 +119,22 @@ def gate_sarif(run_root: Path, gate: Mapping[str, Any], report: Mapping[str, Any
         if dossier:
             identity = package["finding_package_id"]
             # DP-01 deliberately removed invented timelines. No admitted producer supplies ordered paths.
-            gaps.append(producer_gap(
-                GapCode.PRODUCER_REPORTED_GAP,
-                f"sarif_codeflow_omitted:{identity}:ordered_trace_not_in_accepted_dossier_contract"))
+            limitations.append({
+                "finding_id": identity, "capability": "codeFlows",
+                "reason": f"sarif_codeflow_omitted:{identity}:ordered_trace_not_in_accepted_dossier_contract",
+            })
             fix, reason = _qualified_fix(run_root, gate, dossier)
             if fix is not None:
                 finding["exact_remediation"] = fix
             else:
-                gaps.append(producer_gap(GapCode.PRODUCER_REPORTED_GAP, f"sarif_fix_omitted:{identity}:{reason}"))
+                message = f"sarif_fix_omitted:{identity}:{reason}"
+                if reason in _OPTIONAL_FIX_LIMITATIONS:
+                    limitations.append({"finding_id": identity, "capability": "fixes", "reason": message})
+                else:
+                    gaps.append(producer_gap(GapCode.PRODUCER_REPORTED_GAP, message))
         findings.append(finding)
     return export_sarif_bundle(
         findings, run_id=report["run_id"],
         upstream_gaps=sorted(gaps, key=lambda row: (row["reason"], row["scope_id"] or "")),
+        optional_capability_limitations=limitations,
     )
