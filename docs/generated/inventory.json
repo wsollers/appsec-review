@@ -279,7 +279,7 @@
         "responsibility": "Classify bounded component purpose and trust roles from cited evidence."
       },
       "control_assessor": {
-        "responsibility": "Assess assigned proof obligations and return observations with citations."
+        "responsibility": "Assess named subject-bound proof obligations against accepted evidence, preserving uncertainty and cited provisional hypotheses."
       },
       "evidence_verifier": {
         "responsibility": "Resolve cited observations to accepted source or run artifacts."
@@ -378,7 +378,7 @@
         ]
       },
       "independent_reviewer": {
-        "responsibility": "Independently review elevated or ship-blocking proposed claims."
+        "responsibility": "Independently assess the original named obligations and accepted evidence in a fresh blinded context, without a previous assessor's conclusions."
       },
       "independent_scorer": {
         "lens": "skeptical",
@@ -2421,7 +2421,7 @@
       "container-security-summary/1",
       "control-applicability-set/1",
       "control-applicability/1",
-      "control-evidence/4",
+      "control-evidence/5",
       "control-result-set/1",
       "control-validation-batch/1",
       "corroborated-sast-evidence/1",
@@ -25765,6 +25765,216 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_artifact_security_analysis",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_binary_evidence_indexing",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_ci_configuration_analysis",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_clang_static_analysis",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_code_graph_index",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_codeql_analysis",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_cpg_analysis",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_cpp_compiled_analysis",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_cpp_symbol_index",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_dependency_intelligence",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_evidence_collection",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_language_build",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_post_build_security_assessment",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_profile_data",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "routing_context",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_review_prioritization",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "routing_context",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_security_tagging",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_svf_alias_analysis",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_target_analysis_plan",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_target_catalog",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_test_coverage",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
+            "output_kind": "handoff",
+            "producer": "job_tree_sitter_ast",
+            "schema": "appsec-review/job-handoff/2"
+          },
+          {
+            "authority": "producer_evidence",
+            "availability": "optional",
+            "channel": "handoff",
+            "coverage": "allow_partial",
+            "missing": "gap",
             "output_kind": "artifact_catalog",
             "producer": "job_artifact_indexing",
             "schema": "appsec-review/retrieval-index/2"
@@ -25795,119 +26005,9 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "artifact_index_summary",
-            "producer": "job_artifact_indexing",
-            "schema": "appsec-review/artifact-indexing/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_artifact_security_analysis",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
             "output_kind": "artifact_security_observations",
             "producer": "job_artifact_security_analysis",
             "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "artifact_security_results",
-            "producer": "job_artifact_security_analysis",
-            "schema": "appsec-review/artifact-security-observation/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "artifact_scanner_io",
-            "producer": "job_artifact_security_analysis",
-            "schema": "appsec-review/container-execution/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_binary_evidence_indexing",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "binary_functions",
-            "producer": "job_binary_evidence_indexing",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "binary_pseudo_c",
-            "producer": "job_binary_evidence_indexing",
-            "schema": "appsec-review/binary-source-backing/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "binary_evidence_summary",
-            "producer": "job_binary_evidence_indexing",
-            "schema": "appsec-review/binary-evidence-index/1"
-          },
-          {
-            "authority": "operational",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_build_environment_analysis",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "operational",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "build_environment",
-            "producer": "job_build_environment_analysis",
-            "schema": "appsec-review/build-environment-analysis/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_ci_configuration_analysis",
-            "schema": "appsec-review/job-handoff/2"
           },
           {
             "authority": "producer_evidence",
@@ -25935,86 +26035,6 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "ci_documents",
-            "producer": "job_ci_configuration_analysis",
-            "schema": "appsec-review/ci-configuration-analysis-handoff/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "ci_tool_io",
-            "producer": "job_ci_configuration_analysis",
-            "schema": "appsec-review/container-execution/1"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_change_context_analysis",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "change_context",
-            "producer": "job_change_context_analysis",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "change_context_documents",
-            "producer": "job_change_context_analysis",
-            "schema": "appsec-review/change-context-analysis/1"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "operator_exports",
-            "producer": "job_change_context_analysis",
-            "schema": "application/json"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "change_context_tool_io",
-            "producer": "job_change_context_analysis",
-            "schema": "appsec-review/container-execution/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_clang_static_analysis",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
             "output_kind": "clang_static_observations",
             "producer": "job_clang_static_analysis",
             "schema": "appsec-review/retrieval-index/2"
@@ -26028,36 +26048,6 @@
             "output_kind": "clang_static_scope_coverage",
             "producer": "job_clang_static_analysis",
             "schema": "appsec-review/cpp-index-coverage/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "clang_static_summary",
-            "producer": "job_clang_static_analysis",
-            "schema": "appsec-review/clang-static-analysis-handoff/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "clang_static_raw",
-            "producer": "job_clang_static_analysis",
-            "schema": "application/json"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_code_graph_index",
-            "schema": "appsec-review/job-handoff/2"
           },
           {
             "authority": "producer_evidence",
@@ -26085,99 +26075,9 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "code_graph_stages",
-            "producer": "job_code_graph_index",
-            "schema": "appsec-review/code-graph-stage/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "code_graph_checkpoints",
-            "producer": "job_code_graph_index",
-            "schema": "appsec-review/code-graph-checkpoint/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "code_graph_summary",
-            "producer": "job_code_graph_index",
-            "schema": "appsec-review/code-graph-index/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_codeql_analysis",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "codeql_predecessor_import",
-            "producer": "job_codeql_analysis",
-            "schema": "appsec-review/codeql-predecessor-import/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "codeql_graph_export",
-            "producer": "job_codeql_analysis",
-            "schema": "appsec-review/codeql-graph-export/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
             "output_kind": "codeql_observations",
             "producer": "job_codeql_analysis",
             "schema": "appsec-review/codeql-sarif-normalizer/3"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "codeql_plan_and_summary",
-            "producer": "job_codeql_analysis",
-            "schema": "appsec-review/codeql-analysis-handoff/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "codeql_scope_material",
-            "producer": "job_codeql_analysis",
-            "schema": "application/octet-stream"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_cpg_analysis",
-            "schema": "appsec-review/job-handoff/2"
           },
           {
             "authority": "producer_evidence",
@@ -26198,36 +26098,6 @@
             "output_kind": "cpg_scope_coverage",
             "producer": "job_cpg_analysis",
             "schema": "appsec-review/cpp-index-coverage/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "cpg_summary",
-            "producer": "job_cpg_analysis",
-            "schema": "appsec-review/cpg-analysis/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "cpg_binary",
-            "producer": "job_cpg_analysis",
-            "schema": "application/octet-stream"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_cpp_compiled_analysis",
-            "schema": "appsec-review/job-handoff/2"
           },
           {
             "authority": "producer_evidence",
@@ -26295,36 +26165,6 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "cpp_plan_and_summary",
-            "producer": "job_cpp_compiled_analysis",
-            "schema": "appsec-review/cpp-compiled-analysis/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "cpp_case_material",
-            "producer": "job_cpp_compiled_analysis",
-            "schema": "application/octet-stream"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_cpp_symbol_index",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
             "output_kind": "clangd_symbols",
             "producer": "job_cpp_symbol_index",
             "schema": "appsec-review/retrieval-index/2"
@@ -26345,189 +26185,9 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "clangd_summary",
-            "producer": "job_cpp_symbol_index",
-            "schema": "appsec-review/cpp-symbol-index/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "clangd_tool_io",
-            "producer": "job_cpp_symbol_index",
-            "schema": "appsec-review/container-execution/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "normalized_symbols",
-            "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "symbol_coverage",
-            "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-coverage/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "target_decision",
-            "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-decision/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "raw_artifact_refs",
-            "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-inputs/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "reader_executions",
-            "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/container-execution/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "debug_symbol_summary",
-            "producer": "job_debug_symbol_indexing",
-            "schema": "appsec-review/debug-symbol-indexing/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_dependency_intelligence",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "native_discovery",
-            "producer": "job_dependency_intelligence",
-            "schema": "appsec-review/native-discovery/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "native_component_curation",
-            "producer": "job_dependency_intelligence",
-            "schema": "appsec-review/native-component-curation/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "native_metadata_investigation",
-            "producer": "job_dependency_intelligence",
-            "schema": "appsec-review/native-metadata-investigation/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "native_inference_metrics",
-            "producer": "job_dependency_intelligence",
-            "schema": "appsec-review/native-inference-metrics/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "native_spdx",
-            "producer": "job_dependency_intelligence",
-            "schema": "SPDX-2.3"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "native_sbom_provenance",
-            "producer": "job_dependency_intelligence",
-            "schema": "appsec-review/native-sbom-provenance/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "native_sbom_metrics",
-            "producer": "job_dependency_intelligence",
-            "schema": "appsec-review/native-sbom-metrics/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "when_output_declared",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "not_applicable",
             "output_kind": "native_advisory_observations",
             "producer": "job_dependency_intelligence",
             "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "when_output_declared",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "not_applicable",
-            "output_kind": "native_advisory_lookup",
-            "producer": "job_dependency_intelligence",
-            "schema": "appsec-review/native-advisory-lookup/1"
           },
           {
             "authority": "producer_evidence",
@@ -26545,79 +26205,9 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "scorecard_responses",
-            "producer": "job_dependency_intelligence",
-            "schema": "application/json"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "dependency_intelligence_handoff",
-            "producer": "job_dependency_intelligence",
-            "schema": "appsec-review/dependency-intelligence-handoff/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_evidence_collection",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
             "output_kind": "static_tool_observations",
             "producer": "job_evidence_collection",
             "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "static_tool_evidence",
-            "producer": "job_evidence_collection",
-            "schema": "appsec-review/static-tool-evidence/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "static_tool_io",
-            "producer": "job_evidence_collection",
-            "schema": "appsec-review/container-execution/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_language_build",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "topology_refinement_inputs",
-            "producer": "job_language_build",
-            "schema": "appsec-review/build-topology-refinement/1"
           },
           {
             "authority": "producer_evidence",
@@ -26645,36 +26235,6 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "language_build_receipts",
-            "producer": "job_language_build",
-            "schema": "appsec-review/language-build-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "build_workspaces",
-            "producer": "job_language_build",
-            "schema": "application/octet-stream"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_post_build_security_assessment",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
             "output_kind": "build_security",
             "producer": "job_post_build_security_assessment",
             "schema": "appsec-review/retrieval-index/2"
@@ -26685,139 +26245,9 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "build_security_documents",
-            "producer": "job_post_build_security_assessment",
-            "schema": "appsec-review/post-build-security-assessment/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_profile_data",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
             "output_kind": "profile_data",
             "producer": "job_profile_data",
             "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "profile_data_handoff",
-            "producer": "job_profile_data",
-            "schema": "appsec-review/profile-data-handoff/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_project_build",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "topology_refinement_inputs",
-            "producer": "job_project_build",
-            "schema": "appsec-review/build-topology-refinement/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "project_build_dispatch",
-            "producer": "job_project_build",
-            "schema": "appsec-review/project-build-dispatch/3"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "probe_workspaces",
-            "producer": "job_project_build",
-            "schema": "application/octet-stream"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "image_build_streams",
-            "producer": "job_project_build",
-            "schema": "text/plain"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_review_intake",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "model_preflight",
-            "producer": "job_review_intake",
-            "schema": "appsec-review/model-preflight/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "binary_evidence",
-            "producer": "job_review_intake",
-            "schema": "appsec-review/binary-evidence-intake/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "review_intake",
-            "producer": "job_review_intake",
-            "schema": "appsec-review/review-intake/1"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_review_prioritization",
-            "schema": "appsec-review/job-handoff/2"
           },
           {
             "authority": "routing_context",
@@ -26835,99 +26265,9 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "prioritization_documents",
-            "producer": "job_review_prioritization",
-            "schema": "appsec-review/review-prioritization/1"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_security_tagging",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
             "output_kind": "tag_assignments",
             "producer": "job_security_tagging",
             "schema": "appsec-review/tag-assignment/1"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "tagging_documents",
-            "producer": "job_security_tagging",
-            "schema": "appsec-review/security-tagging-handoff/1"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_source_history_analysis",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "history_signals",
-            "producer": "job_source_history_analysis",
-            "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "history_documents",
-            "producer": "job_source_history_analysis",
-            "schema": "appsec-review/source-history-analysis/2"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "raw_git_history",
-            "producer": "job_source_history_analysis",
-            "schema": "application/octet-stream"
-          },
-          {
-            "authority": "routing_context",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "history_tool_io",
-            "producer": "job_source_history_analysis",
-            "schema": "appsec-review/container-execution/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_svf_alias_analysis",
-            "schema": "appsec-review/job-handoff/2"
           },
           {
             "authority": "producer_evidence",
@@ -26955,79 +26295,9 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "svf_alias_summary",
-            "producer": "job_svf_alias_analysis",
-            "schema": "appsec-review/svf-alias-analysis-handoff/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "svf_alias_raw",
-            "producer": "job_svf_alias_analysis",
-            "schema": "application/json"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_target_analysis_plan",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "planning_feedback_cache",
-            "producer": "job_target_analysis_plan",
-            "schema": "appsec-review/target-analysis-proposal/3"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
             "output_kind": "analysis_plan",
             "producer": "job_target_analysis_plan",
             "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "analysis_plan_documents",
-            "producer": "job_target_analysis_plan",
-            "schema": "appsec-review/target-analysis-plan/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_target_catalog",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "target_artifact_inputs",
-            "producer": "job_target_catalog",
-            "schema": "appsec-review/target-artifact-intake/1"
           },
           {
             "authority": "producer_evidence",
@@ -27085,49 +26355,9 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "catalog_documents",
-            "producer": "job_target_catalog",
-            "schema": "appsec-review/target-catalog/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_test_coverage",
-            "schema": "appsec-review/job-handoff/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
             "output_kind": "test_coverage",
             "producer": "job_test_coverage",
             "schema": "appsec-review/retrieval-index/2"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "test_coverage_handoff",
-            "producer": "job_test_coverage",
-            "schema": "appsec-review/test-coverage-handoff/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "handoff",
-            "producer": "job_tree_sitter_ast",
-            "schema": "appsec-review/job-handoff/2"
           },
           {
             "authority": "producer_evidence",
@@ -27155,9 +26385,9 @@
             "channel": "handoff",
             "coverage": "allow_partial",
             "missing": "gap",
-            "output_kind": "tree_sitter_node_shards",
-            "producer": "job_tree_sitter_ast",
-            "schema": "appsec-review/tree-sitter-normalizer/1"
+            "output_kind": "binary_pseudo_c",
+            "producer": "job_binary_evidence_indexing",
+            "schema": "appsec-review/binary-source-backing/1"
           },
           {
             "authority": "producer_evidence",
@@ -27168,16 +26398,6 @@
             "output_kind": "generated_source_backing",
             "producer": "job_tree_sitter_ast",
             "schema": "appsec-review/generated-source-backing/1"
-          },
-          {
-            "authority": "producer_evidence",
-            "availability": "optional",
-            "channel": "handoff",
-            "coverage": "allow_partial",
-            "missing": "gap",
-            "output_kind": "tree_sitter_tool_io",
-            "producer": "job_tree_sitter_ast",
-            "schema": "appsec-review/container-execution/1"
           },
           {
             "authority": "reference",
@@ -27202,7 +26422,7 @@
           "job_security_tagging"
         ],
         "schema": "appsec-review/job-contract/1",
-        "sha256": "280b94dcdb105b71a1645d3d4a8d8e814daf5f2e8500010ef34d7cb72ee668eb",
+        "sha256": "47a3bb43656a3950ff0313f0dd545c8693c2df17f6d961ca96b3bfb0e4166a00",
         "target_access": "checkout"
       },
       "dagster": {
@@ -27474,7 +26694,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.applicability",
               "id": "applicability.build_matrix",
               "internal_tools": [],
-              "line": 183,
+              "line": 199,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27502,7 +26722,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.packages",
               "id": "batching.build_packages",
               "internal_tools": [],
-              "line": 206,
+              "line": 222,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27520,7 +26740,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.partition",
               "id": "batching.partition_work",
               "internal_tools": [],
-              "line": 198,
+              "line": 214,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27544,7 +26764,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.classify",
               "id": "characterization.classify_components",
               "internal_tools": [],
-              "line": 171,
+              "line": 186,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27560,7 +26780,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.load_inputs",
               "id": "characterization.load_inputs",
               "internal_tools": [],
-              "line": 164,
+              "line": 179,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27585,7 +26805,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.join",
               "id": "join.deterministic_join",
               "internal_tools": [],
-              "line": 334,
+              "line": 365,
               "pool": "owasp_verification",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27607,6 +26827,8 @@
                 "applicability.build_matrix",
                 "join.deterministic_join",
                 "publication.publish_indexes",
+                "batching.build_packages",
+                "verification.independent_review",
                 "validation.cell_01",
                 "validation.cell_02",
                 "validation.cell_03",
@@ -27617,7 +26839,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.publish",
               "id": "publication.publish_handoff",
               "internal_tools": [],
-              "line": 392,
+              "line": 436,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27635,14 +26857,15 @@
                 "applicability.build_matrix",
                 "batching.partition_work",
                 "batching.build_packages",
-                "join.deterministic_join"
+                "join.deterministic_join",
+                "verification.independent_review"
               ],
               "guidance_binding": "not_declared",
               "guidance_gap": "T-147",
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.publish_indexes",
               "id": "publication.publish_indexes",
               "internal_tools": [],
-              "line": 345,
+              "line": 377,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27664,7 +26887,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.ingest",
               "id": "standards_selection.ingest_catalogs",
               "internal_tools": [],
-              "line": 152,
+              "line": 167,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27682,7 +26905,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.select",
               "id": "standards_selection.select_profiles",
               "internal_tools": [],
-              "line": 158,
+              "line": 173,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27707,7 +26930,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.make_cell.<locals>.cell",
               "id": "validation.cell_01",
               "internal_tools": [],
-              "line": 245,
+              "line": 258,
               "pool": "owasp_validator",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27726,7 +26949,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.make_cell.<locals>.cell",
               "id": "validation.cell_02",
               "internal_tools": [],
-              "line": 245,
+              "line": 258,
               "pool": "owasp_validator",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27745,7 +26968,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.make_cell.<locals>.cell",
               "id": "validation.cell_03",
               "internal_tools": [],
-              "line": 245,
+              "line": 258,
               "pool": "owasp_validator",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27764,7 +26987,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.make_cell.<locals>.cell",
               "id": "validation.cell_04",
               "internal_tools": [],
-              "line": 245,
+              "line": 258,
               "pool": "owasp_validator",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27791,7 +27014,7 @@
               "handler": "appsec_review.jobs.job_owasp_control_assessment.job.build_job.<locals>.verify",
               "id": "verification.independent_review",
               "internal_tools": [],
-              "line": 294,
+              "line": 320,
               "pool": "owasp_verification",
               "settings": {},
               "source": "src/appsec_review/jobs/job_owasp_control_assessment/job.py",
@@ -27804,7 +27027,7 @@
           "workers": 2
         }
       },
-      "strict_gaps": false,
+      "strict_gaps": true,
       "tests": {
         "acceptance": [
           "tests/acceptance/job_owasp_control_assessment/test_subject_selection.py"
@@ -27817,6 +27040,11 @@
         "unit": [
           "tests/unit/job_owasp_control_assessment/test_audit_assessment.py",
           "tests/unit/job_owasp_control_assessment/test_audit_publication.py",
+          "tests/unit/job_owasp_control_assessment/test_c_subjects.py",
+          "tests/unit/job_owasp_control_assessment/test_closure.py",
+          "tests/unit/job_owasp_control_assessment/test_control_roles.py",
+          "tests/unit/job_owasp_control_assessment/test_network_service_class.py",
+          "tests/unit/job_owasp_control_assessment/test_tag_discovery.py",
           "tests/unit/job_owasp_control_assessment/test_parser_versions.py",
           "tests/unit/job_owasp_control_assessment/test_request_batching.py",
           "tests/unit/job_owasp_control_assessment/test_contract.py",
@@ -46341,7 +45569,7 @@
     "appsec-review.toml": "8a5a9e12bd07e7bfee34d0d8cd35d7f14e9e987d1c95fb062306c52f4b8f6a06",
     "containers/catalog.toml": "9ea9461c6c5e2ebddb48a162e17612746664db198de94a30b712788f946e2e50",
     "docs/intelligence-buckets.json": "9cc28c903b6ed469000c58dd4b99662024e29895cd095252923b1fb8ac0c0b93",
-    "pipeline/guidance/registry.json": "dfd3fd96e035f162563ce0b8bd3c89c125d2ba9b850c56ac3344a62963741bda",
+    "pipeline/guidance/registry.json": "a9575a86592873a248c91cae9cc2c240ee70662df2222e5b09656ed2021a8280",
     "src/appsec_review/__init__.py": "e8ee360d5e72b7f3ad9bf9b84ca9b734b76a9f9d2cf9730e4eabb11121ce692c",
     "src/appsec_review/__main__.py": "6eb6f048c25e857f17755bbc341b70b7184cb4026b743fba3eaecc6951f65fc3",
     "src/appsec_review/acceptance/__init__.py": "df4d9f44a3263bd86f55dac08f2e25ad71b074411d78adc2e8dcf377178688ce",
@@ -46481,10 +45709,10 @@
     "src/appsec_review/indexing/links.py": "2db02db580df32f0ba2fc6589ce744e3d6d0b828506446bd6c6c4da73d51ab9b",
     "src/appsec_review/indexing/matrix.py": "f5230dc7cef5a6c264cabf7598abd2a5926e0d2326f632bbac9e0a95ea9dad8c",
     "src/appsec_review/indexing/metrics.py": "8dd632ecc21e881305493dd870388a9246ff90b574428119f3a1b93fbbb140ed",
-    "src/appsec_review/indexing/products.py": "1a943677778fd4211e7711c1c3eb5099467e3e1791a5d966a4a269269b5b145b",
+    "src/appsec_review/indexing/products.py": "289572a3d3a91549d6b5e4cd8463792aa5e32183f75fd64251fa13a32e1c2759",
     "src/appsec_review/indexing/products_base.py": "d3a707eb9eed46676bca96f669f54d079088402398de858d8e2cc8cbca9fba19",
     "src/appsec_review/indexing/sast.py": "6e9ed08dc684d13bf90785c432c5af865d0129db0f2741ef5a70c4ef84cdc794",
-    "src/appsec_review/indexing/store.py": "b322a25f5b1ecf9d8f50807e2c2ebb1f17197372fcf5ff39993680353f1f8637",
+    "src/appsec_review/indexing/store.py": "7f4075cc1ca42fde8fb2e3fb43172791f2f50dd9aab9c40efb7aa40d3592c9ac",
     "src/appsec_review/indexing/target_documents.py": "d32ac603bb0522f255874358ac4afe96bd12af13e73bb9808d127d5b7c33692e",
     "src/appsec_review/inference/__init__.py": "4f41c6db1cd0162cc2888d5112e9d1d790fe4810d69171e0f0da4a520fe05143",
     "src/appsec_review/inference/anthropic_api.py": "a6b158788f4633404445a69d6ad68ddfe77d22c088531ad11f894dcbbca5527b",
@@ -46687,8 +45915,8 @@
     "src/appsec_review/jobs/job_openvex_export/settings.py": "3d3b71e9959234365d383de6080844bd5f66e5db1173cedf85364f2d74b384fd",
     "src/appsec_review/jobs/job_openvex_export/validation.py": "86d1c002ac74d367ea6480c8c3e6ae00aed4f5eb422f35f9e69f26cec8e9a67e",
     "src/appsec_review/jobs/job_owasp_control_assessment/__init__.py": "549de9b64a182affa30410346da5d37bee43be3a1b5ac291a8e57f6105c88049",
-    "src/appsec_review/jobs/job_owasp_control_assessment/datasets.py": "b9856c5f73df8f7706692c17784e018f2dbdd41e2b52599643e6bd590c7ea510",
-    "src/appsec_review/jobs/job_owasp_control_assessment/job.py": "9eafe8367f8ce942b42c056148e43c66e2acfe7c9cb7053dc28eff33a200bd4d",
+    "src/appsec_review/jobs/job_owasp_control_assessment/datasets.py": "bf9946edadf8138fbfd15f525b26abf92b688bd52e365a9a81c6d356964d3e1b",
+    "src/appsec_review/jobs/job_owasp_control_assessment/job.py": "bfb770376209d423c239b4157ae752ff6fe061e94ca3b31e92580408aaf5d3cc",
     "src/appsec_review/jobs/job_poc_generation/__init__.py": "14894a1b3c6274086002bae9ffd0f4df3a4f6b976cfc38cb601a7ecea5002dbf",
     "src/appsec_review/jobs/job_poc_generation/ast_reduce.py": "736ca527a96f443874ff43ff49085bf3baddc4570d256c7498f1fd56ba99c5b9",
     "src/appsec_review/jobs/job_poc_generation/brief.py": "1cc986127443845769782a2c8dc81a120fccbae087719f37a492fb2a164c6efb",
@@ -46916,14 +46144,14 @@
     "src/appsec_review/osv_offline.py": "cc470d6526733f3685768e15b851013f9162ff4b9e96fcfacd7977fae1083b9d",
     "src/appsec_review/owasp_workbench/__init__.py": "dfe59a8e1c82fda9002989141c0df64d1adf117c0a8149df8072c17c93b00ef3",
     "src/appsec_review/owasp_workbench/acquisition.py": "f780908bdf116acaa0cdd549f8db59ffc7f3bd2504f6b15197e23b00088da291",
-    "src/appsec_review/owasp_workbench/assessment.py": "e9cc407cfc8c25213dcf2ec5f9ed62b24f12f325144781039c1e33fe2ce3ebd3",
+    "src/appsec_review/owasp_workbench/assessment.py": "9e92ef58d477c8a999127f05f6eb737c2a2b39eef679fad78d6866fb508ae953",
     "src/appsec_review/owasp_workbench/batching.py": "8c5774610a1fe8376c714df63945b02fc93ae99ec959a23b6433b2b9ca2ee68c",
     "src/appsec_review/owasp_workbench/c_procedures.py": "6fecc21bb507f0d94a8527c3b29f78ad72fff358c178ac78dbec3591c2de2206",
     "src/appsec_review/owasp_workbench/c_subjects.py": "516f99f4d70079d628d6f0a5110b06d4b6341a9bb342c3e2ca9607a1461814f0",
     "src/appsec_review/owasp_workbench/engine.py": "1cb2f4f9eb85f8dbe56e1a24acc6988e61cca3583f6ffac853b289ea3725b2e7",
-    "src/appsec_review/owasp_workbench/evidence.py": "4852dfbd6ce73340fd4bd6ae83d0e992ab08e792b6c4fa3f42217d9fb6a2ae96",
+    "src/appsec_review/owasp_workbench/evidence.py": "642f5d3ac38b78508c43d3c6cb9e22ada27f84d9eab8836dc37be8ac8f43b3b1",
     "src/appsec_review/owasp_workbench/guidance.py": "3358a3743c82295096cf82450e2d97a2cf42f54af0ddaf6d8812df701ce6e85b",
-    "src/appsec_review/owasp_workbench/indexes.py": "b63920435f56e693dbfb76cf1a6817df4c8e6ceea1c4dbffe72350cb744df212",
+    "src/appsec_review/owasp_workbench/indexes.py": "bd2fdd73fc644b31ec24cd085639afffa69ac125af6610cb37e8a6f1165393de",
     "src/appsec_review/owasp_workbench/obligations.py": "dc678665c98bf59dbe89840193a008f4bcab93c2ea398123c10801ba56b0549d",
     "src/appsec_review/owasp_workbench/standards.py": "7f21ac80cdf21014de67f1b6852018a77fc8e2ec412aa1f687ffa0bf6554592d",
     "src/appsec_review/owasp_workbench/subject_selection.py": "a2da9b95dfe9375e95278a53ab29f0e8029a6425956791f996dd7bfe3feb6f6e",
@@ -46963,11 +46191,11 @@
     "src/appsec_review/reporting/text.py": "61d1be22fe202175f9965b3645c673ba216d1a7ed6c2ed60a7b830700d42d443",
     "src/appsec_review/reporting/tokens.py": "8a457c76085117126edfdcbb665876103c6afc75b7f8f028582c78dd0a6e6211",
     "src/appsec_review/retrieval/__init__.py": "f11066500bee5030e36df8452969f5248f29505be6b935d5f52093f89b566355",
-    "src/appsec_review/retrieval/core.py": "7b91b0d0df449f27d9ed87c2e11a38c2786c771404dae9d8b0522ade7fdf6c4b",
+    "src/appsec_review/retrieval/core.py": "f2e68a57d974765c47e3638d75fc5cf3a3eaa4b5e6b6d3ae5200a17b44e53c76",
     "src/appsec_review/retrieval/debug_symbol_index.py": "2eca60aca006be122b61a7c39fd60c67e79dfe1c0b076f631cfe6c6aff977af4",
     "src/appsec_review/retrieval/debug_symbols.py": "95731df3177ba496afc03122fcd20ca1bcfaa748abd04416c92babd197aa923e",
     "src/appsec_review/retrieval/graph.py": "6e48220132c5bf5126c64773c373382cecd415fd20561e9b94b8a1eceb799580",
-    "src/appsec_review/retrieval/index.py": "56404c05cfe154b8134aba9566e669fd38f6accd875b82a65305a02e47ada071",
+    "src/appsec_review/retrieval/index.py": "862f4185f30ed11063dc00aafd5bb809554dd310d87d90dae68727ddea5412e3",
     "src/appsec_review/retrieval/interfaces.py": "4e62997d38c5111dd3ced80e4f96b39310f618278bfe7d1e24f7247cf6179da5",
     "src/appsec_review/retrieval/model.py": "eec54f2b5e16143bcac4c8125b73fc1a1650bb5070455d59a916774dc2353f5d",
     "src/appsec_review/retrieval/neighborhood.py": "9ea1243126cce114c9919edcf10866b181cf42772fc13410499e34f4f422d539",
@@ -47029,13 +46257,13 @@
     "src/appsec_review/review/numeric_reasoning.py": "281ec6decfe49574d48ce12b7372f748047b0f6fc6697ca3450e4a020e5d3190",
     "src/appsec_review/review/obligations.py": "70dc85cc2d9ca06030b8b5cf725014db6fb98ab2aa3c3e25bcdbc642114b37d8",
     "src/appsec_review/review/package_view.py": "2375f45ac580e2776a2225ed63adb5a70d0c1319d64b952167a4911005874028",
-    "src/appsec_review/review/packages.py": "68c4ddb4c342d696a7a09b6894a8c2121d60a937beb24a87528dc89284106b3d",
+    "src/appsec_review/review/packages.py": "9f01ff06e0231e8ccad4e473e833061928bbec560f6817fa5fa1808d1090cf36",
     "src/appsec_review/review/ranking.py": "6413828bf3f07cc3221289f5214452efea25d5fc6bc86aa1f5ae32ad104211cc",
     "src/appsec_review/review/red_discovery.py": "7196881874068d303b4573dde5e9e88aea36bb92673ccb1b1a61756c55c86c87",
     "src/appsec_review/review/references.py": "082b47912ec5fe2c0febd7db8fabdc39f62f8f4cc607f2f3a6a8571852b1cdc4",
     "src/appsec_review/review/result_cache.py": "dc8f7daa923c3a9f45410ad5f2d62baadd47a3fa53a057c09ef4dc99c638a787",
     "src/appsec_review/review/schemas.py": "5c5b1668bd59c4b2fa6c128c41352bd98949afbdd6b80dc6fc3851c0161ca0da",
-    "src/appsec_review/review/scope.py": "403891f560a74873b59b69feccb7ccf0fa38d0d10ea4f89c2d681464b07ccd30",
+    "src/appsec_review/review/scope.py": "046fa6ae6c787626bf3c07c2cb76b3ecbcc1ef2b6d5e5d53f0eaa6a3a6a95583",
     "src/appsec_review/review/scoring/__init__.py": "6560b8357cae22111c98f0bc18dd358947964867b65cbc323bfdbd5f2e85becf",
     "src/appsec_review/review/scoring/application_matrix.py": "ed620dd1e47410ac0eacc4baaa1db20223473e7087a95d8899b45de1d5600e37",
     "src/appsec_review/review/scoring/application_matrix_v3.py": "805c91c3cb32c30f2e1d90d7d9f36d2166537231471475815b6b0396d1126c1f",
@@ -47123,7 +46351,7 @@
     "src/appsec_review/storage/feed_provenance.py": "eaf411c01c97a5e2aea44ec7b0058e1358bda63ee0e6c46d2b57f3c43a205dd4",
     "src/appsec_review/storage/lock.py": "7ed1466dedb63cbe437b651ecc383722d6507b4ebc6dfc0a2b09c6bd0d964a72",
     "src/appsec_review/storage/runs.py": "44cb479c84bda95e9ade923be30693e1b371809ff1f276b355e34f85bd63ed6a",
-    "src/appsec_review/storage/shared.py": "dfd3f6ef2529e5e8becc1d3e9c223b45ac4782f9f71f2c0f21313420e858e870",
+    "src/appsec_review/storage/shared.py": "c77ac5c978d0c9fb9a2b49cf100446ed2ad485cf3a7662f497f011a3cdccf692",
     "src/appsec_review/storage/validation.py": "265b312666db389736f617f0abf07fb8ac385ded44d1b4132377e9d43a8edb3e",
     "src/appsec_review/storage/verify.py": "9c75a5b4de3d48e8e834e1997c7316013e738fc6ab9da9ed9798453d46f3b10e",
     "src/appsec_review/swift_policy.py": "81c102d9d53514f83f50163bb85d82eb2914d0f10153b381ad4bb377012f5133",
@@ -47150,7 +46378,7 @@
     "src/appsec_review/threat_model/view.py": "3d0663351119f4c4001cbe3d5bba40a319c8307ab8c8f688ba2f0e03c12039f3",
     "src/appsec_review/tool_inputs.py": "0dbd7fcf731c377d078bc076282bc9b3c72a732541e2adbbd6086ef29507e2da",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "d8fabb5f02e66a3322d3401022ec111cece0e13f3af9b20b6ed600e4fb74d89b"
+    "tests/job-test-map.json": "54756d238d7f9cd8bef1e127d633c2b4993aa6a13b0cbbe29b7f6f7f80fef7e7"
   },
   "tool_policy": {
     "disable_grype": true,

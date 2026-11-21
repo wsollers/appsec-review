@@ -200,13 +200,13 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5000 | [Hunt packages reference their unit's context once](#t-5000-hunt-packages-reference-their-units-context-once) | review | in-progress |
 | T-5001 | [Bound the run-wide pipeline log and stream its reporting consumers](#t-5001-bound-the-run-wide-pipeline-log-and-stream-its-reporting-consumers) | pipeline | open |
 | T-5002 | [Bind OWASP finding packages to their obligations so a batch fits the model input budget](#t-5002-bind-owasp-finding-packages-to-their-obligations-so-a-batch-fits-the-model-input-budget) | review | open |
-| T-5003 | [Dispatch OWASP validation only for rows with a supported obligation](#t-5003-dispatch-owasp-validation-only-for-rows-with-a-supported-obligation) | review | open |
+| T-5003 | [Dispatch OWASP validation only for rows with a supported obligation](#t-5003-dispatch-owasp-validation-only-for-rows-with-a-supported-obligation) | review | done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9) |
 | T-5004 | [Make the OWASP job declare, read and report only what it uses](#t-5004-make-the-owasp-job-declare-read-and-report-only-what-it-uses) | pipeline | open |
-| T-5005 | [Fingerprint OWASP shards with the guidance bundle the model actually received](#t-5005-fingerprint-owasp-shards-with-the-guidance-bundle-the-model-actually-received) | review | open |
+| T-5005 | [Fingerprint OWASP shards with the guidance bundle the model actually received](#t-5005-fingerprint-owasp-shards-with-the-guidance-bundle-the-model-actually-received) | review | done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9) |
 | T-5006 | [Carry OWASP verdict dispositions into leads and stop projecting unassessed rows into packages](#t-5006-carry-owasp-verdict-dispositions-into-leads-and-stop-projecting-unassessed-rows-into-packages) | review | open |
-| T-5007 | [Reconcile OWASP documentation, role text and tool advertisement with the code](#t-5007-reconcile-owasp-documentation-role-text-and-tool-advertisement-with-the-code) | review | open |
+| T-5007 | [Reconcile OWASP documentation, role text and tool advertisement with the code](#t-5007-reconcile-owasp-documentation-role-text-and-tool-advertisement-with-the-code) | review | done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9) |
 | T-5008 | [Collation pass: facet-tag first-party units before hunting and route the review on the tags](#t-5008-collation-pass-facet-tag-first-party-units-before-hunting-and-route-the-review-on-the-tags) | review | in-progress |
-| T-5009 | [Project only assessed, subject-bound OWASP rows into control_evidence and package context](#t-5009-project-only-assessed-subject-bound-owasp-rows-into-control_evidence-and-package-context) | review | open |
+| T-5009 | [Project only assessed, subject-bound OWASP rows into control_evidence and package context](#t-5009-project-only-assessed-subject-bound-owasp-rows-into-control_evidence-and-package-context) | review | done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9) |
 | T-5010 | [Publish per-component languages and frameworks from the target catalog](#t-5010-publish-per-component-languages-and-frameworks-from-the-target-catalog) | topology | open |
 | T-5011 | [Attach routed ASVS controls as control_gap hunt obligations for web and API components](#t-5011-attach-routed-asvs-controls-as-control_gap-hunt-obligations-for-web-and-api-components) | review | open |
 | T-5012 | [Publish a control-report projection and render the OWASP section of the final report](#t-5012-publish-a-control-report-projection-and-render-the-owasp-section-of-the-final-report) | review | open |
@@ -387,7 +387,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5153 | [Reject malformed OWASP model field types within the bounded cell](#t-5153-reject-malformed-owasp-model-field-types-within-the-bounded-cell) | review | done (2026-11-19, 033ef93d037e2a07389beef76c809275d7abf8f5) |
 | T-5154 | [Conserve OWASP dispatch and characterization gap accounting](#t-5154-conserve-owasp-dispatch-and-characterization-gap-accounting) | review | done (2026-11-19, 033ef93d037e2a07389beef76c809275d7abf8f5) |
 | T-5155 | [Accept resolving OWASP prerequisite citations and adverse qualifications](#t-5155-accept-resolving-owasp-prerequisite-citations-and-adverse-qualifications) | review | done (2026-11-19, 033ef93d037e2a07389beef76c809275d7abf8f5) |
-| T-5156 | [Make workbench filters retrieve finding-package records](#t-5156-make-workbench-filters-retrieve-finding-package-records) | review | open |
+| T-5156 | [Make workbench filters retrieve finding-package records](#t-5156-make-workbench-filters-retrieve-finding-package-records) | review | done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9) |
 | T-5157 | [Resolve bounded PoC declarations from the correct accepted build](#t-5157-resolve-bounded-poc-declarations-from-the-correct-accepted-build) | review | done (2026-11-19, e5cc0b31a47de2447c3d9a7ed6e7bdb39b224d2b) |
 | T-5158 | [Validate actual PoC calls bounds numeric triggers and denied names](#t-5158-validate-actual-poc-calls-bounds-numeric-triggers-and-denied-names) | review | done (2026-11-19, 77d228461b7a2ee344cef5587b26ad387a4d2761) |
 | T-5159 | [Bound PoC briefs and retain nested compile qualifications](#t-5159-bound-poc-briefs-and-retain-nested-compile-qualifications) | review | done (2026-11-19, e5cc0b31a47de2447c3d9a7ed6e7bdb39b224d2b) |
@@ -498,6 +498,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5264 | [Parse LCOV function end-line records without duplicate functions](#t-5264-parse-lcov-function-end-line-records-without-duplicate-functions) | evidence | done (2026-11-21, ad89e95f92b262bc85bf1f37b8e879a5e2f0b8fd) |
 | T-5265 | [Exclude proven foreign macro nodes before AST budget accounting](#t-5265-exclude-proven-foreign-macro-nodes-before-ast-budget-accounting) | graph | done (2026-11-21, 339b98d0fcc4a10a67b374aa6f2b632bf96699d4) |
 | T-5266 | [Separate optional SARIF capabilities from completion gaps](#t-5266-separate-optional-sarif-capabilities-from-completion-gaps) | review | done (2026-11-21, 65880fb539713e6037ccb5b4ba5d34c22fa61312) |
+| T-5267 | [Repair review-cell telemetry profile fixtures](#t-5267-repair-review-cell-telemetry-profile-fixtures) | testing | open |
+| T-5268 | [Admit shared-artifact retry fixtures through verified stop state](#t-5268-admit-shared-artifact-retry-fixtures-through-verified-stop-state) | testing | open |
 
 ## Active entries
 
@@ -3125,11 +3127,14 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5003 — Dispatch OWASP validation only for rows with a supported obligation
 
-- **State:** open
+- **State:** done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9)
 - **Area:** review
 - **Why:** F2 of `docs/reviews/owasp-process-review-2026-11-14.md`: `partition_work` dispatches every applicable or conditional row (`engine.py:324-326`), `run_batch` returns `terminal_state: "failed"` when nothing is ready because the worker status is `missing_evidence` (`assessment.py:409-414,488-490`), and the job logs `OWASP_WORKER_STARTED` with a model profile and counts the batch as failed (`job.py:211-216,241-244,343`). Run `2026-11-14-0003`: three batches, three `failed` workers, zero model calls; the operations doc tells operators cell failure is a scoped gap when nothing failed.
 - **Scope:** partition only rows with at least one `supported` obligation; record the rest under `non_dispatch_dispositions` with the payload reason; keep `failed` for worker or provider failures.
 - **Done when:** a unit test with a component whose rows have no supported obligation produces no `OWASP_WORKER_STARTED` event, no failed batch and a non-dispatch disposition per row.
+  The real job fixture retains per-row non-dispatch reasons without worker starts, model calls
+  or false failed counts. Only ready batches consume the batch cap; unlaunched rows remain
+  unresolved. Verification and explicit baseline exclusions are recorded under T-5156.
 - **Refs:** `src/appsec_review/owasp_workbench/engine.py`, `src/appsec_review/owasp_workbench/assessment.py`, `src/appsec_review/jobs/job_owasp_control_assessment/job.py`, `docs/operations/owasp-control-assessment.md`.
 
 ### T-5004 — Make the OWASP job declare, read and report only what it uses
@@ -3139,15 +3144,28 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** F3 and F4 of `docs/reviews/owasp-process-review-2026-11-14.md`: the CONTRACT mirrors the whole tags manifest (26 producers, about 110 requirements, `datasets.py:39-330`) because `accept_manifest` opens and receipts every embedded shard (`retrieval/core.py:388-389`) while the resolver keeps only `UPSTREAM_INDEXES` producers (`owasp_workbench/evidence.py:21-24,107-109`); `tests/test_consumes_parity.py:57-66` cements the mirror. The commit `1f40f7aa` fix was necessary but widened CONSUMES to producers the job never uses. Terminal statuses are string literals and unit gaps are free text (`job.py:124-125,244,285,292,349,376,383`), without `strict_gaps=True`; the job sits in the legacy list in `tests/test_gap_contract.py:19`.
 - **Scope:** `accept_manifest`/`RetrievalCore` take a producer and index selection so only shards the resolver uses are opened and receipted; the CONTRACT shrinks to those producers and the parity test becomes a declares-what-it-opens test; statuses come from `interchange.ProducerStatus`, named gaps are `interchange.producer_gap` records with `strict_gaps=True`, and the job leaves the legacy free-text list.
 - **Done when:** unit tests show the claim pins only the producers whose shards were opened, a read receipt exists for each, the handoff `terminal_status` is a `ProducerStatus` member, every gap is a `producer-gap/1` record, and `tests/test_gap_contract.py` no longer lists the job.
+  Audited K03 is repaired through `9841059dd380eac50f12fdf0002e1fa82787aff9`: strict
+  producer-gap controls and selected payload/custody reads replace the whole-manifest payload
+  scan. The declared surface is 22 possible producers and 66 requirements, including explicit
+  custody dependencies. Admission/availability remains distinct from actual read receipts;
+  the stronger historical wording equating all claim pins with actual reads is not asserted here.
+  Default unfiltered verification remains unchanged. Selected root/store/Core reads enforce
+  current grants, exact publication and source custody, endpoint closure and isolated caches.
+  Authenticated control identities precede named metadata discovery, including cold consumers;
+  excluded payload aliases and unverified size allocations are rejected before payload reads.
+  No new publication format, grants or operator operation was introduced.
 - **Refs:** `src/appsec_review/jobs/job_owasp_control_assessment/datasets.py`, `src/appsec_review/jobs/job_owasp_control_assessment/job.py`, `src/appsec_review/owasp_workbench/evidence.py`, `src/appsec_review/retrieval/core.py`, `tests/test_consumes_parity.py`, `tests/test_gap_contract.py`, `docs/architecture/job-interchange.md`.
 
 ### T-5005 — Fingerprint OWASP shards with the guidance bundle the model actually received
 
-- **State:** open
+- **State:** done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9)
 - **Area:** review
 - **Why:** F5 of `docs/reviews/owasp-process-review-2026-11-14.md`: `build_packages` composes a bundle whose task carries the full obligations and pins it on every package (`job.py:183-191`); its hash feeds the finding-package shard fingerprint and the global fingerprint (`job.py:302-304,330-332`), but `investigate` composes a second bundle with `proof_obligations: [VERSION]`, sends that one and keys the reuse receipt on it (`assessment.py:110-124,153-156,207-209`). The bundle a worker saw is discoverable only through `OWASP_MODEL_ATTEMPT` events, never through the published fingerprints.
 - **Scope:** compose once per batch and role in `build_packages`, carry the pinned identity into `investigate`, and fingerprint shards with the identities actually sent.
 - **Done when:** a unit test asserts the bundle sha256 recorded in the model receipt equals the one pinned on the package and in the shard fingerprint.
+  Actual per-batch/per-role composition, pinning and model-boundary receipts agree with the
+  published fingerprints. Blinded reviewer input and role/batch/tamper refusals are preserved.
+  This fixes provenance; it does not claim the old mismatch caused stale model reuse.
 - **Refs:** `src/appsec_review/jobs/job_owasp_control_assessment/job.py`, `src/appsec_review/owasp_workbench/assessment.py`.
 
 ### T-5006 — Carry OWASP verdict dispositions into leads and stop projecting unassessed rows into packages
@@ -3161,11 +3179,14 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5007 — Reconcile OWASP documentation, role text and tool advertisement with the code
 
-- **State:** open
+- **State:** done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9)
 - **Area:** review
 - **Why:** F7, F8, F9 and F11 of `docs/reviews/owasp-process-review-2026-11-14.md`: `pipeline/guidance/registry.json` describes `independent_reviewer` and `control_assessor` tasks the job does not give them (the reviewer is blinded and assesses afresh, `assessment.py:113-117`); `docs/operations/owasp-control-assessment.md:48` says the closed parser rejects missing keys while `config/owasp.py:36-40` defaults two of them; the `parser_versions` table lacks `owasp-proof-obligations/2` and `owasp-complete-source-subjects/1` and nothing asserts TOML versions match the code constants; the artifact listing (`:104-105`) does not match the files under `artifacts/owasp-workbench/`; and `query_owasp_workbench` is advertised in every `workbench_reference` and the datasets route while `review/capability.py:36-37,47` excludes it from the tools a worker can call (0 of 3,227 retrievals on run `2026-11-14-0003`).
 - **Scope:** reword the two role records; mark the optional keys and add the two versions to the settings table; assert TOML/constant parity in `_validate_config` or a unit test; list the real artifact files; document the workbench as application-side and route package references through `query_precomputed query_set=control_evidence` only.
 - **Done when:** a unit test asserts the configured parser version strings equal the code constants; the docs checks pass; no package `workbench_reference` names a tool outside `IN_PROCESS_TOOLS`.
+  Existing parser-version parity remains tested. Role text describes a fresh blinded assessment;
+  optional settings and actual artifact files are documented, and package references distinguish
+  worker `query_precomputed` from application-side `query_owasp_workbench`. No tool grant widened.
 - **Refs:** `pipeline/guidance/registry.json`, `docs/operations/owasp-control-assessment.md`, `src/appsec_review/config/owasp.py`, `src/appsec_review/review/capability.py`, `src/appsec_review/jobs/job_owasp_control_assessment/datasets.py`, `docs/architecture/owasp-control-workbench.md`.
 
 ### T-5008 — Collation pass: facet-tag first-party units before hunting and route the review on the tags
@@ -3180,11 +3201,15 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5009 — Project only assessed, subject-bound OWASP rows into control_evidence and package context
 
-- **State:** open
+- **State:** done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9)
 - **Area:** review
 - **Why:** Change 1 of `docs/reviews/owasp-value-review-2026-11-14.md` (F10): on smoke-cpp run `2026-11-14-0003` the `control_evidence` precomputed set held 277 facts, all `not_assessed` (273) or `cannot_verify` (4) without a subject, and five of them were copied into each of the 562 review packages (7.9 MB; 21 % of hunt-package bytes and 62 % of lead-package bytes), each saying no reviewed proof procedure exists. Reproduced on run `2026-11-16-0005` (2026-11-16): 277 `cannot_determine` rows were projected; after the tag-discovery fix such rows are `unsupported_missing_evidence`/`cannot_determine` and `_build_control_evidence` still projects them as partial facts, now with a named `assessment_unavailable` gap (T-5009) until this lands.
 - **Scope:** `indexing/products.py` `_build_control_evidence` skips rows whose `control_status` is `not_assessed` or whose obligations are empty; `review/packages.py` scopes `control_context` by component and source id.
 - **Done when:** a fixture control-result shard with 273 `not_assessed`, 4 subject-less `cannot_verify` and 1 `not_satisfied` row with a subject yields 1 fact; a package for that subject's file carries 1 entry and a package for another file carries 0.
+  `control_evidence/5` excludes unassessed/unsupported/undispatched/subjectless rows while the
+  full coverage ledger and counted omissions remain. Real downstream fixtures retain only
+  assessed context bound to the component and resolved primary subject source, never an unrelated
+  file. Verdict-disposition policy remains separate under T-5006.
 - **Refs:** `src/appsec_review/indexing/products.py`, `src/appsec_review/review/packages.py`, `src/appsec_review/jobs/job_review_data_indexing/job.py`; T-5006 (verdict dispositions), T-5008 (target-class gate).
 
 ### T-5010 — Publish per-component languages and frameworks from the target catalog
@@ -4904,11 +4929,24 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5156 — Make workbench filters retrieve finding-package records
 
-- **State:** open
+- **State:** done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: OCA-F06. Advertised workbench filters miss finding-package records.
-- **Scope:** `src/appsec_review/retrieval/core.py`
+- **Scope:** `src/appsec_review/owasp_workbench/indexes.py` and actual immutable
+  finding-package publication/query consumers.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main verification through `9841059d` preserves the exact 716-case owner union for the OWASP
+  closure and shared retrieval changes. The seven groups passed 170/78/182/144/12/7/123 cases
+  in 24.29/77.11/44.29/70.46/3.21/3.49/13.88 s, respectively, with two workers and no
+  skipped or over-10-second cases. Five pytest-version-dependent automatic IDs were replaced
+  by explicit labels across 15 unchanged cases; only those 15 were repeated (4.24 s).
+  Whole-module AST proofs and actual parameter indices preserve inputs, assertions and case
+  correspondence. Four owner test sources were normalized to their already-committed LF bytes
+  before execution, retaining original byte hashes and AST equivalence.
+  The five excluded baseline failures remain open under T-5267/T-5268 and are not passes.
+  Model/native/provider, integration, acceptance, deployment and live-review validation were
+  not run. This evidence also covers the completed T-5003/T-5005/T-5007/T-5009 criteria and
+  the bounded K03 portion of T-5004; it does not close unrelated legacy work.
 - **Refs:** `audit-results/job-audit-job_owasp_control_assessment.md`.
 
 ### T-5157 — Resolve bounded PoC declarations from the correct accepted build
@@ -6527,6 +6565,39 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   the 99 historical IDs versus 98 active cases. Native rendering and live review were not run.
 - **Refs:** T-5138, T-5227; `src/appsec_review/jobs/job_final_report_publication/sarif.py`,
   `src/appsec_review/reporting/sarif_export.py`; explicit user decision during cumulative review.
+
+### T-5267 — Repair review-cell telemetry profile fixtures
+
+- **State:** open
+- **Area:** testing
+- **Why:** Three pre-existing cases of
+  `test_review_cell_terminal_metrics_cover_reuse_and_not_launched` (`fresh`, `reused`,
+  `not_launched`) fail because their `SimpleNamespace` profile lacks `enabled`. The test
+  function and inference-team implementation are unchanged from `5e0bf1c5`; these cases were
+  explicitly excluded from the OWASP repair's passing selection, not skipped or counted as passes.
+- **Scope:** Repair only the offline profile fixture while preserving fresh/reused/non-dispatch
+  metric assertions and the real team code. Do not bypass profile checks or call a provider.
+- **Done when:** All three cases pass independently and shuffled/parallel below 10 s using valid
+  profile input; the explicit exclusion can be removed without weakening assertions.
+- **Refs:** `tests/test_owasp_telemetry.py`,
+  `src/appsec_review/jobs/job_inference_security_review/teams.py`; OWASP repair baseline, 2026-11-21.
+
+### T-5268 — Admit shared-artifact retry fixtures through verified stop state
+
+- **State:** open
+- **Area:** testing
+- **Why:** The existing `object_tamper` and `receipt_missing` cases of
+  `test_handoff_resume_and_downstream_failure_keep_original_producer` attempt another Dagster
+  dispatch without its required verified stop admission. Both fail before receipt verification.
+  The test function and runtime repair/runner paths are unchanged from `e5a1d8d5`; these two
+  additional baseline cases remain outside the OWASP repair's passing selection.
+- **Scope:** Give the offline retry fixture valid stop-admission evidence through the existing
+  contract, preserving original-producer, reuse and tamper assertions. Do not weaken recovery
+  admission or perform an actual stop, restart or Dagster operation.
+- **Done when:** Both cases pass independently and shuffled/parallel below 10 s with the real
+  admission checks preserved, allowing their explicit selection exclusion to be removed.
+- **Refs:** `tests/test_shared_artifacts.py`, `src/appsec_review/runtime/repair.py`,
+  `src/appsec_review/runtime/runner.py`; OWASP default-path baseline, 2026-11-21.
 
 ## Legacy backlog
 

@@ -310,7 +310,7 @@ Jobs: `job_owasp_control_assessment`.
 
 ```json
 {
-  "responsibility": "Assess assigned proof obligations and return observations with citations."
+  "responsibility": "Assess named subject-bound proof obligations against accepted evidence, preserving uncertainty and cited provisional hypotheses."
 }
 ```
 
@@ -444,7 +444,7 @@ Jobs: `job_owasp_control_assessment`.
 
 ```json
 {
-  "responsibility": "Independently review elevated or ship-blocking proposed claims."
+  "responsibility": "Independently assess the original named obligations and accepted evidence in a fresh blinded context, without a previous assessor's conclusions."
 }
 ```
 

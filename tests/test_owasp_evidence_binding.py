@@ -536,7 +536,7 @@ def test_private_key_body_cannot_leak_when_requested_span_omits_header(publicati
     ('endpoint = "https://service:opaqueCredential@example.test"', "opaqueCredential", "endpoint"),
     ('// ghp_1234567890abcdefghijklmnopqrstuvwxyz', "ghp_1234567890abcdefghijklmnopqrstuvwxyz", "//"),
     ('-----BEGIN PRIVATE KEY-----\nplain-key-body\n-----END PRIVATE KEY-----', "plain-key-body", "<redacted:"),
-])
+], ids=["assignment", "json-logical-id", "environment-key", "bearer", "url-userinfo", "token", "private-key"])
 def test_redaction_handles_credentials_and_keeps_canonical_names(text, secret, name):
     safe, changed = redact(text)
     assert changed and secret not in safe

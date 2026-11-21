@@ -166,7 +166,8 @@ def test_network_mastg_crosswalk_remains_supporting_guidance_only(catalogs, cont
     ("V8.3.1", AUTH, "DELETE /users/{id} -> delete_user"),
     ("V8.3.1", AUTH.replace("    require_permission(actor, 'delete_user')\n", ""),
      "DELETE /users/{id} -> delete_user"),
-])
+], ids=["parameterized-query", "interpolated-query", "password-eight", "password-four",
+        "authorization-check", "authorization-missing", "service-authorization", "service-authorization-missing"])
 def test_positive_and_adverse_source_paths_are_questions_not_verdicts(
         tmp_path: Path, controls, native: str, source: str, name: str) -> None:
     resolver, evidence, _ = _accepted(tmp_path, source)

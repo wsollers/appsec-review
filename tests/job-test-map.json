@@ -549,6 +549,11 @@
       "unit": [
         "tests/unit/job_owasp_control_assessment/test_audit_assessment.py",
         "tests/unit/job_owasp_control_assessment/test_audit_publication.py",
+        "tests/unit/job_owasp_control_assessment/test_c_subjects.py",
+        "tests/unit/job_owasp_control_assessment/test_closure.py",
+        "tests/unit/job_owasp_control_assessment/test_control_roles.py",
+        "tests/unit/job_owasp_control_assessment/test_network_service_class.py",
+        "tests/unit/job_owasp_control_assessment/test_tag_discovery.py",
         "tests/unit/job_owasp_control_assessment/test_parser_versions.py",
         "tests/unit/job_owasp_control_assessment/test_request_batching.py",
         "tests/unit/job_owasp_control_assessment/test_contract.py",
@@ -967,6 +972,19 @@
     }
   },
   "common_contracts": {
+    "selected-retrieval-custody": {
+      "jobs": ["job_owasp_control_assessment"],
+      "unit": [
+        "tests/unit/retrieval/test_selected_manifest.py",
+        "tests/unit/retrieval/test_selected_store.py",
+        "tests/unit/retrieval/test_selected_publication.py",
+        "tests/unit/retrieval/test_selected_metadata.py",
+        "tests/unit/retrieval/test_named_discovery.py"
+      ],
+      "integration": [],
+      "acceptance": [],
+      "live": []
+    },
     "scanner-stream-capture": {
       "jobs": [
         "job_artifact_security_analysis",
