@@ -141,6 +141,126 @@ def test_nested_model_values_reach_bounded_repair(tmp_path, field, value):
     assert not list((tmp_path / "exhausted" / "cache").glob("*.json"))
 
 
+def _assert_dotnet_worker_guidance(request, run_root, worker):
+    from appsec_review.guidance.compose import pin_bundle, render_prompt, verify_bundle
+    from appsec_review.review.models import IntegrityError
+
+    digest = request.summary["guidance_bundle_sha256"]
+    bundle = json.loads((run_root / "data/guidance" / digest / "bundle.json").read_bytes())
+    assert bundle["identity"]["worker"] == worker
+    assert bundle["role_id"] == "build_engineer_dotnet"
+    assert verify_bundle(bundle) == digest
+    assert render_prompt(bundle) == request.guidance
+    assert pin_bundle(run_root, bundle)["bundle_sha256"] == digest
+    role = next(section for section in bundle["sections"] if section["name"] == "role")
+    source = (ROOT / "pipeline/prompt-fragments/roles/build-engineer-dotnet.md").read_bytes()
+    assert role["source_sha256"] == hashlib.sha256(source).hexdigest()
+    assert role["text"] == request.role == source.decode()
+    assert "current preparation requirement" in request.guidance
+    assert "not proof that a download actually occurred" in request.guidance
+    assert "does not alone prove an image-preparation download" not in request.guidance
+    assert "this field does not control that access" in request.guidance
+    assert "do not add a redundant `dotnet-sdk-*` system package" in request.guidance
+    assert request.allowed_build_systems == ("dotnet",)
+    assert request.allowed_scanners == request.allowed_components == ()
+    changed = copy.deepcopy(bundle)
+    next(section for section in changed["sections"] if section["name"] == "role")["text"] += "\nchanged"
+    with pytest.raises(IntegrityError, match="guidance section hash mismatch: role"):
+        verify_bundle(changed)
+
+
+@pytest.mark.parametrize("reference", ["PackageReference", "PackageDownload", None],
+                         ids=["package-reference", "package-download", "sdk-only"])
+def test_dotnet_preparation_guidance_matches_planning_and_repair_contracts(tmp_path, reference):
+    from appsec_review.config import load_config
+    from appsec_review.container_runtime import ProjectImageResolver, profiles_from_settings
+    from appsec_review.jobs.build_discovery import descriptor_package, validate_build_recipe
+    from appsec_review.jobs.job_project_build.job import _infer_repair
+    from appsec_review.jobs.job_project_build.repair import REPAIR_SCHEMA, apply_repair
+    from tests.unit.job_target_analysis_plan.test_partitioning import _resolve
+
+    content = '<Project Sdk="Microsoft.NET.Sdk">'
+    if reference:
+        content += f'<ItemGroup><{reference} Include="Example" Version="1.0.0" /></ItemGroup>'
+    content += "</Project>"
+    target = tmp_path / "target"
+    (target / "dotnet").mkdir(parents=True)
+    (target / "dotnet/App.csproj").write_text(content, encoding="utf-8")
+    files = [{"path": "dotnet/App.csproj", "sha256": hashlib.sha256(content.encode()).hexdigest(),
+              "size_bytes": len(content.encode())}]
+    unit = discover_build_units(files)[0]
+    unit["descriptor_package"] = descriptor_package(target, unit, files)
+    catalog, _, final, _ = _inputs()
+    catalog = {**catalog, "files": files, "build_units": [unit]}
+    recipe = {
+        "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
+        "image_profile": "dotnet", "source_dir": "dotnet", "build_dir": "dotnet/obj",
+        "system_packages": [], "environment": {}, "dependency_files": ["dotnet/App.csproj"],
+        "configure_commands": [["dotnet", "restore", "App.csproj"]],
+        "build_commands": [["dotnet", "build", "App.csproj"]], "expected_outputs": ["dotnet/bin"],
+        "network_required": False, "reason": "accepted .NET descriptor",
+    }
+    planning_root = tmp_path / "planning"
+    calls = []
+
+    def infer_plan(request, **_kwargs):
+        calls.append(request)
+        _assert_dotnet_worker_guidance(request, planning_root, "build_planning")
+        if len(calls) == 2:
+            assert any("accepted package references require dependency egress" in error
+                       for error in request.repair_errors)
+        return ModelResult({**final, "build_recipes": [{
+            **recipe, "network_required": bool(reference and len(calls) == 2)}]})
+
+    planned, _ = _resolve(planning_root, catalog, custom_infer=infer_plan,
+                           target_root=target, max_input_tokens=32000)
+    assert planned["model_calls"] == (2 if reference else 1)
+    assert planned["gaps"] == []
+    action = planned["plan"]["build_topology"]["build_actions"][0]
+    accepted = action["recipe"]
+    assert accepted["network_required"] is bool(reference)
+    assert accepted["system_packages"] == []
+    assert validate_build_recipe(accepted, unit) == []
+    if reference:
+        assert any("accepted package references require dependency egress" in error
+                   for error in validate_build_recipe({**accepted, "network_required": False}, unit))
+
+    config = load_config(ROOT / "appsec-review.toml").job("job_project_build")
+    profile = profiles_from_settings(config.settings["profiles"])["dotnet"]
+    resolver = ProjectImageResolver(metadata_root=tmp_path / "metadata", target_root=target,
+        runner=lambda *_a, **_kw: pytest.fail("definition must not execute image/build commands"))
+    _, definition = resolver.definition({**accepted, "build_system": "dotnet"}, profile)
+    assert ('RUN ["dotnet","restore"]' in definition.decode()) is bool(reference)
+    repair_root = tmp_path / "repair"
+    context = SimpleNamespace(job=SimpleNamespace(
+        config=config, repository_root=ROOT, run_root=repair_root, run_id="dotnet-guidance",
+        attempt_id="attempt_0001"), unit_root=repair_root / "repair-unit")
+    repair = {"schema": REPAIR_SCHEMA, "system_packages": [],
+              "environment": {"TREATWARNINGSASERRORS": "false"}, "package_manager": None,
+              "dependency_restores": [], "reason": "accepted analyzer warning promoted to error"}
+    repair_calls = []
+
+    def infer_repair(request, **_kwargs):
+        repair_calls.append(request)
+        _assert_dotnet_worker_guidance(request, repair_root, "build_repair")
+        assert request.summary["accepted_recipe"]["network_required"] is bool(reference)
+        return ModelResult({**repair, "network_required": False} if len(repair_calls) == 1 else repair)
+
+    kwargs = {"action": action, "recipe": accepted, "dockerfile": definition,
+              "diagnostics": {"stderr_tail": "analyzer warning promoted to error"},
+              "attempts": [], "infer": infer_repair}
+    with pytest.raises(ModelOutputError, match="repair proposal fields are invalid"):
+        _infer_repair(context, repair_number=1, **kwargs)
+    proposal = _infer_repair(context, repair_number=2, **kwargs)
+    repaired = apply_repair(accepted, proposal, build_system="dotnet")
+    assert len(repair_calls) == 2
+    assert repaired["network_required"] is bool(reference)
+    assert repaired["system_packages"] == []
+    assert validate_build_recipe(repaired, unit) == []
+    _, repaired_definition = resolver.definition({**repaired, "build_system": "dotnet"}, profile)
+    assert ('RUN ["dotnet","restore"]' in repaired_definition.decode()) is bool(reference)
+
+
 def _component_inputs():
     texts = {
         "CMakeLists.txt": "project(control)\n",

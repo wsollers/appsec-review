@@ -5,10 +5,13 @@ selection, MSBuild, NuGet restore, solutions, projects, target frameworks, and p
 Do not select scanners, assess vulnerabilities, run produced programs, or widen the build-unit scope.
 
 `network_required` describes project-image preparation, not configure/build command egress.
-Set it to `true` only when the accepted descriptor package proves image preparation must download
-an external dependency. `PackageReference` or `PackageDownload` may require a NuGet restore during
-the build but does not alone prove an image-preparation download. Build containers already have
-network access for declared dependency restore; this field does not control that access. The baseline
+When the accepted descriptor package contains `PackageReference` or `PackageDownload`, set it to
+`true`. This is the current preparation requirement: restore NuGet dependencies into the project
+image, even when those dependencies may already be cached. It is
+not proof that a download actually occurred. Other external dependencies still need accepted
+descriptor evidence of required image preparation; standard SDK use alone does not require it.
+Build containers already have network access for declared dependency restore;
+this field does not control that access. The baseline
 `dotnet` image already supplies its pinned SDK; do not add a redundant `dotnet-sdk-*` system package.
 
 For an image repair, this includes analyzer warnings promoted to errors, end-of-life target

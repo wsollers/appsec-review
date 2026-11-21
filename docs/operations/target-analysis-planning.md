@@ -29,6 +29,10 @@ role and only the build units in that partition. Each request includes an image-
 each unit carries its required profile and a validator-derived command policy. Android applications
 therefore remain Java-family work while requiring the Android execution image before the model
 proposes a recipe.
+For .NET planning and image repair, accepted `PackageReference` or `PackageDownload` declarations
+require `network_required=true` under the existing validator policy. The flag selects project-image
+NuGet preparation; it is not evidence that a download occurred and does not control build-container
+egress. The pinned SDK alone does not require dependency preparation or an additional SDK package.
 The shipped configuration sets `provider = "claude-cli"`, which runs the operator-authenticated
 Claude CLI (`inference/claude_cli.py`) with `--safe-mode --tools ""` and removes
 `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` from the child environment. Its input is the bounded
