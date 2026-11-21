@@ -307,6 +307,13 @@ def test_job_runner_executes_isolated_planner_succeeded_and_index_attest_reuse(t
     accepted = load_accepted_plan(run_root)
     assert accepted["schema"] == PLAN_SCHEMA
     assert accepted["model"]["status"] == "ACCEPTED"
+    attempt = run_root / outcome["handoff"]["resolving_paths"]["attempt"]
+    load_receipt = json.loads((attempt / "steps/catalog_summary/tasks/load_accepted_catalog/status.json").read_bytes())
+    catalog_reads = [row for row in load_receipt["input_consumption"]["reads"]
+                     if row["producer"] == "job_target_catalog"]
+    assert len(catalog_reads) == 8
+    assert {row["output_kind"] for row in catalog_reads} == {"handoff", "catalog_documents"}
+    assert all(row["handoff_sha256"] == upstream["job_target_catalog"] for row in catalog_reads)
     from appsec_review.jobs.job_project_build.datasets import CONTRACT as BUILD_CONTRACT
     from appsec_review.runtime.inputs import input_read_scope
 

@@ -31,6 +31,7 @@ from appsec_review.jobs.job_target_analysis_plan.planning import (
     PLAN_SCHEMA,
     deterministic_plan,
     summarize_catalog,
+    validate_plan,
 )
 from appsec_review.orchestration.topology import wave1_dependencies
 from appsec_review.retrieval import IndexBuilder, IndexIdentity, write_manifest
@@ -210,6 +211,12 @@ def test_artifact_and_read_artifact_enforce_custody_size_and_json_object_bounds(
             "sha256": hashlib.sha256(raw_arr).hexdigest(),
             "size_bytes": len(raw_arr),
         })
+    oversized = tmp_path / "oversized.json"
+    with oversized.open("wb") as stream:
+        stream.truncate(16 * 1024 * 1024 + 1)
+    with pytest.raises(ValueError, match="exceeds its byte bound"):
+        catalog_reader.read_artifact(tmp_path, {"path": oversized.name},
+            before_read=lambda: pytest.fail("oversized payload must not reach hash observation"))
 
 
 def _write_ref(root: Path, rel_path: str, payload: dict) -> dict:
@@ -254,10 +261,10 @@ def _publish_catalog(root: Path, *, source: str = SOURCE, partition_source: str 
     })
     targets = _write_ref(root, "data/jobs/job_target_catalog/targets.json", {
         "schema": "appsec-review/build-targets/2",
-        "targets": [
-            {"build_unit_id": "u-built", "artifact_kind": "built", "path": "bin/app.jar"},
-            {"build_unit_id": "u-src", "artifact_kind": "source", "path": "CMakeLists.txt"},
-        ],
+        "targets": discover_build_units([
+            {"path": "CMakeLists.txt", "sha256": "1" * 64, "size_bytes": 34},
+            {"path": "app.csproj", "sha256": "2" * 64, "size_bytes": 20},
+        ]),
         "gaps": [],
     })
     cat_ref = _write_ref(root, "data/jobs/job_target_catalog/catalog.json", {
@@ -295,7 +302,7 @@ def test_accepted_catalog_validates_schemas_source_identities_and_recognized_bui
     _publish_catalog(ok_root)
     accepted = catalog_reader.load_accepted_catalog(ok_root)
     assert {item["path"] for item in accepted["build_files"]} == {"CMakeLists.txt", "app.csproj"}
-    assert [item["path"] for item in accepted["accepted_artifacts"]] == ["bin/app.jar"]
+    assert accepted["accepted_artifacts"] == ()
     assert accepted["source_only_scopes"] == ("docs",)
     assert accepted["gaps"] == ("partition_gap",)
 
@@ -318,6 +325,141 @@ def test_accepted_catalog_validates_schemas_source_identities_and_recognized_bui
     _publish_catalog(bad_part, partition_source="other-part-source")
     with pytest.raises(ValueError, match="partition source identity differs"):
         catalog_reader.load_accepted_catalog(bad_part)
+
+
+@pytest.fixture
+def real_catalog_publication(tmp_path):
+    from appsec_review.interchange import validate_unit_output
+    from appsec_review.jobs.job_target_catalog import job as catalog_job
+    from appsec_review.runtime.runner import JobRunner
+    from appsec_review.storage.shared import SharedArtifacts, attempt_artifacts, publication_scope_for_owner
+    from tests.unit.job_target_catalog.support import PARTITION, context, source
+
+    unit = context(tmp_path, PARTITION)
+    unit.job.config.job_id = "job_target_catalog"
+    unit.job.run_id = unit.job.run_root.name
+    unit.job.repository_root = ROOT
+    unit.job.orchestration = {}
+    source(unit, "CMakeLists.txt", b"project(app)\nadd_library(app SHARED main.c)\n", None)
+    source(unit, "main.c", b"int main(void) { return 0; }\n", "C")
+    source(unit, "prebuilt/app.jar", b"PK\x03\x04\x00inert-archive-fixture", None)
+    source(unit, "prebuilt/libapp.so", b"\x7fELF" + b"\x00" * 60, None)
+    root, attempt = unit.job.run_root, unit.job.attempt_root
+    job = catalog_job.build_job()
+    atomic_json(attempt / "claim.json", {
+        "dataset_contract": dataset_contract(
+            job.job_id, tuple(catalog_job.TOPOLOGY), job.datasets, job_contract=job.contract.document()),
+        "orchestration": {},
+    })
+    identity = {"job_id": job.job_id, "source_fingerprint": unit.job.source_fingerprint,
+                "schema_identity": job.schema_identity}
+    write_fixture_handoff(root, attempt / "handoff.json", identity)
+    with publication_scope_for_owner(SharedArtifacts.for_job(unit.job)):
+        for task in job.units:
+            unit.unit_id = task.unit_id
+            unit.outputs[task.unit_id] = task.handler(unit)
+            validate_unit_output(unit.outputs[task.unit_id], unit_id=task.unit_id, strict_gaps=True)
+    (attempt / "result.json").unlink()
+    path = write_fixture_handoff(root, attempt / "handoff.json", {
+        **identity, "completion_status": "COMPLETED_WITH_GAPS",
+        "outputs": unit.outputs, "artifacts": attempt_artifacts(root, attempt),
+    })
+    provisional = json.loads(path.read_bytes())
+    claim = json.loads((attempt / "claim.json").read_bytes())
+    claim.update(component_identities={"implementation": "unit/1", "schema": job.schema_identity,
+                                       "validation": "unit/1"},
+                 started_at=provisional["started_at"], job_config_sha256=provisional["job_config_sha256"])
+    projected = JobRunner(load_config(ROOT / "appsec-review.toml"))._handoff_document(
+        unit.job, claim, {"status": "COMPLETED_WITH_GAPS", "outputs": unit.outputs},
+        json.loads((attempt / "outcomes.json").read_bytes()), provisional["outcomes"],
+        accepted=True, completed=provisional["completed_at"], artifacts=provisional["artifacts"])
+    atomic_json(path, projected)
+    digest = file_sha256(path)
+    atomic_json(root / "data/jobs/job_target_catalog/latest.json", {
+        "handoff_path": path.relative_to(root).as_posix(), "handoff_sha256": digest})
+    return unit, projected, digest
+
+
+@pytest.mark.parametrize("consumer_id", ["job_target_analysis_plan", "job_build_environment_analysis"],
+                         ids=["planner", "environment"])
+def test_real_catalog_intake_reaches_admitted_plan_and_exact_document_receipts(
+        real_catalog_publication, consumer_id):
+    from appsec_review.runtime.inputs import admit_inputs
+    from tests.unit.job_target_catalog.support import PARTITION
+
+    unit, published, digest = real_catalog_publication
+    job = builtin_registry().build(consumer_id)
+    consumer = SimpleNamespace(
+        run_root=unit.job.run_root, config=SimpleNamespace(job_id=consumer_id),
+        source_fingerprint=unit.job.source_fingerprint, evidence_target_snapshot=unit.job.source_fingerprint,
+        contract=job.contract, upstream_handoffs={"job_target_catalog": digest},
+        optional_prior_handoffs={}, external_input_selection=None)
+    admit_inputs(consumer, {"job_target_catalog"})
+    (consumer.run_root / "data/jobs/job_target_catalog/latest.json").unlink()
+    with input_read_scope(consumer) as reads:
+        accepted = catalog_reader.load_accepted_catalog(consumer.run_root)
+    raw = unit.outputs[PARTITION]["target_artifacts"]
+    assert {item["target_relative_path"] for item in raw} == {"prebuilt/app.jar", "prebuilt/libapp.so"}
+    by_path = {item["path"]: item for item in accepted["accepted_artifacts"]}
+    assert set(by_path) == {item["target_relative_path"] for item in raw}
+    for item in raw:
+        projection = by_path[item["target_relative_path"]]
+        assert projection["intake"] == item
+        assert projection["sha256"] == item["sha256"] and projection["size_bytes"] == item["size_bytes"]
+        assert projection["path"] != item["path"]
+        assert item["path"].startswith("data/shared/objects/")
+    observed = reads.document()["reads"]
+    assert len(observed) == 8
+    assert {item["output_kind"] for item in observed} == {"handoff", "catalog_documents"}
+    main = unit.outputs["publish_catalog.publish_handoff"]["artifact"]
+    document = catalog_reader.read_artifact(consumer.run_root, main)
+    refs = [main, *(document["artifacts"][name] for name in (
+        "repository_discovery.partition_repository", "repository_discovery.discover_projects",
+        "component_discovery.catalog_components", "build_discovery.discover_build_systems",
+        "build_discovery.discover_compile_commands", "build_discovery.catalog_build_targets"))]
+    assert {(r["path"], r["sha256"]) for r in observed if r["output_kind"] == "catalog_documents"} == {
+        (r["path"], r["sha256"]) for r in refs}
+    assert all(r["handoff_sha256"] == digest and r["read"] is True and r["cited"] is None for r in observed)
+    plan = deterministic_plan(accepted, summarize_catalog(
+        accepted, max_items=2000, max_bytes=524288, sample_per_prefix=20))
+    validate_plan(plan, accepted)
+    selections = {item["scanner_id"]: item["scope"] for item in plan["scanner_selections"]}
+    for scanner, path in (("tool-spotbugs", "prebuilt/app.jar"), ("tool-blint", "prebuilt/libapp.so")):
+        assert selections[scanner] == [{"path": path, "sha256": by_path[path]["sha256"]}]
+    assert plan["build_topology"]["targets"] == list(accepted["accepted_artifacts"])
+    assert plan["build_topology"]["link_outputs"] == [by_path["prebuilt/libapp.so"]]
+    assert all(action["executable"] is False for action in plan["build_topology"]["build_actions"])
+
+
+@pytest.mark.parametrize("case", ["grant", "pin", "bytes", "schema", "authority"],
+                         ids=["missing-grant", "missing-pin", "changed-bytes", "wrong-schema", "wrong-authority"])
+def test_catalog_document_reads_fail_closed_under_real_admission(real_catalog_publication, case):
+    unit, _published, digest = real_catalog_publication
+    consumer = SimpleNamespace(
+        run_root=unit.job.run_root, config=SimpleNamespace(job_id=JOB),
+        contract=CONTRACT, upstream_handoffs={"job_target_catalog": digest})
+    if case == "grant":
+        consumer.contract = replace(CONTRACT, inputs=tuple(
+            item for item in CONTRACT.inputs if item.output_kind != "catalog_documents"))
+        message = "undeclared consumption"
+    elif case == "pin":
+        consumer.upstream_handoffs = {}
+        message = "not supplied by the attempt claim"
+    elif case == "bytes":
+        ref = unit.outputs["repository_discovery.discover_projects"]["artifact"]
+        path = consumer.run_root / ref["path"]
+        path.write_bytes(path.read_bytes() + b"\n")
+        message = "consumed output bytes changed"
+    else:
+        from appsec_review.runtime.contracts import EvidenceAuthority
+        changes = {"schema": "wrong/1"} if case == "schema" else {"authority": EvidenceAuthority.OPERATIONAL}
+        consumer.contract = replace(CONTRACT, inputs=tuple(
+            replace(item, **changes) if item.output_kind == "catalog_documents" else item
+            for item in CONTRACT.inputs))
+        message = "consumed output schema differs from input contract"
+    with pytest.raises(ValueError, match=message):
+        with input_read_scope(consumer):
+            catalog_reader.load_accepted_catalog(consumer.run_root)
 
 
 def test_verify_source_topology_swift_policy_base_indexes_and_load_accepted_plan(tmp_path: Path) -> None:

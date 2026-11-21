@@ -99,8 +99,9 @@ def load_accepted_plan(run_root: Path) -> Mapping[str, Any]:
         raise ValueError("accepted planning handoff exceeds its byte bound")
     handoff = accepted.handoff
     identity = handoff.get("outputs", {}).get("plan_acceptance.publish_handoff", {}).get("artifact")
-    observe_output(Path(run_root), "job_target_analysis_plan", "analysis_plan_documents", identity or {})
-    plan = read_artifact(Path(run_root), identity or {}, byte_limit=32 * 1024 * 1024)
+    plan = read_artifact(Path(run_root), identity or {}, byte_limit=32 * 1024 * 1024,
+        before_read=lambda: observe_output(
+            Path(run_root), "job_target_analysis_plan", "analysis_plan_documents", identity or {}))
     if plan.get("schema") != PLAN_SCHEMA:
         raise ValueError("accepted analysis plan schema is unsupported")
     graph = plan.get("build_topology", {}).get("executable_graph")

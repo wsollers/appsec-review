@@ -91,8 +91,11 @@ def _catalog_repair_projection(tmp_path, openapi_raw):
     admit_inputs(consumer, {job.job_id})
     with input_read_scope(consumer) as reads:
         accepted = load_accepted_catalog(root)
-    assert len(reads.document()["reads"]) == 1
-    assert reads.document()["reads"][0]["handoff_sha256"] == digest
+    observations = reads.document()["reads"]
+    assert len(observations) == 8
+    assert {row["output_kind"] for row in observations} == {"handoff", "catalog_documents"}
+    assert all(row["handoff_sha256"] == digest and row["read"] and row["cited"] is None
+               for row in observations)
     assert accepted["catalog_handoff_sha256"] == digest
     android = next(build for build in accepted["build_units"] if build["build_system"] == "gradle")
     assert android["required_image_profile"] == "android"

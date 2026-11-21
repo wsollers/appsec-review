@@ -61,6 +61,15 @@ No new glob, regex, SQL, shell, or filesystem endpoint is needed.
 Typed consumers of `load_accepted_plan` record both the admitted handoff read and the exact
 `analysis_plan_documents` payload read. A handoff grant alone does not grant payload consumption;
 these observations retain the accepted artifact path/hash and do not imply citation.
+The shared accepted-catalog reader likewise observes the catalog document and six child documents
+as `catalog_documents`, against the consumer's declared input and admitted pin.
+
+Prebuilt scanner inputs come from the accepted repository partition's `target_artifacts`, not
+discovered build-unit records. Each planner projection uses the exact target-relative path and
+hash for applicability while retaining the unchanged run-owned record under `intake`, including
+its source identity and `target-artifact-intake/1` schema. These are intake candidates, not produced
+build outputs or proven shipped artifacts. Projecting their metadata does not read binary payloads
+or record `target_artifact_inputs` as consumed. Binary execution/analysis remains downstream.
 
 The model sees only a bounded catalog summary (`appsec-review/target-analysis-summary/1`, written
 as `catalog-summary.json` beside the accepted plan). Its bounds are integers in
