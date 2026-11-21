@@ -424,9 +424,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5190 | [Preserve SVF resource bounds nested validation and partial outcomes](#t-5190-preserve-svf-resource-bounds-nested-validation-and-partial-outcomes) | graph | open |
 | T-5191 | [Bound Gerrit and bundle reviews without assigning current facts to old patchsets](#t-5191-bound-gerrit-and-bundle-reviews-without-assigning-current-facts-to-old-patchsets) | history | done (2026-11-20, 0f4bc0ab33cb591ea01ed4f3c6fb615538395fe7) |
 | T-5192 | [Retain materializable acquisitions when changed-path diff fails](#t-5192-retain-materializable-acquisitions-when-changed-path-diff-fails) | pipeline | done (2026-11-20, 0f4bc0ab33cb591ea01ed4f3c6fb615538395fe7) |
-| T-5193 | [Reject malformed nested planning values through bounded repair](#t-5193-reject-malformed-nested-planning-values-through-bounded-repair) | build | open |
-| T-5194 | [Carry real prebuilt artifact intake into plan selection](#t-5194-carry-real-prebuilt-artifact-intake-into-plan-selection) | build | open |
-| T-5195 | [Align dotnet planning guidance with the accepted recipe contract](#t-5195-align-dotnet-planning-guidance-with-the-accepted-recipe-contract) | build | in-progress |
+| T-5193 | [Reject malformed nested planning values through bounded repair](#t-5193-reject-malformed-nested-planning-values-through-bounded-repair) | build | done (2026-11-21, f03d690f3424d71e4217b4f01ada039a7a3b845d; verified at 01c34c4708e4afa61f1400fe9ff170f907d0c85b) |
+| T-5194 | [Carry real prebuilt artifact intake into plan selection](#t-5194-carry-real-prebuilt-artifact-intake-into-plan-selection) | build | done (2026-11-21, 30e9fcfc37d57a53103ba3ad27d725ea0af41ca5; verified at 01c34c4708e4afa61f1400fe9ff170f907d0c85b) |
+| T-5195 | [Align dotnet planning guidance with the accepted recipe contract](#t-5195-align-dotnet-planning-guidance-with-the-accepted-recipe-contract) | build | done (2026-11-21, 585d30aa97fda68dd3d11c281291800f6ac1dd28; verified at 01c34c4708e4afa61f1400fe9ff170f907d0c85b) |
 | T-5196 | [Preserve CRLF source offsets and declaration coverage gaps](#t-5196-preserve-crlf-source-offsets-and-declaration-coverage-gaps) | evidence | done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5) |
 | T-5197 | [Handle malformed npm and preserve Android descriptor facts](#t-5197-handle-malformed-npm-and-preserve-android-descriptor-facts) | topology | done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5) |
 | T-5198 | [Parse bounded OpenAPI JSON structurally with exact operations](#t-5198-parse-bounded-openapi-json-structurally-with-exact-operations) | evidence | done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5) |
@@ -434,12 +434,12 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5200 | [Index duplicate coverage content without conflicting source identities](#t-5200-index-duplicate-coverage-content-without-conflicting-source-identities) | evidence | done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906) |
 | T-5201 | [Route coverage retrieval and distinguish file from build aggregates](#t-5201-route-coverage-retrieval-and-distinguish-file-from-build-aggregates) | evidence | done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906) |
 | T-5202 | [Read completion status consistently across engineering signal loaders](#t-5202-read-completion-status-consistently-across-engineering-signal-loaders) | review | done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906) |
-| T-5203 | [Advance NVD cursors only across complete validated snapshot intervals](#t-5203-advance-nvd-cursors-only-across-complete-validated-snapshot-intervals) | data | open |
-| T-5204 | [Preserve newer OSV state and configured snapshot roots in consumers](#t-5204-preserve-newer-osv-state-and-configured-snapshot-roots-in-consumers) | data | open |
-| T-5205 | [Validate MITRE identity and account for character truncation](#t-5205-validate-mitre-identity-and-account-for-character-truncation) | data | open |
-| T-5206 | [Validate actual cve-bin-tool range rows against declared counts](#t-5206-validate-actual-cve-bin-tool-range-rows-against-declared-counts) | data | open |
-| T-5207 | [Keep feed redirects within configured HTTPS source identity](#t-5207-keep-feed-redirects-within-configured-https-source-identity) | data | open |
-| T-5208 | [Return snapshot identities from the publisher transaction actually completed](#t-5208-return-snapshot-identities-from-the-publisher-transaction-actually-completed) | data | open |
+| T-5203 | [Advance NVD cursors only across complete validated snapshot intervals](#t-5203-advance-nvd-cursors-only-across-complete-validated-snapshot-intervals) | data | done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed; verified at 53176290621e5c65ccc86860cae8107c53c08fdb) |
+| T-5204 | [Preserve newer OSV state and configured snapshot roots in consumers](#t-5204-preserve-newer-osv-state-and-configured-snapshot-roots-in-consumers) | data | done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed and 53176290621e5c65ccc86860cae8107c53c08fdb) |
+| T-5205 | [Validate MITRE identity and account for character truncation](#t-5205-validate-mitre-identity-and-account-for-character-truncation) | data | done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed; verified at 53176290621e5c65ccc86860cae8107c53c08fdb) |
+| T-5206 | [Validate actual cve-bin-tool range rows against declared counts](#t-5206-validate-actual-cve-bin-tool-range-rows-against-declared-counts) | data | done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed; verified at 53176290621e5c65ccc86860cae8107c53c08fdb) |
+| T-5207 | [Keep feed redirects within configured HTTPS source identity](#t-5207-keep-feed-redirects-within-configured-https-source-identity) | data | done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed; verified at 53176290621e5c65ccc86860cae8107c53c08fdb) |
+| T-5208 | [Return snapshot identities from the publisher transaction actually completed](#t-5208-return-snapshot-identities-from-the-publisher-transaction-actually-completed) | data | done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed; verified at 53176290621e5c65ccc86860cae8107c53c08fdb) |
 | T-5209 | [Index the real threat-model schema without dropping owners and threats](#t-5209-index-the-real-threat-model-schema-without-dropping-owners-and-threats) | evidence | done (2026-11-20, 575260351792605f17111abd77afa3349e72fba6) |
 | T-5210 | [Retain graph eligibility language restrictions and distinct threat sites](#t-5210-retain-graph-eligibility-language-restrictions-and-distinct-threat-sites) | evidence | done (2026-11-20, 575260351792605f17111abd77afa3349e72fba6) |
 | T-5211 | [Preserve language control flow and explicit CFG incompleteness](#t-5211-preserve-language-control-flow-and-explicit-cfg-incompleteness) | graph | done (2026-11-19, 6e91ad8a10f208d3b1f7b0de347147d01240dbab) |
@@ -478,7 +478,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5244 | [Resolve profile data conditional audit boundaries](#t-5244-resolve-profile-data-conditional-audit-boundaries) | pipeline | open |
 | T-5245 | [Resolve remediation planning conditional audit boundaries](#t-5245-resolve-remediation-planning-conditional-audit-boundaries) | pipeline | blocked |
 | T-5246 | [Resolve test coverage conditional audit boundaries](#t-5246-resolve-test-coverage-conditional-audit-boundaries) | pipeline | open |
-| T-5247 | [Resolve third party data sync conditional audit boundaries](#t-5247-resolve-third-party-data-sync-conditional-audit-boundaries) | pipeline | open |
+| T-5247 | [Resolve third party data sync conditional audit boundaries](#t-5247-resolve-third-party-data-sync-conditional-audit-boundaries) | pipeline | done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed and 53176290621e5c65ccc86860cae8107c53c08fdb) |
 | T-5248 | [Resolve tree sitter ast conditional audit boundaries](#t-5248-resolve-tree-sitter-ast-conditional-audit-boundaries) | pipeline | open |
 | T-5249 | [Reproduce and repair recurrent Grype database listing selection](#t-5249-reproduce-and-repair-recurrent-grype-database-listing-selection) | data | open |
 | T-5250 | [Repair the three stateful guidance prompt-size test failures](#t-5250-repair-the-three-stateful-guidance-prompt-size-test-failures) | testing | done (2026-11-19, 86d81cae0680fd8fa97ffe6c7fd773fdc55e3a8e) |
@@ -495,6 +495,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5261 | [Preserve Clang AST file elision across macro locations](#t-5261-preserve-clang-ast-file-elision-across-macro-locations) | graph | done (2026-11-20, 9c669701a7f1b11f4fb575492a90ac7a9b04a48b) |
 | T-5262 | [Retain bounded diagnostics when descendant pipe draining fails](#t-5262-retain-bounded-diagnostics-when-descendant-pipe-draining-fails) | native | done (2026-11-20, 8ed56f29a9407ab9e044428b37d4b21fab27f90d) |
 | T-5263 | [Complete authorized native tooling rollout and positive acceptance](#t-5263-complete-authorized-native-tooling-rollout-and-positive-acceptance) | images | blocked |
+| T-5264 | [Parse LCOV function end-line records without duplicate functions](#t-5264-parse-lcov-function-end-line-records-without-duplicate-functions) | evidence | done (2026-11-21, ad89e95f92b262bc85bf1f37b8e879a5e2f0b8fd) |
+| T-5265 | [Exclude proven foreign macro nodes before AST budget accounting](#t-5265-exclude-proven-foreign-macro-nodes-before-ast-budget-accounting) | graph | done (2026-11-21, 339b98d0fcc4a10a67b374aa6f2b632bf96699d4) |
+| T-5266 | [Separate optional SARIF capabilities from completion gaps](#t-5266-separate-optional-sarif-capabilities-from-completion-gaps) | review | done (2026-11-21, 65880fb539713e6037ccb5b4ba5d34c22fa61312) |
 
 ## Active entries
 
@@ -2141,6 +2144,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Why:** job 9 of the Freeciv walk reported `analysis summary was truncated by configured bounds` while the published summary was under both bounds (334 sample items of 2,000; 359,844 of 524,288 bytes). `planning.summarize_catalog` trims by popping build-unit descriptor documents first, then catalog lists, then prefix samples, until the item count and the canonical byte size fit, and records only `truncated: true`; the summary read by the model is smaller than the one the bounds allow, and nothing says what was dropped. The user accepted the gap for the Freeciv walk (walk terms row 19).
 - **Scope:** record the trimmed items by kind and count in `bounds`; trim samples before descriptor documents (the documents are the planning evidence, the samples are illustration); report truncation only when the final size or count is at a bound; a focused regression with a summary that needs trimming.
 - **Done when:** a trimmed summary names what was removed; a summary that fits is not marked truncated; the regression passes.
+  Scoped audit case TA-F03 is repaired at `f03d690f3424d71e4217b4f01ada039a7a3b845d`,
+  verified with descriptor follow-up `01c34c4708e4afa61f1400fe9ff170f907d0c85b` in the
+  179-case main union: exact item/byte accounting, evidence visibility and explicit unit-count
+  overflow. This does not claim closure of every historical walk criterion above.
 - **Refs:** `src/appsec_review/jobs/job_target_analysis_plan/planning.py` (`summarize_catalog`, `trim_one`), walk record 09 (host-local), T-111.
 
 ### T-115 — Record code-graph live verification in fixture provenance and test it against the lock
@@ -5377,7 +5384,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5193 — Reject malformed nested planning values through bounded repair
 
-- **State:** open
+- **State:** done (2026-11-21, f03d690f3424d71e4217b4f01ada039a7a3b845d; verified at 01c34c4708e4afa61f1400fe9ff170f907d0c85b)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: TA-F01. malformed nested model values abort the job instead of bounded rejection.
 - **Scope:** `src/appsec_review/jobs/build_discovery.py`, `src/appsec_review/jobs/job_target_analysis_plan/planning.py`
@@ -5386,7 +5393,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5194 — Carry real prebuilt artifact intake into plan selection
 
-- **State:** open
+- **State:** done (2026-11-21, 30e9fcfc37d57a53103ba3ad27d725ea0af41ca5; verified at 01c34c4708e4afa61f1400fe9ff170f907d0c85b)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: TA-F02. real prebuilt artifact intake never reaches plan artifact selections.
 - **Scope:** `src/appsec_review/jobs/job_target_analysis_plan/job.py`, `src/appsec_review/jobs/job_target_analysis_plan/planning.py`
@@ -5395,7 +5402,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5195 — Align dotnet planning guidance with the accepted recipe contract
 
-- **State:** in-progress
+- **State:** done (2026-11-21, 585d30aa97fda68dd3d11c281291800f6ac1dd28; verified at 01c34c4708e4afa61f1400fe9ff170f907d0c85b)
 - **Area:** build
 - **Why:** Archived audit/feedback cases: TA-F05. .NET planning guidance contradicts the recipe validator.
 - **Scope:** `src/appsec_review/jobs/job_target_analysis_plan/planning.py` and the shared
@@ -5405,6 +5412,12 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   `network_required` triggers that preparation; it neither proves a download occurred nor
   controls .NET build-container egress. No network policy, tool grant or SDK change is authorized.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  T-5193 through T-5195 passed the exact 179-case owner union on main in 17.71 s, two workers,
+  seed 1934, with no skips or cases over 10 s. Actual nested rejection, catalog intake and typed
+  reads are exercised; both planning and repair roles pass real composition/render/verify/pin
+  controls. The final descriptor follow-up preserves exact accepted ancestor/sibling evidence
+  after summary trimming, including scoped requests, grants, hashes and cache replay.
+  Models, image preparation, native builds and live reviews were not run.
 - **Refs:** `audit-results/job-audit-job_target_analysis_plan.md`.
 
 ### T-5196 — Preserve CRLF source offsets and declaration coverage gaps
@@ -5509,7 +5522,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5203 — Advance NVD cursors only across complete validated snapshot intervals
 
-- **State:** open
+- **State:** done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed; verified at 53176290621e5c65ccc86860cae8107c53c08fdb)
 - **Area:** data
 - **Why:** Archived audit/feedback cases: SYNC-F01, SYNC-F02, SYNC-F03. Bootstrap cursor skips updates newer than the downloaded yearly snapshots; Inconsistent NVD page counts are accepted and permanently advance the cursor.
 - **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/steps/nvd_sync/feed.py`
@@ -5518,7 +5531,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5204 — Preserve newer OSV state and configured snapshot roots in consumers
 
-- **State:** open
+- **State:** done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed and 53176290621e5c65ccc86860cae8107c53c08fdb)
 - **Area:** data
 - **Why:** Archived audit/feedback cases: SYNC-F04, SYNC-F09. OSV duplicate merging silently discards newer advisory state, withdrawal and aliases; Configurable OSV publisher root is ignored by the actual scanner consumers.
 - **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/steps/osv_sync/feed.py`
@@ -5527,7 +5540,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5205 — Validate MITRE identity and account for character truncation
 
-- **State:** open
+- **State:** done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed; verified at 53176290621e5c65ccc86860cae8107c53c08fdb)
 - **Area:** data
 - **Why:** Archived audit/feedback cases: SYNC-F05, SYNC-F08. Unversioned, non-CWE XML is published under the configured CWE version; MITRE character truncation is omitted from truncation accounting.
 - **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/steps/mitre_sync/feed.py`
@@ -5536,7 +5549,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5206 — Validate actual cve-bin-tool range rows against declared counts
 
-- **State:** open
+- **State:** done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed; verified at 53176290621e5c65ccc86860cae8107c53c08fdb)
 - **Area:** data
 - **Why:** Archived audit/feedback cases: SYNC-F06. cve-bin-tool validation trusts the declared range count without checking range rows.
 - **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/steps/cve_bin_tool_db_build/database.py`
@@ -5545,7 +5558,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5207 — Keep feed redirects within configured HTTPS source identity
 
-- **State:** open
+- **State:** done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed; verified at 53176290621e5c65ccc86860cae8107c53c08fdb)
 - **Area:** data
 - **Why:** Archived audit/feedback cases: SYNC-F07. General downloader's redirects escape the configured HTTPS source identity.
 - **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/publication.py`
@@ -5554,11 +5567,18 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5208 — Return snapshot identities from the publisher transaction actually completed
 
-- **State:** open
+- **State:** done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed; verified at 53176290621e5c65ccc86860cae8107c53c08fdb)
 - **Area:** data
 - **Why:** Archived audit/feedback cases: SYNC-F10. Interleaved publishers produce successful receipts containing different snapshot identities.
 - **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  T-5203 through T-5208 passed 258 distinct main cases in two groups (181 in 11.04 s and 77
+  in 5.91 s), two workers, seeds 15203/15247, without skips or cases over 10 s. Newer OSV
+  state cannot coexist silently with stale scanner archives: publication and both consumers
+  reject inconsistent snapshots, including historical ones, without rewriting raw ZIP evidence.
+  Five EPSS labels were stabilized after pytest-version auto-ID drift; the same inputs and
+  assertions passed again in 2.59 s. AST and canonical node-set proofs preserve all 258 cases.
+  No external feeds, scanners or native builder were run; baked-builder rollout is T-5263.
 - **Refs:** `audit-results/job-audit-job_third_party_data_sync.md`.
 
 ### T-5209 — Index the real threat-model schema without dropping owners and threats
@@ -5690,6 +5710,10 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   the 416-case main union. Source/catalog shards and artifact/language/debug payloads retain
   exact typed admitted identity and observed reads; removal of the dataset permission refuses
   consumption. Target-analysis, project-build and Tree-sitter readers remain separate work.
+  Target-analysis TA-F04 is now complete at `30e9fcfc37d57a53103ba3ad27d725ea0af41ca5`,
+  with descriptor follow-up `01c34c4708e4afa61f1400fe9ff170f907d0c85b`: the 179-case main union
+  verifies exact catalog/accepted-plan payload observations and denied-grant controls.
+  Project-build and Tree-sitter slices remain open; this is not a blanket reader closure.
 - **Refs:** `audit-results/job-audit-job_debug_symbol_indexing.md`, `audit-results/job-audit-job_project_build.md`, `audit-results/job-audit-job_target_analysis_plan.md`, `audit-results/job-audit-job_tree_sitter_ast.md`.
 
 ### T-5218 — Observe exact private analysis payload reads
@@ -6073,11 +6097,20 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5247 — Resolve third party data sync conditional audit boundaries
 
-- **State:** open
+- **State:** done (2026-11-21, c7761e1874e9b1c570b9ecd4a2646013734928ed and 53176290621e5c65ccc86860cae8107c53c08fdb)
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: L209, L210. Bound NVD decompression and cve image-layer materialization; Verify complete MITRE XML declaration detection within supported encodings.
 - **Scope:** `src/appsec_review/jobs/job_third_party_data_sync/job.py`
 - **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+  User chose conservative 512 MiB defaults with explicit oversize gaps for NVD uncompressed
+  bytes and CVE-builder per-layer/cumulative layer bytes. These do not establish capacity for
+  every historical replay. Preserve prior publication/cursors on refusal; no larger implicit
+  defaults, real feed calibration or native image execution is authorized.
+  The 258-case main union for T-5203 through T-5208 includes supported XML encodings and
+  full declaration rejection, positive/consistent typed limits, dishonest-size/growing-stream
+  cases and refusal before publication. Compressed staging and expanded replay use independent
+  counters under the same ceilings; the builder receives frozen private limits.
+  Offline boundary repair is complete; native rollout and positive acceptance remain T-5263.
 - **Refs:** `audit-results/job-audit-job_third_party_data_sync.md`.
 
 ### T-5248 — Resolve tree sitter ast conditional audit boundaries
@@ -6402,20 +6435,77 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 - **State:** blocked
 - **Area:** images
-- **Why:** Affected native-C++ and Ghidra tooling changes and the Clang wrapper have not received
+- **Why:** Affected native-C++ and Ghidra tooling changes, the Clang wrapper and the baked CVE
+  database builder have not received
   the required operator rebuild/verification/binding and positive native acceptance. Closed
   offline repair records do not close these pre-live deployment gaps; authorization is still needed.
 - **Scope:** Only explicitly authorized affected-tool rollout on the chosen review host: exact
   source/release/image identities, Ghidra's pinned-class compile gate, configured signing policy
   and host-owned bindings. Record version-attributed positive native output for affected parsers,
   including CodeQL URI forms; do not invent captures or rebuild unrelated images.
+  `tools/cve-bin-tool/Dockerfile` copies `build_db.py` into `/opt/builder/build_db.py`; a source
+  reload does not deploy its new bounded reader. Rebuild/verify that specific image before
+  claiming in-image enforcement; producer-side staging/expansion bounds are implemented independently.
 - **Done when:** The operator-authorized evidence identifies the rebuilt/verified affected tools,
   current host bindings and positive native results. Mounted application-source reload remains
   separate from tooling rebuilds; prior run pins stay immutable. No real target, review restart,
   key provisioning, enforcement change or broad integration suite is authorized by this entry.
-- **Refs:** T-5095, T-5106, T-5117, T-5257, T-5259;
+- **Refs:** T-5095, T-5106, T-5117, T-5247, T-5257, T-5259;
   `docs/architecture/deployment-image-and-source-mount.md`,
   `docs/operations/clang-static-analysis.md`; cumulative feedback, 2026-11-20.
+
+### T-5264 — Parse LCOV function end-line records without duplicate functions
+
+- **State:** done (2026-11-21, ad89e95f92b262bc85bf1f37b8e879a5e2f0b8fd)
+- **Area:** evidence
+- **Why:** A valid LCOV 2.x `FN:1,3,f` followed by `FNDA:1,f` yields two functions and one hit
+  instead of one function and one hit; the optional end line becomes part of the function name.
+- **Scope:** LCOV parsing and focused ingestion/accounting regressions. Preserve older records,
+  names containing commas, source scoping and numeric/row bounds; no coverage generator is run.
+- **Done when:** Both documented FN forms join their FNDA counts correctly without fabricated
+  functions, and invalid records retain explicit malformed coverage behavior.
+  Main 141 passed in 6.34 s, two workers, seed 15264, exact owner cases, no skips or cases
+  over 10 s. Declaration resolution uses complete FNDA names, preserving legacy comma/numeric
+  names and malformed-range controls. No native coverage generator was run.
+- **Refs:** T-5199; `src/appsec_review/jobs/job_test_coverage/parsers.py`;
+  LCOV 2.0 `man/geninfo.1`, Tracefile Format; cumulative-review inert reproduction at `788998da`.
+
+### T-5265 — Exclude proven foreign macro nodes before AST budget accounting
+
+- **State:** done (2026-11-21, 339b98d0fcc4a10a67b374aa6f2b632bf96699d4)
+- **Area:** graph
+- **Why:** T-5261 preserves stream filename state, but an all-known-foreign macro itself remains
+  unlocated and bypasses the source filter. It can exhaust the detail budget before accepted code.
+- **Scope:** Node-local provenance distinct from coordinate resolution and stream state. Filter
+  only when every relevant emitted loc/range spelling/expansion branch is known foreign.
+  Mixed, missing or unresolved provenance stays qualified; never invent a macro source location.
+- **Done when:** Explicit and file-elided all-foreign macros cannot crowd out accepted declarations;
+  mixed/unknown macros and accepted descendants retain the intended behavior and source bounds.
+  Main 114 passed in 6.11 s, two workers, seed 15265, exact owner cases, no skips or cases
+  over 10 s. `clang-ast/7` invalidates earlier parser results; all original stream-state controls
+  remain. Fixtures are emitter-shaped constructions, not new native captures.
+- **Refs:** T-5261; `src/appsec_review/jobs/job_cpp_compiled_analysis/job.py`;
+  cumulative-review inert reproduction at `788998da`.
+
+### T-5266 — Separate optional SARIF capabilities from completion gaps
+
+- **State:** done (2026-11-21, 65880fb539713e6037ccb5b4ba5d34c22fa61312)
+- **Area:** review
+- **Why:** The gate adapter reports unavailable optional code-flow/fix enrichment as completion
+  gaps, so every nonempty finding export is incomplete even when valid records were exported.
+- **Scope:** User chose to report optional SARIF capabilities separately from completion gaps.
+  Preserve visible omission reasons, qualified real fixes, and status-affecting omitted finding
+  records, genuine review gaps and integrity failures. Do not synthesize traces or edits.
+- **Done when:** A complete located export can succeed without optional enrichment while retaining
+  explicit capability limitations; missing records and genuine failures still affect completion.
+  Canonical gap identity/deduplication and review certification remain unchanged.
+  Main 98 passed in 8.55 s, two workers, seed 15266, exact active owner cases, no skips or cases
+  over 10 s. `runs[0].properties.optional_capability_limitations` retains bounded finding,
+  capability and reason records. Missing results remain gaps; bound result or metadata tampering
+  remains fatal. One former unparametrized tamper test now has result/metadata variants, explaining
+  the 99 historical IDs versus 98 active cases. Native rendering and live review were not run.
+- **Refs:** T-5138, T-5227; `src/appsec_review/jobs/job_final_report_publication/sarif.py`,
+  `src/appsec_review/reporting/sarif_export.py`; explicit user decision during cumulative review.
 
 ## Legacy backlog
 

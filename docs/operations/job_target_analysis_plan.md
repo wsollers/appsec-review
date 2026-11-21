@@ -30,13 +30,13 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `analysis_decisions` | `analysis_decisions.apply_deterministic_rules` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L228) |
-| `analysis_decisions` | `analysis_decisions.resolve_ambiguity` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L251) |
-| `catalog_summary` | `catalog_summary.load_accepted_catalog` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L200) |
-| `catalog_summary` | `catalog_summary.summarize_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L215) |
-| `plan_acceptance` | `plan_acceptance.index_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L453) |
-| `plan_acceptance` | `plan_acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L545) |
-| `plan_acceptance` | `plan_acceptance.validate_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L441) |
+| `analysis_decisions` | `analysis_decisions.apply_deterministic_rules` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L231) |
+| `analysis_decisions` | `analysis_decisions.resolve_ambiguity` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L254) |
+| `catalog_summary` | `catalog_summary.load_accepted_catalog` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L203) |
+| `catalog_summary` | `catalog_summary.summarize_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L218) |
+| `plan_acceptance` | `plan_acceptance.index_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L456) |
+| `plan_acceptance` | `plan_acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L548) |
+| `plan_acceptance` | `plan_acceptance.validate_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_analysis_plan/job.py#L444) |
 
 ### Accepted input declarations
 

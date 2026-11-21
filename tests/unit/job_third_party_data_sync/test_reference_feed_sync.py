@@ -137,7 +137,7 @@ def test_epss_valid_scores_publish_index_with_model_and_score_date(tmp_path: Pat
     (epss_bytes([("CVE-2026-0001", 1.5, 0.2)]), "outside"),
     (epss_bytes([("CVE-2026-0001", 0.1, 0.2), ("CVE-2026-0001", 0.1, 0.2)]), "repeats"),
     (b"not a gzip stream", "gzip"),
-])
+], ids=["missing-comment", "invalid-header", "out-of-range", "duplicate-cve", "not-gzip"])
 def test_epss_malformed_files_fail_normalization(tmp_path: Path, payload: bytes, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         _epss_cycle(tmp_path, payload)
