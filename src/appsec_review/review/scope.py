@@ -17,7 +17,7 @@ from typing import Any
 
 from appsec_review.indexing.store import ShardSet, shard_key, shard_summary
 from appsec_review.retrieval.core import RetrievalGap, resolve_accepted_manifest
-from appsec_review.retrieval.index import load_verified_manifest
+from appsec_review.retrieval.index import IndexSelection, load_verified_manifest
 from appsec_review.review.dispositions import DISPOSITIONS, DISPOSITION_RULE, FIRST_PARTY, SourceDispositions
 from appsec_review.review.identity import make_id
 from appsec_review.review.models import Gap, GapClass, IntegrityError
@@ -236,6 +236,13 @@ class AcceptedScope:
     # The configured source dispositions the scope was accepted under; paths outside the catalog are
     # classified by the same globs, so a lead located anywhere gets exactly one disposition.
     dispositions: SourceDispositions = field(default_factory=SourceDispositions)
+    selection: IndexSelection | None = None
+    excluded_shards: tuple[Mapping[str, Any], ...] = ()
+
+    @property
+    def view_identity(self) -> str:
+        return (self.selection.view_identity(self.manifest_sha256)
+                if self.selection is not None else self.manifest_sha256)
 
     @property
     def store(self) -> ShardSet:
@@ -290,6 +297,10 @@ class AcceptedScope:
 
     def verify(self) -> None:
         """Re-hash every accepted shard; called again before packages are published."""
+        if self.selection is not None:
+            load_verified_manifest(self.run_root, self.manifest_path, self.manifest_sha256,
+                                   selection=self.selection)
+            return
         for shard in self.shards:
             path = (self.run_root / str(shard["relative_path"])).resolve()
             if self.run_root not in path.parents or not path.is_file() or file_sha256(path) != shard["sha256"]:
@@ -308,6 +319,10 @@ class AcceptedScope:
         return {
             "schema": "appsec-review/review-evidence-map/1", "rule": SCOPE_RULE, "run_id": self.run_id,
             "manifest_sha256": self.manifest_sha256, "target_snapshot": self.target_snapshot,
+            **({"view_identity": self.view_identity,
+                "excluded_shards": [{"name": item["name"], "shard_id": _sid(item),
+                                     "producer": _job(item), "disposition": "not_selected"}
+                                    for item in self.excluded_shards]} if self.selection is not None else {}),
             "producers": [item.record() for item in ordered_producers],
             "available": sorted(item.producer for item in ordered_producers if item.state != "missing"),
             "missing": sorted(item.producer for item in ordered_producers if item.state == "missing"),
@@ -325,14 +340,18 @@ class AcceptedScope:
 
 
 def _verified(run_root: Path, manifest_path: Path | None = None,
-              manifest_sha256: str | None = None) -> tuple[Path, str, Mapping[str, Any]]:
+              manifest_sha256: str | None = None, *,
+              selection: IndexSelection | None = None) -> tuple[Path, str, Mapping[str, Any]]:
+    if selection is not None and (manifest_path is None or manifest_sha256 is None):
+        raise IntegrityError("selected source views require an explicit manifest path and pin")
     try:
         if manifest_path is None or manifest_sha256 is None:
             manifest_path, accepted_sha = resolve_accepted_manifest(run_root)
         else:
-            manifest_path = Path(manifest_path).resolve()
+            manifest_path = (Path(manifest_path).absolute() if selection is not None
+                             else Path(manifest_path).resolve())
             accepted_sha = manifest_sha256
-        manifest, actual = load_verified_manifest(run_root, manifest_path, accepted_sha)
+        manifest, actual = load_verified_manifest(run_root, manifest_path, accepted_sha, selection=selection)
     except (RetrievalGap, ValueError, OSError, json.JSONDecodeError, TypeError) as exc:
         raise IntegrityError(f"accepted index set failed verification: {exc}") from exc
     if actual != accepted_sha:
@@ -382,7 +401,8 @@ def _coverage(store: ShardSet, name: str, shards: tuple[Mapping[str, Any], ...])
 
 def accept_manifest(run_root: Path, *, manifest_path: Path | None = None,
                     manifest_sha256: str | None = None,
-                    dispositions: SourceDispositions | None = None) -> AcceptedScope:
+                    dispositions: SourceDispositions | None = None,
+                    selection: IndexSelection | None = None) -> AcceptedScope:
     """Verify the run's accepted index set and build its evidence map (gates 1 and 2).
 
     ``dispositions`` (``settings.source_dispositions``) classifies every accepted source file; without it
@@ -390,9 +410,12 @@ def accept_manifest(run_root: Path, *, manifest_path: Path | None = None,
     """
     policy = dispositions if dispositions is not None else SourceDispositions()
     run_root = Path(run_root).resolve()
-    manifest_path, manifest_sha, manifest = _verified(run_root, manifest_path, manifest_sha256)
+    manifest_path, manifest_sha, manifest = _verified(run_root, manifest_path, manifest_sha256, selection=selection)
     snapshot = str(manifest.get("target_snapshot", ""))
     shards = tuple(sorted((dict(item) for item in manifest.get("indexes", ())), key=shard_key))
+    excluded = tuple(item for item in shards if selection is not None and not selection.includes(item))
+    if selection is not None:
+        shards = tuple(item for item in shards if selection.includes(item))
     _check_embedded(run_root, shards, snapshot)
     store = ShardSet(run_root, shards)
     producers = tuple(_coverage(store, name, tuple(shard for shard in shards if select(shard)))
@@ -433,5 +456,6 @@ def accept_manifest(run_root: Path, *, manifest_path: Path | None = None,
         target_snapshot=snapshot, shards=shards, components=tuple(components),
         build_units=tuple(units[key] for key in sorted(units)),
         source_files=tuple(sources[key] for key in sorted(sources)), producers=producers,
+        selection=selection, excluded_shards=excluded,
         freshness=freshness, gaps=sorted_gaps(gaps),
         _sha={shard_key(shard): str(shard["sha256"]) for shard in shards}, dispositions=policy)

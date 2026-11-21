@@ -109,6 +109,8 @@ class EvidenceResolver:
             raise ValueError("OWASP source line cap must be between 1 and 500")
         if (core.run_id != scope.run_id or core.run_root != scope.run_root
                 or core.manifest_sha256 != scope.manifest_sha256
+                or getattr(core, "view_identity", core.manifest_sha256)
+                != getattr(scope, "view_identity", scope.manifest_sha256)
                 or core.manifest["target_snapshot"] != scope.target_snapshot):
             raise ValueError("evidence resolver run/target/manifest isolation mismatch")
         self.core, self.scope = core, scope
@@ -601,7 +603,8 @@ def _classifying(row: Mapping[str, Any]) -> bool:
 
 def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_path: Path) -> dict[str, Any]:
     scope = accept_manifest(core.run_root, manifest_path=manifest_path,
-                            manifest_sha256=core.manifest_sha256, dispositions=settings.source_dispositions)
+                            manifest_sha256=core.manifest_sha256, dispositions=settings.source_dispositions,
+                            selection=getattr(core, "selection", None))
     resolver = EvidenceResolver(core, scope, max_source_lines=settings.max_source_lines)
     components, evidence, limitations = [], [], []
     for (index, shard_id), shard in sorted(resolver.shards.items()):
@@ -735,6 +738,12 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
     return {
         "components": components, "evidence": evidence, "input_mode": "accepted_indexes",
         "retrieval_manifest": {"path": scope.manifest_path.relative_to(core.run_root).as_posix(),
-                               "sha256": scope.manifest_sha256, "target_snapshot": scope.target_snapshot},
+                               "sha256": scope.manifest_sha256, "target_snapshot": scope.target_snapshot,
+                               **({"view_identity": scope.view_identity,
+                                   "selection_sha256": scope.selection.sha256,
+                                   "excluded_shards": [{"name": item["name"], "shard_id": item["shard_id"],
+                                       "producer": item["producer"]["job"], "disposition": "not_selected"}
+                                       for item in scope.excluded_shards]}
+                                  if getattr(scope, "selection", None) is not None else {})},
         "limitations": limitations, "gaps": gaps, "retrieval_metrics": dict(resolver.metrics),
     }

@@ -66,6 +66,14 @@ applies: OWASP is selected by default, and `resume`/`plan-resume --force-from` c
 or OWASP only when that job is enabled. Both drivers now use the same typed review-job contracts,
 including enabled CI/post-build producers; third-party sync remains standalone. A standalone dispatch must use the run's accepted
 upstream handoffs and snapshot, not an arbitrary source tree.
+The job opens its explicit producer/index source view before payload validation. The manifest
+path and hash must be pinned explicitly; selected reads never fall back to an ambient accepted pointer.
+The original manifest and ancestry identities remain authenticated; excluded and superseded ancestor payloads are not
+opened or recorded as reads. Selected shards still need the exact admitted dataset owner, schema,
+authority and handoff pin. Generated-source and binary-source backing records are separate admitted
+custody dependencies; absent grants or unresolved relation endpoints fail closed. The input record
+keeps the original manifest hash, a separate view identity and named `not_selected` exclusions.
+Default retrieval callers without a selection retain full-manifest verification.
 
 For assessment, retain `enabled = true`, `mode = "assessment"` and enabled worker/reviewer profiles,
 and configure the intended provider, models and budgets before freezing a new run. Set

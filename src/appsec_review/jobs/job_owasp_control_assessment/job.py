@@ -20,7 +20,7 @@ from appsec_review.owasp_workbench import (
     partition_work, publish_manifest, publish_shard, select_profiles,
     standards_manifest, target_class_ledger, verify_results,
 )
-from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT, DATASETS
+from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT, DATASETS, SOURCE_SELECTION
 from appsec_review.runtime.inputs import feed_input_identity
 from appsec_review.owasp_workbench.assessment import prepare_guidance, run_batch
 from appsec_review.owasp_workbench.engine import UNRESOLVED_OUTCOMES
@@ -122,9 +122,14 @@ def _fixture_or_accepted_inputs(unit: UnitContext) -> dict[str, Any]:
 
 
 def _core(unit: UnitContext) -> tuple[RetrievalCore, Path]:
+    if (getattr(unit.job, "input_manifest_path", None) is None
+            or getattr(unit.job, "input_manifest_sha256", None) is None):
+        raise ValueError("OWASP source view requires the attempt's explicit admitted manifest pin")
+    from appsec_review.storage.shared import safe_path
+    safe_path(unit.job.run_root, Path(unit.job.input_manifest_path).relative_to(unit.job.run_root).as_posix())
     path, sha256 = resolve_context_manifest(unit.job)
     return RetrievalCore(unit.job.run_root.parent, unit.job.run_id, manifest_path=path,
-                         manifest_sha256=sha256), path
+                         manifest_sha256=sha256, selection=SOURCE_SELECTION), path
 
 
 def _resolver(unit: UnitContext) -> EvidenceResolver:
@@ -132,7 +137,8 @@ def _resolver(unit: UnitContext) -> EvidenceResolver:
     typed = parse_settings(unit.job.config.settings)
     return EvidenceResolver(core, accept_manifest(unit.job.run_root, manifest_path=path,
                                                   manifest_sha256=core.manifest_sha256,
-                                                  dispositions=typed.source_dispositions),
+                                                  dispositions=typed.source_dispositions,
+                                                  selection=core.selection),
                             max_source_lines=typed.max_source_lines)
 
 

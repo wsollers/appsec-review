@@ -20,7 +20,7 @@ from appsec_review.interchange import decode_handoff
 from appsec_review.observability import PipelineLog
 from appsec_review.observability.spans import count_work
 from appsec_review.retrieval.index import (
-    INDEX_NAMES, MANIFEST_SCHEMA, IndexIdentity, load_verified_manifest, write_manifest,
+    INDEX_NAMES, MANIFEST_SCHEMA, IndexIdentity, IndexSelection, load_verified_manifest, write_manifest,
 )
 from appsec_review.retrieval.interfaces import ArtifactQueryRequest
 from appsec_review.retrieval.model import (
@@ -303,9 +303,12 @@ class RetrievalCore:
                  manifest_path: Path | None = None,
                  limits: RetrievalLimits | None = None, clock: Callable[[], float] = time.monotonic,
                  graph_settings: GraphSettings | None = None, log: PipelineLog | None = None,
-                 shard_filter: Callable[[Mapping[str, Any]], bool] | None = None):
+                 shard_filter: Callable[[Mapping[str, Any]], bool] | None = None,
+                 selection: IndexSelection | None = None):
         if not _RUN_ID.fullmatch(run_id):
             raise ValueError("invalid run id")
+        if selection is not None and (manifest_path is None or manifest_sha256 is None):
+            raise RetrievalIntegrityError("selected source views require an explicit manifest path and pin")
         self.run_root = RunStore(Path(runs_dir)).resolve(run_id)
         if graph_settings is None:
             # The run-bound jobs.job_code_graph_index.settings.graph bounds, so review cells and MCP
@@ -323,14 +326,16 @@ class RetrievalCore:
             if manifest_path is None:
                 manifest_path, accepted_sha = resolve_accepted_manifest(self.run_root)
             else:
-                manifest_path = Path(manifest_path).resolve()
+                manifest_path = (Path(manifest_path).absolute() if selection is not None
+                                 else Path(manifest_path).resolve())
                 if self.run_root not in manifest_path.parents or not manifest_path.is_file():
                     raise RetrievalIntegrityError("explicit retrieval manifest is unavailable or escapes the run")
                 accepted_sha = file_sha256(manifest_path)
             if manifest_sha256 is not None and not hmac.compare_digest(accepted_sha, manifest_sha256):
                 raise RetrievalIntegrityError("MCP session manifest pin does not match accepted index set")
             try:
-                self.manifest, self.manifest_sha256 = load_verified_manifest(self.run_root, manifest_path, accepted_sha)
+                self.manifest, self.manifest_sha256 = load_verified_manifest(
+                    self.run_root, manifest_path, accepted_sha, selection=selection)
             except RetrievalIntegrityError:
                 raise
             except ValueError as exc:
@@ -342,14 +347,19 @@ class RetrievalCore:
         self.target_root = Path(str(self.manifest["target_root"])).resolve()
         self.limits = limits or RetrievalLimits()
         self.clock = clock
+        self.selection = selection
+        self.view_identity = (selection.view_identity(self.manifest_sha256)
+                              if selection is not None else self.manifest_sha256)
         grouped: dict[str, list[Mapping[str, Any]]] = {}
         for item in self.manifest["indexes"]:
+            if selection is not None and not selection.includes(item):
+                continue
             if shard_filter is not None and not shard_filter(item):
                 continue
             grouped.setdefault(str(item["name"]), []).append(item)
         self.indexes = {name: ShardGroup(sorted(items, key=lambda item: str(item.get("shard_id", "default"))))
                         for name, items in grouped.items()}
-        view_identity = f"{run_id}:{self.manifest_sha256}"
+        view_identity = f"{run_id}:{self.view_identity}"
         if shard_filter is not None:
             view_identity += ":" + hashlib.sha256(canonical_json([
                 (name, row.get("shard_id", "default"), row["sha256"])
@@ -385,6 +395,15 @@ class RetrievalCore:
         _ACTIVE_MCP.reset(token)
 
     def _database(self, identity: Mapping[str, Any], deadline: float) -> sqlite3.Connection:
+        if self.selection is not None:
+            if not self.selection.includes(identity):
+                raise RetrievalIntegrityError("index is outside the selected source view")
+            from appsec_review.storage.validation import isolated_validation_scope
+            with isolated_validation_scope(self.run_root, policy_identity="index-selection:" + self.selection.sha256):
+                return self._verified_database(identity, deadline)
+        return self._verified_database(identity, deadline)
+
+    def _verified_database(self, identity: Mapping[str, Any], deadline: float) -> sqlite3.Connection:
         from appsec_review.runtime.inputs import observe_shard
         observe_shard(self.run_root, identity)
         from appsec_review.storage.shared import safe_path
@@ -410,6 +429,13 @@ class RetrievalCore:
                 identity["schema"], name, identity["fingerprint"], identity.get("shard_id", "default")):
             database.close()
             raise RetrievalIntegrityError(f"index metadata mismatch: {name}/{identity.get('shard_id', 'default')}")
+        if self.selection is not None:
+            from appsec_review.retrieval.index import _verify_selected_custody
+            try:
+                _verify_selected_custody(self.run_root, self.manifest, database, self.selection)
+            except Exception:
+                database.close()
+                raise
         database.set_progress_handler(lambda: 1 if self.clock() > deadline else 0, 1000)
         return database
 

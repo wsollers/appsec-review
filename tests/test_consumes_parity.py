@@ -54,16 +54,32 @@ def test_security_tagging_declares_the_manifest_publishers_it_follows() -> None:
     assert set(job.consumes) <= set(upstream_closure(job.job_id, dependencies, set(dependencies)))
 
 
-def test_owasp_declares_every_producer_the_tags_manifest_embeds() -> None:
-    """OWASP accepts security_tagging's manifest and opens every embedded shard, so it must declare
-    every producer that manifest can carry. Regression for smoke-cpp run 2026-11-13-0001: the target
-    produced profile data and test coverage, their shards reached the tags manifest, and
-    load_inputs refused with "undeclared or unsupplied shard producer: job_profile_data"."""
+def test_owasp_declares_exact_selected_owners_and_source_custody() -> None:
+    from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT, SOURCE_SELECTION
+    from appsec_review.runtime.contracts import InputChannel
     registry, _, _ = _graph()
-    owasp = registry.build("job_owasp_control_assessment")
-    tagging = registry.build("job_security_tagging")
-    missing = sorted(({*tagging.consumes, "job_security_tagging"} - set(owasp.consumes)) - {"job_owasp_control_assessment"})
-    assert not missing, f"OWASP cannot read shards from producers it does not declare: {missing}"
+    actual = {(item.producer, item.output_kind, item.schema, item.authority)
+              for item in CONTRACT.inputs if item.channel is InputChannel.HANDOFF and item.output_kind != "handoff"}
+    expected = {(producer, item.output_kind, item.schema, item.authority)
+                for producer in CONTRACT.consumes for item in registry.build(producer).datasets
+                if any((producer, name) in SOURCE_SELECTION.producer_indexes for name in item.indexes)
+                or (producer, item.output_kind) in SOURCE_SELECTION.custody_outputs}
+    assert actual == expected
+
+
+def test_owasp_receipts_only_the_selected_shards_it_opens(tmp_path) -> None:
+    from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT, SOURCE_SELECTION
+    from appsec_review.runtime.inputs import input_read_scope
+    from tests.unit.retrieval.test_selected_manifest import CATALOG, fixture, read
+    value = fixture(tmp_path)
+    value.context.contract = CONTRACT
+    value.context.upstream_handoffs = {CATALOG: value.context.upstream_handoffs[CATALOG]}
+    with input_read_scope(value.context) as receipts:
+        core = read(value, SOURCE_SELECTION)
+        assert core.find(identity=value.source)["results"]
+    assert {(item["producer"], item["output_kind"]) for item in receipts.document()["reads"]} == {
+        (CATALOG, "source_files")}
+    assert all(item["read"] and item["cited"] is None for item in receipts.document()["reads"])
 
 
 def test_owasp_evidence_import_does_not_depend_on_registry_preload() -> None:

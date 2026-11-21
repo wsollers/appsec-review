@@ -246,6 +246,13 @@ The accepted manifest joins `standards`, `component-classification`, `applicabil
 `validation-work`, `finding-package` and `control-result` shards. It records assessment mode,
 accepted upstream manifest, immutable configuration identity and `assessment_bounds`, including
 the resolved `max_source_lines` used when later projections re-resolve citations.
+The OWASP source view is an application-owned `IndexSelection`, derived alongside explicit input
+requirements in the job's dataset module. It narrows producer/index identities without granting
+access. The original manifest hash is preserved separately from the view identity; ancestry
+envelopes/descriptors are authenticated without opening obsolete payloads. Selected payloads and
+generated/binary backing dependencies retain exact admitted-owner and byte checks, and relations
+must close over selected, admitted endpoints. Selected verification and query opens isolate their
+digest/admission state from full or other-view caches; cursor identities also bind the view.
 
 Attempted or reused, subject-bound results become PRECOMPUTED `control_evidence`, then provisional `owasp_control` leads and
 lead/hunt packages. Deep custody and obligations stay lossless in the hash-pinned workbench

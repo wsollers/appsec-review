@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 from tempfile import TemporaryDirectory
 from typing import Any, Iterable, Mapping
@@ -35,6 +36,38 @@ INDEX_NAMES = (
     "debug_symbols",
     "binary",
 )
+
+
+@dataclass(frozen=True, slots=True)
+class IndexSelection:
+    """Trusted application selection, never an input permission or a worker-supplied filter."""
+
+    producer_indexes: tuple[tuple[str, str], ...]
+    custody_outputs: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        for field in ("producer_indexes", "custody_outputs"):
+            values = getattr(self, field)
+            if not isinstance(values, tuple) or any(
+                    not isinstance(pair, tuple) or len(pair) != 2
+                    or not all(isinstance(value, str) for value in pair)
+                    or not re.fullmatch(r"job_[a-z0-9_]+", pair[0])
+                    or not re.fullmatch(r"[a-z][a-z0-9_]*", pair[1]) for pair in values):
+                raise ValueError("index selection requires explicit producer/index or custody identities")
+            object.__setattr__(self, field, tuple(sorted(set(values))))
+        if any(index not in INDEX_NAMES for _, index in self.producer_indexes):
+            raise ValueError("index selection names an unknown index")
+
+    @property
+    def sha256(self) -> str:
+        return hashlib.sha256(canonical_json(asdict(self))).hexdigest()
+
+    def includes(self, shard: Mapping[str, Any]) -> bool:
+        return (shard.get("producer", {}).get("job"), shard["name"]) in self.producer_indexes
+
+    def view_identity(self, manifest_sha256: str) -> str:
+        return hashlib.sha256(canonical_json({
+            "manifest_sha256": manifest_sha256, "selection_sha256": self.sha256})).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -391,15 +424,45 @@ def write_manifest(
 def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | None = None,
                            _seen: frozenset[Path] = frozenset(),
                            verified: dict[tuple[Path, str], Mapping[str, Any]] | None = None,
+                           *, selection: IndexSelection | None = None,
                            ) -> tuple[Mapping[str, Any], str]:
-    """Verify the manifest and every immutable shard before opening any database.
+    """Authenticate the original manifest, optionally reading only a trusted root payload view.
+
+    Ancestry envelopes and descriptors remain authenticated in selected views, but superseded
+    ancestor payloads are availability, not this view's reads. Default verification is unchanged.
+    """
+    if selection is None:
+        return _load_verified_manifest(run_root, path, expected_sha256, _seen, verified)
+    if not isinstance(selection, IndexSelection):
+        raise ValueError("manifest selection must be a trusted IndexSelection")
+    if expected_sha256 is None:
+        raise ValueError("selected source views require an explicit manifest path and pin")
+    # Full/admitted contexts attest a different read surface. Selected verification starts with
+    # fresh digests and admission checks; only its own recursive ancestry shares validation state.
+    from appsec_review.storage.validation import isolated_validation_scope
+    with isolated_validation_scope(Path(run_root), policy_identity="index-selection:" + selection.sha256):
+        return _load_verified_manifest(run_root, path, expected_sha256, _seen, {}, selection=selection)
+
+
+def _load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | None = None,
+                            _seen: frozenset[Path] = frozenset(),
+                            verified: dict[tuple[Path, str], Mapping[str, Any]] | None = None,
+                            *, selection: IndexSelection | None = None,
+                            _payloads: bool = True,
+                            ) -> tuple[Mapping[str, Any], str]:
+    """Verify full manifests, or selected root payloads with authenticated ancestry envelopes.
 
     ``verified`` memoizes manifests already verified in full, keyed by path and content hash, so
-    an ancestor shared by several upstream lineages is verified once per call (or once per caller
-    that passes the same mapping) instead of once per path through the lineage graph.
+    an ancestor shared by several upstream lineages is verified once per call. Selected views use
+    an isolated operation and local memo; they never inherit external full/admitted attestations.
     """
     run_root = Path(run_root).resolve()
-    resolved = Path(path).resolve()
+    if selection is not None:
+        from appsec_review.storage.shared import safe_path
+        relative = Path(path).absolute().relative_to(run_root).as_posix()
+        resolved = safe_path(run_root, relative)
+    else:
+        resolved = Path(path).resolve()
     if resolved in _seen:
         raise ValueError("index manifest dependency cycle")
     seen_manifests = _seen | {resolved}
@@ -413,13 +476,16 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
         raise ValueError("index manifest integrity mismatch")
     if verified is None:
         verified = {}
-    manifest_key = ("manifest", str(resolved), actual)
+    cache_identity = actual if selection is None else actual + ":" + selection.sha256
+    if not _payloads:
+        cache_identity += ":envelope"
+    manifest_key = ("manifest", str(resolved), cache_identity)
     if validation is not None and manifest_key in validation.records:
         return validation.records[manifest_key], actual
     from appsec_review.observability.spans import count_work
     count_work("manifest_validations")
-    if (resolved, actual) in verified:
-        return verified[(resolved, actual)], actual
+    if (resolved, cache_identity) in verified:
+        return verified[(resolved, cache_identity)], actual
     document = json.loads(resolved.read_text(encoding="utf-8"))
     if document.get("schema") != MANIFEST_SCHEMA:
         raise ValueError("unsupported index manifest schema")
@@ -427,7 +493,12 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
     if content_hash != hashlib.sha256(canonical_json(document)).hexdigest():
         raise ValueError("index manifest content hash mismatch")
     document["content_sha256"] = content_hash
-    if validation is not None:
+    if selection is not None:
+        if document.get("run_id") != run_root.name or not isinstance(document.get("target_snapshot"), str):
+            raise ValueError("selected manifest run or target identity is invalid")
+        if not isinstance(document.get("indexes"), list) or not isinstance(document.get("upstream_manifests", []), list):
+            raise ValueError("selected manifest descriptors are invalid")
+    if validation is not None and selection is None:
         admitted = validation.admitted_manifests.get(resolved.relative_to(run_root).as_posix())
         if admitted is not None and admitted["sha256"] == actual:
             if admitted["document"] != document:
@@ -441,16 +512,24 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
             return document, actual
     swift_enabled = swift_enabled_from_run(run_root)
     for upstream in document.get("upstream_manifests", []):
-        upstream_path = (run_root / str(upstream.get("path", ""))).resolve()
+        upstream_path = run_root / str(upstream.get("path", ""))
+        if selection is None:
+            upstream_path = upstream_path.resolve()
         if upstream_path == resolved:
             raise ValueError("index manifest references itself")
-        load_verified_manifest(run_root, upstream_path, str(upstream.get("sha256", "")), seen_manifests,
-                               verified)
+        parent, _ = _load_verified_manifest(run_root, upstream_path, str(upstream.get("sha256", "")), seen_manifests,
+                                           verified, selection=selection, _payloads=selection is None)
+        if selection is not None and (parent["run_id"], parent["target_snapshot"]) != (
+                document["run_id"], document["target_snapshot"]):
+            raise ValueError("selected manifest ancestry run/target mismatch")
     seen: set[tuple[str, str]] = set()
     entity_ids: set[str] = set()
     relations: list[tuple[str, str, str, str]] = []
     for raw in document.get("indexes", []):
         count_work("shard_references")
+        if selection is not None and (not isinstance(raw, Mapping)
+                                      or not isinstance(raw.get("producer"), Mapping)):
+            raise ValueError("selected manifest shard descriptor is invalid")
         identity = IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))})
         shard_key = (identity.name, identity.shard_id)
         if shard_key in seen:
@@ -458,6 +537,13 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
         seen.add(shard_key)
         from appsec_review.storage.shared import safe_path
         candidate = safe_path(run_root, identity.relative_path)
+        if selection is not None:
+            if not isinstance(identity.producer.get("job"), str):
+                raise ValueError("selected manifest descriptor has no producer identity")
+            if not _payloads or not selection.includes(raw):
+                continue
+            from appsec_review.runtime.inputs import observe_shard
+            observe_shard(run_root, raw)
         if identity.relative_path.startswith("data/shared/"):
             from appsec_review.storage.shared import safe_path, verify_receipt
             candidate = safe_path(run_root, identity.relative_path)
@@ -479,6 +565,7 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
         summary_key = ("shard", canonical_json({
             "identity": raw, "target_snapshot": document.get("target_snapshot"),
             "swift_enabled": swift_enabled,
+            **({"selection_sha256": selection.sha256} if selection is not None else {}),
         }).decode("utf-8"), identity.sha256)
         if validation is not None and summary_key in validation.records:
             cached_entities, cached_relations = validation.records[summary_key]
@@ -496,6 +583,8 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
                 raise ValueError(f"index metadata mismatch: {identity.name}/{identity.shard_id}")
             if metadata.get("target_snapshot") != document.get("target_snapshot"):
                 raise ValueError(f"index target snapshot mismatch: {identity.name}/{identity.shard_id}")
+            if selection is not None:
+                _verify_selected_custody(run_root, document, database, selection)
             # The catalog is the sole durable inventory exception. Every derived shard is checked
             # independently so a stale or externally presented Swift artifact fails closed.
             if not swift_enabled and identity.producer.get("job") != "job_target_catalog":
@@ -524,8 +613,42 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
                 validation.records[summary_key] = (shard_entities, shard_relations)
     for relation_id, source_id, target_id, shard_id in relations:
         if source_id not in entity_ids or target_id not in entity_ids:
-            raise ValueError(f"relation closure mismatch: {shard_id}/{relation_id}")
-    verified[(resolved, actual)] = document
+            label = "selected relation endpoint unavailable or unadmitted" if selection is not None else "relation closure mismatch"
+            raise ValueError(f"{label}: {shard_id}/{relation_id}")
+    verified[(resolved, cache_identity)] = document
     if validation is not None:
         validation.records[manifest_key] = document
     return document, actual
+
+
+def _verify_selected_custody(run_root: Path, manifest: Mapping[str, Any],
+                              database: sqlite3.Connection, selection: IndexSelection) -> None:
+    from appsec_review.retrieval.source_resolution import read_source_bytes, source_native
+    from appsec_review.runtime.consume import accepted_upstream
+    from appsec_review.runtime.inputs import observe_output
+    from appsec_review.storage.validation import current_validation
+    validation = current_validation(run_root)
+    for path, sha256, raw in database.execute("SELECT path, file_sha256, producer_location_json FROM locations"):
+        native = source_native(json.loads(raw))
+        if not native:
+            continue
+        producer, output = (("job_binary_evidence_indexing", "binary_pseudo_c")
+                            if native["source_domain"] == "binary"
+                            else ("job_tree_sitter_ast", "generated_source_backing"))
+        if (producer, output) not in selection.custody_outputs:
+            raise ValueError(f"selected source custody dependency is not selected: {producer}/{output}")
+        key = ("source-custody", selection.sha256, hashlib.sha256(canonical_json({
+            "native": native, "path": path, "sha256": sha256,
+            "target_snapshot": manifest["target_snapshot"]})).hexdigest())
+        if validation is not None and key in validation.records:
+            continue
+        reference = native["source_backing"]
+        accepted = accepted_upstream(run_root, producer)
+        if not any(item["path"] == reference["path"] and item["sha256"] == reference["sha256"]
+                   for item in accepted.handoff["artifacts"]):
+            raise ValueError("selected source backing is not bound to its admitted producer")
+        observe_output(run_root, producer, output, reference)
+        read_source_bytes(run_root, Path(manifest["target_root"]), target_snapshot=manifest["target_snapshot"],
+                          path=path, sha256=sha256, native=native)
+        if validation is not None:
+            validation.records[key] = True
