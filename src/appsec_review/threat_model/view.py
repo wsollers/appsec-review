@@ -37,8 +37,8 @@ class EvidenceView(Protocol):
     def entities(self, producer: str, output_kind: str, kind: str, *, limit: int) -> Page:
         """Entities of one kind published by one producer output, in entity-id order."""
 
-    def search_calls(self, name: str, *, limit: int) -> Page:
-        """Tree-sitter ``call_expression`` nodes whose written callee name is exactly ``name``."""
+    def search_calls(self, name: str, *, limit: int, languages: tuple[str, ...] | None = None) -> Page:
+        """Exact written-name calls, optionally language-bounded; unknown languages remain diagnostic."""
 
 
 @dataclass(frozen=True, slots=True)

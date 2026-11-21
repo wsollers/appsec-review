@@ -1548,11 +1548,12 @@ def _build_symbol_links(context: ProductContext, selected: tuple[Mapping[str, An
 
 
 def _select_threat_boundaries(shards: ShardSet) -> tuple[Mapping[str, Any], ...]:
-    return (
-        *shards.select(index="documents", job=CATALOG),
-        *shards.select(index="components", job=CATALOG),
-        *shards.select(index="source", job=CATALOG),
-    )
+    # Citation resolution depends on which admitted producer shards are available, not only
+    # the generated document bytes. Include those identities in the derived-shard fingerprint.
+    return shards.select(job=(
+        CATALOG, "job_artifact_indexing", "job_language_build", "job_cpp_compiled_analysis",
+        "job_code_graph_index", "job_tree_sitter_ast", "job_review_prioritization",
+    ))
 
 
 def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
@@ -1577,8 +1578,9 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
         str(row["native_id"]): row["identity"]
         for row in shards.entities(shards.select(index="components", job=CATALOG), kinds=("component",))
     }
-    sources_by_path = {
-        str((row.get("location") or {}).get("path")): row["identity"]
+    sources_by_location = {
+        (str((row.get("location") or {}).get("path")), str((row.get("location") or {}).get("file_sha256"))):
+            row["identity"]
         for row in shards.entities(shards.select(index="source", job=CATALOG), kinds=("source_file",))
         if (row.get("location") or {}).get("path")
     }
@@ -1588,7 +1590,8 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
     tm_doc = tm_state.get("threat_model") if isinstance(tm_state.get("threat_model"), Mapping) else {}
 
     elements_by_id: dict[str, Mapping[str, Any]] = {}
-    for elem in (dfd_doc.get("elements") or dfd_doc.get("nodes") or ()):
+    citation_locations: dict[tuple[str, str], Mapping[str, Any] | None] = {}
+    for elem in dfd_doc.get("elements") or ():
         if isinstance(elem, Mapping) and isinstance(elem.get("id"), str):
             elements_by_id[elem["id"]] = elem
 
@@ -1606,7 +1609,10 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
                 "cross_boundary_flows": [],
                 "threats": [],
                 "source_paths": set(),
+                "source_identities": set(),
                 "evidence_refs": set(),
+                "citations": {},
+                "projection_gaps": set(),
                 "doc_identities": set(),
                 "seen_details": defaultdict(set),
             }
@@ -1618,12 +1624,55 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
             return
         for item in items:
             if isinstance(item, Mapping):
-                ref = item.get("ref") or item.get("source_identity")
+                ref = item.get("ref")
                 if isinstance(ref, str) and ref:
                     bucket["evidence_refs"].add(ref)
-                path = item.get("path")
-                if isinstance(path, str) and path:
-                    bucket["source_paths"].add(path)
+                entity_id = item.get("entity_id")
+                publication = item.get("publication") or {}
+                if isinstance(entity_id, str) and entity_id.startswith("asr:") and isinstance(publication, Mapping):
+                    key = (entity_id, str(publication.get("sha256")))
+                    if key not in citation_locations:
+                        from appsec_review.indexing.store import open_shard
+                        location = None
+                        for shard in shards.shards:
+                            if (shard["sha256"] == publication.get("sha256")
+                                    and shard["name"] == publication.get("index")
+                                    and shard.get("shard_id", "default") == publication.get("shard_id")
+                                    and shard.get("producer", {}).get("job") == publication.get("job")):
+                                with open_shard(context.run_root, shard) as database:
+                                    found = database.execute(
+                                        "SELECT e.identity, l.mapping_method, l.confidence, l.ambiguous "
+                                        "FROM entities e LEFT JOIN locations l ON l.entity_id = e.identity "
+                                        "WHERE e.identity = ? AND e.kind = ?", (entity_id, item.get("entity_kind"))
+                                    ).fetchone()
+                                    location = dict(found) if found else None
+                                break
+                        citation_locations[key] = location
+                    location = citation_locations[key]
+                    if location is not None:
+                        bucket["citations"][entity_id] = {
+                            "basis": item.get("basis"), "publication": publication, "locator": item.get("locator"),
+                            "mapping_method": location["mapping_method"], "confidence": location["confidence"],
+                            "ambiguous": location["ambiguous"],
+                        }
+                    else:
+                        bucket["projection_gaps"].add(
+                            f"citation_unavailable: {entity_id} is not in its hash-pinned admitted shard")
+                locator = item.get("locator")
+                match = re.fullmatch(
+                    r"(.+):([0-9]+)-([0-9]+)(?:#b([0-9]+)-([0-9]+))?@([0-9a-f]{64})",
+                    locator) if isinstance(locator, str) else None
+                if match:
+                    from appsec_review.threat_model.contract import SourceSpan
+                    try:
+                        span = SourceSpan(match[1], match[6], int(match[2]), int(match[3]),
+                                          int(match[4]) if match[4] else None, int(match[5]) if match[5] else None)
+                    except ValueError:
+                        continue
+                    bucket["source_paths"].add(span.path)
+                    source = sources_by_location.get((span.path, span.file_sha256))
+                    if source:
+                        bucket["source_identities"].add(source)
 
     def _retain(bucket: dict[str, Any], field: str, key: str, item: dict[str, Any]) -> None:
         seen = bucket["seen_details"][field]
@@ -1634,38 +1683,30 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
         bucket[field].sort(key=lambda value: value[key])
         del bucket[field][16:]
 
-    element_to_boundary: dict[str, str] = {}
-    for raw_b in (dfd_doc.get("boundaries") or dfd_doc.get("trust_boundaries") or ()):
+    element_to_boundaries: dict[str, set[str]] = defaultdict(set)
+    for raw_b in dfd_doc.get("boundaries") or ():
         if not isinstance(raw_b, Mapping) or not isinstance(raw_b.get("id"), str):
             continue
         bid = raw_b["id"]
         trust = str(raw_b.get("kind") or raw_b.get("trust_level") or raw_b.get("zone") or "trust_boundary")
         b_entry = _ensure_boundary(bid, label=str(raw_b.get("name") or bid), trust_level=trust, origin="generated_threat_model")
-        for member_id in (raw_b.get("elements") or raw_b.get("element_ids") or raw_b.get("node_ids") or raw_b.get("members") or ()):
+        for member_id in raw_b.get("inside") or ():
             if isinstance(member_id, str):
                 b_entry["element_ids"].add(member_id)
-                element_to_boundary[member_id] = bid
+                element_to_boundaries[member_id].add(bid)
                 elem = elements_by_id.get(member_id) or {}
-                comp_id = elem.get("component_id")
-                if isinstance(comp_id, str) and comp_id:
-                    b_entry["component_ids"].add(comp_id)
+                for comp_id in elem.get("component_ids") or ():
+                    if isinstance(comp_id, str) and comp_id:
+                        b_entry["component_ids"].add(comp_id)
+                _collect_evidence(elem.get("evidence"), b_entry)
         _collect_evidence(raw_b.get("evidence"), b_entry)
 
     for flow in dfd_doc.get("flows") or ():
         if not isinstance(flow, Mapping) or not isinstance(flow.get("id"), str):
             continue
-        crossed = list(flow.get("crosses") or flow.get("boundaries") or ())
-        src_el = str(flow.get("source") or flow.get("source_id") or flow.get("from") or "")
-        dst_el = str(flow.get("target") or flow.get("target_id") or flow.get("to") or "")
-        if not crossed:
-            b_src = element_to_boundary.get(src_el)
-            b_dst = element_to_boundary.get(dst_el)
-            if b_src and b_dst and b_src != b_dst:
-                crossed = [b_dst]
-            elif b_dst:
-                crossed = [b_dst]
-            elif b_src:
-                crossed = [b_src]
+        crossed = list(flow.get("crosses") or ())
+        src_el = str(flow.get("source") or "")
+        dst_el = str(flow.get("target") or "")
         for bid in crossed:
             if not isinstance(bid, str) or not bid:
                 continue
@@ -1674,37 +1715,33 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
                     "flow_id": flow["id"],
                     "source": src_el,
                     "target": dst_el,
-                    "protocol": str(flow.get("protocol") or flow.get("channel") or "unspecified")[:64],
+                    "protocol": str((flow.get("attributes") or {}).get("protocol") or "unspecified")[:64],
             })
             _collect_evidence(flow.get("evidence"), b_entry)
 
-    for ep in (list(tm_doc.get("entry_points") or ()) + list(dfd_doc.get("entry_points") or ())):
+    for ep in tm_doc.get("entry_points") or ():
         if not isinstance(ep, Mapping) or not isinstance(ep.get("id"), str):
             continue
-        target_bid = str(ep.get("boundary_id") or element_to_boundary.get(str(ep.get("element_id") or ep.get("node_id") or "")) or "boundary:entry_surface")
-        b_entry = _ensure_boundary(target_bid, label="Entry Surface" if target_bid == "boundary:entry_surface" else None,
-                                   trust_level=str(ep.get("trust_level") or "untrusted_entry"))
-        _retain(b_entry, "entry_points", "entry_point_id", {
+        target_bids = element_to_boundaries.get(str(ep.get("process") or ""), set())
+        if not target_bids:
+            derived.gap(f"unassigned_entry_point: {ep['id']} has no declared process trust boundary")
+        for target_bid in sorted(target_bids):
+            b_entry = boundaries[target_bid]
+            _retain(b_entry, "entry_points", "entry_point_id", {
                 "entry_point_id": ep["id"],
-                "name": str(ep.get("name") or ep["id"])[:200],
-                "kind": str(ep.get("kind") or "entry_point")[:64],
-                "element_id": ep.get("element_id") or ep.get("node_id"),
-        })
-        _collect_evidence(ep.get("evidence"), b_entry)
+                "name": str(ep.get("enclosing_symbol") or ep["id"])[:200],
+                "kind": str(ep.get("interaction") or "entry_point")[:64],
+                "element_id": ep.get("process"),
+            })
+            _collect_evidence(ep.get("evidence"), b_entry)
 
     for threat in tm_doc.get("threats") or ():
         if not isinstance(threat, Mapping) or not isinstance(threat.get("id"), str):
             continue
-        t_bids = list(threat.get("boundaries") or ())
-        if not t_bids and isinstance(threat.get("boundary_id"), str):
-            t_bids = [threat["boundary_id"]]
+        t_bids = list(threat.get("boundary_ids") or ())
         if not t_bids:
-            subj = str(threat.get("subject_id") or threat.get("target_id") or threat.get("target") or threat.get("element_id") or "")
-            if subj in element_to_boundary:
-                t_bids = [element_to_boundary[subj]]
-            else:
-                derived.gap(f"unassigned_threat: {threat['id']} has no declared or source-resolved trust boundary")
-                continue
+            derived.gap(f"unassigned_threat: {threat['id']} has no declared or source-resolved trust boundary")
+            continue
         for bid in t_bids:
             if not isinstance(bid, str) or not bid:
                 continue
@@ -1712,8 +1749,8 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
             _retain(b_entry, "threats", "threat_id", {
                     "threat_id": threat["id"],
                     "category": str(threat.get("category") or threat.get("stride") or "unspecified")[:64],
-                    "title": str(threat.get("title") or threat.get("statement") or threat["id"])[:240],
-                    "severity": str(threat.get("severity") or "medium")[:32],
+                    "title": f"{threat.get('state', 'unassessed')}: {threat.get('title') or threat['id']}"[:240],
+                    "severity": "unspecified",
             })
             _collect_evidence(threat.get("evidence"), b_entry)
 
@@ -1758,11 +1795,13 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
         doc_ids = sorted(b_entry["doc_identities"])[:16]
         subj_id = next((components_by_native[cid] for cid in comp_ids if cid in components_by_native), None)
         if subj_id is None:
-            subj_id = next((sources_by_path[p] for p in src_paths if p in sources_by_path), None)
+            subj_id = min(b_entry["source_identities"], default=None)
         if subj_id is None and doc_ids:
             subj_id = doc_ids[0]
         subj_path = src_paths[0] if src_paths else None
-        row_gaps: list[str] = []
+        row_gaps: list[str] = sorted(b_entry["projection_gaps"])
+        for gap in row_gaps:
+            derived.gap(f"{bid}: {gap}")
         for field, bound in (("element_ids", 32), ("component_ids", 16), ("source_paths", 16),
                              ("evidence_refs", 24), ("doc_identities", 16), ("entry_points", 16),
                              ("cross_boundary_flows", 16), ("threats", 16)):
@@ -1788,7 +1827,8 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
             subject_path=subj_path,
             status="partial" if row_gaps else "complete",
             gaps=row_gaps,
-            basis="accepted generated DFD/threat-model artifacts and catalogued target boundary documents; routing context only",
+            basis="accepted generated threat hypotheses and catalogued target boundary documents; "
+                  "routing context only, not verified vulnerabilities or semantic proof",
             upstream=upstream[:16],
             fact_type="threat_boundary",
             result={
@@ -1815,13 +1855,9 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
         for cid in comp_ids:
             if cid in components_by_native:
                 linked_targets.append(components_by_native[cid])
-        for sp in src_paths:
-            if sp in sources_by_path:
-                linked_targets.append(sources_by_path[sp])
+        linked_targets.extend(sorted(b_entry["source_identities"]))
         linked_targets.extend(doc_ids)
-        for ref in ev_refs:
-            if ref.startswith("asr:"):
-                linked_targets.append(ref)
+        linked_targets.extend(sorted(b_entry["citations"]))
         linked_targets = list(dict.fromkeys(linked_targets))
         if len(linked_targets) > 16:
             gap = f"truncated: {bid}: {len(linked_targets) - 16} boundary provenance links omitted"
@@ -1832,7 +1868,11 @@ def _build_threat_boundaries(context: ProductContext, selected: tuple[Mapping[st
         for target_id in linked_targets[:16]:
             derived.relations.append(
                 RelationRecord(RelationKind.DERIVED_FROM, record_fact.identity.value, target_id,
-                               True, 1.0, None, {"query_set": name})
+                               True, 1.0, None, {
+                                   "query_set": name, "authority": "routing_context",
+                                   "mapping_method": "generated-model-provenance",
+                                   "citation": b_entry["citations"].get(target_id),
+                               })
             )
     if len(ordered_ids) > context.max_facts:
         derived.gap(f"truncated: {len(ordered_ids) - context.max_facts} trust boundary record(s) exceeded the fact bound")
@@ -1936,7 +1976,7 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
     ProductRule("symbol_links", "symbol-links/1", _select_symbol_links, _build_symbol_links,
                 links=("symbol_syntax",)),
     ProductRule("document_context", "document-context/2", _select_document_context, _build_document_context),
-    ProductRule("threat_boundaries", "threat-boundaries/2", _select_threat_boundaries, _build_threat_boundaries,
+    ProductRule("threat_boundaries", "threat-boundaries/3", _select_threat_boundaries, _build_threat_boundaries,
                 threat_model=True),
 )
 assert tuple(rule.query_set for rule in PRODUCT_RULES) == FIRST_STAGE_SETS

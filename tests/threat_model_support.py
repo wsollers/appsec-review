@@ -63,7 +63,10 @@ class FakeEvidenceView:
                        key=lambda item: item.entity_id)
         return Page(tuple(found[:limit]), len(found) > limit)
 
-    def search_calls(self, name: str, *, limit: int) -> Page:
+    def search_calls(self, name: str, *, limit: int, languages: tuple[str, ...] | None = None) -> Page:
         self.queries.append(("search_calls", name, limit))
-        found = sorted(self._calls.get(name, []), key=lambda item: item.entity_id)
+        found = sorted((item for item in self._calls.get(name, [])
+                        if languages is None or not isinstance(item.payload.get("language"), str)
+                        or not item.payload["language"].strip() or item.payload["language"] in languages),
+                       key=lambda item: item.entity_id)
         return Page(tuple(found[:limit]), len(found) > limit)

@@ -232,33 +232,10 @@ def test_t172_threat_boundaries_product_and_indexing_contract(tmp_path: Path) ->
     att = run_root / "data" / "jobs" / "job_threat_model_generation" / "attempts" / "attempt_0001"
     out_dir = att / "outputs"
     out_dir.mkdir(parents=True)
-    dfd_doc = {
-        "schema": "appsec-review/generated-dfd/1",
-        "trust_boundaries": [
-            {"id": "tb-edge", "name": "Public Edge", "trust_level": "untrusted-to-app",
-             "node_ids": ["proc-api"], "evidence_ids": ["ev-1"]}
-        ],
-        "nodes": [
-            {"id": "ext-client", "kind": "external_entity", "name": "Browser", "trust_boundary_id": None, "evidence_ids": ["ev-1"]},
-            {"id": "proc-api", "kind": "process", "name": "API Handler", "trust_boundary_id": "tb-edge", "evidence_ids": ["ev-1"]},
-        ],
-        "flows": [
-            {"id": "flow-1", "source_id": "ext-client", "target_id": "proc-api",
-             "crosses_trust_boundary": True, "protocol": "https", "auth_evidence": "none", "evidence_ids": ["ev-1"]}
-        ],
-        "entry_points": [
-            {"id": "ep-login", "name": "POST /login", "node_id": "proc-api",
-             "kind": "http_route", "source_path": "src/auth.py", "evidence_ids": ["ev-1"]}
-        ],
-    }
-    tm_doc = {
-        "schema": "appsec-review/generated-threat-model/1",
-        "threats": [
-            {"id": "thr-1", "stride": "Spoofing", "statement": "Unauthenticated POST /login spoofing",
-             "target_id": "proc-api", "flow_id": "flow-1", "entry_point_ids": ["ep-login"],
-             "priority": "high", "priority_inputs": {"boundary_crossing": True}, "evidence_ids": ["ev-1"]}
-        ],
-    }
+    from tests.test_threat_model_documents import documents, plains
+    from appsec_review.threat_model.validate import validate_documents
+    dfd_doc, tm_doc, evidence_doc, generated_result = plains(documents())
+    validate_documents(dfd_doc, tm_doc, evidence_doc, generated_result)
     res_doc = {"schema": "appsec-review/threat-model-generation/1", "counts": {"threats": 1},
                "gaps": [f"upstream coverage gap {i}" for i in range(14)]}
     for fname, payload in (("dfd.json", dfd_doc), ("threat-model.json", tm_doc), ("result.json", res_doc)):
@@ -303,7 +280,7 @@ def test_unassigned_threat_is_not_attached_to_first_boundary(tmp_path: Path) -> 
     ctx = products.ProductContext(
         run_root=tmp_path, snapshot=SNAPSHOT, shards=ShardSet(tmp_path, ()), links={}, feeds={},
         owasp={}, max_facts=10, threat_model={
-            "status": "accepted", "dfd": {"trust_boundaries": [{"id": "a"}, {"id": "z"}]},
+            "status": "accepted", "dfd": {"boundaries": [{"id": "a"}, {"id": "z"}]},
             "threat_model": {"threats": [{"id": "unassigned", "title": "No declared subject"}]},
         },
     )

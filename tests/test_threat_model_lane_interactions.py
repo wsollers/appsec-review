@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 from typing import Any
 
 from appsec_review.interchange import GAP_SCHEMA, GapCode
@@ -43,6 +44,9 @@ class FakeRules:
     def interaction_for_callee(self, name: str) -> Interaction | None:
         return self.callees.get(name)
 
+    def languages_for_callee(self, name: str) -> tuple[str, ...]:
+        return ("c", "cpp")
+
 
 def _scope(build_unit_id: str | None = "unit-server", component_id: str | None = "component-net") -> dict[str, Any]:
     return {"scope_id": "scope-1", "language": "cpp", "build_unit_id": build_unit_id, "component_id": component_id}
@@ -50,7 +54,9 @@ def _scope(build_unit_id: str | None = "unit-server", component_id: str | None =
 
 def entry_point(entity_id: str, source_class: str, path: str, line: int, *, function: str = "net::serve",
                 api: str | None = "recv") -> EvidenceRecord:
-    payload = {"family": "entry_point", "scope": _scope(), "exact": True, "result": {
+    payload = {"family": "entry_point", "scope": _scope(), "exact": True,
+               "producer": {"name": "codeql-export"}, "coverage_status": "complete",
+               "cross_check": {"state": "not_covered"}, "admissibility": {"direct_eligible": True}, "result": {
         "source_class": source_class,
         "api_or_parameter": {"display": f"call to {api}", "node_kind": "call", "api": api, "index": 1},
         "enclosing_function": {"symbol": f"symbol:{function}", "display": function},
@@ -61,7 +67,9 @@ def entry_point(entity_id: str, source_class: str, path: str, line: int, *, func
 
 def sink_site(entity_id: str, sink_class: str, path: str, line: int, *, function: str = "run_job",
               api: str = "system") -> EvidenceRecord:
-    payload = {"family": "sink_site", "scope": _scope("unit-worker", None), "exact": True, "result": {
+    payload = {"family": "sink_site", "scope": _scope("unit-worker", None), "exact": True,
+               "producer": {"name": "codeql-export"}, "coverage_status": "complete",
+               "cross_check": {"state": "not_covered"}, "admissibility": {"direct_eligible": True}, "result": {
         "sink_class": sink_class, "cwe_family": "CWE-78", "api": {"display": api, "declared_in": "stdlib.h"},
         "argument_index": 0, "display": f"{api}(...)", "enclosing_function": {"symbol": None, "display": function},
         "dominating_sanitizer_count": 0, "catalog_rule": "rule-2", "model": "command", "models": ["command"]}}
@@ -105,8 +113,8 @@ def test_graph_entry_point_yields_a_verified_semantic_fact_with_its_source_class
         "interaction": "network_listen", "path": "src/net/server.cpp", "source_class": "remote", "sink_class": None,
         "callee": "recv", "enclosing_symbol": "net::serve", "build_unit_id": "unit-server",
         "component_id": "component-net"}
-    assert dict(fact.native_identity) == {"interaction": "network_listen", "path": "src/net/server.cpp",
-                                          "start_line": 42, "enclosing_symbol": "net::serve"}
+    assert fact.native_identity["build_unit_id"] == "unit-server"
+    assert fact.native_identity["file_sha256"] == span("src/net/server.cpp", 42).file_sha256
     (evidence,) = fact.evidence
     assert (evidence.entity_id, evidence.entity_kind, evidence.basis, evidence.rule) == (
         "entry:1", "entry_point", Basis.VERIFIED_SEMANTIC, "graph.entry_point.remote")
@@ -143,10 +151,13 @@ def test_call_site_by_name_yields_an_observed_syntax_fact_only() -> None:
     assert (syntax_row.producer, syntax_row.output_kind, syntax_row.records_read) == (*SYNTAX, 1)
 
 
-def test_graph_fact_wins_over_a_syntax_fact_at_the_same_location() -> None:
-    view = FakeEvidenceView().add(entry_point("entry:1", "remote", "src/net/server.cpp", 42, api="accept"))
-    view.add_call("accept", call_site("ast:7", "accept", "src/net/server.cpp", 42, enclosing="serve",
-                                      build_unit_id="unit-other"))
+def test_graph_fact_wins_only_over_syntax_with_the_same_span_and_ownership() -> None:
+    graph = entry_point("entry:1", "remote", "src/net/server.cpp", 42, api="accept")
+    graph = replace(graph, span=replace(graph.span, start_byte=100, end_byte=120))
+    syntax = call_site("ast:7", "accept", "src/net/server.cpp", 42, enclosing="net::serve")
+    syntax = replace(syntax, span=graph.span, payload={
+        **syntax.payload, "scope_id": "scope-1", "component_id": "component-net"})
+    view = FakeEvidenceView().add(graph).add_call("accept", syntax)
     result = run(view)
     (fact,) = result.facts
     assert fact.basis is Basis.VERIFIED_SEMANTIC
@@ -272,11 +283,10 @@ def test_result_is_independent_of_record_order() -> None:
         assert canonical(run(_populated(random.Random(seed)))) == expected
     result = run(_populated(None))
     identities = [canonical(fact.native_identity) for fact in result.facts]
-    assert identities == sorted(identities) and len(set(identities)) == len(identities) == 9
-    merged = next(fact for fact in result.facts if fact.attributes["path"] == "src/io.c"
-                  and fact.native_identity["start_line"] == 12)
-    assert len(merged.evidence) == 3 and {item.rule for item in merged.evidence} == {"signal.annotation.route", "signal.route.handler",
-                                                       "syntax.call.recv"}
+    assert identities == sorted(identities) and len(set(identities)) == len(identities) == 12
+    distinct = [fact for fact in result.facts if fact.attributes["path"] == "src/io.c"
+                and fact.native_identity["start_line"] == 12]
+    assert len(distinct) == 3 and all(len(fact.evidence) == 1 for fact in distinct)
     assert codes(result) == [(GapCode.LOCATION_UNRESOLVED.value, "syntax.call")]
 
 

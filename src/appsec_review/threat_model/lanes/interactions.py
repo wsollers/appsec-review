@@ -46,6 +46,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 
+from appsec_review.graph.contract import Producer, ineligibility_reasons
 from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.threat_model import view as views
 from appsec_review.threat_model.contract import (
@@ -75,6 +76,8 @@ class InteractionRules(Protocol):
 
     def interaction_for_callee(self, name: str) -> Interaction | None: ...
 
+    def languages_for_callee(self, name: str) -> tuple[str, ...]: ...
+
 
 @dataclass(frozen=True, slots=True)
 class _Candidate:
@@ -84,6 +87,7 @@ class _Candidate:
     start_line: int
     reference: EvidenceRef
     attributes: Mapping[str, Any]
+    identity: Mapping[str, Any]
 
     @property
     def rank(self) -> tuple[int, str, str]:
@@ -104,10 +108,23 @@ def _candidate(record: EvidenceRecord, interaction: Interaction, basis: Basis, r
                enclosing_symbol: str | None = None, build_unit_id: str | None = None,
                component_id: str | None = None) -> _Candidate:
     assert record.span is not None
-    return _Candidate(interaction, record.span.path, record.span.start_line, cite(record, basis, rule), {
+    attributes = {
         "interaction": interaction.value, "path": record.span.path, "source_class": source_class,
         "sink_class": sink_class, "callee": callee, "enclosing_symbol": enclosing_symbol,
-        "build_unit_id": build_unit_id, "component_id": component_id})
+        "build_unit_id": build_unit_id, "component_id": component_id}
+    identity = {
+        "interaction": interaction.value, "path": record.span.path, "start_line": record.span.start_line,
+        "end_line": record.span.end_line, "file_sha256": record.span.file_sha256,
+        "start_byte": record.span.start_byte, "end_byte": record.span.end_byte,
+        "enclosing_symbol": enclosing_symbol, "build_unit_id": build_unit_id, "component_id": component_id,
+        "scope_id": _text(_mapping(record.payload, "scope").get("scope_id"))
+                    or _text(record.payload.get("scope_id")),
+    }
+    # A line-only observation cannot establish that another record denotes the same call.
+    if record.span.start_byte is None or record.span.end_byte is None:
+        identity["observation"] = (record.publication.job, record.entity_id)
+    return _Candidate(interaction, record.span.path, record.span.start_line, cite(record, basis, rule),
+                      attributes, identity)
 
 
 def _graph_candidate(record: EvidenceRecord, kind: str, rules: InteractionRules) -> _Candidate | None:
@@ -163,12 +180,10 @@ def _signal_candidate(record: EvidenceRecord, rules: InteractionRules) -> _Candi
 
 
 def _fact(group: list[_Candidate], limits: Limits) -> Fact:
-    """One fact per interaction, path and start line; the strongest-basis record supplies the attributes."""
+    """Merge only observations with identical physical spans and ownership."""
     lead = min(group, key=lambda item: item.rank)
     evidence = merge_evidence(tuple(item.reference for item in group), limit=limits.max_evidence_refs_per_element)
-    identity = {"interaction": lead.interaction.value, "path": lead.path, "start_line": lead.start_line,
-                "enclosing_symbol": lead.attributes["enclosing_symbol"]}
-    return Fact(FactKind.INTERACTION, identity, f"{lead.interaction.value} {lead.path}:{lead.start_line}",
+    return Fact(FactKind.INTERACTION, lead.identity, f"{lead.interaction.value} {lead.path}:{lead.start_line}",
                 strongest(*(item.reference.basis for item in group)), evidence, lead.attributes)
 
 
@@ -179,6 +194,38 @@ def interactions(view: EvidenceView, rules: InteractionRules, limits: Limits, *,
     gaps: list[Mapping[str, Any]] = []
     ledger: list[InputLedgerRow] = []
     read_any = False
+
+    def graph(record: EvidenceRecord, kind: str) -> _Candidate | None:
+        candidate = _graph_candidate(record, kind, rules)
+        if candidate is None:
+            return None
+        payload = record.payload
+        reasons = list(ineligibility_reasons({**payload, "cross_check": _mapping(payload, "cross_check")}))
+        producer = _mapping(payload, "producer").get("name")
+        if producer != Producer.CODEQL_EXPORT.value:
+            reasons.append(f"non_semantic_producer:{producer or 'missing'}")
+        if _mapping(payload, "admissibility").get("direct_eligible") is not True:
+            reasons.append("not_direct_eligible")
+        if payload.get("family") != kind:
+            reasons.append("family_mismatch")
+        if reasons:
+            gaps.append(producer_gap(
+                GapCode.PRODUCER_REPORTED_GAP,
+                f"graph interaction from {producer or 'unknown producer'} was not established: {', '.join(reasons)}",
+                unit_id=unit_id, scope_id=record.entity_id))
+            return None
+        return candidate
+
+    def syntax(record: EvidenceRecord, name: str, interaction: Interaction) -> _Candidate | None:
+        language = _text(record.payload.get("language"))
+        if language is None:
+            gaps.append(producer_gap(
+                GapCode.PRODUCER_REPORTED_GAP, "call language is missing; catalog interaction was not established",
+                unit_id=unit_id, scope_id=record.entity_id))
+            return None
+        if language not in rules.languages_for_callee(name):
+            return None
+        return _syntax_candidate(record, name, interaction)
 
     def take(query: str, page: views.Page, reading: Any) -> tuple[int, int]:
         if page.truncated:
@@ -208,7 +255,7 @@ def interactions(view: EvidenceView, rules: InteractionRules, limits: Limits, *,
         for kind in ("entry_point", "sink_site"):
             page = view.entities(*GRAPH_INPUT, kind, limit=limits.max_query_rows)
             count, unlocated = take(f"graph.{kind}", page,
-                                    lambda record, kind=kind: _graph_candidate(record, kind, rules))
+                                    lambda record, kind=kind: graph(record, kind))
             read += count
             unlocated_gap(f"graph.{kind}", unlocated)
     ledger.append(views.with_count(opened.row, read))
@@ -223,10 +270,10 @@ def interactions(view: EvidenceView, rules: InteractionRules, limits: Limits, *,
             interaction = rules.interaction_for_callee(name)
             if interaction is None:
                 continue
-            page = view.search_calls(name, limit=limits.max_query_rows)
+            page = view.search_calls(name, languages=rules.languages_for_callee(name), limit=limits.max_query_rows)
             count, missing = take(f"syntax.call.{name}", page,
                                   lambda record, name=name, interaction=Interaction(interaction):
-                                  _syntax_candidate(record, name, interaction))
+                                  syntax(record, name, interaction))
             read += count
             unlocated += missing
         unlocated_gap("syntax.call", unlocated)
@@ -242,9 +289,9 @@ def interactions(view: EvidenceView, rules: InteractionRules, limits: Limits, *,
         unlocated_gap("signal.review_signal", unlocated)
     ledger.append(views.with_count(opened.row, read))
 
-    groups: dict[tuple[str, str, int], list[_Candidate]] = {}
+    groups: dict[bytes, list[_Candidate]] = {}
     for item in candidates:
-        groups.setdefault((item.interaction.value, item.path, item.start_line), []).append(item)
+        groups.setdefault(canonical(item.identity), []).append(item)
     facts = [_fact(group, limits) for group in groups.values()]
     if len(facts) > limits.max_entry_points:
         facts.sort(key=lambda fact: (BASIS_PRECEDENCE.index(fact.basis), canonical(fact.native_identity)))

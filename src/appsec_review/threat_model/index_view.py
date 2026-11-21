@@ -281,14 +281,15 @@ class IndexEvidenceView:
                     f"{_RELATIONS} WHERE kind = ? ORDER BY relation_id LIMIT ?", (kind, bound + 1)))
         return self._page(records, bound)
 
-    def search_calls(self, name: str, *, limit: int) -> Page:
+    def search_calls(self, name: str, *, limit: int, languages: tuple[str, ...] | None = None) -> Page:
         """Tree-sitter ``call_expression`` nodes whose ``syntax.written_name`` is exactly ``name``.
 
         ``name`` is data: it is only ever a bound SQL parameter or a quoted FTS5 phrase. A name with
         an ASCII letter or digit and no control character is found through ``search_fts`` (the
         phrase is a superset filter) and then matched exactly with ``json_extract``; any other name
         is matched by ``json_extract`` alone. Every returned record is checked again on its decoded
-        payload, so a non-exact match is never returned.
+        payload, so a non-exact match is never returned. Language exclusions apply before the
+        query bound; missing/mistyped languages remain visible for the lane's diagnostic gap.
         """
         bound = self._limit(limit)
         if not isinstance(name, str) or not name:
@@ -300,8 +301,18 @@ class IndexEvidenceView:
         for shard in () if found is None else found.owned.get(SYNTAX_INPUT[1], ()):
             publication = self._publication(*SYNTAX_INPUT, shard)
             with closing(self._open(found, shard)) as database:
-                rows = (database.execute(_CALLS_FTS, (_fts_phrase(name), name, bound + 1)) if indexed
-                        else database.execute(_CALLS_SCAN, (name, bound + 1))).fetchall()
+                sql = _CALLS_FTS if indexed else _CALLS_SCAN
+                parameters: list[Any] = [_fts_phrase(name), name] if indexed else [name]
+                if languages is not None:
+                    allowed = tuple(sorted(set(languages)))
+                    language_filter = (
+                        " AND (coalesce(json_type(e.payload_json, '$.language'), 'null') != 'text'"
+                        " OR trim(json_extract(e.payload_json, '$.language')) = ''"
+                        " OR json_extract(e.payload_json, '$.language') IN ("
+                        + ",".join("?" for _ in allowed) + "))")
+                    sql = sql.replace(" ORDER BY", language_filter + " ORDER BY")
+                    parameters.extend(allowed)
+                rows = database.execute(sql, (*parameters, bound + 1)).fetchall()
             overflow = overflow or len(rows) > bound
             for row in rows:
                 record = self._entity(row, publication)

@@ -34,6 +34,14 @@ original evidence to establish predicates; the generated model does not satisfy 
 [current job page](job_threat_model_generation.md) and
 [review subsystem](../architecture/review-inference-and-guidance.md).
 
+Indexing also projects the admitted canonical documents into `threat_boundaries`. Boundary
+`inside` membership, process `component_ids`, entry-point `process`, and threat `boundary_ids`
+are retained, including multiple boundaries for a process or threat. Locators retain source
+paths; source ownership links require matching file digests, and citation links require the
+hash-pinned producing shard to be present in the admitted index set. Citation mapping metadata
+and basis remain provenance, not proof of a semantic interaction. Generated threat titles retain
+their candidate state; severity is `unspecified`, never an invented assessed severity.
+
 ## What it reads
 
 Accepted evidence only (`TargetAccess.ACCEPTED_EVIDENCE`): no checkout, no target tree, no model, no
@@ -52,6 +60,18 @@ network. Every read is a bounded query of an index shard bound in a handoff the 
 An absent, disabled, empty or partial optional input never fails the job: it becomes a ledger row
 and a gap. Reference data comes from `data/reference/threat-model/` (interaction catalog, threat
 templates, crosswalk); its three SHA-256 digests are recorded in every document's `origin`.
+
+Graph interactions require a CodeQL-export origin and the existing graph admissibility
+conditions (exact location, complete coverage, and an agreeing or uncovered cross-check).
+Analyzer-only, partial, disagreeing or otherwise ineligible graph records are excluded with a
+record-specific gap, not relabeled as verified semantics. This qualification does not make a
+generated threat a verified vulnerability.
+
+Written-name calls are restricted to the callee's catalogued languages before the index query
+bound is applied. Missing language remains a diagnostic gap; the catalog is not extended by a
+matching name. Interaction deduplication requires the same source digest, full span, enclosing
+symbol, build unit, component and producer scope. Line-only records remain distinct observations.
+This deliberately avoids guessing cross-producer equivalence when ownership or spans differ.
 
 ## What it writes
 
