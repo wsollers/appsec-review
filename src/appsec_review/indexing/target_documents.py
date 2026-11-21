@@ -17,11 +17,11 @@ from urllib.parse import urlsplit
 
 from appsec_review.retrieval.model import normalize_relative_path
 from appsec_review.indexing.document_interfaces import (
-    DocumentParseError, idl_operations, json_member_spans, structured_operations,
+    DocumentParseError, idl_operations, json_document, structured_operations,
 )
 
 
-PARSER_IDENTITY = "target-documents/4"
+PARSER_IDENTITY = "target-documents/5"
 ADDITIONAL_INTERFACE_KINDS = frozenset({"asyncapi", "protobuf", "graphql"})
 KINDS = frozenset({"design", "threat_model", "dfd", "openapi", "postman", "unit_test"}) | ADDITIONAL_INTERFACE_KINDS
 _TEXT_SUFFIXES = {".md", ".markdown", ".rst", ".adoc", ".asciidoc", ".org", ".txt"}
@@ -224,7 +224,7 @@ def collect_target_documents(
         ):
             parser = idl_operations if kind in {"protobuf", "graphql"} else structured_operations
             try:
-                format_options = {"json_format": True} if kind == "openapi" and source.suffix.lower() == ".json" else {}
+                format_options = {"json_format": True} if parser is structured_operations and source.suffix.lower() == ".json" else {}
                 operations, limitations = parser(content, kind, max_depth=max_parse_depth,
                                                   max_nodes=max_parse_nodes, **format_options)
             except DocumentParseError as exc:
@@ -253,18 +253,13 @@ def collect_target_documents(
                          "detail": "OpenAPI source must be a materialized JSON document"})
         else:
             try:
-                document = json.loads(content)
-            except (ValueError, TypeError):
-                gaps.append({"path": path, "reason": "parse_error", "detail": "invalid JSON"})
+                document, spans = json_document(content, max_depth=max_parse_depth, max_nodes=max_parse_nodes)
+            except DocumentParseError as exc:
+                gaps.append({"path": path, "reason": "parse_error", "detail": str(exc)})
                 continue
             if kind == "postman":
                 if not isinstance(document, dict) or not isinstance(document.get("item"), list):
                     gaps.append({"path": path, "reason": "parse_error", "detail": "invalid Postman collection"})
-                    continue
-                try:
-                    spans = json_member_spans(content, max_depth=max_parse_depth, max_nodes=max_parse_nodes)
-                except DocumentParseError as exc:
-                    gaps.append({"path": path, "reason": "parse_error", "detail": str(exc)})
                     continue
                 def walk(items: list[Any], depth: int = 0,
                          prefix: tuple[str | int, ...] = ("item",)) -> None:

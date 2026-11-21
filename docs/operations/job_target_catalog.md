@@ -199,9 +199,12 @@ The [retrieval architecture](../architecture/python-and-retrieval.md) defines re
 4. Select target documents from the accepted inventory; enforce configured file, byte, record,
    chunk and parser bounds. Verify source hashes and line/byte ranges before adding document
    entities and references. Missing document kinds and extraction gaps remain coverage facts;
-   changed or escaping accepted files raise integrity errors. OpenAPI JSON and YAML share bounded
-   structural operation parsing, so compact JSON and route lookalikes in examples cannot redirect
-   operation locations. JSON retains operation parameters, responses and request-body declarations;
+   changed or escaping accepted files raise integrity errors. JSON interfaces use one bounded JSON
+   decoder for values, decoded keys and structural member spans, then share operation extraction
+   with YAML. Tabs and escaped non-BMP Unicode retain JSON semantics; source bytes are never
+   reserialized or normalized to obtain locations. Node/depth budgets apply during descent,
+   before unrestricted tree materialization. Duplicate decoded keys and malformed scalars leave
+   parse gaps without hiding other valid documents. JSON retains parameters, responses and request-body declarations;
    unresolved references remain gaps, not fetched or inferred definitions.
 
 ### `publish_catalog`
@@ -284,7 +287,7 @@ implementation/schema/validator identities. Source/symbol/component/build index 
 bind their producer artifact hashes and catalog parser, retrieval normalizer, delivery policy
 and mapping identities. The document fingerprint additionally binds extraction limits and the
 target-document release/parser identity. The corrected raw-symbol/coverage catalog uses
-`catalog-parser/2`; structural OpenAPI JSON uses `target-documents/4`. A changed input therefore selects different shards;
+`catalog-parser/2`; JSON-aware interface parsing uses `target-documents/5`. A changed input therefore selects different shards;
 an existing path is not a license to accept altered bytes. Whole-job reuse and selective
 downstream invalidation follow [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability);
 artifact-bearing units are not generic portable failed-attempt checkpoints.

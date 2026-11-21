@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from bisect import bisect_right
 import json
+import math
 import re
 from typing import Any
 
@@ -84,10 +85,13 @@ def _span(key: Node, value: Node) -> tuple[int, int]:
     return start, max(start, end)
 
 
-def json_member_spans(text: str, *, max_depth: int, max_nodes: int
-                      ) -> dict[tuple[str | int, ...], tuple[int, int]]:
-    """Locate members by structural path in JSON already validated by ``json.loads``."""
-    decoder = json.JSONDecoder()
+def json_document(text: str, *, max_depth: int, max_nodes: int
+                  ) -> tuple[Any, dict[tuple[str | int, ...], tuple[int, int]]]:
+    """Decode JSON values and member locations together, enforcing budgets before descent."""
+    def invalid_constant(value: str) -> None:
+        raise DocumentParseError(f"invalid JSON constant: {value}")
+
+    decoder = json.JSONDecoder(parse_constant=invalid_constant)
     line_starts = [0, *(match.end() for match in re.finditer(r"\r\n|\r|\n", text))]
     spans: dict[tuple[str | int, ...], tuple[int, int]] = {}
     count = 0
@@ -97,42 +101,94 @@ def json_member_spans(text: str, *, max_depth: int, max_nodes: int
             offset += 1
         return offset
 
-    def visit(offset: int, path: tuple[str | int, ...], depth: int) -> int:
+    def budget(depth: int) -> None:
         nonlocal count
         count += 1
         if depth > max_depth or count > max_nodes:
-            raise DocumentParseError("JSON source location parsing bound reached")
+            raise DocumentParseError("specification parsing bound reached")
+
+    def require(offset: int, token: str) -> None:
+        if offset >= len(text) or text[offset] != token:
+            raise DocumentParseError(f"invalid JSON: expected {token!r}")
+
+    def scalar(offset: int) -> tuple[Any, int]:
+        value, end = decoder.raw_decode(text, offset)
+        if isinstance(value, str) and re.search(r"[\ud800-\udfff]", value):
+            raise DocumentParseError("invalid JSON Unicode: unpaired surrogate")
+        if isinstance(value, float) and not math.isfinite(value):
+            raise DocumentParseError("JSON number exceeds finite scalar range")
+        return value, end
+
+    def visit(offset: int, path: tuple[str | int, ...], depth: int) -> tuple[Any, int]:
+        budget(depth)
         offset = whitespace(offset)
+        if offset >= len(text):
+            raise DocumentParseError("invalid JSON: missing value")
         opening = text[offset]
         if opening not in "{[":
-            return decoder.raw_decode(text, offset)[1]
+            return scalar(offset)
         closing = "}" if opening == "{" else "]"
+        result = {} if opening == "{" else []
         offset = whitespace(offset + 1)
-        index = 0
-        while text[offset] != closing:
+        if offset < len(text) and text[offset] == closing:
+            return result, offset + 1
+        while True:
             key_start = offset
             if opening == "{":
-                key, offset = decoder.raw_decode(text, offset)
-                count += 1
+                budget(depth)
+                require(offset, '"')
+                key, offset = scalar(offset)
                 member_path = (*path, key)
-                if member_path in spans:
+                if key in result:
                     raise DocumentParseError("duplicate JSON member has ambiguous source location")
                 offset = whitespace(offset)
-                offset += 1  # The colon is known valid from json.loads.
+                require(offset, ":")
+                offset += 1
             else:
-                member_path = (*path, index)
-                index += 1
-            end = visit(offset, member_path, depth + 1)
+                member_path = (*path, len(result))
+            value, end = visit(offset, member_path, depth + 1)
             if opening == "{":
+                result[key] = value
                 spans[member_path] = (bisect_right(line_starts, key_start),
                                       bisect_right(line_starts, end - 1))
+            else:
+                result.append(value)
             offset = whitespace(end)
-            if text[offset] != closing:
-                offset = whitespace(offset + 1)
-        return offset + 1
+            if offset < len(text) and text[offset] == closing:
+                return result, offset + 1
+            require(offset, ",")
+            offset = whitespace(offset + 1)
 
-    visit(0, (), 0)
+    try:
+        document, end = visit(0, (), 0)
+        if whitespace(end) != len(text):
+            raise DocumentParseError("invalid JSON: trailing content")
+    except DocumentParseError:
+        raise
+    except (ValueError, RecursionError) as exc:
+        raise DocumentParseError("invalid JSON or scalar/nesting capacity exceeded") from exc
+    return document, spans
+
+
+def json_member_spans(text: str, *, max_depth: int, max_nodes: int
+                      ) -> dict[tuple[str | int, ...], tuple[int, int]]:
+    """Locate unambiguous JSON members using the same bounded decoder as their values."""
+    _, spans = json_document(text, max_depth=max_depth, max_nodes=max_nodes)
     return spans
+
+
+def _json_node(value: Any) -> Node:
+    """Adapt already-bounded JSON values to the shared spec walker, without YAML decoding."""
+    prefix = "tag:yaml.org,2002:"
+    if isinstance(value, dict):
+        return MappingNode(prefix + "map", [(_json_node(key), _json_node(member))
+                                           for key, member in value.items()])
+    if isinstance(value, list):
+        return SequenceNode(prefix + "seq", [_json_node(member) for member in value])
+    if isinstance(value, str):
+        return ScalarNode(prefix + "str", value)
+    kind = "null" if value is None else "bool" if isinstance(value, bool) else "int" if isinstance(value, int) else "float"
+    return ScalarNode(prefix + kind, json.dumps(value))
 
 
 def _operation(protocol: str, method: str, route: str, start: int, end: int,
@@ -156,13 +212,19 @@ def _security(node: Node | None) -> tuple[str, list[str]]:
 def structured_operations(text: str, kind: str, *, max_depth: int, max_nodes: int,
                           json_format: bool = False,
                           ) -> tuple[list[dict[str, Any]], list[str]]:
-    root = _compose(text, max_depth, max_nodes)
     document = None
     if json_format:
+        document, spans = json_document(text, max_depth=max_depth, max_nodes=max_nodes)
         try:
-            document = json.loads(text)
-        except (ValueError, RecursionError) as exc:
-            raise DocumentParseError("invalid JSON") from exc
+            root = _json_node(document)
+        except RecursionError as exc:
+            raise DocumentParseError("JSON nesting capacity exceeded") from exc
+    else:
+        root = _compose(text, max_depth, max_nodes)
+
+    def span(key: Node, value: Node, *locator: str) -> tuple[int, int]:
+        return spans[locator] if json_format else _span(key, value)
+
     top = _mapping(root)
     operations = []
     gaps = []
@@ -192,7 +254,7 @@ def structured_operations(text: str, kind: str, *, max_depth: int, max_nodes: in
                 if parameters is not None and not isinstance(parameters, SequenceNode):
                     raise DocumentParseError("operation parameters must be a sequence")
                 operations.append(_operation(
-                    "http", method.upper(), route, *_span(key, value),
+                    "http", method.upper(), route, *span(key, value, "paths", route, method),
                     operation_id=_scalar(_child(value, "operationId")),
                     responses=sorted(_mapping(_child(value, "responses"))),
                     request_body="requestBody" in fields, security_state=state,
@@ -209,7 +271,8 @@ def structured_operations(text: str, kind: str, *, max_depth: int, max_nodes: in
             for route, (_, channel) in channels.items():
                 for action, (key, value) in _mapping(channel).items():
                     if action in {"publish", "subscribe"}:
-                        operations.append(_operation("async", action.upper(), route, *_span(key, value)))
+                        operations.append(_operation(
+                            "async", action.upper(), route, *span(key, value, "channels", route, action)))
         else:
             for name, (key, value) in _mapping(_child(root, "operations")).items():
                 reference = _scalar(_child(_child(value, "channel"), "$ref"))
@@ -224,7 +287,7 @@ def structured_operations(text: str, kind: str, *, max_depth: int, max_nodes: in
                 if not route:
                     gaps.append(f"missing AsyncAPI channel address for {name}")
                     continue
-                operations.append(_operation("async", action.upper(), route, *_span(key, value),
+                operations.append(_operation("async", action.upper(), route, *span(key, value, "operations", name),
                                              operation_id=name))
     return operations, sorted(set(gaps))
 

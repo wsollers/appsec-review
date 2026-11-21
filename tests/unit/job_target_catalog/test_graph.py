@@ -14,7 +14,7 @@ from tests.unit.job_target_catalog.support import (
 )
 
 
-def test_catalog_repairs_reach_admitted_reader_and_retrieval_projection(tmp_path):
+def _catalog_repair_projection(tmp_path, openapi_raw):
     from appsec_review.interchange import validate_unit_output
     from appsec_review.jobs.job_target_analysis_plan import build_job as plan_job
     from appsec_review.jobs.job_target_catalog.reader import load_accepted_catalog
@@ -45,7 +45,7 @@ def test_catalog_repairs_reach_admitted_reader_and_retrieval_projection(tmp_path
     raw = "# café\r\ndef present():\r\n    pass\r\n".encode()
     entry = source(unit, "present.py", raw)
     source(unit, "omitted.py", b"def omitted():\n" + b"# padding\n" * 9000)
-    source(unit, "openapi.json", b'{"openapi":"3.0.3","paths":{"/x":{"get":{},"post":{}}}}', None)
+    api_entry = source(unit, "openapi.json", openapi_raw, None)
     root, attempt = unit.job.run_root, unit.job.attempt_root
     job = catalog.build_job()
     atomic_json(attempt / "claim.json", {
@@ -113,6 +113,41 @@ def test_catalog_repairs_reach_admitted_reader_and_retrieval_projection(tmp_path
     assert location["file_sha256"] == entry["sha256"]
     assert raw[location["start_byte"]:location["end_byte"]] == b"def present():\r\n"
     assert len(core.find(indexes=["documents"], kind="document_record")["results"]) == 2
+    return core, api_entry
+
+
+def test_catalog_repairs_reach_admitted_reader_and_retrieval_projection(tmp_path):
+    _catalog_repair_projection(tmp_path, b'{"openapi":"3.0.3","paths":{"/x":{"get":{},"post":{}}}}')
+
+
+@pytest.mark.parametrize("layout", ["tabs", "escaped", "literal", "tabs-crlf-escaped"])
+def test_openapi_json_unicode_and_whitespace_reach_admitted_reader(tmp_path, layout):
+    route = "/orders" if layout == "tabs" else "/\U0001f600"
+    operation = {"operationId": "orders\U0001f600",
+                 "parameters": [{"name": "query\U0001f680", "in": "query"}],
+                 "responses": {"200": {"description": "ok"}}}
+    spec = {"openapi": "3.0.3", "paths": {route: {"get": operation, "post": operation}}}
+    indent = "\t" if layout.startswith("tabs") else "  "
+    escaped = layout != "literal"
+    text = json.dumps(spec, indent=indent, ensure_ascii=escaped)
+    newline = "\r\n" if "crlf" in layout else "\n"
+    raw = text.replace("\n", newline).encode()
+    core, entry = _catalog_repair_projection(tmp_path, raw)
+    rows = core.find(indexes=["documents"], kind="document_record")["results"]
+    assert {row["payload"]["fields"]["method"] for row in rows} == {"GET", "POST"}
+    for row in rows:
+        fields, location = row["payload"]["fields"], row["location"]
+        assert row["payload"]["authority"] == "declared"
+        assert fields["route"] == route
+        assert fields["operation_id"] == operation["operationId"]
+        assert fields["parameters"] == operation["parameters"]
+        assert location["file_sha256"] == entry["sha256"]
+        method = fields["method"].lower()
+        block = json.dumps(operation, indent=indent, ensure_ascii=escaped).splitlines()
+        expected = (indent * 3 + f'"{method}": ' + block[0] + "\n"
+                    + "\n".join(indent * 3 + line for line in block[1:])
+                    + ("," if method == "get" else "") + "\n").replace("\n", newline).encode()
+        assert raw[location["start_byte"]:location["end_byte"]] == expected
 
 EXPECTED = {
     PARTITION: (),

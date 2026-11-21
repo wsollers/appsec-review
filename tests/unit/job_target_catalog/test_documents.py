@@ -112,6 +112,46 @@ def test_openapi_record_budget_and_unresolved_references_remain_gaps(tmp_path):
     assert any("unresolved specification reference" in reason for reason in reasons)
 
 
+@pytest.mark.parametrize("body", [
+    '"/\\ud83d\\ude00":{"get":{}},"/\U0001f600":{"post":{}}',
+    '"/x":{"get":{},"\\u0067et":{}}',
+    '"/x":{"get":{},}',
+    '"/\\ud83d":{"get":{}}',
+    '"/x":{"get":{"operationId":"\\ude00"}}',
+    '"/x":{"get":{"parameters":[NaN]}}',
+], ids=["unicode-duplicate-route", "escaped-duplicate-method", "trailing-comma",
+        "unpaired-key", "unpaired-field", "non-json-scalar"])
+def test_openapi_json_invalid_sibling_does_not_hide_valid_document(tmp_path, body):
+    unit = context(tmp_path, UNIT)
+    bad = source(unit, "a.openapi.json", ('{"openapi":"3.0.3","paths":{' + body + '}}').encode(), None)
+    good = source(unit, "z.openapi.json", b'{"openapi":"3.0.3","paths":{"/good":{"get":{}}}}', None)
+    unit.outputs[PARTITION] = partition([bad, good])
+    result = handler(UNIT)(unit)
+    validate_unit_output(result, unit_id=UNIT, strict_gaps=True)
+    assert result["item_count"] == 1
+    assert any(gap["scope_id"] == "a.openapi.json" and "parse_error" in gap["reason"]
+               for gap in result["gaps"])
+    with sqlite3.connect(unit.job.run_root / result["artifact"]["path"]) as db:
+        [(payload, path, digest)] = db.execute(
+            "SELECT e.payload_json,l.path,l.file_sha256 FROM entities e "
+            "JOIN locations l ON l.entity_id=e.identity").fetchall()
+    assert json.loads(payload)["fields"]["route"] == "/good"
+    assert path == good["path"] and digest == good["sha256"]
+
+
+@pytest.mark.parametrize("bound", ["nodes", "depth"])
+def test_json_structural_budget_precedes_unvisited_invalid_scalar(bound):
+    from appsec_review.indexing.document_interfaces import DocumentParseError, json_member_spans
+
+    text = '{"values":[0,1,2,INVALID]}'
+    limits = {"max_depth": 1 if bound == "depth" else 64,
+              "max_nodes": 6 if bound == "nodes" else 100}
+    with pytest.raises(DocumentParseError, match="parsing bound reached"):
+        json_member_spans(text, **limits)
+    with pytest.raises(DocumentParseError, match="invalid JSON"):
+        json_member_spans(text, max_depth=64, max_nodes=100)
+
+
 def fixture(tmp_path, monkeypatch, *, kinds=REQUIRED_KINDS, records=None, links=(), gaps=()):
     builders = capture_indexes(monkeypatch)
     unit = context(tmp_path, UNIT)
