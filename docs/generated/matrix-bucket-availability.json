@@ -641,8 +641,7 @@
         "values": [
           "coverage",
           "query_dataset_inventory",
-          "query_engineering_signals",
-          "query_precomputed"
+          "query_engineering_signals"
         ]
       },
       "producer_languages": {
@@ -6070,11 +6069,11 @@
       ],
       "job_enabled": true,
       "mcp_tools": {
-        "basis": "query_precomputed query_set=test_coverage",
+        "basis": "query_engineering_signals signal_family=test_coverage",
         "gaps": [],
         "state": "declared",
         "values": [
-          "query_precomputed"
+          "query_engineering_signals"
         ]
       },
       "producer": "job_test_coverage",

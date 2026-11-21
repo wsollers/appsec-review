@@ -729,6 +729,7 @@
     },
     "job_review_prioritization": {
       "unit": [
+        "tests/unit/job_review_prioritization/test_engineering_status.py",
         "tests/unit/job_review_prioritization/test_audit_delivery.py",
         "tests/unit/job_review_prioritization/test_semantic_attribution.py",
         "tests/unit/job_review_prioritization/test_review_followup.py",
@@ -848,6 +849,7 @@
     },
     "job_target_catalog": {
       "unit": [
+        "tests/test_target_documents.py",
         "tests/unit/job_build_environment_analysis/test_catalog_inputs.py",
         "tests/unit/job_target_catalog/test_cataloging_languages.py",
         "tests/unit/job_target_catalog/test_contract.py",

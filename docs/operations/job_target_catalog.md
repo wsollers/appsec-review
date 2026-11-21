@@ -29,20 +29,20 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `build_discovery` | `build_discovery.catalog_build_targets` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L388) |
-| `build_discovery` | `build_discovery.discover_build_systems` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L312) |
-| `build_discovery` | `build_discovery.discover_compile_commands` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L376) |
-| `component_discovery` | `component_discovery.catalog_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L419) |
-| `component_discovery` | `component_discovery.catalog_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L431) |
-| `publish_catalog` | `publish_catalog.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L761) |
-| `publish_catalog` | `publish_catalog.validate_catalog` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L747) |
-| `repository_discovery` | `repository_discovery.census_languages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L271) |
-| `repository_discovery` | `repository_discovery.discover_projects` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L278) |
-| `repository_discovery` | `repository_discovery.partition_repository` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L223) |
-| `retrieval_indexes` | `retrieval_indexes.build_component_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L599) |
-| `retrieval_indexes` | `retrieval_indexes.build_path_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L483) |
-| `retrieval_indexes` | `retrieval_indexes.build_symbol_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L530) |
-| `retrieval_indexes` | `retrieval_indexes.build_target_documents` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L620) |
+| `build_discovery` | `build_discovery.catalog_build_targets` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L389) |
+| `build_discovery` | `build_discovery.discover_build_systems` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L313) |
+| `build_discovery` | `build_discovery.discover_compile_commands` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L377) |
+| `component_discovery` | `component_discovery.catalog_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L422) |
+| `component_discovery` | `component_discovery.catalog_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L434) |
+| `publish_catalog` | `publish_catalog.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L800) |
+| `publish_catalog` | `publish_catalog.validate_catalog` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L786) |
+| `repository_discovery` | `repository_discovery.census_languages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L272) |
+| `repository_discovery` | `repository_discovery.discover_projects` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L279) |
+| `repository_discovery` | `repository_discovery.partition_repository` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L224) |
+| `retrieval_indexes` | `retrieval_indexes.build_component_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L638) |
+| `retrieval_indexes` | `retrieval_indexes.build_path_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L506) |
+| `retrieval_indexes` | `retrieval_indexes.build_symbol_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L553) |
+| `retrieval_indexes` | `retrieval_indexes.build_target_documents` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L659) |
 
 ### Accepted input declarations
 
@@ -78,7 +78,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_target_catalog/test_catalog_graph.py`<br>`tests/integration/job_target_catalog/test_catalog_path_graph.py`<br>`tests/integration/job_target_catalog/test_catalog_documents_graph.py` |
 | live | None declared |
-| unit | `tests/unit/job_build_environment_analysis/test_catalog_inputs.py`<br>`tests/unit/job_target_catalog/test_cataloging_languages.py`<br>`tests/unit/job_target_catalog/test_contract.py`<br>`tests/unit/job_target_catalog/test_descriptor_discovery.py`<br>`tests/unit/job_target_catalog/test_discovery.py`<br>`tests/unit/job_target_catalog/test_documents.py`<br>`tests/unit/job_target_catalog/test_graph.py`<br>`tests/unit/job_target_catalog/test_helpers.py`<br>`tests/unit/job_target_catalog/test_indexes.py`<br>`tests/unit/runtime/test_wave5_contracts.py` |
+| unit | `tests/test_target_documents.py`<br>`tests/unit/job_build_environment_analysis/test_catalog_inputs.py`<br>`tests/unit/job_target_catalog/test_cataloging_languages.py`<br>`tests/unit/job_target_catalog/test_contract.py`<br>`tests/unit/job_target_catalog/test_descriptor_discovery.py`<br>`tests/unit/job_target_catalog/test_discovery.py`<br>`tests/unit/job_target_catalog/test_documents.py`<br>`tests/unit/job_target_catalog/test_graph.py`<br>`tests/unit/job_target_catalog/test_helpers.py`<br>`tests/unit/job_target_catalog/test_indexes.py`<br>`tests/unit/runtime/test_wave5_contracts.py` |
 
 ### Dagster placement
 

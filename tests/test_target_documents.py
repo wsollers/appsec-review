@@ -330,7 +330,8 @@ def test_document_sources_have_a_bounded_catalog_producer() -> None:
      "QUERY", "Query.order"),
     ("api/schema.graphqls", "schema { query: Store }\ntype Store { order: [Order!]! }\n",
      "QUERY", "Store.order"),
-])
+], ids=["openapi-yaml", "swagger-yaml", "swagger-json", "asyncapi-yaml", "asyncapi-json",
+        "protobuf", "graphql-query", "graphql-schema"])
 def test_broader_interfaces_are_source_located_declarations(tmp_path, path, text, method, route):
     source = tmp_path / path
     source.parent.mkdir(parents=True)

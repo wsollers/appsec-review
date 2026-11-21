@@ -29,10 +29,10 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L430) |
-| `index` | `index.coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L372) |
-| `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L337) |
-| `normalize` | `normalize.coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L366) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L433) |
+| `index` | `index.coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L374) |
+| `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L339) |
+| `normalize` | `normalize.coverage` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_test_coverage/job.py#L368) |
 
 ### Accepted input declarations
 
@@ -62,7 +62,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Dataset | Step | Schema | Stage | Indexes | MCP route |
 | --- | --- | --- | --- | --- | --- |
-| `test_coverage` | `index` | `appsec-review/retrieval-index/2` | indexed | `analysis` | `query_precomputed` |
+| `test_coverage` | `index` | `appsec-review/retrieval-index/2` | indexed | `analysis` | `query_engineering_signals` |
 | `test_coverage_handoff` | `acceptance` | `appsec-review/test-coverage-handoff/1` | artifact_only | Not indexed | `coverage`, `query_dataset_inventory` |
 
 Protected and artifact-only routes expose sanitized metadata, not payload access.

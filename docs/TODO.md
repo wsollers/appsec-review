@@ -427,13 +427,13 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5193 | [Reject malformed nested planning values through bounded repair](#t-5193-reject-malformed-nested-planning-values-through-bounded-repair) | build | open |
 | T-5194 | [Carry real prebuilt artifact intake into plan selection](#t-5194-carry-real-prebuilt-artifact-intake-into-plan-selection) | build | open |
 | T-5195 | [Align dotnet planning guidance with the accepted recipe contract](#t-5195-align-dotnet-planning-guidance-with-the-accepted-recipe-contract) | build | open |
-| T-5196 | [Preserve CRLF source offsets and declaration coverage gaps](#t-5196-preserve-crlf-source-offsets-and-declaration-coverage-gaps) | evidence | open |
-| T-5197 | [Handle malformed npm and preserve Android descriptor facts](#t-5197-handle-malformed-npm-and-preserve-android-descriptor-facts) | topology | open |
-| T-5198 | [Parse bounded OpenAPI JSON structurally with exact operations](#t-5198-parse-bounded-openapi-json-structurally-with-exact-operations) | evidence | open |
-| T-5199 | [Count unique coverage lines and preserve malformed counter uncertainty](#t-5199-count-unique-coverage-lines-and-preserve-malformed-counter-uncertainty) | evidence | open |
-| T-5200 | [Index duplicate coverage content without conflicting source identities](#t-5200-index-duplicate-coverage-content-without-conflicting-source-identities) | evidence | open |
-| T-5201 | [Route coverage retrieval and distinguish file from build aggregates](#t-5201-route-coverage-retrieval-and-distinguish-file-from-build-aggregates) | evidence | open |
-| T-5202 | [Read completion status consistently across engineering signal loaders](#t-5202-read-completion-status-consistently-across-engineering-signal-loaders) | review | open |
+| T-5196 | [Preserve CRLF source offsets and declaration coverage gaps](#t-5196-preserve-crlf-source-offsets-and-declaration-coverage-gaps) | evidence | done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5) |
+| T-5197 | [Handle malformed npm and preserve Android descriptor facts](#t-5197-handle-malformed-npm-and-preserve-android-descriptor-facts) | topology | done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5) |
+| T-5198 | [Parse bounded OpenAPI JSON structurally with exact operations](#t-5198-parse-bounded-openapi-json-structurally-with-exact-operations) | evidence | done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5) |
+| T-5199 | [Count unique coverage lines and preserve malformed counter uncertainty](#t-5199-count-unique-coverage-lines-and-preserve-malformed-counter-uncertainty) | evidence | done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906) |
+| T-5200 | [Index duplicate coverage content without conflicting source identities](#t-5200-index-duplicate-coverage-content-without-conflicting-source-identities) | evidence | done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906) |
+| T-5201 | [Route coverage retrieval and distinguish file from build aggregates](#t-5201-route-coverage-retrieval-and-distinguish-file-from-build-aggregates) | evidence | done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906) |
+| T-5202 | [Read completion status consistently across engineering signal loaders](#t-5202-read-completion-status-consistently-across-engineering-signal-loaders) | review | done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906) |
 | T-5203 | [Advance NVD cursors only across complete validated snapshot intervals](#t-5203-advance-nvd-cursors-only-across-complete-validated-snapshot-intervals) | data | open |
 | T-5204 | [Preserve newer OSV state and configured snapshot roots in consumers](#t-5204-preserve-newer-osv-state-and-configured-snapshot-roots-in-consumers) | data | open |
 | T-5205 | [Validate MITRE identity and account for character truncation](#t-5205-validate-mitre-identity-and-account-for-character-truncation) | data | open |
@@ -477,7 +477,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5243 | [Resolve post build security assessment conditional audit boundaries](#t-5243-resolve-post-build-security-assessment-conditional-audit-boundaries) | pipeline | open |
 | T-5244 | [Resolve profile data conditional audit boundaries](#t-5244-resolve-profile-data-conditional-audit-boundaries) | pipeline | open |
 | T-5245 | [Resolve remediation planning conditional audit boundaries](#t-5245-resolve-remediation-planning-conditional-audit-boundaries) | pipeline | blocked |
-| T-5246 | [Resolve test coverage conditional audit boundaries](#t-5246-resolve-test-coverage-conditional-audit-boundaries) | pipeline | blocked |
+| T-5246 | [Resolve test coverage conditional audit boundaries](#t-5246-resolve-test-coverage-conditional-audit-boundaries) | pipeline | open |
 | T-5247 | [Resolve third party data sync conditional audit boundaries](#t-5247-resolve-third-party-data-sync-conditional-audit-boundaries) | pipeline | open |
 | T-5248 | [Resolve tree sitter ast conditional audit boundaries](#t-5248-resolve-tree-sitter-ast-conditional-audit-boundaries) | pipeline | open |
 | T-5249 | [Reproduce and repair recurrent Grype database listing selection](#t-5249-reproduce-and-repair-recurrent-grype-database-listing-selection) | data | open |
@@ -5391,65 +5391,102 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5196 — Preserve CRLF source offsets and declaration coverage gaps
 
-- **State:** open
+- **State:** done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: TC-01, TC-05. CRLF sources publish incorrect “exact” symbol byte spans; Symbol shard reports complete declarations after the source inventory omits files.
 - **Scope:** `src/appsec_review/jobs/cataloging.py`, `src/appsec_review/jobs/job_target_catalog/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Raw bounded byte reads preserve exact CRLF/UTF-8 spans and hashes through catalog shards and
+  admitted retrieval. Changed bytes/size or custody escapes fail closed; source-inventory omissions
+  become typed gaps and partial declaration coverage without discarding retained symbols.
+  Main: 184 passed/16.93 s and 61 passed/5.18 s; after an ID-only change, the affected document
+  file's 58 cases passed/2.66 s. Two workers, no skips or slow cases, 242 distinct cases preserved.
+  Eight explicit parameter labels remove pytest 9.1/9.2 auto-ID differences; AST comparison proves
+  all inputs and assertions unchanged, with exact canonical node-union correspondence recorded.
+  Implementation introduced at `df3762c9`; JSON follow-up completed at `732c9a3c`.
 - **Refs:** `audit-results/job-audit-job_target_catalog.md`.
 
 ### T-5197 — Handle malformed npm and preserve Android descriptor facts
 
-- **State:** open
+- **State:** done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5)
 - **Area:** topology
 - **Why:** Archived audit/feedback cases: TC-02, TC-04. Invalid npm manifest shapes fail the entire catalog instead of producing parse gaps; Descriptor packaging erases accepted Android facts and selects the Java profile.
 - **Scope:** `src/appsec_review/jobs/build_discovery.py`, `src/appsec_review/jobs/job_target_catalog/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  T-5196's main union verifies malformed npm roots/sections/constraints produce scoped parser gaps
+  while valid siblings survive. Accepted Android discovery facts and SDK identity survive bounded
+  descriptor packaging; generic Java and Android apply-false controls retain their classifications.
+  Descriptor omissions remain explicit. T-111 and native build/acceptance work are not closed.
 - **Refs:** `audit-results/job-audit-job_target_catalog.md`.
 
 ### T-5198 — Parse bounded OpenAPI JSON structurally with exact operations
 
-- **State:** open
+- **State:** done (2026-11-20, 732c9a3c56b8c3a163531194b7766f2bf463a4b5)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: TC-03. OpenAPI 3 JSON bypasses structural parsing, losing or misbinding operations and ignoring parser limits.
 - **Scope:** `src/appsec_review/indexing/document_interfaces.py`, `src/appsec_review/indexing/target_documents.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  T-5196's 242-case main union covers compact, pretty, tab-indented, CRLF and escaped/non-BMP
+  JSON through actual collection, publication and admitted retrieval. One bounded JSON decoder
+  supplies values and source spans; it does not decode JSON with YAML or normalize evidence bytes.
+  Duplicate decoded keys/operations remain ambiguous gaps; unpaired surrogates, malformed JSON
+  and over-budget inputs remain scoped failures with valid sibling documents preserved.
+  Existing YAML/Postman/AsyncAPI behavior and byte/node/depth/record bounds remain intact.
 - **Refs:** `audit-results/job-audit-job_target_catalog.md`.
 
 ### T-5199 — Count unique coverage lines and preserve malformed counter uncertainty
 
-- **State:** open
+- **State:** done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: TC-01, TC-05, TC-06, TC-07. Repeated source records silently inflate file denominators; LLVM count validation truncates invalid values and lets overflow escape.
 - **Scope:** `src/appsec_review/jobs/job_test_coverage/parsers.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Main: 159 passed/11.81 s, two workers, seed 30261203, no skips or slow cases; exact owner
+  node-set parity and byte-identical test sources verified. Initial repair `e21f9d72` is completed
+  by `1a414624`: physical lines deduplicate without merging distinct-class branch identities or
+  counting class/method summary copies twice. Unprovable duplicate branch unions remain gaps.
+  Invalid/fractional/nonfinite/oversized numeric input, including JSON format detection, stays
+  within per-artifact malformed handling; valid siblings survive and custody errors stay fatal.
+  Orphan LCOV functions cannot attach to a later source; unknown branch counts are not false zero.
 - **Refs:** `audit-results/job-audit-job_test_coverage.md`.
 
 ### T-5200 — Index duplicate coverage content without conflicting source identities
 
-- **State:** open
+- **State:** done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: TC-02. Identical reports at different artifact paths abort indexing.
 - **Scope:** `src/appsec_review/jobs/job_test_coverage/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  T-5199's main union verifies distinct artifact paths remain distinct provenance even with
+  identical report bytes. Real ingestion/index storage retains both reports and their overlap gap,
+  rather than conflicting or silently collapsing source identities.
 - **Refs:** `audit-results/job-audit-job_test_coverage.md`.
 
 ### T-5201 — Route coverage retrieval and distinguish file from build aggregates
 
-- **State:** open
+- **State:** done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906)
 - **Area:** evidence
 - **Why:** Archived audit/feedback cases: TC-03, TC-04. The published dataset advertises an invalid retrieval route; File coverage cells are mistaken for build aggregates and broadcast.
 - **Scope:** `src/appsec_review/jobs/job_test_coverage/datasets.py`, `src/appsec_review/retrieval/core.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  T-5199's main union exercises the declared `query_engineering_signals` test-coverage route
+  through real retrieval and exact path filtering, with unknown-family refusal. File cells and
+  build totals retain separate attribution; unresolved file coverage is not broadcast. This
+  coverage proof does not change the separate profile-context path.
 - **Refs:** `audit-results/job-audit-job_test_coverage.md`; follow-up to closed T-171 (not reopened).
 
 ### T-5202 — Read completion status consistently across engineering signal loaders
 
-- **State:** open
+- **State:** done (2026-11-20, 1a414624095a3eb5a96794651908cd9f22889906)
 - **Area:** review
 - **Why:** Archived audit/feedback cases: TC-08. Prioritization labels successfully consumed coverage UNAVAILABLE.
 - **Scope:** `src/appsec_review/jobs/job_review_prioritization/composite.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  Coverage status repair `e21f9d72` is extended to all six named engineering loaders by `48a8e126`.
+  Completion/domain/legacy precedence preserves admitted partial, unavailable and failed states.
+  Real JobRunner publication slices, typed admitted reads, hashes, snapshots and missing/tampered
+  pin controls pass in the 159-case main union. Payload selection, grants and normalized ranking
+  are unchanged; publication slices are not complete scanner/acquisition/model pipelines.
 - **Refs:** `audit-results/job-audit-job_test_coverage.md`; follow-up to closed T-171 (not reopened).
 
 ### T-5203 — Advance NVD cursors only across complete validated snapshot intervals
@@ -5796,6 +5833,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   closed JSON contract, records the still-unimplemented OWASP matrix under T-5012, and includes
   SARIF publication/accounting in the authored flow. Renderer dimensions were already correct;
   no actual PDF/browser rendering or model execution is claimed.
+  Target-catalog TC-D01 now describes strict control gaps separately from payload reasons and
+  gap-ID declaration coverage. Coverage TC-D1/D2 name actual unit/manual selectors and the
+  existing uncovered-risk boost; no new numeric ranking policy is introduced.
 - **Refs:** `audit-results/job-audit-cumulative.md` and the documentation/conditional sections in all 47 linked per-job reports, including the final-gate pinned-input/pointer-stability distinction; follow-up to closed T-168, T-169, T-170, T-171, T-172, T-173, T-176 (not reopened).
 
 ### T-5230 — Resolve clang static analysis conditional audit boundaries
@@ -5984,11 +6024,23 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5246 — Resolve test coverage conditional audit boundaries
 
-- **State:** blocked
+- **State:** open
 - **Area:** pipeline
 - **Why:** Archived audit/feedback cases: L147, L149. Decide safe support for standard DOCTYPE-bearing JaCoCo exports; Retain helper-only coverage cache collision without claiming admitted stale reuse.
-- **Scope:** `src/appsec_review/jobs/job_test_coverage/job.py` Blocked decision: Decide safe DOCTYPE-bearing JaCoCo support while preserving entity protections; do not classify helper-only cache collision as an admitted runtime defect.
+- **Scope:** `src/appsec_review/jobs/job_test_coverage/job.py` and its coverage parsers.
+  User decision, 2026-11-20: accept standard JaCoCo DOCTYPE declarations without resolving
+  DTDs or entities. No external filesystem/network resolution, user-defined entity expansion
+  or broader XML policy relaxation is authorized. Preserve raw evidence and parsing bounds.
+  Do not classify helper-only cache collision as an admitted runtime defect.
 - **Done when:** Focused offline fixtures establish each trigger; correct proved defects or document the bounded contract and remaining gaps.
+  L147 implemented and verified at `1a414624` in the 159-case main union: only the standard
+  JaCoCo Report 1.1 public declaration with `report.dtd` is accepted, without DTD retrieval.
+  Encoding-aware nonresolving preflight enforces declarations and node bounds; unknown IDs,
+  internal subsets, custom or unresolved entities remain rejected, including UTF-16 controls.
+  Original artifact bytes/hashes are preserved; only a private parsing buffer omits the validated
+  header. Cobertura gets no DOCTYPE exception and no native report generator was run.
+  L149 remains conditional: helper-only cache behavior is not demonstrated admitted stale reuse.
+  This entry stays open for that remaining verification, not because the user decision is pending.
 - **Refs:** `audit-results/job-audit-job_test_coverage.md`.
 
 ### T-5247 — Resolve third party data sync conditional audit boundaries
