@@ -29,9 +29,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_image_pin_verification/job.py#L137) |
-| `selection` | `selection.resolve_pins` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_image_pin_verification/job.py#L74) |
-| `verification` | `verification.inspect_images` | 1 | `owasp_verification` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_image_pin_verification/job.py#L106) |
+| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_image_pin_verification/job.py#L143) |
+| `selection` | `selection.resolve_pins` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_image_pin_verification/job.py#L75) |
+| `verification` | `verification.inspect_images` | 1 | `owasp_verification` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_image_pin_verification/job.py#L112) |
 
 ### Accepted input declarations
 
@@ -57,7 +57,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_image_pin_verification/test_host_pins.py`<br>`tests/integration/job_image_pin_verification/test_image_pin_verification.py` |
 | live | None declared |
-| unit | `tests/unit/job_image_pin_verification/test_configuration.py`<br>`tests/unit/job_image_pin_verification/test_contract.py`<br>`tests/unit/job_image_pin_verification/test_host_pins.py`<br>`tests/unit/job_image_pin_verification/test_image_pin_update.py`<br>`tests/unit/job_image_pin_verification/test_job_graph.py`<br>`tests/unit/job_image_pin_verification/test_pins.py`<br>`tests/unit/job_image_pin_verification/test_update_boundaries.py` |
+| unit | `tests/unit/job_image_pin_verification/test_configuration.py`<br>`tests/unit/job_image_pin_verification/test_contract.py`<br>`tests/unit/job_image_pin_verification/test_host_pins.py`<br>`tests/unit/job_image_pin_verification/test_image_pin_update.py`<br>`tests/unit/job_image_pin_verification/test_job_graph.py`<br>`tests/unit/job_image_pin_verification/test_pins.py`<br>`tests/unit/job_image_pin_verification/test_update_boundaries.py`<br>`tests/unit/job_image_pin_verification/test_signing_selection.py`<br>`tests/signing/test_cli.py::test_pinned_images_adds_id_only_and_image_tag_pins_of_enabled_jobs` |
 
 ### Dagster placement
 

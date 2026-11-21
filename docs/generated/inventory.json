@@ -3071,7 +3071,7 @@
       "stepwise-rewind/1",
       "stylistic-lead-filter/1",
       "successor-import/1",
-      "svf-alias-adapter/1",
+      "svf-alias-adapter/3",
       "svf-alias-analysis-handoff/1",
       "svf-alias-output/1",
       "svf-alias-record/1",
@@ -20504,7 +20504,7 @@
               "handler": "appsec_review.jobs.job_image_pin_verification.job.build_job.<locals>.publish_handoff",
               "id": "publication.publish_handoff",
               "internal_tools": [],
-              "line": 137,
+              "line": 143,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_image_pin_verification/job.py",
@@ -20526,7 +20526,7 @@
               "handler": "appsec_review.jobs.job_image_pin_verification.job.build_job.<locals>.resolve_pins",
               "id": "selection.resolve_pins",
               "internal_tools": [],
-              "line": 74,
+              "line": 75,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_image_pin_verification/job.py",
@@ -20550,7 +20550,7 @@
               "handler": "appsec_review.jobs.job_image_pin_verification.job.build_job.<locals>.inspect_images",
               "id": "verification.inspect_images",
               "internal_tools": [],
-              "line": 106,
+              "line": 112,
               "pool": "owasp_verification",
               "settings": {},
               "source": "src/appsec_review/jobs/job_image_pin_verification/job.py",
@@ -20578,7 +20578,9 @@
           "tests/unit/job_image_pin_verification/test_image_pin_update.py",
           "tests/unit/job_image_pin_verification/test_job_graph.py",
           "tests/unit/job_image_pin_verification/test_pins.py",
-          "tests/unit/job_image_pin_verification/test_update_boundaries.py"
+          "tests/unit/job_image_pin_verification/test_update_boundaries.py",
+          "tests/unit/job_image_pin_verification/test_signing_selection.py",
+          "tests/signing/test_cli.py::test_pinned_images_adds_id_only_and_image_tag_pins_of_enabled_jobs"
         ]
       },
       "workers": 1
@@ -41069,7 +41071,7 @@
               "handler": "appsec_review.jobs.job_svf_alias_analysis.job.build_job.<locals>.publish",
               "id": "acceptance.publish_handoff",
               "internal_tools": [],
-              "line": 518,
+              "line": 639,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_svf_alias_analysis/job.py",
@@ -41093,7 +41095,7 @@
               "handler": "appsec_review.jobs.job_svf_alias_analysis.job.build_job.<locals>.analyze",
               "id": "analyze.scopes",
               "internal_tools": [],
-              "line": 499,
+              "line": 615,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_svf_alias_analysis/job.py",
@@ -41115,7 +41117,7 @@
               "handler": "appsec_review.jobs.job_svf_alias_analysis.job.build_job.<locals>.load",
               "id": "load.accepted_cpp",
               "internal_tools": [],
-              "line": 492,
+              "line": 608,
               "pool": "application",
               "settings": {},
               "source": "src/appsec_review/jobs/job_svf_alias_analysis/job.py",
@@ -41138,7 +41140,8 @@
         "unit": [
           "tests/unit/job_svf_alias_analysis/test_contract.py",
           "tests/unit/job_svf_alias_analysis/test_svf_alias_analysis.py",
-          "tests/unit/job_svf_alias_analysis/test_svf_tool.py"
+          "tests/unit/job_svf_alias_analysis/test_svf_tool.py",
+          "tests/graph/test_svf_crosscheck.py"
         ]
       },
       "workers": 2
@@ -46370,7 +46373,7 @@
     "src/appsec_review/binary_decompilation/publication.py": "3b57ea92845ff58376f84325ab8f28021a93b2a77847de2b9952ef27694869f8",
     "src/appsec_review/binary_decompilation/runner.py": "f475c65f34b60a1e1722dd954879db51dade8e7a96e0078958d3536bb3320c0c",
     "src/appsec_review/blint_report.py": "bb0e7857f1e84a40850bd842f210eda2f3522869e315fde004b0a4def7f71830",
-    "src/appsec_review/cli.py": "8c4e4261fd5e61b357eb33eb85bf98c25c0a821fdbbcef10e44bb98f1e6a2302",
+    "src/appsec_review/cli.py": "0d555b8921edc7d3cb6b720618f4a2a5076a502e4149a464a95e70f6055a72b9",
     "src/appsec_review/codeql/__init__.py": "340c9f507876061495dfcc2c11ffc81c31a1dc78de17ce3bf57c965ec8de0400",
     "src/appsec_review/codeql/execution_metrics.py": "57530d57e6a960269978e9c4f0f8ae9f6d2b799a77be76d72936a08e41321ac7",
     "src/appsec_review/codeql/predecessor.py": "5353ec22bffac2d6004731980e9d4fa3bab765a746db30f5c7ce6785a59fde03",
@@ -46460,7 +46463,7 @@
     "src/appsec_review/graph/normalize.py": "bd83ba68b3435ebe6265922b6a37d1a997f3f06ba5088f99b8781476dd8c9c4d",
     "src/appsec_review/graph/scorecard.py": "7362e3d38371f7e267e6e82d9460dc4954430a3f809cb7103d31dc140022d4af",
     "src/appsec_review/graph/settings.py": "7d5cf9ab8f981793a603f8ed3c14da0d48b2f3e1ac6b1f5d8a76e7389286f342",
-    "src/appsec_review/graph/svf_crosscheck.py": "076735aa424c7f26c28722a142f752a6836055fb1b8adf7fbccdaee85b4f7347",
+    "src/appsec_review/graph/svf_crosscheck.py": "4ec647855c43c32b4e48685a938a09564b5487a61b911b1e7d5793d34a09b6eb",
     "src/appsec_review/guidance/__init__.py": "d0872a53c488984113a073a6ed1f108e4b8b6886a117f5275e9dee7598b83df1",
     "src/appsec_review/guidance/cards.py": "0b5e9e07e4d28013e3ace8d57351482431a2d7288194dd7e07559181b944157e",
     "src/appsec_review/guidance/compose.py": "8553163e2c99a0148a65b78f7830de88911dc776da1dc0343d9b4919b1f83bb5",
@@ -46634,8 +46637,8 @@
     "src/appsec_review/jobs/job_final_report_publication/settings.py": "fa8675f291bcc0232607accfa5ad9fe27c9b9ef32b7e82cc208fa6f9e74eec33",
     "src/appsec_review/jobs/job_image_pin_verification/__init__.py": "e3bc474a66954c0e9699a7accf8e02c1ac505c2caecd7bf92781c7929831a1cf",
     "src/appsec_review/jobs/job_image_pin_verification/datasets.py": "961604188bfbf94bf7993fa596dd6e8fcb52af76fb39fd78943d449f4d989fe8",
-    "src/appsec_review/jobs/job_image_pin_verification/job.py": "1d4ae5ae2e1bfab9c7046939fe6e118b6274146258fe2bf51557fa0ae685745b",
-    "src/appsec_review/jobs/job_image_pin_verification/pins.py": "4ea6ffcd81475a35e75bde7316360a4f68eeb37ddccb630847bed6b1cbc8e9ab",
+    "src/appsec_review/jobs/job_image_pin_verification/job.py": "6654aaaf9fe70d21e037cdb975a63295e63903fa285e36c080b266c87b42d04a",
+    "src/appsec_review/jobs/job_image_pin_verification/pins.py": "79078570b540ffdf1d5467c1956725146d0f373212b3e6e4467bbc015d3084e3",
     "src/appsec_review/jobs/job_inference_security_review/__init__.py": "056c3c7d7e437b22762e7fe9b79d47560bf191833d6833acd2d2c6c8bd70da5a",
     "src/appsec_review/jobs/job_inference_security_review/audit.py": "f7593f51182c28e2a3601c24ab9fe47539b46128a55c01f503f4546f05371b45",
     "src/appsec_review/jobs/job_inference_security_review/chains.py": "cb752e294a3398a5be7c2da0e0d60a8a3cd6fcd74b06940421995ece2cb31d78",
@@ -46786,7 +46789,7 @@
     "src/appsec_review/jobs/job_source_history_analysis/window.py": "3ed98c1e76f0cd5a57aa3f217acf03cdc5e8338eae359b1726504cb3161bde92",
     "src/appsec_review/jobs/job_svf_alias_analysis/__init__.py": "e08e45c43a03c1852ca56c5293cb257fa5cb42848155bb730f7982cc76bdbeaf",
     "src/appsec_review/jobs/job_svf_alias_analysis/datasets.py": "1270cc8151f29ceb106ff2590005ce187a9bdf9fbc101e210af83729a0539eeb",
-    "src/appsec_review/jobs/job_svf_alias_analysis/job.py": "23ae83459cfbf9db0eb2a56a8aefa81b597e6597056abf8e4d62ea1738852a61",
+    "src/appsec_review/jobs/job_svf_alias_analysis/job.py": "3821b346384d7cb2487a433099af721c17567163531ae47960248e4b3f359f98",
     "src/appsec_review/jobs/job_svf_alias_analysis/planning.py": "3457d5f59c2730b0157ab85648bfebde7c674047bfda591a7a71beffb0db71ae",
     "src/appsec_review/jobs/job_target_acquisition/__init__.py": "e3bc474a66954c0e9699a7accf8e02c1ac505c2caecd7bf92781c7929831a1cf",
     "src/appsec_review/jobs/job_target_acquisition/datasets.py": "872269ec92b71e6fd73aa7d38132a24b11168e0122b964916cd229dfb853ef07",
@@ -47147,7 +47150,7 @@
     "src/appsec_review/threat_model/view.py": "3d0663351119f4c4001cbe3d5bba40a319c8307ab8c8f688ba2f0e03c12039f3",
     "src/appsec_review/tool_inputs.py": "0dbd7fcf731c377d078bc076282bc9b3c72a732541e2adbbd6086ef29507e2da",
     "tests/acceptance_review_stages.py": "b64a3f293df78b2eae8a257cf4653c03bcf8b144f589312f96e4e070c90c0b51",
-    "tests/job-test-map.json": "71c6c45e95a81a7bf3553f25524d2bbeaedfc7ac6b845446d6b02bef098bfcf0"
+    "tests/job-test-map.json": "d8fabb5f02e66a3322d3401022ec111cece0e13f3af9b20b6ed600e4fb74d89b"
   },
   "tool_policy": {
     "disable_grype": true,

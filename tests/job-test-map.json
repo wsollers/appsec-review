@@ -390,7 +390,9 @@
         "tests/unit/job_image_pin_verification/test_image_pin_update.py",
         "tests/unit/job_image_pin_verification/test_job_graph.py",
         "tests/unit/job_image_pin_verification/test_pins.py",
-        "tests/unit/job_image_pin_verification/test_update_boundaries.py"
+        "tests/unit/job_image_pin_verification/test_update_boundaries.py",
+        "tests/unit/job_image_pin_verification/test_signing_selection.py",
+        "tests/signing/test_cli.py::test_pinned_images_adds_id_only_and_image_tag_pins_of_enabled_jobs"
       ],
       "integration": [
         "tests/integration/job_image_pin_verification/test_host_pins.py",
@@ -811,7 +813,8 @@
       "unit": [
         "tests/unit/job_svf_alias_analysis/test_contract.py",
         "tests/unit/job_svf_alias_analysis/test_svf_alias_analysis.py",
-        "tests/unit/job_svf_alias_analysis/test_svf_tool.py"
+        "tests/unit/job_svf_alias_analysis/test_svf_tool.py",
+        "tests/graph/test_svf_crosscheck.py"
       ],
       "integration": [],
       "acceptance": [],

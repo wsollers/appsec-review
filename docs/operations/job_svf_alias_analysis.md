@@ -34,9 +34,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L518) |
-| `analyze` | `analyze.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L499) |
-| `load` | `load.accepted_cpp` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L492) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L639) |
+| `analyze` | `analyze.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L615) |
+| `load` | `load.accepted_cpp` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L608) |
 
 ### Accepted input declarations
 
@@ -86,7 +86,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | `tests/live/test_svf_live.py` |
-| unit | `tests/unit/job_svf_alias_analysis/test_contract.py`<br>`tests/unit/job_svf_alias_analysis/test_svf_alias_analysis.py`<br>`tests/unit/job_svf_alias_analysis/test_svf_tool.py` |
+| unit | `tests/unit/job_svf_alias_analysis/test_contract.py`<br>`tests/unit/job_svf_alias_analysis/test_svf_alias_analysis.py`<br>`tests/unit/job_svf_alias_analysis/test_svf_tool.py`<br>`tests/graph/test_svf_crosscheck.py` |
 
 ### Dagster placement
 

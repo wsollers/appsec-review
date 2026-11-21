@@ -372,8 +372,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5138 | [Export only evidence-backed SARIF flows fixes classifications and severity](#t-5138-export-only-evidence-backed-sarif-flows-fixes-classifications-and-severity) | review | done (2026-11-19, 9586762a38875517b0ab20652839d99581dee20f) |
 | T-5139 | [Carry certified reachable supply-chain facts into the report](#t-5139-carry-certified-reachable-supply-chain-facts-into-the-report) | review | done (2026-11-19, e80e099908d74e4f1fca7714c8bcd99e7dce76ce) |
 | T-5140 | [Conserve report bounds completion metrics and renderer outcomes](#t-5140-conserve-report-bounds-completion-metrics-and-renderer-outcomes) | review | done (2026-11-19, e80e099908d74e4f1fca7714c8bcd99e7dce76ce) |
-| T-5141 | [Update only active required image pins by default](#t-5141-update-only-active-required-image-pins-by-default) | images | open |
-| T-5142 | [Verify declared preinstalled CodeQL runtime identities at readiness](#t-5142-verify-declared-preinstalled-codeql-runtime-identities-at-readiness) | images | open |
+| T-5141 | [Update only active required image pins by default](#t-5141-update-only-active-required-image-pins-by-default) | images | done (2026-11-21, b6b50202eabe1cc13c70570be50cb37e66030164; verified at f8afa77480ca0065278ec0abde7b3916db764abd) |
+| T-5142 | [Verify declared preinstalled CodeQL runtime identities at readiness](#t-5142-verify-declared-preinstalled-codeql-runtime-identities-at-readiness) | images | done (2026-11-21, b6b50202eabe1cc13c70570be50cb37e66030164 and f8afa77480ca0065278ec0abde7b3916db764abd) |
 | T-5143 | [Honor evidence request wire shapes and zero retrieval budgets](#t-5143-honor-evidence-request-wire-shapes-and-zero-retrieval-budgets) | review | done (2026-11-19, d6e7b56c398525abe058d8d06b7a6143994e18a1) |
 | T-5144 | [Require verifier blindness evidence for independent confirmation](#t-5144-require-verifier-blindness-evidence-for-independent-confirmation) | review | done (2026-11-19, c1343965c1af975f7cb786e2657c852b099c9823) |
 | T-5145 | [Keep failed judges distinct from intentionally not-convened judges](#t-5145-keep-failed-judges-distinct-from-intentionally-not-convened-judges) | review | done (2026-11-19, a588fa2247a2c4eb743753a7d84973bf1a6f0ff2) |
@@ -420,8 +420,8 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5186 | [Preserve history boundaries rename identities and empty-ranking precedence](#t-5186-preserve-history-boundaries-rename-identities-and-empty-ranking-precedence) | history | done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170) |
 | T-5187 | [Contain optional GitHub enrichment transport failures](#t-5187-contain-optional-github-enrichment-transport-failures) | history | done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170) |
 | T-5188 | [Publish schema-consistent proportional hotspot counts](#t-5188-publish-schema-consistent-proportional-hotspot-counts) | history | done (2026-11-19, 894b6000096253c31d6983d549f5aba08c9f2170) |
-| T-5189 | [Preserve incomplete SVF operands before alias contradiction decisions](#t-5189-preserve-incomplete-svf-operands-before-alias-contradiction-decisions) | graph | open |
-| T-5190 | [Preserve SVF resource bounds nested validation and partial outcomes](#t-5190-preserve-svf-resource-bounds-nested-validation-and-partial-outcomes) | graph | open |
+| T-5189 | [Preserve incomplete SVF operands before alias contradiction decisions](#t-5189-preserve-incomplete-svf-operands-before-alias-contradiction-decisions) | graph | done (2026-11-21, 709ccbfedbb2b8165fbb1900fc2ef167d3868063; verified at 3200c77c021458989a2471e5ec5f6177c13cb096) |
+| T-5190 | [Preserve SVF resource bounds nested validation and partial outcomes](#t-5190-preserve-svf-resource-bounds-nested-validation-and-partial-outcomes) | graph | done (2026-11-21, 709ccbfedbb2b8165fbb1900fc2ef167d3868063 and 3200c77c021458989a2471e5ec5f6177c13cb096) |
 | T-5191 | [Bound Gerrit and bundle reviews without assigning current facts to old patchsets](#t-5191-bound-gerrit-and-bundle-reviews-without-assigning-current-facts-to-old-patchsets) | history | done (2026-11-20, 0f4bc0ab33cb591ea01ed4f3c6fb615538395fe7) |
 | T-5192 | [Retain materializable acquisitions when changed-path diff fails](#t-5192-retain-materializable-acquisitions-when-changed-path-diff-fails) | pipeline | done (2026-11-20, 0f4bc0ab33cb591ea01ed4f3c6fb615538395fe7) |
 | T-5193 | [Reject malformed nested planning values through bounded repair](#t-5193-reject-malformed-nested-planning-values-through-bounded-repair) | build | done (2026-11-21, f03d690f3424d71e4217b4f01ada039a7a3b845d; verified at 01c34c4708e4afa61f1400fe9ff170f907d0c85b) |
@@ -445,7 +445,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5211 | [Preserve language control flow and explicit CFG incompleteness](#t-5211-preserve-language-control-flow-and-explicit-cfg-incompleteness) | graph | done (2026-11-19, 6e91ad8a10f208d3b1f7b0de347147d01240dbab) |
 | T-5212 | [Bind CFG cache semantics and apply bounds before materialization](#t-5212-bind-cfg-cache-semantics-and-apply-bounds-before-materialization) | graph | done (2026-11-19, 5b92dae8befb957b3413595eaeb9af0ea28d507e) |
 | T-5213 | [Align optional intake declarations and Tree-sitter loader behavior](#t-5213-align-optional-intake-declarations-and-tree-sitter-loader-behavior) | pipeline | open |
-| T-5214 | [Verify every native scope checkpoint evidence artifact](#t-5214-verify-every-native-scope-checkpoint-evidence-artifact) | graph | open |
+| T-5214 | [Verify every native scope checkpoint evidence artifact](#t-5214-verify-every-native-scope-checkpoint-evidence-artifact) | graph | done (2026-11-21, 3200c77c021458989a2471e5ec5f6177c13cb096; prior caller proofs below) |
 | T-5215 | [Bind seed omission and provenance accounting into native checkpoint reuse](#t-5215-bind-seed-omission-and-provenance-accounting-into-native-checkpoint-reuse) | graph | done (2026-11-20, eadf2c800980733179d5cfbbff8fcb5aa84456e3) |
 | T-5216 | [Bind dossier Markdown and HTML through publication and the gate](#t-5216-bind-dossier-markdown-and-html-through-publication-and-the-gate) | evidence | done (2026-11-19, d945d9a698f1d107e2d3ffcb6b81d5e5a9a40e9b) |
 | T-5217 | [Observe exact accepted build payload reads](#t-5217-observe-exact-accepted-build-payload-reads) | evidence | open |
@@ -4710,7 +4710,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5141 — Update only active required image pins by default
 
-- **State:** open
+- **State:** done (2026-11-21, b6b50202eabe1cc13c70570be50cb37e66030164; verified at f8afa77480ca0065278ec0abde7b3916db764abd)
 - **Area:** images
 - **Why:** Archived audit/feedback cases: IP-F01. Default pin updater still requires retired manual Joern/SVF images.
 - **Scope:** `src/appsec_review/jobs/job_image_pin_verification/pins.py`
@@ -4719,11 +4719,18 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5142 — Verify declared preinstalled CodeQL runtime identities at readiness
 
-- **State:** open
+- **State:** done (2026-11-21, b6b50202eabe1cc13c70570be50cb37e66030164 and f8afa77480ca0065278ec0abde7b3916db764abd)
 - **Area:** images
 - **Why:** Archived audit/feedback cases: IP-F02. Gate omits declared preinstalled CodeQL runtime IDs.
 - **Scope:** `src/appsec_review/config/host_pins.py`, `src/appsec_review/jobs/job_image_pin_verification/job.py`; paired callers/tests identified by those cases.
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  T-5141/T-5142 passed the exact 152-case owner union on main in 8.64 s, two workers,
+  seed 25142, without skips or cases over 10 s. Default selection excludes retired optional
+  tools but preserves explicit selections. Readiness inspects frozen CodeQL build/runtime IDs
+  and preserves per-reference diagnostics. ID-only references remain `tag=None`: bulk signing
+  retains `skipped_absent`, while the readiness gate remains strict for an absent declared ID.
+  Engine/signing boundaries were faked; no real image, host pin, signing policy or binding changed.
+  Operator rollout and positive acceptance remain outside this closure (T-5263).
 - **Refs:** `audit-results/job-audit-job_image_pin_verification.md`.
 
 ### T-5143 — Honor evidence request wire shapes and zero retrieval budgets
@@ -5334,7 +5341,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5189 — Preserve incomplete SVF operands before alias contradiction decisions
 
-- **State:** open
+- **State:** done (2026-11-21, 709ccbfedbb2b8165fbb1900fc2ef167d3868063; verified at 3200c77c021458989a2471e5ec5f6177c13cb096)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: SVF-F02, SVF-F05. Truncated points-to sets can publish a complete object with a missing free; Alias cross-check drops unmodeled empty operands before its completeness test.
 - **Scope:** `containers/tools/svf/driver/svf-alias-export.cpp`, `src/appsec_review/graph/svf_crosscheck.py`; paired callers/tests identified by those cases.
@@ -5343,11 +5350,19 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5190 — Preserve SVF resource bounds nested validation and partial outcomes
 
-- **State:** open
+- **State:** done (2026-11-21, 709ccbfedbb2b8165fbb1900fc2ef167d3868063 and 3200c77c021458989a2471e5ec5f6177c13cb096)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: SVF-F01, SVF-F04, SVF-K01. Output-sized process file limit prevents permitted bitcode sizes; Nested driver validation admits malformed success or crashes the entire analysis task.
 - **Scope:** `src/appsec_review/jobs/job_svf_alias_analysis/job.py`
 - **Done when:** Each cited case has a focused unit regression that fails before repair and passes alone and shuffled/parallel.
+  T-5189/T-5190 passed the exact 123-case owner union on main in 5.28 s, two workers,
+  seed 25190, without skips or cases over 10 s. Truncation/unmodeled operands retain uncertainty
+  in inverse objects and negative alias decisions; known empty sets and positive intersections
+  remain meaningful. Independent file/parser budgets, nested shape validation and actual
+  aggregate partial/failed publication are covered. Malformed or unresolvable driver paths
+  become module-local gaps without swallowing accepted-custody or cancellation failures.
+  Retirement/default-disabled policy is unchanged. Fixtures are inert emitter-shaped data;
+  no native SVF/LLVM compatibility, image rollout or live review is claimed.
 - **Refs:** `audit-results/job-audit-job_svf_alias_analysis.md`; follow-up to closed T-159, T-168, T-169 (not reopened).
 
 ### T-5191 — Bound Gerrit and bundle reviews without assigning current facts to old patchsets
@@ -5652,7 +5667,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5214 — Verify every native scope checkpoint evidence artifact
 
-- **State:** open
+- **State:** done (2026-11-21, 3200c77c021458989a2471e5ec5f6177c13cb096; prior caller proofs below)
 - **Area:** graph
 - **Why:** Archived audit/feedback cases: CSA-F04, CSI-K01, CPG-F06, SVF-F03. Scope cache reuses observations whose native evidence is missing; raw evidence omitted from scope-checkpoint verification.
 - **Scope:** `src/appsec_review/jobs/cpp_index_scopes.py`, `src/appsec_review/jobs/job_clang_static_analysis/job.py`; paired callers/tests identified by those cases.
@@ -5666,7 +5681,13 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   re-verified on reuse. Clangd CSI-K01 completed at `97da8146`, with main 139 passed/9.78 s:
   receipt-linked stdout/stderr are verified even without explicit raw pins; missing, changed
   or symlinked streams fail closed. New generations preserve prior execution bytes and receipts.
-  SVF-F03 remains open; these caller-specific checks do not establish global closure.
+  The final named caller, SVF-F03, is complete at `709ccbfedbb2b8165fbb1900fc2ef167d3868063`
+  with identity-return follow-up `3200c77c021458989a2471e5ec5f6177c13cb096`. Main 123
+  passed in 5.28 s. Plans, run/driver JSON, compile databases, receipts and streams are verified
+  on reuse; missing, changed or symlinked evidence refuses reuse. Identity-addressed checkpoints
+  and fresh execution generations preserve prior bytes through A-to-B-to-A transitions.
+  This closes the four named caller defects using their recorded focused proofs, not a new
+  all-native acceptance run.
 - **Refs:** `audit-results/job-audit-job_clang_static_analysis.md`, `audit-results/job-audit-job_cpg_analysis.md`, `audit-results/job-audit-job_cpp_symbol_index.md`, `audit-results/job-audit-job_svf_alias_analysis.md`; follow-up to closed T-159 (not reopened).
 
 ### T-5215 — Bind seed omission and provenance accounting into native checkpoint reuse
