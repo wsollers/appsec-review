@@ -10,6 +10,9 @@ import pytest
 
 from appsec_review.jobs.job_image_pin_verification import build_job
 from appsec_review.jobs.job_image_pin_verification import job as gate
+from appsec_review.config import load_config
+from appsec_review.config.host_pins import HostPins
+from tests.host_pins_support import ROOT, fixture_bindings, fixture_preinstalled, write_host_pins
 from tests.unit.job_image_pin_verification.support import (
     PIN_A, PIN_B, UNITS, artifact, config, context, matching_runner, pin, write_inputs,
 )
@@ -114,6 +117,87 @@ def test_resolve_binds_frozen_host_pins_and_hashes_exact_input_bytes(tmp_path):
     }
     assert not (unit.job.repository_root / "containers/build.py").exists()
     assert sorted(path.name for path in catalog.parent.iterdir()) == ["catalog.toml"]
+
+
+def frozen_codeql_inputs(tmp_path):
+    unit = context(tmp_path, UNITS[0])
+    _, frozen, host = write_inputs(unit)
+    unit.job.repository_root = ROOT
+    declarations = fixture_preinstalled()
+    write_host_pins(host, runtimes=declarations)
+    loaded = load_config(ROOT / "appsec-review.toml", profile="dev", overlay="",
+                         host_pins=HostPins(host, host.read_bytes()))
+    frozen.write_bytes(loaded.resolved_json)
+    return unit, frozen, declarations
+
+
+@pytest.mark.parametrize("outcome", ["matched", "build-missing", "runtime-missing", "mismatched", "malformed"],
+                         ids=str)
+def test_gate_inspects_declared_exact_ids_and_keeps_per_reference_diagnostics(tmp_path, outcome):
+    unit, _, declarations = frozen_codeql_inputs(tmp_path)
+    selected = handler(UNITS[0])(unit)
+    runtime_pins = [row for row in selected["pins"] if ".preinstalled_runtimes[" in row["source"]]
+    assert runtime_pins == [
+        pin(f"jobs.job_codeql_analysis.settings.preinstalled_runtimes[{index}].{key}", row[key], row[key])
+        for index, row in enumerate(declarations) for key in ("build_image_id", "runtime_image_id")
+    ]
+    local = fixture_bindings()
+    exact_ids = {row[key] for row in declarations for key in ("build_image_id", "runtime_image_id")}
+    local.update({image_id: image_id for image_id in exact_ids})
+    failing_id = declarations[0]["build_image_id" if outcome == "build-missing" else "runtime_image_id"]
+    calls = []
+
+    def runner(argv, timeout):
+        assert tuple(argv[:3]) == ("docker", "image", "inspect") and timeout == 60
+        reference = argv[3]
+        calls.append(reference)
+        if reference == failing_id and outcome != "matched":
+            if outcome in {"build-missing", "runtime-missing"}:
+                return 1, b"", b"No such image: declared", False
+            return 0, (PIN_B if outcome == "mismatched" else "sha256:bad").encode(), b"", False
+        return 0, local[reference].encode(), b"", False
+
+    inspection = context(tmp_path, UNITS[1], {UNITS[0]: selected})
+    if outcome == "matched":
+        verified = handler(UNITS[1], runner)(inspection)
+        publication = context(tmp_path, UNITS[2], {UNITS[1]: verified})
+        published = handler(UNITS[2], runner)(publication)
+        assert published["terminal_status"] == "SUCCEEDED" and published["gaps"] == []
+        assert all(row["status"] == "matched" for row in published["images"])
+        assert [row["tag"] for row in published["images"] if ".preinstalled_runtimes[" in row["source"]] == [
+            row["tag"] for row in runtime_pins]
+    else:
+        with pytest.raises(gate.ImagePinVerificationFailed):
+            handler(UNITS[1], runner)(inspection)
+        _, document = artifact(inspection, "image-pin-verification.json")
+        assert document["status"] == "FAILED"
+        failed_sources = [row["source"] for row in runtime_pins if row["tag"] == failing_id]
+        assert [gap["scope_id"] for gap in document["gaps"]] == failed_sources
+        assert all(gap["code"] == "producer_blocked" and gap["retryable"] for gap in document["gaps"])
+        expected_status = ("missing" if outcome.endswith("missing") else
+                           "inspect_failed" if outcome == "malformed" else "mismatched")
+        assert [row["status"] for row in document["pins"] if row["source"] in failed_sources] == [
+            expected_status] * len(failed_sources)
+        assert not (inspection.job.run_root / "data/jobs/job_image_pin_verification/latest.json").exists()
+    assert exact_ids <= set(calls)
+    assert len(calls) == len(set(calls))
+
+
+@pytest.mark.parametrize("change", ["missing", "empty", "invalid"], ids=str)
+def test_resolve_refuses_omitted_or_changed_frozen_codeql_declarations(tmp_path, change):
+    unit, frozen, _ = frozen_codeql_inputs(tmp_path)
+    document = json.loads(frozen.read_bytes())
+    settings = document["jobs"]["job_codeql_analysis"]["settings"]
+    if change == "missing":
+        del settings["preinstalled_runtimes"]
+    elif change == "empty":
+        settings["preinstalled_runtimes"] = []
+    else:
+        settings["preinstalled_runtimes"][0]["runtime_image_id"] = "sha256:bad"
+    frozen.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValueError, match="preinstalled"):
+        handler(UNITS[0])(unit)
+    assert not (unit.unit_root / "image-pin-plan.json").exists()
 
 
 def test_resolve_wires_bound_catalog_and_resolved_document_into_selection(tmp_path, monkeypatch):

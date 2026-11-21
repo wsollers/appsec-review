@@ -506,11 +506,14 @@ the dedicated first job is the authoritative fresh check when a run is resumed.
 
 `job_image_pin_verification` follows the model gate and precedes intake in every review graph. It
 is also always executed and non-propagating. It builds nothing: it reads `containers/catalog.toml`
-and the run's frozen configuration, runs `docker image inspect` for every enabled catalog image, every
-enabled job's `tag`/`image_id` pin (the project-build profiles) and `source_image_tag`/
-`source_image_id` pin (CodeQL), records each pin's pinned and resolved image ID, and fails the run,
-never recording a gap, naming every missing image and moved tag. Images are rebuilt and re-pinned on
-the host by the operator. Setting `jobs.job_image_pin_verification.settings.enabled = false` makes
+and the run's frozen configuration, runs `docker image inspect` for every enabled non-manual catalog
+image, enabled job image reference, enabled telemetry PDF image, and enabled CodeQL preinstalled
+build/runtime ID. Manual catalog images remain selected when an enabled job/report references them.
+Declared runtimes retain exact-ID inspection and must match the frozen host document. The gate
+records every expected and observed ID and fails on missing, mismatched or uninspectable references,
+retaining one diagnostic gap per failed reference but never publishing an accepted failed handoff.
+Inspection does not establish compiled-query readiness or change signing policy. Images are rebuilt
+and re-pinned on the host by the operator. Setting `jobs.job_image_pin_verification.settings.enabled = false` makes
 the next gate follow the model gate directly. See
 [`../operations/image-pin-verification.md`](../operations/image-pin-verification.md).
 

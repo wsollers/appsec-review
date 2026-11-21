@@ -3,9 +3,9 @@
 The job builds nothing. Images are built and re-pinned on the host by the operator
 (``containers/build.py build``, then ``appsec-review update-image-pins``). The gate reads
 ``containers/catalog.toml`` and the run's frozen configuration, runs ``docker image inspect`` for each
-tag through an injectable command runner (tests never reach Docker), and fails the run naming every
-missing image, moved tag and uninspectable tag. A missing or mismatched tool image is never a
-recorded gap.
+tag or declared CodeQL build/runtime ID through an injectable command runner (tests never reach
+Docker), and fails the run naming every missing, mismatched or uninspectable reference. Failures
+retain per-reference diagnostic gaps but never publish an accepted handoff.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from appsec_review.jobs.job_image_pin_verification.pins import (
     CATALOG, PASSING, configured_pins, describe, verify_pins,
 )
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.runtime.selection import resolved_job_is_enabled
 
 
 LOGGER = logging.getLogger(__name__)
@@ -87,6 +88,11 @@ def build_job(*, runner: Runner | None = None) -> Job:
         if (host_record.get("sha256") != hashlib.sha256(host_bytes).hexdigest()
                 or host_record.get("document") != parse_host_pins(host_bytes)):
             raise ValueError("image pin verification host-pins identity mismatch")
+        codeql = resolved.get("jobs", {}).get("job_codeql_analysis")
+        if isinstance(codeql, Mapping) and resolved_job_is_enabled("job_codeql_analysis", codeql):
+            if (codeql.get("settings", {}).get("preinstalled_runtimes")
+                    != host_record["document"]["preinstalled_runtimes"]):
+                raise ValueError("image pin verification preinstalled runtime declarations differ from host pins")
         pins = configured_pins(bound_catalog_images(images, resolved), resolved)
         if not pins:
             raise ValueError("image pin verification found no enabled catalog image or configured pin")

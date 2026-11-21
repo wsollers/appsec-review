@@ -39,13 +39,44 @@ def runner(images):
     return run
 
 
+def active_bindings():
+    images = fixture_bindings()
+    for tag in ("appsec-review/tool-svf:3.3.0", "appsec-review/tool-joern:4.0.630"):
+        del images[tag]
+    return images
+
+
+def test_default_update_bootstraps_without_retired_manual_images(tmp_path, monkeypatch):
+    config, catalog, host = files(tmp_path, monkeypatch)
+    local = active_bindings()
+    docker = runner(local)
+    report = update_pins(config_path=config, catalog_path=catalog, write=True, runner=docker)
+    assert report["failures"] == [] and report["written"] is True
+    assert {argv[3] for argv in docker.calls} == set(local)
+    assert tomllib.loads(host.read_text())["images"] == local
+    loaded = load_config(config)
+    assert loaded.job("job_cpg_analysis").settings["enabled"] is False
+    assert loaded.job("job_svf_alias_analysis").settings["enabled"] is False
+
+
+def test_default_update_still_requires_explicitly_referenced_manual_image(tmp_path, monkeypatch):
+    config, catalog, host = files(tmp_path, monkeypatch)
+    local = active_bindings()
+    referenced_manual = "appsec-review/tool-report-latex:1.0.0"
+    del local[referenced_manual]
+    report = update_pins(config_path=config, catalog_path=catalog, write=True, runner=runner(local))
+    assert report["written"] is False and len(report["failures"]) == 1
+    assert referenced_manual in report["failures"][0] and "resolved missing" in report["failures"][0]
+    assert not host.exists()
+
+
 def test_dry_run_bootstraps_without_loading_missing_pins_or_writing_files(tmp_path, monkeypatch):
     config, catalog, host = files(tmp_path, monkeypatch)
     before = config.read_bytes(), catalog.read_bytes()
     docker = runner(fixture_bindings())
     report = update_pins(config_path=config, catalog_path=catalog, write=False, runner=docker)
     assert not report["written"] and not report["failures"] and report["edits"]
-    assert report["checked"] == len(fixture_bindings()) == len(docker.calls)
+    assert report["checked"] == len(active_bindings()) == len(docker.calls)
     assert not host.exists()
     assert before == (config.read_bytes(), catalog.read_bytes())
 
@@ -53,7 +84,7 @@ def test_dry_run_bootstraps_without_loading_missing_pins_or_writing_files(tmp_pa
 def test_write_changes_only_ignored_host_bindings_and_loads_every_consumer(tmp_path, monkeypatch):
     config, catalog, host = files(tmp_path, monkeypatch)
     before = config.read_bytes(), catalog.read_bytes()
-    local = fixture_bindings()
+    local = active_bindings()
     report = update_pins(config_path=config, catalog_path=catalog, write=True, runner=runner(local))
     assert report["written"] and not report["failures"]
     assert before == (config.read_bytes(), catalog.read_bytes())
@@ -122,3 +153,22 @@ def test_cli_bootstrap_and_missing_image_exit_status(tmp_path, monkeypatch, caps
     monkeypatch.setattr(build_executor, "_run", runner(fixture_bindings()))
     assert cli.main(["--config", str(config), "update-image-pins", "--write"]) == 0
     assert json.loads(capsys.readouterr().out)["written"] and host.is_file()
+
+
+@pytest.mark.parametrize("available", [False, True], ids=["missing", "available"])
+def test_cli_explicit_manual_images_still_require_inspection_before_publication(
+        tmp_path, monkeypatch, capsys, available):
+    from appsec_review import cli
+    from appsec_review.container_runtime import build_executor
+    config, _, host = files(tmp_path, monkeypatch)
+    write_host_pins(host)
+    before = host.read_bytes()
+    docker = runner(fixture_bindings() if available else active_bindings())
+    monkeypatch.setattr(build_executor, "_run", docker)
+    status = cli.main(["--config", str(config), "update-image-pins", "--include-manual", "--write"])
+    report = json.loads(capsys.readouterr().out)
+    assert status == (0 if available else 1)
+    assert report["written"] is available
+    assert len(report["failures"]) == (0 if available else 2)
+    assert {argv[3] for argv in docker.calls} == set(fixture_bindings())
+    assert host.read_bytes() == before

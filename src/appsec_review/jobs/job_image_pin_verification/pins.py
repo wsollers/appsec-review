@@ -9,6 +9,7 @@ import re
 import tomllib
 from typing import Any
 
+from appsec_review.config.codeql import _preinstalled_runtimes
 from appsec_review.config.host_pins import (
     HostPins, IMAGE_ID, configuration_image_settings, host_pins_path, image_settings,
     parse_host_pins, serialize_host_pins,
@@ -45,6 +46,15 @@ def configured_pins(catalog_images: Sequence[Mapping[str, Any]],
                 image_id = settings.get(id_key)
                 if isinstance(image_id, str):
                     pins.append({"source": source, "tag": tag, "image_id": image_id})
+            if job_id == "job_codeql_analysis":
+                runtimes = _preinstalled_runtimes(job.get("settings", {}).get("preinstalled_runtimes"))
+                for index, runtime in enumerate(runtimes):
+                    for key in ("build_image_id", "runtime_image_id"):
+                        image_id = getattr(runtime, key)
+                        pins.append({
+                            "source": f"jobs.{job_id}.settings.preinstalled_runtimes[{index}].{key}",
+                            "tag": image_id, "image_id": image_id,
+                        })
     report = document.get("reporting", {}).get("telemetry_report", {})
     if report.get("enabled") is True and report.get("render_pdf") is True:
         for source, settings, id_key, tag in image_settings(report, "reporting.telemetry_report"):
@@ -103,7 +113,8 @@ def describe(result: Mapping[str, Any]) -> str:
 
 
 def update_pins(*, config_path: Path, catalog_path: Path, write: bool, runner: Runner,
-                profile: str | None = None, host_path: Path | None = None) -> dict[str, Any]:
+                profile: str | None = None, host_path: Path | None = None,
+                include_manual: bool = False) -> dict[str, Any]:
     """Inspect recipe tags, validate the complete effective configuration, then publish one host file."""
     from appsec_review.config.loader import load_config
     from appsec_review.storage import atomic_bytes
@@ -118,7 +129,8 @@ def update_pins(*, config_path: Path, catalog_path: Path, write: bool, runner: R
             "images": {}, "preinstalled_runtimes": []}
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise PinUpdateError(f"cannot read the pins: {type(exc).__name__}: {exc}") from exc
-    tags = {item["tag"] for item in images if item.get("state") == "enabled"}
+    tags = {item["tag"] for item in images if item.get("state") == "enabled"
+            and (include_manual or item.get("manual") is not True)}
     tags.update(tag for _, _, _, tag in configuration_image_settings(document))
     pins = [{"source": f"host-pins.images[{json.dumps(tag)}]", "tag": tag,
              "image_id": previous["images"].get(tag)} for tag in sorted(tags)]

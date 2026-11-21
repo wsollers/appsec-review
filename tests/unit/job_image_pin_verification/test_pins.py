@@ -8,6 +8,7 @@ from appsec_review.jobs.job_image_pin_verification.pins import (
     PASSING, configured_pins, describe, inspect_image, verify_pins,
 )
 from tests.unit.job_image_pin_verification.support import PIN_A, PIN_B, pin
+from tests.host_pins_support import fixture_preinstalled
 
 
 def test_configured_pins_filter_catalog_and_sort_enabled_jobs_without_mutating_inputs():
@@ -38,16 +39,55 @@ def test_configured_pins_filter_catalog_and_sort_enabled_jobs_without_mutating_i
     assert (catalog, document) == before
 
 
-def test_configured_pins_include_step_list_and_image_tag_pairs_but_not_preinstalled_runtime_ids():
+def test_configured_pins_include_step_list_and_image_tag_pairs():
     document = {"jobs": {"job_scan": {
-        "settings": {"image_tag": "fixture/image-tag", "image_id": PIN_B,
-                     "preinstalled_runtimes": [{"source_image_tag": "ignored", "source_image_id": PIN_A}]},
+        "settings": {"image_tag": "fixture/image-tag", "image_id": PIN_B},
         "steps": {"scan": {"settings": {"tools": [{"tag": "fixture/list", "image_id": PIN_A}]}}},
     }}}
     assert configured_pins([], document) == [
         pin("jobs.job_scan.settings.image_id", "fixture/image-tag", PIN_B),
         pin("jobs.job_scan.steps.scan.settings.tools[0].image_id", "fixture/list"),
     ]
+
+
+@pytest.mark.parametrize("enabled", [False, True], ids=["disabled", "enabled"])
+def test_only_enabled_codeql_selects_declared_ids_and_deduplicates_inspection(enabled):
+    declaration = fixture_preinstalled()[0]
+    declaration["build_image_id"] = declaration["runtime_image_id"] = PIN_A
+    document = {"jobs": {"job_codeql_analysis": {
+        "settings": {"enabled": enabled, "preinstalled_runtimes": [declaration]},
+    }}}
+    before = deepcopy(document)
+    calls = []
+
+    def runner(argv, timeout):
+        calls.append(argv[3])
+        return 0, PIN_A.encode(), b"", False
+
+    results = verify_pins(configured_pins([], document), runner)
+    assert calls == ([PIN_A] if enabled else [])
+    assert [row["source"] for row in results] == ([
+        f"jobs.job_codeql_analysis.settings.preinstalled_runtimes[0].{key}"
+        for key in ("build_image_id", "runtime_image_id")
+    ] if enabled else [])
+    assert all(row["status"] == "matched" and row["image_id"] == PIN_A for row in results)
+    assert document == before
+
+
+@pytest.mark.parametrize("invalid", ["undeclared", "null", "missing-id", "invalid-id"], ids=str)
+def test_codeql_selection_refuses_invalid_or_missing_declarations(invalid):
+    declaration = fixture_preinstalled()[0]
+    settings = {"preinstalled_runtimes": [declaration]}
+    if invalid == "undeclared":
+        settings.clear()
+    elif invalid == "null":
+        settings["preinstalled_runtimes"] = None
+    elif invalid == "missing-id":
+        del declaration["build_image_id"]
+    else:
+        declaration["runtime_image_id"] = "sha256:bad"
+    with pytest.raises(ValueError, match="preinstalled"):
+        configured_pins([], {"jobs": {"job_codeql_analysis": {"settings": settings}}})
 
 
 @pytest.mark.parametrize(

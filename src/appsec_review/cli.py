@@ -165,6 +165,8 @@ def parser() -> argparse.ArgumentParser:
         help="re-pin every configured image-ID pin to the image its tag resolves to on the local daemon")
     pins.add_argument("--write", action="store_true",
                       help="apply the edits; without it the planned edits are only printed")
+    pins.add_argument("--include-manual", action="store_true",
+                      help="also inspect enabled manual catalog images not referenced by configuration")
 
     add_signing_parser(commands)
 
@@ -193,7 +195,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             config_path = _config_source(args.config)
             report = update_pins(
                 config_path=config_path, catalog_path=config_path.parent / "containers/catalog.toml",
-                write=args.write, runner=_run, profile=args.profile)
+                write=args.write, runner=_run, profile=args.profile, include_manual=args.include_manual)
         except (PinUpdateError, OSError, ValueError) as exc:
             print(json.dumps({"error": str(exc)}, sort_keys=True))
             return 1

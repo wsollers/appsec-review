@@ -93,13 +93,19 @@ The operator-owned [host binding procedure](image-pin-verification.md) and
    mismatches or an empty pin selection.
 3. Select enabled non-manual catalog images, image references in enabled jobs and enabled
    telemetry PDF rendering. A manual image can still be selected through a job reference.
+   Enabled CodeQL also selects every declared preinstalled build/runtime ID. Validate the
+   declarations and their agreement with the frozen host document; absence or corruption is an
+   input failure, not an empty selection. An explicit empty list is valid but makes no
+   preinstalled-runtime readiness claim.
 4. Write `image-pin-plan.json` with catalog, configuration and host-binding hashes plus each
-   reference's source, tag and expected ID.
+   reference's source, tag and expected ID. Exact-ID selections use that ID in the `tag` field,
+   the inspection reference, as well as in `image_id`; no tag lookup substitutes a different image.
 
 ### `verification`
 
-1. Inspect each distinct tag once through `inspect_image`, using its fixed command timeout.
-   Preserve separate results for references sharing a tag but expecting different IDs.
+1. Inspect each distinct tag or exact ID once through `inspect_image`, using its fixed command
+   timeout. Preserve separate results for references sharing an inspection argument, including
+   different declaration fields or tags expecting different IDs.
 2. Classify valid daemon output as `matched`, `mismatched`, or `present` when the selected
    catalog row has no expected ID. Classify missing images separately from timeout, malformed
    output, command failure and operating-system inspection errors.
@@ -144,8 +150,9 @@ walk's terms; image repair and re-pinning are not actions performed by this job.
 
 ## Acceptance
 
-1. **A. Inputs:** Compare the selected reference set against the enabled catalog/job/report
-   references and verify the frozen host-pins hash. Confirm there is no target or upstream
+1. **A. Inputs:** Compare the selected reference set against the enabled non-manual catalog,
+   enabled job/report references and enabled CodeQL preinstalled build/runtime declarations;
+   verify the frozen host-pins hash. Confirm there is no target or upstream
    payload consumption; connectivity is a scheduling predecessor.
 2. **B. Independent comparison:** Compare each expected ID with a separately recorded daemon
    inspection, including distinct tag count versus reference count. Identify any `present`
@@ -164,4 +171,5 @@ into downstream semantic identity. Per-call tag deduplication is not a persisten
 A resumed dispatch re-inspects the daemon; changed host bindings do not rewrite the frozen
 run configuration. Follow [host bindings](image-pin-verification.md#frozen-configuration) for
 configuration changes and [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability)
-for accepted-job identity. Signing and launch enforcement are unchanged.
+for accepted-job identity. Signing and launch enforcement are unchanged. Successful inspection
+does not establish compiled-query readiness or replace separately authorized native acceptance.

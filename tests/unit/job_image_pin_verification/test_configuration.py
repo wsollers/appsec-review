@@ -46,7 +46,8 @@ def test_configured_pins_cover_enabled_catalog_images_and_enabled_job_settings_o
         "job_project_build": {"settings": {"profiles": {"native": {
             "tag": "audit-buildenv-cpp:local", "image_id": "sha256:" + "a" * 64, "user": "10001:10001"}}}},
         "job_codeql_analysis": {"settings": {"source_image_tag": "audit-codeql:x",
-                                             "source_image_id": "sha256:" + "b" * 64}},
+                                             "source_image_id": "sha256:" + "b" * 64,
+                                             "preinstalled_runtimes": []}},
         "job_off": {"settings": {"enabled": False, "tag": "t", "image_id": "sha256:" + "c" * 64}},
     }}
     catalog = [{"id": "tool-x", "state": "enabled", "tag": "fixture/tool-x:1", "image_id": "sha256:" + "d" * 64},

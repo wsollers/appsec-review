@@ -59,7 +59,7 @@ def test_update_sorts_deduplicates_all_recipes_and_validates_candidate_before_pu
         return all_present(argv, timeout)
 
     report = update_pins(config_path=config, catalog_path=catalog, host_path=host, profile="fixture-profile",
-                         write=write, runner=runner)
+                         write=write, runner=runner, include_manual=True)
     expected_tags = ["fixture/catalog", "fixture/config", "fixture/manual", "fixture/report"]
     content = serialize_host_pins(dict.fromkeys(expected_tags, PIN_A), [])
     assert calls == expected_tags
@@ -82,7 +82,8 @@ def test_identical_bindings_report_written_without_rewriting_host_file(tmp_path,
     loader_boundary(monkeypatch)
     publish = Mock(side_effect=AssertionError("identical content must not be rewritten"))
     monkeypatch.setattr(storage, "atomic_bytes", publish)
-    report = update_pins(config_path=config, catalog_path=catalog, host_path=host, write=True, runner=all_present)
+    report = update_pins(config_path=config, catalog_path=catalog, host_path=host, write=True,
+                         runner=all_present, include_manual=True)
     assert report == {
         "written": True, "checked": 4, "host_file": str(host), "edits": [], "failures": [],
         "sha256": hashlib.sha256(before).hexdigest(),
@@ -103,7 +104,8 @@ def test_update_refuses_all_writes_when_any_tag_is_missing_or_uninspectable(tmp_
             return 1, b"", b"daemon down", False
         return 0, PIN_B.encode(), b"", False
 
-    report = update_pins(config_path=config, catalog_path=catalog, host_path=host, write=True, runner=runner)
+    report = update_pins(config_path=config, catalog_path=catalog, host_path=host, write=True,
+                         runner=runner, include_manual=True)
     assert report == {
         "written": False, "checked": 4, "host_file": str(host),
         "edits": [
@@ -207,9 +209,11 @@ def test_update_checks_each_declared_preinstalled_id_without_relabelling_the_dec
 
     if failure_id is not None:
         with pytest.raises(PinUpdateError, match=f"declared preinstalled image is not available: {failure_id}"):
-            update_pins(config_path=config, catalog_path=catalog, host_path=host, write=True, runner=runner)
+            update_pins(config_path=config, catalog_path=catalog, host_path=host, write=True,
+                        runner=runner, include_manual=True)
     else:
-        result = update_pins(config_path=config, catalog_path=catalog, host_path=host, write=True, runner=runner)
+        result = update_pins(config_path=config, catalog_path=catalog, host_path=host, write=True,
+                             runner=runner, include_manual=True)
         assert result["written"] is True and result["edits"] == [] and result["failures"] == []
     expected_ids = [PIN_A] if failure_id == PIN_A else [PIN_A, PIN_B]
     assert calls == ["fixture/catalog", "fixture/config", "fixture/manual", "fixture/report", *expected_ids]

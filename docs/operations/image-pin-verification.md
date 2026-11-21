@@ -26,9 +26,12 @@ and smoke, inspect and publish the local bindings:
 .venv/bin/appsec-review signing sign-image --all-pinned --private-key ~/.config/appsec-review/signing/private/operator.pem
 ```
 
-The updater inspects each distinct recipe tag once. It includes enabled catalog images and
-configured job/reporting image references. Missing or uninspectable images refuse the entire
-update. The complete candidate configuration must pass the real typed loader before the host file
+The updater inspects each distinct recipe tag once. By default it includes enabled **non-manual**
+catalog images and configured job/reporting image references. Unreferenced manual images (such as
+retired Joern/SVF tools) are not prerequisites. A manual image explicitly referenced by configuration
+is still required; `--include-manual` also selects all enabled manual catalog images for inspection.
+That opt-in does not waive missing-image checks or candidate validation. Missing or uninspectable
+images refuse the entire update. The complete candidate configuration must pass the real typed loader before the host file
 is atomically replaced; configuration/catalog bytes never change. An unchanged update is idempotent.
 `run-readiness pin` runs these commands without a Git add or commit.
 
@@ -82,7 +85,13 @@ Its `enabled` setting remains the existing typed Boolean.
 The job reads the catalog and **frozen resolved configuration**, verifies the frozen host-pins
 hash, and checks every enabled non-manual catalog image, enabled job image reference and enabled
 telemetry PDF image against its bound ID. A manual catalog image is still checked when an enabled
-job/report references it. It runs only `docker image inspect`, through the injectable runner.
+job/report references it. For enabled CodeQL, it also checks each declared preinstalled build/runtime
+image by its **exact ID**, not by a tag or a substituted host observation. The declarations must
+match the frozen host document and pass their existing closed typed validation; missing or invalid
+declarations fail selection. An explicitly empty declaration list is allowed and does not establish
+preinstalled readiness or change the configured undeclared-runtime policy.
+It runs only `docker image inspect`, through the injectable runner. It does not check compiled-query
+readiness, execute tools, or replace the configured signing/launch checks.
 
 `image-pin-plan/2` records catalog, resolved-configuration and host-pins hashes plus the selected
 pins. `image-pin-verification.json` and the handoff record every expected/observed ID and status.
