@@ -81,12 +81,28 @@ class _LcovSource:
     branches: set[tuple[int, str, str]] = field(default_factory=set)
     covered_branches: set[tuple[int, str, str]] = field(default_factory=set)
     functions: dict[str, int] = field(default_factory=dict)
+    function_declarations: set[tuple[int, str]] = field(default_factory=set)
 
     def totals(self) -> CoverageTotals:
+        functions = dict(self.functions)
+        for start, declaration in sorted(self.function_declarations):
+            name = declaration
+            # Exact FNDA names disambiguate legacy comma-bearing names, including numeric
+            # prefixes. Otherwise LCOV 2.0's optional end line precedes the remaining name.
+            end, separator, remainder = declaration.partition(",")
+            if (declaration not in self.functions and separator and re.fullmatch(
+                    r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", end.strip())):
+                last = _checked_int(end, "LCOV function end line")
+                if last < start:
+                    raise ValueError("LCOV function end line precedes start line")
+                if not remainder:
+                    raise ValueError("LCOV function name is empty")
+                name = remainder
+            functions.setdefault(name, 0)
         return CoverageTotals(
             len(self.lines), sum(hit > 0 for hit in self.lines.values()),
-            len(self.branches), len(self.covered_branches), len(self.functions),
-            sum(hit > 0 for hit in self.functions.values()))
+            len(self.branches), len(self.covered_branches), len(functions),
+            sum(hit > 0 for hit in functions.values()))
 
 
 def _merge(files: list[CoverageFile]) -> tuple[CoverageFile, ...]:
@@ -138,8 +154,8 @@ def _lcov(data: bytes, max_rows: int) -> CoverageDocument:
             values = raw[3:].split(",", 1)
             if len(values) != 2 or not values[1]:
                 raise ValueError(f"LCOV row {number} is malformed")
-            _checked_int(values[0], "LCOV function line")
-            source.functions.setdefault(values[1], 0)
+            start = _checked_int(values[0], "LCOV function line")
+            source.function_declarations.add((start, values[1]))
         elif raw.startswith("FNDA:"):
             if source is None:
                 raise ValueError(f"LCOV row {number} precedes SF")

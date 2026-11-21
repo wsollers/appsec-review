@@ -389,3 +389,31 @@ def test_jacoco_header_filter_preserves_utf16_and_rejects_unknown_attribute_enti
     assert _totals(document)["lines_rate"] == 1.0
     with pytest.raises(ValueError, match="coverage XML is malformed"):
         parse_coverage(bom + text.replace("&amp;", "&unresolved;").encode(encoding), "jacoco")
+
+
+
+@pytest.mark.parametrize(("definition", "name"), [
+    ("1,f", "f"),
+    ("1,3,f", "f"),
+    ("1,f<int,int>", "f<int,int>"),
+    ("1,3,f<int,int>", "f<int,int>"),
+    ("1,1,f", "f"),
+    ("1,7", "7"),
+    ("1,3,f", "3,f"),
+], ids=["legacy", "range", "legacy-comma", "range-comma", "one-line", "numeric-name", "numeric-comma"])
+def test_lcov_fn_optional_end_preserves_full_name(definition, name):
+    payload = f"SF:a.c\nFN:{definition}\nFNDA:1,{name}\nDA:1,1\nend_of_record\n".encode()
+    totals = _totals(parse_coverage(payload, "lcov"))
+    assert (totals["functions_total"], totals["functions_covered"], totals["functions_rate"]) == (1, 1, 1.0)
+    assert (totals["lines_total"], totals["lines_covered"]) == (1, 1)
+    with pytest.raises(ValueError, match="LCOV row bound exceeded"):
+        parse_coverage(payload, "lcov", max_rows=4)
+
+
+def test_lcov_fn_versions_union_across_source_records():
+    old = b"SF:a.c\nFN:1,f<int,int>\nFNDA:1,f<int,int>\nDA:1,1\nend_of_record\n"
+    new = b"SF:a.c\nFN:1,3,f<int,int>\nFNDA:0,f<int,int>\nFN:4,6,g\nDA:1,0\nend_of_record\n"
+    for payload in (old + new, new + old):
+        totals = _totals(parse_coverage(payload, "lcov"))
+        assert (totals["functions_total"], totals["functions_covered"], totals["functions_rate"]) == (2, 1, 0.5)
+        assert (totals["lines_total"], totals["lines_covered"]) == (1, 1)

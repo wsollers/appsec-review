@@ -666,3 +666,28 @@ def test_standard_jacoco_header_preserves_accepted_report_and_source_identity(tm
     assert doc["source_fingerprint"] == snapshot
     assert not any("malformed_coverage" in gap for gap in doc["gaps"])
     assert reads.document()["reads"][0]["handoff_sha256"] == result["handoff_sha256"]
+
+
+
+@pytest.mark.parametrize(("definition", "name"), [
+    ("1,f", "f"), ("1,3,f", "f"),
+    ("1,f<int,int>", "f<int,int>"), ("1,3,f<int,int>", "f<int,int>"),
+], ids=["legacy", "range", "legacy-comma", "range-comma"])
+def test_lcov_fn_accounting_reaches_real_index(tmp_path, definition, name):
+    from appsec_review.indexing.store import ShardSet
+
+    payload = f"SF:src/a.c\nFN:{definition}\nFNDA:1,{name}\nDA:1,1\nend_of_record\n".encode()
+    root, normalized, indexed = _index_report_fixture(tmp_path, report_payload=payload)
+    unit = normalized["units"][0]
+    assert unit["coverage_state"] == "complete" and unit["gaps"] == []
+    assert (unit["totals"]["functions_total"], unit["totals"]["functions_covered"]) == (1, 1)
+    store = ShardSet(root, indexed["indexes"])
+    cells = list(store.entities(store.shards, kinds=("coverage_cell",)))
+    assert len(cells) == 2
+    for cell in cells:
+        assert cell["payload"]["totals"] == unit["totals"]
+        assert cell["payload"]["totals"]["functions_rate"] == 1.0
+    [file_cell] = [row["payload"] for row in cells if "producer_path" in row["payload"]]
+    assert file_cell["path"] == "src/a.c" and file_cell["file_sha256"] == "1" * 64
+    assert (root / file_cell["artifact_path"]).read_bytes() == payload
+    assert file_sha256(root / file_cell["artifact_path"]) == file_cell["artifact_sha256"]

@@ -350,3 +350,34 @@ def test_unknown_jacoco_declarations_remain_artifact_scoped_gaps(tmp_path, decla
     assert len(unit["gaps"]) == 1 and unit["gaps"][0].startswith("malformed_coverage:")
     assert (tmp_path / bad["path"]).read_bytes() == bad_payload
     assert file_sha256(tmp_path / bad["path"]) == bad["sha256"]
+
+
+
+@pytest.mark.parametrize("records", [
+    b"FN:-1,3,f\nFNDA:1,f\n",
+    b"FN:1.5,3,f\nFNDA:1,f\n",
+    b"FN:1,-3,f\nFNDA:1,f\n",
+    b"FN:1,3.5,f\nFNDA:1,f\n",
+    b"FN:3,1,f\nFNDA:1,f\n",
+    b"FN:1,3,\nFNDA:1,f\n",
+    b"FN:1,3,f\nFNDA:-1,f\n",
+    b"FN:1," + b"9" * 5000 + b",f\nFNDA:1,f\n",
+], ids=["negative-start", "fractional-start", "negative-end", "fractional-end",
+        "reversed-range", "missing-name", "negative-hits", "large-end"])
+def test_lcov_fn_malformed_ranges_remain_artifact_gaps(tmp_path, records):
+    payload = b"SF:a.c\n" + records + b"DA:1,1\nend_of_record\n"
+    bad = _artifact(tmp_path, "data/bad/lcov.info", payload)
+    good = _artifact(tmp_path, "data/good/lcov.info", b"SF:a.c\nFN:1,f\nFNDA:0,f\nDA:1,0\nend_of_record\n")
+    receipt = {"build_unit_id": "u1", "family": "native", "terminal_status": "SUCCEEDED", "artifacts": [bad]}
+    unavailable = ingest_coverage_artifacts(tmp_path, [receipt], {"a.c": "1" * 64})["units"][0]
+    assert unavailable["coverage_state"] == "unavailable" and unavailable["files"] == []
+    assert unavailable["totals"]["functions_rate"] is None
+    assert len(unavailable["gaps"]) == 1 and unavailable["gaps"][0].startswith("malformed_coverage:")
+    receipt["artifacts"].append(good)
+    partial = ingest_coverage_artifacts(tmp_path, [receipt], {"a.c": "1" * 64})["units"][0]
+    assert partial["coverage_state"] == "partial" and partial["gaps"] == unavailable["gaps"]
+    assert (partial["totals"]["functions_total"], partial["totals"]["functions_covered"]) == (1, 0)
+    assert partial["totals"]["functions_rate"] == 0.0
+    assert len(partial["files"]) == 1 and partial["files"][0]["artifact_sha256"] == good["sha256"]
+    assert (tmp_path / bad["path"]).read_bytes() == payload
+    assert file_sha256(tmp_path / bad["path"]) == bad["sha256"]

@@ -138,9 +138,13 @@ tree construction, also bounding nesting by that budget. Only the validated decl
 removed from the in-memory tree input so unresolved attribute entities cannot be silently omitted.
 Original report bytes and hashes are never rewritten.
 
-LCOV observations for the same source union line, branch, and function-name identities before
-totals are computed; repeated missed hits cannot erase covered hits. Cobertura unions physical
-lines and identifiable methods across classes, deduplicating method/class line copies. Branch
+LCOV accepts both `FN:<start>,<name>` and `FN:<start>,<end>,<name>`. Recognized end-line fields
+must be nonnegative integers at or after the start; they are metadata, not part of the function
+name. Complete `FNDA` names retain commas and disambiguate legacy comma-bearing labels before
+optional range interpretation. Observations for the same source union line, branch, and
+function-name identities before totals are computed; repeated missed hits cannot erase covered
+hits. Cobertura unions physical lines and identifiable methods across classes, deduplicating
+method/class line copies. Branch
 counts retain class identity: distinct classes at the same physical line have separate branch
 denominators. Repeated summaries of the same class/line are unioned only when their union is
 determined (matching denominators with zero or fully covered observations). Ambiguous partial
