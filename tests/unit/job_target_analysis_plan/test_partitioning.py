@@ -11,7 +11,7 @@ import pytest
 
 from appsec_review.config import PlanningFeedbackSettings
 from appsec_review.inference import ModelResult
-from appsec_review.jobs.build_discovery import discover_build_units
+from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units
 from appsec_review.jobs.job_target_analysis_plan import build_job
 from appsec_review.jobs.job_target_analysis_plan.job import _verify_source_topology
 from appsec_review.jobs.job_target_analysis_plan.planning import (
@@ -19,6 +19,7 @@ from appsec_review.jobs.job_target_analysis_plan.planning import (
     ambiguity_reasons,
     bounded_feedback,
     deterministic_plan,
+    feedback_request,
     prepare_feedback_request,
     summarize_catalog,
     validate_plan,
@@ -206,6 +207,184 @@ def test_nested_node_rejection_preserves_descriptor_backed_command_normalization
     action = result["plan"]["build_topology"]["build_actions"][0]
     assert action["recipe"]["build_commands"] == [["npm", "run", "build"]]
     assert action["executable"] is False
+
+
+def _external_descriptor_inputs(tmp_path, kind="ancestor"):
+    from tests.unit.job_target_analysis_plan.test_feedback import _inputs
+
+    external = "tsconfig.json" if kind == "ancestor" else "shared/Shared.csproj"
+    texts = {
+        "other/package.json": '{"scripts":{"build":"tsc"}}',
+        "other/tsconfig.json": '{"compilerOptions":{"strict":true}}',
+        "unrelated.txt": "unrelated catalogued evidence",
+    }
+    if kind == "ancestor":
+        texts["nested/package.json"] = '{"scripts":{"build":"tsc"}}'
+        texts[external] = json.dumps({"compilerOptions": {"strict": True}, "padding": "x " * 2000})
+        selected_root = "nested"
+    else:
+        texts["solution/App.sln"] = (
+            'Project("{11111111-1111-1111-1111-111111111111}") = "Shared", '
+            '"../shared/Shared.csproj", "{22222222-2222-2222-2222-222222222222}"\nEndProject\n')
+        texts[external] = '<Project Sdk="Microsoft.NET.Sdk"><!--' + "x " * 2000 + "--></Project>"
+        selected_root = "solution"
+    target = tmp_path / "target"
+    files = []
+    for path, text in sorted(texts.items()):
+        file = target / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text(text, encoding="utf-8")
+        files.append({"path": path, "sha256": hashlib.sha256(text.encode()).hexdigest(),
+                      "size_bytes": len(text.encode())})
+    units = discover_build_units(files, read_text=texts.get)
+    for unit in units:
+        unit["descriptor_package"] = descriptor_package(target, unit, files)
+    selected = next(unit for unit in units if unit["root"] == selected_root)
+    document = next(item for item in selected["descriptor_package"]["documents"] if item["path"] == external)
+    base, request, _, _ = _inputs()
+    catalog = {**base, "files": files, "build_units": units}
+    scoped = {**catalog, "build_units": [selected]}
+    full = summarize_catalog(scoped, max_items=2000, max_bytes=524288, sample_per_prefix=20)
+    summary = summarize_catalog(scoped, max_items=2000,
+                                max_bytes=len(canonical_json(full)) - len(document["content"].encode()) // 2,
+                                sample_per_prefix=20)
+    assert all(item["path"] != external for unit in summary["build_units"]
+               for item in unit["descriptor_package"]["documents"])
+    request = replace(request, summary=summary, allowed_build_units=(selected["build_unit_id"],),
+                      allowed_build_systems=(selected["build_system"],),
+                      allowed_image_profiles=(selected["family"],),
+                      allowed_paths=tuple(item["path"] for item in selected["markers"]))
+    return catalog, scoped, request, summary, target, document
+
+
+@pytest.mark.parametrize("kind", ["ancestor", "sibling"], ids=["ancestor", "sibling"])
+def test_trimmed_external_descriptor_reaches_actual_scoped_feedback(tmp_path, kind):
+    from appsec_review.guidance.compose import render_prompt, verify_bundle
+
+    catalog, scoped, request, summary, target, document = _external_descriptor_inputs(tmp_path, kind)
+    calls = []
+    original = copy.deepcopy(catalog)
+    run_root = tmp_path / "run"
+
+    def infer(current, **_kwargs):
+        calls.append(current)
+        if len(calls) == 1:
+            assert document["path"] in current.allowed_paths
+            assert {"path": document["path"], "sha256": document["sha256"],
+                    "size_bytes": len(document["content"].encode())} in current.summary["evidence_inventory"]
+            assert not {"unrelated.txt", "other/tsconfig.json"} & set(current.allowed_paths)
+            assert current.summary["evidence_inventory_omitted"] == 0
+            digest = current.summary["guidance_bundle_sha256"]
+            bundle = json.loads((run_root / "data/guidance" / digest / "bundle.json").read_bytes())
+            assert verify_bundle(bundle) == digest and render_prompt(bundle) == current.guidance
+            assert "exact descriptor documents already accepted" in current.guidance
+            return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "need_evidence", "requests": [{
+                "path": document["path"], "sha256": document["sha256"], "reason": "accepted descriptor context"}]})
+        assert current.summary["evidence"] == [document]
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "final", "component_proposals": [],
+                            "build_recipes": [], "hints": [], "abstentions": [{
+                                "build_unit_id": current.allowed_build_units[0], "reason": "no build recipe proof"}]})
+
+    result, _ = _resolve(run_root, scoped, summary=summary, custom_infer=infer,
+                         max_input_tokens=32000, target_root=target)
+    assert result["model_calls"] == 2 and result["plan"]["planning_evidence"] == [document]
+    assert catalog == original
+    bounded = feedback_request(request, catalog, replace(PlanningFeedbackSettings(), max_request_bytes=1024))
+    assert bounded.summary["evidence_inventory"] == []
+    captured = {item["path"] for unit in summary["build_units"]
+                for item in unit["descriptor_package"]["documents"]}
+    assert bounded.summary["evidence_inventory_omitted"] == len(
+        {document["path"], *request.allowed_paths} - captured)
+
+
+@pytest.mark.parametrize("case", ["unrelated", "wrong-unit", "wrong-hash", "missing-grant"],
+                         ids=["unrelated", "wrong-unit", "wrong-hash", "missing-grant"])
+def test_external_evidence_scope_requires_selected_descriptor_identity_and_grant(tmp_path, case):
+    from appsec_review.storage.shared import safe_path
+
+    catalog, _scoped, request, _summary, target, document = _external_descriptor_inputs(tmp_path)
+    limits = replace(PlanningFeedbackSettings(), max_calls=1)
+    offered = feedback_request(request, catalog, limits)
+    inventory_paths = {item["path"] for item in offered.summary["evidence_inventory"]}
+    assert document["path"] in inventory_paths
+    assert not {"unrelated.txt", "other/tsconfig.json"} & inventory_paths
+    path = {"unrelated": "unrelated.txt", "wrong-unit": "other/tsconfig.json"}.get(case, document["path"])
+    identity = next(item for item in catalog["files"] if item["path"] == path)
+    paths = set(offered.allowed_paths)
+    if case == "missing-grant":
+        paths.remove(path)
+    else:
+        paths.add(path)
+    offered = replace(offered, allowed_paths=tuple(sorted(paths)))
+    reads = []
+
+    def read(item, bound):
+        reads.append(item["path"])
+        with safe_path(target, item["path"]).open("rb") as stream:
+            return stream.read(bound + 1)
+
+    result = bounded_feedback(
+        lambda *_a, **_kw: ModelResult({"schema": PROPOSAL_SCHEMA, "action": "need_evidence",
+            "requests": [{"path": path, "sha256": "0" * 64 if case == "wrong-hash" else identity["sha256"],
+                          "reason": "bounded negative"}]}),
+        offered, catalog=catalog, limits=limits, read_document=read,
+        cache_root=tmp_path / "cache", identity={})
+    assert result["status"] == "BUDGET_EXCEEDED" and result["calls"] == 1
+    assert result["errors"] == ["evidence_identity_or_scope_rejected"]
+    assert result["documents"] == [] and reads == []
+
+
+@pytest.mark.parametrize("case", ["bytes", "symlink"], ids=["changed-bytes", "escaped-symlink"])
+def test_external_descriptor_actual_read_keeps_hash_and_target_custody_checks(tmp_path, case):
+    _catalog, scoped, _request, summary, target, document = _external_descriptor_inputs(tmp_path)
+    path = target / document["path"]
+    if case == "bytes":
+        path.write_text(document["content"] + "\n", encoding="utf-8")
+        message = "requested evidence source identity changed"
+    else:
+        external = tmp_path / "not-target.json"
+        external.write_text(document["content"], encoding="utf-8")
+        path.unlink()
+        path.symlink_to(external)
+        message = "symlink|outside|escape"
+
+    def infer(request, **_kwargs):
+        assert document["path"] in request.allowed_paths
+        return ModelResult({"schema": PROPOSAL_SCHEMA, "action": "need_evidence", "requests": [{
+            "path": document["path"], "sha256": document["sha256"], "reason": "accepted descriptor context"}]})
+
+    with pytest.raises(ValueError, match=message):
+        _resolve(tmp_path / "run", scoped, summary=summary, custom_infer=infer,
+                 max_input_tokens=32000, target_root=target)
+
+
+def test_external_descriptor_inventory_rejects_conflicting_accepted_identity(tmp_path):
+    catalog, _scoped, request, _summary, _target, document = _external_descriptor_inputs(tmp_path)
+    document["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="accepted descriptor does not resolve its catalog inventory identity"):
+        feedback_request(request, catalog, PlanningFeedbackSettings())
+
+
+def test_feedback_cache_cannot_promote_an_unrelated_out_of_root_catalog_file(tmp_path):
+    from tests.unit.job_target_analysis_plan.test_feedback import _inputs
+
+    catalog, request, final, _texts = _inputs()
+    text = "unrelated catalog evidence"
+    document = {"path": "outside.txt", "sha256": hashlib.sha256(text.encode()).hexdigest(), "content": text}
+    catalog["files"].append({"path": document["path"], "sha256": document["sha256"],
+                             "size_bytes": len(text.encode())})
+    request = replace(request, allowed_paths=(*request.allowed_paths, document["path"]))
+    kwargs = {"catalog": catalog, "limits": PlanningFeedbackSettings(),
+              "read_document": None, "cache_root": tmp_path / "cache", "identity": {}}
+    accepted = bounded_feedback(lambda *_a, **_kw: ModelResult(final), request, **kwargs)
+    assert accepted["status"] == "ACCEPTED"
+    path = tmp_path / "cache" / (accepted["cache_key"] + ".json")
+    cached = json.loads(path.read_bytes())
+    cached["documents"] = [document]
+    path.write_bytes(canonical_json(cached))
+    with pytest.raises(ValueError, match="complete validated final"):
+        bounded_feedback(lambda *_a, **_kw: pytest.fail("invalid cache must not invoke a model"),
+                         request, **kwargs)
 
 
 def test_initial_byte_overflow_partitions_before_any_model_call_without_losing_units(tmp_path, record_property):

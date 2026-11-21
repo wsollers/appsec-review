@@ -581,7 +581,7 @@ def evidence_catalog(catalog, documents):
         package = unit.setdefault("descriptor_package", {})
         existing = {item["path"]: item for item in package.get("documents", ())}
         for path, document in captured.items():
-            if _under(path, unit["root"]):
+            if _under(path, unit["root"]) or path in existing:
                 if path in existing and existing[path] != document:
                     raise ValueError("planning evidence changed captured descriptor bytes")
                 existing[path] = copy.deepcopy(document)
@@ -608,14 +608,28 @@ def prepare_feedback_request(request):
     return current, canonical_json(asdict(current))
 
 
+def _feedback_inventory(request, catalog):
+    """Source inventory bounded by selected unit roots and their exact accepted descriptors."""
+    units = [unit for unit in catalog.get("build_units", ())
+             if unit["build_unit_id"] in request.allowed_build_units]
+    roots = [unit["root"] for unit in units]
+    inventory = {item["path"]: item for item in catalog["files"]}
+    descriptors = {(document["path"], document["sha256"]) for unit in units
+                   for document in unit.get("descriptor_package", {}).get("documents", ())}
+    if any(inventory.get(path, {}).get("sha256") != digest for path, digest in descriptors):
+        raise ValueError("accepted descriptor does not resolve its catalog inventory identity")
+    return {path: item for path, item in inventory.items()
+            if any(_under(path, root) for root in roots) or (path, item["sha256"]) in descriptors}
+
+
 def feedback_request(request, catalog, limits):
     """Offer exact additional inventory identities within the existing request-byte budget."""
     from dataclasses import asdict, replace
-    roots = [unit["root"] for unit in catalog.get("build_units", ())]
-    captured = {document["path"] for unit in request.summary.get("build_units", ())
+    captured = {(document["path"], document["sha256"]) for unit in request.summary.get("build_units", ())
+                if unit["build_unit_id"] in request.allowed_build_units
                 for document in unit.get("descriptor_package", {}).get("documents", ())}
-    eligible = sorted((item for item in catalog["files"]
-                       if item["path"] not in captured and any(_under(item["path"], root) for root in roots)),
+    eligible = sorted((item for item in _feedback_inventory(request, catalog).values()
+                       if (item["path"], item["sha256"]) not in captured),
                       key=lambda item: item["path"])
     references = []
     offered = replace(request, summary={**request.summary, "evidence_inventory": references,
@@ -660,7 +674,7 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
     metrics = {"request_bytes": 0, "response_bytes": 0, "evidence_bytes": 0, "evidence_rounds": 0}
     def finish(value):
         return {**value, "metrics": {**metrics, "elapsed_seconds": clock() - started}}
-    inventory = {item["path"]: item for item in catalog["files"]}
+    inventory = _feedback_inventory(request, catalog)
     key = hashlib.sha256(canonical_json({
         "identity": identity, "request": asdict(request), "limits": asdict(limits),
         "source": catalog["source_fingerprint"], "call_timeout_seconds": call_timeout_seconds,
@@ -681,7 +695,8 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
                 or len({item["path"] for item in documents}) != len(documents)
                 or sum(len(item["content"].encode()) for item in documents) > limits.max_evidence_bytes
                 or any(len(item["content"].encode()) > limits.max_document_bytes for item in documents)
-                or any(item["path"] not in request.allowed_paths for item in documents)
+                or any(item["path"] not in request.allowed_paths or item["path"] not in inventory
+                       or inventory[item["path"]]["sha256"] != item["sha256"] for item in documents)
                 or model_safe(documents) != documents or model_safe(cached["proposal"]) != cached["proposal"]
                 or cached["proposal"].get("abstentions") != []
                 or validate_proposal(cached["proposal"], catalog=augmented,
@@ -777,7 +792,6 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
                 rounds += 1
                 metrics["evidence_rounds"] = rounds
                 additions, request_errors = {}, []
-                roots = [unit["root"] for unit in catalog.get("build_units", ())]
                 for item in requests:
                     if (not isinstance(item, Mapping) or set(item) != {"path", "sha256", "reason"}
                             or not isinstance(item["path"], str)
@@ -785,8 +799,7 @@ def bounded_feedback(infer, request, *, catalog, limits, read_document, cache_ro
                             or len(item["reason"].encode()) > 2048
                             or item["path"] not in inventory
                             or item["path"] not in current.allowed_paths
-                            or inventory[item["path"]]["sha256"] != item["sha256"]
-                            or not any(_under(item["path"], root) for root in roots)):
+                            or inventory[item["path"]]["sha256"] != item["sha256"]):
                         request_errors.append("evidence_identity_or_scope_rejected")
                         continue
                     if item["path"] in documents or item["path"] in additions:

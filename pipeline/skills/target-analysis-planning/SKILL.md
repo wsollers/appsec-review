@@ -15,8 +15,10 @@ fixture names, fixed project lists, or remembered repository layouts.
 
 Return only `appsec-review/target-analysis-proposal/3` JSON. A `need_evidence` response contains
 only `schema`, `action`, and `requests`: objects within `feedback_limits.max_documents` with an accepted inventory `path`,
-its exact `sha256`, and a bounded `reason`. Request only evidence beneath the supplied units'
-roots. The application may reject unavailable, oversized, sensitive, repeated, or foreign evidence.
+its exact `sha256`, and a bounded `reason`. Request only offered inventory identities: files
+beneath the supplied units' roots or exact descriptor documents already accepted for those units,
+including ancestor or sibling descriptors. A merely catalogued out-of-root file is not eligible.
+The application may reject unavailable, oversized, sensitive, repeated, or foreign evidence.
 No tools, filesystem access, script execution, compiler probes, or earlier-run knowledge are allowed.
 Use exact hashes from `evidence_inventory`; its omitted count names unavailable visibility, not
 permission to invent paths or source identities.

@@ -152,7 +152,11 @@ it does not copy only the descriptors shown to inference.
 The only response actions are `need_evidence` and `final`. Evidence requests name accepted
 inventory paths and exact raw hashes, not commands. Each group receives a byte-bounded additional
 inventory view with an explicit omitted count. UTF-8 evidence is additive, hash-verified and
-scoped to accepted unit roots; unsupported encodings, sensitive content and missing source
+scoped to the selected units' roots and their exact previously accepted descriptor documents,
+including ancestor or sibling descriptors removed from the summary by byte trimming. Other units'
+descriptors and merely catalogued out-of-root files are not admitted. Eligible omitted descriptors
+count toward inventory omissions under the unchanged request-byte bound; both new reads and cache
+replay enforce this scope as well as the explicit path grant. Unsupported encodings, sensitive content and missing source
 custody cannot silently become proof. A final response accounts for every scoped unit with one
 validated recipe or an explicit abstention. Hints name existing compiler fact IDs and never
 change graph bytes. Summary trimming cannot replace the accepted whole evidence bundle.
