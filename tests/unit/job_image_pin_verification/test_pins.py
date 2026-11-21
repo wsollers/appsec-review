@@ -225,6 +225,29 @@ def test_verify_empty_does_not_inspect_and_each_call_gets_a_fresh_cache():
     assert calls == ["fixture/tool:1", "fixture/tool:1"]
 
 
+@pytest.mark.parametrize("missing", [False, True], ids=["matched", "missing"])
+def test_gate_verifies_id_only_reference_without_changing_its_classification(missing):
+    selected = pin("jobs.job_codeql_analysis.settings.preinstalled_runtimes[0].runtime_image_id",
+                   tag=None, image_id=PIN_A)
+    before = deepcopy(selected)
+    calls = []
+
+    def runner(argv, timeout):
+        calls.append((argv[3], timeout))
+        if argv[3] == PIN_A and not missing:
+            return 0, PIN_A.encode(), b"", False
+        return 1, b"", b"No such image: declared", False
+
+    [result] = verify_pins([selected], runner)
+    assert calls == [(PIN_A, 60)]
+    assert result["tag"] is None and result["image_id"] == PIN_A
+    assert result["status"] == ("missing" if missing else "matched")
+    assert (result["status"] in PASSING) is (not missing)
+    assert result["resolved_image_id"] == (None if missing else PIN_A)
+    assert f"image {PIN_A}" in describe(result)
+    assert selected == before
+
+
 @pytest.mark.parametrize(
     ("status", "image_id", "resolved", "detail", "description"),
     [

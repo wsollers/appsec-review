@@ -98,8 +98,8 @@ The operator-owned [host binding procedure](image-pin-verification.md) and
    input failure, not an empty selection. An explicit empty list is valid but makes no
    preinstalled-runtime readiness claim.
 4. Write `image-pin-plan.json` with catalog, configuration and host-binding hashes plus each
-   reference's source, tag and expected ID. Exact-ID selections use that ID in the `tag` field,
-   the inspection reference, as well as in `image_id`; no tag lookup substitutes a different image.
+   reference's source, tag and expected ID. Exact-ID selections retain `tag: null` and their
+   immutable `image_id`; gate inspection uses that ID directly, without substituting a tag.
 
 ### `verification`
 
@@ -173,3 +173,5 @@ run configuration. Follow [host bindings](image-pin-verification.md#frozen-confi
 configuration changes and [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability)
 for accepted-job identity. Signing and launch enforcement are unchanged. Successful inspection
 does not establish compiled-query readiness or replace separately authorized native acceptance.
+The operator's bulk-signing command may report an absent declared ID-only image as `skipped_absent`;
+that separate policy never makes a missing image pass this readiness gate.

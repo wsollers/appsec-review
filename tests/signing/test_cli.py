@@ -193,7 +193,9 @@ DOCUMENT = {"configuration_host_pins": HOST_BINDING, "jobs": {
     "job_codeql_analysis": {"settings": {
         "source_image_tag": "fixture/matched:1", "source_image_id": IMAGE_A,
         "preinstalled_runtimes": [{"source_image_id": IMAGE_A, "build_image_id": IMAGE_A,
-                                   "runtime_image_id": IMAGE_C}]}},
+                                   "runtime_image_id": IMAGE_C, "runtime_user": "1000:1000",
+                                   "codeql_release_id": "codeql-fixture",
+                                   "runner_release_id": "runner-fixture", "runner_source": "application"}]}},
     "job_dossier_publication": {"settings": {"image_tag": "fixture/latex:1", "image_id": IMAGE_C}},
     "job_disabled": {"settings": {"enabled": False, "tag": "fixture/disabled:1", "image_id": IMAGE_D}},
 }}

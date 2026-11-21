@@ -53,7 +53,7 @@ def configured_pins(catalog_images: Sequence[Mapping[str, Any]],
                         image_id = getattr(runtime, key)
                         pins.append({
                             "source": f"jobs.{job_id}.settings.preinstalled_runtimes[{index}].{key}",
-                            "tag": image_id, "image_id": image_id,
+                            "tag": None, "image_id": image_id,
                         })
     report = document.get("reporting", {}).get("telemetry_report", {})
     if report.get("enabled") is True and report.get("render_pdf") is True:
@@ -85,10 +85,11 @@ def verify_pins(pins: Sequence[Mapping[str, Any]], runner: Runner) -> list[dict[
     resolved: dict[str, dict[str, Any]] = {}
     results = []
     for pin in pins:
-        tag = str(pin["tag"])
-        if tag not in resolved:
-            resolved[tag] = inspect_image(runner, tag)
-        local = resolved[tag]
+        tag = str(pin["tag"]) if pin["tag"] is not None else None
+        reference = tag if tag is not None else pin["image_id"]
+        if reference not in resolved:
+            resolved[reference] = inspect_image(runner, reference)
+        local = resolved[reference]
         if local["state"] != "present":
             status = local["state"]
         elif pin.get("image_id") is None:
@@ -108,7 +109,8 @@ def describe(result: Mapping[str, Any]) -> str:
         resolved = f"not inspectable ({result['detail']})"
     else:
         resolved = str(result["resolved_image_id"])
-    return (f"{result['source']}: tag {result['tag']} pinned {result['image_id'] or '<unpinned>'} "
+    reference = f"tag {result['tag']}" if result["tag"] is not None else f"image {result['image_id']}"
+    return (f"{result['source']}: {reference} pinned {result['image_id'] or '<unpinned>'} "
             f"resolved {resolved}")
 
 

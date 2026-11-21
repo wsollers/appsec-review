@@ -138,7 +138,7 @@ def test_gate_inspects_declared_exact_ids_and_keeps_per_reference_diagnostics(tm
     selected = handler(UNITS[0])(unit)
     runtime_pins = [row for row in selected["pins"] if ".preinstalled_runtimes[" in row["source"]]
     assert runtime_pins == [
-        pin(f"jobs.job_codeql_analysis.settings.preinstalled_runtimes[{index}].{key}", row[key], row[key])
+        pin(f"jobs.job_codeql_analysis.settings.preinstalled_runtimes[{index}].{key}", None, row[key])
         for index, row in enumerate(declarations) for key in ("build_image_id", "runtime_image_id")
     ]
     local = fixture_bindings()
@@ -164,14 +164,15 @@ def test_gate_inspects_declared_exact_ids_and_keeps_per_reference_diagnostics(tm
         published = handler(UNITS[2], runner)(publication)
         assert published["terminal_status"] == "SUCCEEDED" and published["gaps"] == []
         assert all(row["status"] == "matched" for row in published["images"])
-        assert [row["tag"] for row in published["images"] if ".preinstalled_runtimes[" in row["source"]] == [
-            row["tag"] for row in runtime_pins]
+        assert [row["image_id"] for row in published["images"] if ".preinstalled_runtimes[" in row["source"]] == [
+            row["image_id"] for row in runtime_pins]
+        assert all(row["tag"] is None for row in runtime_pins)
     else:
         with pytest.raises(gate.ImagePinVerificationFailed):
             handler(UNITS[1], runner)(inspection)
         _, document = artifact(inspection, "image-pin-verification.json")
         assert document["status"] == "FAILED"
-        failed_sources = [row["source"] for row in runtime_pins if row["tag"] == failing_id]
+        failed_sources = [row["source"] for row in runtime_pins if row["image_id"] == failing_id]
         assert [gap["scope_id"] for gap in document["gaps"]] == failed_sources
         assert all(gap["code"] == "producer_blocked" and gap["retryable"] for gap in document["gaps"])
         expected_status = ("missing" if outcome.endswith("missing") else
