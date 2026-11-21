@@ -180,6 +180,50 @@ def test_codeql_no_constraint_agrees_with_a_disjoint_set_and_doubts_an_alias(svf
     assert _svf_entry(by_id[alias.identity.value])["state"] == "partial"
 
 
+@pytest.mark.parametrize("cause", ["pointer_not_modeled", "unknown_object", "truncated"])
+@pytest.mark.parametrize("side", ["compare", "sink"])
+def test_incomplete_empty_operand_prevents_negative_alias_verdict(tmp_path: Path, cause: str, side: str) -> None:
+    """Inert emitter-shaped mutations, never a claim of newly captured native output."""
+    def incomplete(_document, outputs):
+        for output in outputs.values():
+            for site in list(output["sites"]):
+                if site["file"] != "/target/source/guard.c" or site["line"] != 16 or site["operand"] != 1:
+                    continue
+                site["incomplete_reasons"] = [] if cause == "truncated" else [cause]
+                site["truncated"] = cause == "truncated"
+                if side == "sink":
+                    from copy import deepcopy
+                    missing = deepcopy(site)
+                    missing.update(role="store", line=17, column=18, operand=-1)
+                    output["sites"].append(missing)
+                    site["incomplete_reasons"] = ["empty_points_to_set"]
+                    site["truncated"] = False
+    root = tmp_path / "run"
+    executor = ReplayExecutor(root, mutate=incomplete)
+    result = _analyze_scope(unit(root), scope(root), LINK_COMMANDS, lambda _unit: executor)
+    shard = result["index_identity"]
+    svf = read_svf(ShardSet(root, [shard]), shard)
+    sink = _sink("*written = input")
+    guard = _guard("checked != NULL", sink, True)
+    checked, by_id = _run([sink, guard], [svf])
+    assert by_id[guard.identity.value].payload["cross_check"]["state"] != "disagree"
+    assert by_id[guard.identity.value].payload["admissibility"]["direct_eligible"] is True
+    assert not any(relation.kind is RelationKind.CONTRADICTS for relation in checked.relations)
+
+
+def test_positive_alias_survives_an_additional_unmodeled_operand(svf) -> None:
+    from dataclasses import replace
+    entities = []
+    for entity in svf.entities:
+        if entity["payload"].get("incomplete_reasons") == ["empty_points_to_set"]:
+            entity = {**entity, "payload": {**entity["payload"], "incomplete_reasons": ["pointer_not_modeled"]}}
+        entities.append(entity)
+    sink = _sink("*value->left = input")
+    guard = _guard("alias != NULL", sink, True)
+    _, by_id = _run([sink, guard], [replace(svf, entities=tuple(entities))])
+    assert _svf_entry(by_id[guard.identity.value])["state"] == "agree"
+
+
 def test_without_svf_shards_or_matching_rows_facts_are_unchanged(svf) -> None:
     fact = _call(CALL, "native/callbacks.c", "copy_handler", "function_pointer_resolved")
     result, by_id = _run([fact], [])

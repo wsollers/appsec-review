@@ -16,6 +16,11 @@ accepted native compile/link inputs for independent graph cross-checking. These 
 the analyzed bitcode, not findings. Open-world modules, incomplete sites and truncated target sets
 cannot justify negative claims about aliases or callees outside the modeled program.
 
+SVF is retired from default reviews under [T-168/T-169](../TODO.md), replaced by Alternate CPG.
+The retained manual/replay path is default-disabled. Disabled selection omits the job without a
+skip summary; retirement metadata appears only when an admitted execution reaches publication.
+The tool is manual-only in the image catalog. This page does not authorize activation.
+
 <!-- generated:begin job=job_svf_alias_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract
@@ -240,14 +245,19 @@ Source: [handler and record normalization](../../src/appsec_review/jobs/job_svf_
    link-unit membership and open-world reasons; unlinked translation units remain separate.
    Record omitted trailing modules when the module bound is reached.
 3. Check a scope checkpoint; otherwise invoke `tool-svf` with a bounded plan document and
-   per-module output ceiling. Read bounded run-result JSON only after successful execution.
+   a process file limit covering the largest admitted bitcode or JSON artifact. Keep the
+   separate per-module/run JSON read ceilings. Read run-result JSON only after successful execution.
    Retain compile-to-bitcode failures; unavailable image, timeout, OOM, size limit or bad result
    leaves affected modules unavailable.
 4. For each planned module, require an analyzed outcome, an in-scratch output path and a valid
-   bounded driver document. Reject missing/failed/escaping/malformed output for that module.
+   bounded driver document. Validate nested object values/references, target members/counts,
+   completion flags and source-point primitives before normalization. Reject
+   missing/failed/escaping/malformed output for that module without dropping usable siblings.
 5. Map pointer sites and indirect calls to accepted source locations; count outside-source sites
    instead of giving them locations. Preserve target/object sets, truncation, incomplete reasons,
-   module closed-world state and unmodeled externals. Add bounded memory-object relations.
+   module closed-world state and unmodeled externals. Add bounded memory-object relations;
+   truncated or unmodeled points-to sites prevent complete inverse accessor lists even when
+   the omitted accessor's object remains visible at another site.
 6. Write an analysis shard with per-module coverage and counts; no modules yields unavailable
    coverage. Save the scope checkpoint, including failed or partial scope results.
 
@@ -256,6 +266,8 @@ Source: [handler and record normalization](../../src/appsec_review/jobs/job_svf_
 1. Compose analysis shards and unavailable-scope coverage into a verified manifest.
 2. Publish `svf-alias-analysis-summary.json` with record, module and closed-world-module counts.
    No runnable or unavailable cases is not-applicable; aggregate scope gaps prevent success.
+   All analyzed scopes failed yields `FAILED`; usable but partial/mixed scopes yield
+   `COMPLETED_WITH_GAPS`. Missing module outcomes and normalization causes reach aggregate gaps.
 
 ## Dataflow
 
@@ -275,10 +287,9 @@ flowchart LR
 
 ## Gaps
 
-[T-159](../TODO.md) records an accounting limitation: module-level partial reasons can survive
-in coverage rows without reaching the aggregate gap list. Root outcomes do not inspect those
-nested rows. Acceptance must compare module coverage with the root summary rather than treating
-an empty aggregate gap list as complete SVF coverage.
+Module-level failures and partial reasons are propagated explicitly to the aggregate gap list;
+the runtime does not reconstruct these from nested rows. Acceptance still compares module
+coverage with the root summary rather than treating execution success as native-analysis fidelity.
 
 Text reasons are wrapped as `producer_reported_gap` by
 [interchange](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope), normally
@@ -291,10 +302,9 @@ with non-retryable metadata. This is not an advisory classification.
 - Coverage missing: module/site/indirect-call/memory-object limits, missing bitcode, lossy debug
   upgrades and open-world reasons such as unlinked units, dynamic loading or unmodeled externals.
   Per-site incomplete flags and outside-accepted-source counters must be inspected too.
-- In the current [scope loop](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L324),
-  normalization reasons are written into module coverage but are not all appended to the
-  top-level gap list. Aggregate publication can therefore understate those reasons; compare
-  coverage rows and per-scope status, not only the summary count.
+- Points-to-set and indirect-target bounds are partial module coverage, not just per-record flags.
+  Empty modeled sets remain distinct from empty unmodeled/unknown/truncated operands: the latter
+  block negative alias verdicts.
 - Changed accepted sources/database or damaged matching checkpoint evidence raises an exception,
   not a successful unavailable publication.
 
@@ -308,7 +318,7 @@ The walk must separately approve any expected coverage loss.
    bitcode-production outcomes and closed-world flags with indexed rows. Verify sampled locations
    against source bytes and independently count outside-source and truncated sites.
 3. **C. Gaps:** Group verified canonical outcomes, then reconcile module coverage rows and scope
-   terminal statuses for reasons omitted from aggregate gaps. Compare each cause with receipts,
+   terminal statuses against aggregate gaps. Compare each cause with receipts,
    native output and the walk's approved list.
 4. **D. Baseline:** At authorized acceptance save `stepwise.py accept`, corpus namespace and baseline
    with module identities, closed-world counts and coverage reasons. This page does not claim
@@ -318,7 +328,9 @@ The walk must separately approve any expected coverage loss.
 
 Checkpoint identity includes scope/source/compile state, link commands, adapter, settings and tool
 identity. A changed link topology invalidates that scope even with unchanged source. Matching
-checkpoints verify retained artifacts and index metadata; they may retain failed/partial results,
+checkpoints verify raw plans, compile databases, run/driver JSON, receipts, stdout/stderr and index
+metadata. Missing, changed or symlinked matching evidence fails closed. New identities use separate
+scratch generations so prior evidence is not overwritten. Checkpoints may retain failed/partial results,
 so an unchanged retry need not rerun SVF. Manifest composition follows
 [accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
 Task binding omissions remain [T-147](../TODO.md);

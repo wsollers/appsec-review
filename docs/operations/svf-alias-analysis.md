@@ -10,9 +10,12 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 
 `job_svf_alias_analysis` runs after an accepted `job_cpp_compiled_analysis` handoff and before
 `job_code_graph_index`, which consumes its shards as a cross-check input
-([design](../architecture/svf-alias-producer.md)). It is **opt-in**:
-`jobs.job_svf_alias_analysis.settings.enabled = false` by default, and a disabled job is omitted from
-direct and Dagster execution plans. Its central configuration must define this exact topology:
+([design](../architecture/svf-alias-producer.md)). It is **retired from default review execution**
+under [T-168/T-169](../TODO.md), replaced by Alternate CPG. The retained manual/replay path is
+disabled by default (`jobs.job_svf_alias_analysis.settings.enabled = false`). A disabled job is
+omitted from direct and Dagster execution plans: it does not publish a retirement skip summary.
+An explicitly admitted manual execution retains retirement metadata in its summary. These
+instructions do not authorize enabling it. Its central configuration defines this topology:
 
 ```text
 load.accepted_cpp -> analyze.scopes -> acceptance.publish_handoff
@@ -24,13 +27,13 @@ All settings are positive integers except `enabled`, and are validated before an
 
 | Setting | Shipped value | Controls |
 | --- | --- | --- |
-| `enabled` | `false` | opt-in; a disabled job is omitted from execution plans |
+| `enabled` | `false` | retired/default-disabled; a disabled job is omitted from execution plans |
 | `workers` | 2 | concurrent accepted C/C++ scopes (one container each) |
 | `max_modules_per_scope` | 32 | planned modules analyzed per scope; the rest are a named gap |
 | `max_module_bitcode_bytes` | 268435456 (256 MiB) | a larger linked module is `too_large` and is not analyzed |
 | `max_module_output_bytes` | 8388608 (8 MiB) | driver document per module |
 | `max_output_bytes` | 1048576 (1 MiB) | the run result document |
-| `field_limit` | 64 | SVF's field-sensitivity limit; wider structs merge fields (`field_limit_collapsed`) |
+| `field_limit` | 64 | passed to SVF's field-sensitivity option; the driver emits no `field_limit_collapsed` reason |
 | `max_sites` | 20000 | pointer sites exported per module |
 | `max_pts_size` | 256 | objects kept per points-to set |
 | `max_indirect_calls` | 20000 | indirect calls exported per module |
@@ -48,8 +51,10 @@ a required key in `[jobs.job_svf_alias_analysis.settings]`; the code has no fall
 in `appsec-review.toml`. The time limits are below the earliest design draft's (an Andersen limit of
 900 s) because the whole scope must finish inside the central 600 s tool policy.
 
-The whole scope also runs under the central container policy (1 GiB memory, 600 s). A large C++
-module that exceeds it shows up as an OOM or timeout gap.
+The whole scope also runs under the central container policy (1 GiB memory, 600 s). The process
+file-size limit is one byte above the largest bitcode/module-output/run-result bound; each JSON
+document retains its separate parser limit. A large C++ module that exceeds the memory or time
+policy shows up as an OOM or timeout gap.
 
 ## Finding context in review packages
 
@@ -71,7 +76,8 @@ module, a name-based caller match and every reached bound appear as named gaps i
 
 ## Image
 
-The recipe catalog declares `tool-svf`; the run's frozen host binding supplies its expected
+The recipe catalog declares `tool-svf` as manual-only, outside default active-image selection;
+the run's frozen host binding supplies its expected
 image ID, which the executor verifies before applying configured signing policy.
 See [image-pin verification](image-pin-verification.md). Build instructions, the offline asset lock and the license review are in
 [`containers/tools/svf/`](../../containers/tools/svf/README.md). A missing or mismatched image is a
@@ -89,13 +95,18 @@ scope gap (`tool-svf image unavailable`), never zero points-to records.
   allocator and accessor fan-in, linked by `REFERENCES` from each accessor site), with exact
   (`llvm-dilocation`) source points. Every record repeats its module's `module_closed_world`
   flag and `open_world_reasons`.
-- Raw plans, compile databases, driver documents and execution receipts stay under `data/svf/` as
-  protected run artifacts. Bitcode is deleted after each module is analyzed.
+- Raw plans, compile databases, run/driver documents, execution receipts and stdout/stderr stay
+  under `data/svf/` as protected run artifacts. Module bitcode is removed after analysis; compile
+  unit bitcode can remain in scope scratch.
 
-Do not equate the aggregate gap list with those module rows. [T-159](../TODO.md) records that
-normalization/open-world reasons can remain in module coverage and nested scope status without
-reaching root canonical outcomes; the runtime does not inspect SQLite coverage to reconstruct them.
-Acceptance must compare both surfaces, as specified by the [canonical job page](job_svf_alias_analysis.md).
+Module failures, missing outcomes and normalization reasons propagate into aggregate gaps.
+All-failed analyzed scopes produce `FAILED`; mixed usable and failed/partial scopes produce
+`COMPLETED_WITH_GAPS`. Per-set points-to and indirect-target truncation makes module coverage
+partial. Memory-object fan-in is incomplete whenever truncated/unmodeled sites could have omitted
+accessors, including a free not present in the retained set. The emitter's modeled empty set alone
+does not omit a concrete accessor; it is not interchangeable with an unmodeled or unknown set.
+Acceptance still compares detailed coverage and canonical outcomes, as specified by the
+[canonical job page](job_svf_alias_analysis.md); unit checks do not establish native correctness.
 
 In `job_code_graph_index`, SVF verdicts appear as a `svf` producer entry (`rule: svf-cross-check/1`)
 in each covered fact's `cross_check` block. A `disagree` entry comes only from closed-world, complete
@@ -105,18 +116,29 @@ resolves gain `secondary_only` call-site facts with `producer = svf`.
 ## Resume
 
 A scope checkpoint is reused only when its identity matches and every referenced run artifact still
-verifies. The identity covers the accepted scope, link commands, settings, tool identity
-(including the image pin) and adapter version. Any change produces a new immutable shard.
+verifies, including raw plan, result, driver documents, compile database, receipt and streams.
+Missing, changed or symlinked matching evidence raises an integrity error, not a cache miss or
+producer gap. The identity covers the accepted scope, link commands, settings, tool identity
+(including the image pin) and adapter version. Changed identities use separate scope scratch
+generations, preserving prior raw evidence.
 
 ## Verification
 
-Offline suites (recorded real tool output, no Docker):
+Offline unit selectors (existing recordings plus explicitly inert emitter-shaped mutations;
+no Docker, native analysis or model calls):
 
 ```text
-python -m pytest -q tests/test_svf_alias_analysis.py tests/test_svf_tool.py tests/graph/test_svf_crosscheck.py --basetemp=test/tmp/svf
+tests/unit/job_svf_alias_analysis/test_contract.py
+tests/unit/job_svf_alias_analysis/test_svf_alias_analysis.py
+tests/unit/job_svf_alias_analysis/test_svf_tool.py
+tests/graph/test_svf_crosscheck.py
 ```
 
-Live tier (requires the pinned image locally; skipped otherwise). It runs the job through the real
+Use the [focused collection/count-guarded wrapper](../architecture/testing.md#working-loop)
+for those selectors. A successful unit run does not certify LLVM/SVF emitter fidelity.
+
+Manual live tier (requires separate user authorization and the pinned image locally; skipped
+otherwise). It runs the job through the real
 container executor on the synthetic fixture and on the copied `linux-calibration` multi-vulnerability
 project, and checks that the recordings used offline still match the image:
 

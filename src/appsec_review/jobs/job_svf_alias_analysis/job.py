@@ -42,7 +42,7 @@ DRIVER_SCHEMA = "appsec-review/svf-alias-output/1"
 FACT_SCHEMA = "appsec-review/svf-alias-record/1"
 OBJECT_SCHEMA = "appsec-review/svf-memory-object/1"
 OBJECT_RULE = "svf-memory-object/1"
-ADAPTER = "svf-alias-adapter/1"
+ADAPTER = "svf-alias-adapter/2"
 MAPPING_METHOD = "llvm-dilocation"
 ARGV = ("/opt/appsec/svf.py", "run", "/scratch/plan.json", "/scratch/result.json")
 SHARD_PREFIX = "svf"
@@ -144,6 +144,16 @@ class _Sources:
         )
 
 
+def _strings(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _location(value: Any) -> bool:
+    return (isinstance(value, Mapping) and isinstance(value.get("file"), str)
+            and type(value.get("line")) is int and value["line"] >= 1
+            and type(value.get("column")) is int and value["column"] >= 0)
+
+
 def _valid_driver_document(document: Any, settings: Mapping[str, Any]) -> str | None:
     if not isinstance(document, Mapping) or document.get("schema") != DRIVER_SCHEMA:
         return "analysis output envelope was malformed"
@@ -154,18 +164,57 @@ def _valid_driver_document(document: Any, settings: Mapping[str, Any]) -> str | 
         return "analysis output sections were malformed"
     if len(sites) > settings["max_sites"] or len(calls) > settings["max_indirect_calls"]:
         return "analysis output exceeded its site or indirect-call bound"
-    if not isinstance(module.get("open_world_reasons"), list):
+    if not _strings(module.get("open_world_reasons")) or not _strings(module.get("unmodeled_externals", [])):
         return "analysis output module block was malformed"
     for site in sites:
-        if not isinstance(site, Mapping) or site.get("role") not in _ROLES \
-                or not isinstance(site.get("points_to"), list) or len(site["points_to"]) > settings["max_pts_size"] \
-                or not isinstance(site.get("incomplete_reasons"), list):
+        if not isinstance(site, Mapping) or not isinstance(site.get("role"), str) or site["role"] not in _ROLES \
+                or not _strings(site.get("points_to")) or len(site["points_to"]) > settings["max_pts_size"] \
+                or not _strings(site.get("incomplete_reasons")) or type(site.get("truncated")) is not bool \
+                or type(site.get("operand")) is not int or not _location(site) \
+                or not all(isinstance(site.get(key), str) for key in ("function", "function_demangled")) \
+                or ("callee" in site and not isinstance(site["callee"], str)) \
+                or any(key not in objects for key in site["points_to"]) \
+                or len(set(site["points_to"])) != len(site["points_to"]):
             return "analysis output contained a malformed pointer site"
     for call in calls:
         if not isinstance(call, Mapping) or not isinstance(call.get("targets"), list) \
-                or len(call["targets"]) > settings["max_targets_per_call"]:
+                or len(call["targets"]) > settings["max_targets_per_call"] \
+                or type(call.get("truncated")) is not bool or type(call.get("target_count")) is not int \
+                or not _location(call) \
+                or not all(isinstance(call.get(key), str) for key in ("function", "function_demangled")) \
+                or any(not isinstance(target, Mapping) or not isinstance(target.get("name"), str)
+                       or not target["name"] or not isinstance(target.get("demangled"), str)
+                       for target in call["targets"]):
             return "analysis output contained a malformed indirect call"
+        if call["target_count"] < len(call["targets"]) \
+                or call["truncated"] != (call["target_count"] > len(call["targets"])) \
+                or len({target["name"] for target in call["targets"]}) != len(call["targets"]):
+            return "analysis output contained a malformed indirect call count"
+    for key, detail in objects.items():
+        if not isinstance(key, str) or not isinstance(detail, Mapping) \
+                or not isinstance(detail.get("kind"), str) or not isinstance(detail.get("name"), str) \
+                or type(detail.get("field")) is not int \
+                or ("location" in detail and not _location(detail["location"])) \
+                or any(name in detail and not isinstance(detail[name], str)
+                       for name in ("allocator", "allocator_demangled")):
+            return "analysis output contained a malformed memory object"
+    if any(type(document.get(key)) is not bool for key in ("sites_truncated", "indirect_calls_truncated")):
+        return "analysis output truncation flags were malformed"
+    andersen = document.get("andersen")
+    if not isinstance(andersen, Mapping) or andersen.get("completed") is not True:
+        return "analysis output Andersen completion was malformed or incomplete"
     return None
+
+
+def _points_to_gaps(document: Mapping[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    for site in document["sites"]:
+        if site.get("truncated"):
+            reasons.append("points-to set bound reached")
+        # The emitter uses this one reason for a modeled set with no concrete objects.
+        reasons.extend(f"incomplete points-to set: {reason}" for reason in site["incomplete_reasons"]
+                       if reason != "empty_points_to_set" or site["points_to"])
+    return list(dict.fromkeys(reasons))
 
 
 def _module_records(scope: IndexScope, sources: _Sources, planned: PlannedModule, outcome: Mapping[str, Any],
@@ -234,6 +283,11 @@ def _module_records(scope: IndexScope, sources: _Sources, planned: PlannedModule
         reasons.append(f"pointer-site bound reached in module {planned.label}")
     if document.get("indirect_calls_truncated"):
         reasons.append(f"indirect-call bound reached in module {planned.label}")
+    reasons.extend(f"{reason} in module {planned.label}" for reason in _points_to_gaps(document))
+    if any(call.get("truncated") for call in document["indirect_calls"]):
+        reasons.append(f"indirect-call target bound reached in module {planned.label}")
+    if counts["outside_accepted_sources"]:
+        reasons.append(f"{counts['outside_accepted_sources']} sites outside accepted sources in module {planned.label}")
     if int(outcome.get("debug_info_warnings") or 0):
         reasons.append(f"{DEBUG_INFO_UPGRADED_LOSSY}: {outcome['debug_info_warnings']} debug-info warnings in module "
                        f"{planned.label}")
@@ -259,7 +313,7 @@ def _memory_objects(scope: IndexScope, sources: _Sources, planned: PlannedModule
     the whole fan-in; no deeper walk adds information. Each object keeps its allocation site and
     allocator plus at most ``max_accessors_per_object`` accessors ordered free, write, read, compare,
     pass, then by location; the rest are counted. A list is complete only when it is untruncated,
-    the module exported every site and the module is closed-world.
+    the module exported every site's modeled set and the module is closed-world.
     """
     raw_counts: dict[str, int] = {}
     for site in document["sites"]:
@@ -278,6 +332,9 @@ def _memory_objects(scope: IndexScope, sources: _Sources, planned: PlannedModule
         keys = keys[:settings["max_objects_per_module"]]
     bound = settings["max_accessors_per_object"]
     module = sites[0].payload
+    incomplete = _points_to_gaps(document)
+    if document.get("sites_truncated"):
+        incomplete.append("pointer-site bound reached")
     objects: list[EntityRecord] = []
     relations: list[RelationRecord] = []
     for key in keys:
@@ -312,7 +369,13 @@ def _memory_objects(scope: IndexScope, sources: _Sources, planned: PlannedModule
                            "column": item.location.start_column} for item in kept],
             "accessor_counts": counts, "accessor_total": len(ordered), "truncated": truncated,
             "accessors_outside_accepted_sources": max(0, raw_counts.get(key, 0) - len(ordered)),
-            "complete": not truncated and not document.get("sites_truncated") and bool(module["module_closed_world"]),
+            "incomplete_reasons": list(dict.fromkeys([
+                *incomplete, *module["open_world_reasons"],
+                *(["accessor bound reached"] if truncated else []),
+                *(["accessors outside accepted sources"] if raw_counts.get(key, 0) > len(ordered) else []),
+            ])),
+            "complete": (not truncated and not incomplete and bool(module["module_closed_world"])
+                         and raw_counts.get(key, 0) == len(ordered)),
             "authority": "computed points-to over accepted bitcode; a cross-check input, not a finding",
         }
         label = detail.get("allocator_demangled") or detail.get("kind") or "object"
@@ -353,23 +416,28 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
     raw_artifacts: list[Mapping[str, Any]] = [dict(scope.compile_database)]
     execution: dict[str, Any] = {}
     outcomes: dict[str, Mapping[str, Any]] = {}
-    documents: dict[str, Mapping[str, Any]] = {}
     tool_version = "unknown"
-    scratch = root / "run"
+    scratch = root / identity / "run"
     try:
         execution = execute_scope_tool(unit, scope, TOOL_ID, ARGV, scratch, executor_factory,
-                                       file_size_limit_bytes=settings["max_module_output_bytes"] + 1,
+                                       file_size_limit_bytes=max(settings[key] for key in (
+                                           "max_module_bitcode_bytes", "max_module_output_bytes", "max_output_bytes")) + 1,
                                        documents={"plan.json": _plan_document(plan.modules, settings)})
     except Exception as exc:
         gaps.append(f"tool-svf image unavailable: {type(exc).__name__}: {exc}")
     if execution:
         raw_artifacts.extend((execution["receipt"], execution["compile_database"]))
+        raw_artifacts.append(artifact(unit.job.run_root, scratch / "plan.json"))
+        raw_artifacts.extend(artifact(unit.job.run_root, unit.job.run_root / execution[key])
+                             for key in ("stdout_path", "stderr_path"))
         failure = ("timed out" if execution["timed_out"] else "was OOM-killed" if execution["oom_killed"]
                    else "output exceeded its execution bound" if execution["file_size_limit_reached"]
                    else f"exited with status {execution['exit_code']}" if execution["exit_code"] != 0 else None)
         if failure:
             gaps.append(f"tool-svf {failure}")
         else:
+            if (scratch / "result.json").is_file() and not (scratch / "result.json").is_symlink():
+                raw_artifacts.append(artifact(unit.job.run_root, scratch / "result.json"))
             result, error = _read_bounded_json(scratch / "result.json", settings["max_output_bytes"], "SVF run result")
             if error is None and (not isinstance(result, Mapping) or result.get("schema") != RESULT_SCHEMA
                                   or not isinstance(result.get("modules"), list)):
@@ -377,15 +445,42 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
             if error:
                 gaps.append(error)
             else:
-                raw_artifacts.append(artifact(unit.job.run_root, scratch / "result.json"))
                 tool_version = str(result.get("tool_version") or "unknown")
-                for record in result.get("compile", ()):
+                compiled = result.get("compile", [])
+                if not isinstance(compiled, list) or any(
+                    not isinstance(record, Mapping) or type(record.get("produced")) is not bool
+                    or type(record.get("index")) is not int or record["index"] < 0
+                    or not isinstance(record.get("file"), str) or type(record.get("timeout", False)) is not bool
+                    for record in compiled
+                ):
+                    gaps.append("SVF run result compile section was malformed")
+                    compiled = []
+                for record in compiled:
                     if isinstance(record, Mapping) and not record.get("produced"):
                         gaps.append(f"compile unit {record.get('index')} ({record.get('file')}) did not produce "
                                     "bitcode" + (" (timed out)" if record.get("timeout") else ""))
+                seen: set[str] = set()
+                planned_ids = {item.module_id for item in plan.modules}
                 for outcome in result["modules"]:
-                    if isinstance(outcome, Mapping) and isinstance(outcome.get("module_id"), str):
-                        outcomes[outcome["module_id"]] = outcome
+                    if not isinstance(outcome, Mapping) or not isinstance(outcome.get("module_id"), str):
+                        gaps.append("SVF run result contained a malformed module outcome")
+                        continue
+                    module_id = outcome["module_id"]
+                    if module_id in seen:
+                        gaps.append(f"SVF run result contained duplicate module {module_id}")
+                        outcomes.pop(module_id, None)
+                        continue
+                    seen.add(module_id)
+                    if module_id not in planned_ids:
+                        gaps.append(f"SVF run result contained unplanned module {module_id}")
+                        continue
+                    if not _strings(outcome.get("gaps")) or not isinstance(outcome.get("status"), str) \
+                            or type(outcome.get("debug_info_warnings", 0)) is not int \
+                            or outcome.get("debug_info_warnings", 0) < 0 \
+                            or (outcome["status"] == "analyzed" and not isinstance(outcome.get("output"), str)):
+                        gaps.append(f"SVF run result contained a malformed module outcome: {module_id}")
+                        continue
+                    outcomes[module_id] = outcome
 
     shard = f"{SHARD_PREFIX}-{scope.scope_id}"
     sources = _Sources(scope)
@@ -394,12 +489,14 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
     module_rows: list[tuple[str, str, str | None]] = []
     totals = {"modules": len(plan.modules), "analyzed": 0, "closed_world": 0, "sites": 0, "indirect_calls": 0,
               "outside_accepted_sources": 0, "memory_objects": 0}
+    missing_detail = gaps[-1] if gaps else "missing from the SVF run result"
     for planned in plan.modules:
         outcome = outcomes.get(planned.module_id)
         label = f"{SHARD_PREFIX}:{scope.project_id}:{planned.label}"
         if outcome is None:
-            reason = "module was not analyzed: " + (gaps[-1] if gaps else "missing from the SVF run result")
+            reason = "module was not analyzed: " + missing_detail
             module_rows.append((label, "unavailable", reason[:4096]))
+            gaps.append(f"module {planned.label}: {reason[:1024]}")
             continue
         module_gaps = [str(item) for item in outcome.get("gaps", ())]
         if outcome.get("status") != "analyzed":
@@ -412,13 +509,14 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
             module_rows.append((label, "unavailable", "analysis output path escapes the scope scratch"))
             gaps.append(f"module {planned.label}: analysis output path escapes the scope scratch")
             continue
+        if output.is_file() and not output.is_symlink():
+            raw_artifacts.append(artifact(unit.job.run_root, output))
         document, error = _read_bounded_json(output, settings["max_module_output_bytes"], "analysis output")
         error = error or _valid_driver_document(document, settings)
         if error:
             module_rows.append((label, "unavailable", error))
             gaps.append(f"module {planned.label}: {error}")
             continue
-        raw_artifacts.append(artifact(unit.job.run_root, output))
         module_records, counts, reasons = _module_records(scope, sources, planned, outcome, document, tool_version)
         sites = [item for item in module_records if item.identity.kind is EntityKind.POINTS_TO_SET]
         objects, object_relations, object_count, object_reasons = (
@@ -435,7 +533,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
             totals[key] += counts[key]
         problems = [*module_gaps, *reasons]
         module_rows.append((label, "partial" if problems else "complete", "; ".join(problems)[:4096] or None))
-        gaps.extend(f"module {planned.label}: {item}" for item in module_gaps)
+        gaps.extend(f"module {planned.label}: {item}" for item in problems)
 
     fingerprint = index_fingerprint(
         name="analysis", target_snapshot=scope.case_snapshot, producer_artifacts=raw_artifacts,
@@ -466,6 +564,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
         status = "FAILED" if module_rows else "COMPLETED_WITH_GAPS"
     result = {"scope_id": scope.scope_id, "case_id": scope.case_id, "project_id": scope.project_id,
               "accepted_compile_database": dict(scope.compile_database), "execution": execution,
+              "raw_artifacts": raw_artifacts,
               "plan": plan.as_dict(), "counts": totals, "record_count": len(records),
               "index_identity": asdict(index), "gaps": gaps, "terminal_status": status,
               "not_applicable_inputs": scope.not_applicable_inputs()}
@@ -509,9 +608,14 @@ def build_job(*, executor_factory: Any = None) -> Job:
             results = list(pool.map(lambda scope: _analyze_scope(
                 unit, scope, _link_commands(accepted, scope.case_id), executor_factory), runnable))
         gaps = [f"{item['case_id']}: {gap}" for item in results for gap in item["gaps"]]
+        gaps.extend(f"{item['case_id']}: scope ended {item['terminal_status']} without a reported cause"
+                    for item in results if item["terminal_status"] not in {"SUCCEEDED", "SKIPPED_NA", "NOT_APPLICABLE"}
+                    and not item["gaps"])
         gaps.extend(f"{case_id}: {reason}" for case_id, reason in unavailable.items())
         status = "NOT_APPLICABLE" if not results and not unavailable else (
             "SUCCEEDED" if results and not gaps else "COMPLETED_WITH_GAPS")
+        if results and all(item["terminal_status"] == "FAILED" for item in results):
+            status = "FAILED"
         return {"scopes": results, "scope_count": len(results), "gaps": gaps,
                 "not_applicable_scopes": skipped, "terminal_status": status}
 

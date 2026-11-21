@@ -254,6 +254,225 @@ def test_rerun_reuses_the_verified_scope_checkpoint(tmp_path: Path) -> None:
     assert second["index_identity"]["sha256"] == first["index_identity"]["sha256"]
 
 
+@pytest.mark.parametrize("largest", [
+    "max_module_bitcode_bytes", "max_module_output_bytes", "max_output_bytes",
+], ids=["bitcode", "module-json", "run-json"])
+def test_process_file_limit_admits_each_configured_artifact_bound(tmp_path: Path, largest: str) -> None:
+    settings = {**SETTINGS, "max_module_bitcode_bytes": 100000,
+                "max_module_output_bytes": 100000, "max_output_bytes": 100000, largest: 200000}
+    _, _, executor, _ = _run(tmp_path, settings=settings)
+    assert executor.requests[0].file_size_limit_bytes == 200001
+
+
+@pytest.mark.parametrize("cause", ["truncated", "pointer_not_modeled", "unknown_object"])
+def test_omitted_points_to_accessors_cannot_publish_complete_objects(tmp_path: Path, cause: str) -> None:
+    """Inert emitter-shaped mutations, not newly recorded native SVF output."""
+    def omit_free(document, outputs):
+        app = next(m for m in document["modules"] if m["kind"] == "link")
+        output = outputs[app["module_id"]]
+        freed = next(s for s in output["sites"] if s.get("callee") == "free" and s["line"] == 19)
+        if cause == "truncated":
+            freed["points_to"] = ["obj:constant:shared"]
+            freed["truncated"] = True
+        else:
+            freed["points_to"] = []
+            freed["incomplete_reasons"] = [cause]
+    root = tmp_path / "run"
+    _, _, _, result = _run(tmp_path, ReplayExecutor(root, mutate=omit_free),
+                           settings={**SETTINGS, "max_pts_size": 1})
+    obj = next(item["payload"] for item in _entities(root, result)
+               if item["kind"] == "memory_object" and item["path"] == "native/guard.c" and item["line"] == 14)
+    assert obj["accessor_counts"]["free"] == 0
+    assert obj["complete"] is False
+    assert obj["incomplete_reasons"]
+    assert _coverage(root, result)["svf:cpp:native:build/app"][0] == "partial"
+    assert any(("points-to" if cause == "truncated" else cause) in gap for gap in result["gaps"])
+
+
+def test_truncated_indirect_targets_are_partial_module_coverage(tmp_path: Path) -> None:
+    def truncate(_document, outputs):
+        call = next(output["indirect_calls"][0] for output in outputs.values()
+                    if output["module"]["open_world_reasons"] == [])
+        call["targets"] = call["targets"][:1]
+        call["truncated"] = True
+    root = tmp_path / "run"
+    _, _, _, result = _run(tmp_path, ReplayExecutor(root, mutate=truncate))
+    assert _coverage(root, result)["svf:cpp:native:build/app"][0] == "partial"
+    assert any("target" in gap for gap in result["gaps"])
+
+
+@pytest.mark.parametrize("artifact_name", [
+    "result.json", "alias.json", "plan.json", "compile_commands.json", "execution.json", "stdout.bin", "stderr.bin",
+], ids=["result", "driver", "plan", "compile-db", "receipt", "stdout", "stderr"])
+@pytest.mark.parametrize("damage", ["delete", "alter", "symlink"])
+def test_scope_checkpoint_rejects_damaged_parser_evidence(tmp_path: Path, artifact_name: str, damage: str) -> None:
+    from appsec_review.jobs.cpp_index_scopes import CheckpointIntegrityError
+    root, accepted, executor, _ = _run(tmp_path)
+    scratch = executor.requests[0].scratch_root
+    evidence = next(scratch.rglob(artifact_name))
+    original = evidence.read_bytes()
+    evidence.unlink()
+    if damage == "alter":
+        evidence.write_bytes(original + b" ")
+    elif damage == "symlink":
+        replacement = scratch / "replacement"
+        replacement.write_bytes(original)
+        evidence.symlink_to(replacement)
+    with pytest.raises(CheckpointIntegrityError):
+        _analyze_scope(unit(root), accepted, LINK_COMMANDS, lambda _unit: executor)
+    assert len(executor.requests) == 1
+
+
+def test_changed_scope_identity_preserves_prior_raw_evidence(tmp_path: Path) -> None:
+    root, accepted, executor, _ = _run(tmp_path)
+    first_scratch = executor.requests[0].scratch_root
+    pinned = {path: path.read_bytes() for path in first_scratch.rglob("*") if path.is_file()}
+    _analyze_scope(unit(root, {**SETTINGS, "max_pts_size": 63}), accepted, LINK_COMMANDS, lambda _unit: executor)
+    assert len(executor.requests) == 2
+    assert executor.requests[1].scratch_root != first_scratch
+    assert all(path.read_bytes() == data for path, data in pinned.items())
+
+
+@pytest.mark.parametrize("signal", ["stop", "interrupt"])
+def test_scope_control_flow_is_not_converted_into_a_module_gap(tmp_path: Path, signal: str) -> None:
+    from appsec_review.runtime.execution_safety import ReviewStopped
+    error = ReviewStopped if signal == "stop" else KeyboardInterrupt
+    root = tmp_path / "run"
+    with pytest.raises(error):
+        _run(tmp_path, ReplayExecutor(root, raise_error=error()))
+    assert not list((root / "data" / "svf").rglob("checkpoint.json"))
+
+
+@pytest.mark.parametrize("mutation", [
+    "target-string", "target-name", "target-count", "target-boolean-count", "target-missing-flag",
+    "target-flag", "object-string", "object-location", "object-field", "missing-object",
+    "point-key", "site-role", "site-operand", "site-flag", "site-reasons", "module-reasons",
+    "module-externals", "global-flag", "andersen-incomplete",
+])
+def test_malformed_driver_module_is_unavailable_without_losing_sibling(tmp_path: Path, mutation: str) -> None:
+    """Mutations model malformed external JSON; the parser/normalizer are real."""
+    def malformed(document, outputs):
+        app = next(m for m in document["modules"] if m["kind"] == "link")
+        output = outputs[app["module_id"]]
+        call, site = output["indirect_calls"][0], output["sites"][0]
+        key = site["points_to"][0]
+        if mutation == "target-string":
+            call["targets"] = ["copy_handler"]
+        elif mutation == "target-name":
+            call["targets"][0]["name"] = {}
+        elif mutation == "target-count":
+            call["target_count"] = 3
+        elif mutation == "target-boolean-count":
+            call["target_count"] = True
+        elif mutation == "target-missing-flag":
+            del call["truncated"]
+        elif mutation == "target-flag":
+            call["truncated"] = "false"
+        elif mutation == "object-string":
+            output["objects"][key] = "not an object"
+        elif mutation == "object-location":
+            output["objects"][key]["location"] = "not a location"
+        elif mutation == "object-field":
+            output["objects"][key]["field"] = []
+        elif mutation == "missing-object":
+            del output["objects"][key]
+        elif mutation == "point-key":
+            site["points_to"] = [{}]
+        elif mutation == "site-role":
+            site["role"] = []
+        elif mutation == "site-operand":
+            site["operand"] = {}
+        elif mutation == "site-flag":
+            site["truncated"] = "false"
+        elif mutation == "site-reasons":
+            site["incomplete_reasons"] = [{}]
+        elif mutation == "module-reasons":
+            output["module"]["open_world_reasons"] = [{}]
+        elif mutation == "module-externals":
+            output["module"]["unmodeled_externals"] = None
+        elif mutation == "global-flag":
+            output["sites_truncated"] = "false"
+        else:
+            output["andersen"]["completed"] = False
+    root = tmp_path / "run"
+    _, _, _, result = _run(tmp_path, ReplayExecutor(root, mutate=malformed))
+    coverage = _coverage(root, result)
+    assert coverage["svf:cpp:native:build/app"][0] == "unavailable"
+    assert coverage["svf:cpp:native:native/plugin.c"][0] == "partial"
+    assert result["counts"]["analyzed"] == 1
+    assert all(item["payload"]["module_kind"] != "link" for item in _entities(root, result))
+    assert any("malformed" in gap or "incomplete" in gap for gap in result["gaps"])
+
+
+@pytest.mark.parametrize("mutation", ["gaps", "debug-count", "duplicate-module", "compile-section", "compile-produced"])
+def test_malformed_run_nested_sections_are_named_gaps(tmp_path: Path, mutation: str) -> None:
+    def malformed(document, _outputs):
+        if mutation == "gaps":
+            document["modules"][0]["gaps"] = None
+        elif mutation == "debug-count":
+            document["modules"][0]["debug_info_warnings"] = "bad"
+        elif mutation == "duplicate-module":
+            document["modules"].append(dict(document["modules"][0]))
+        elif mutation == "compile-section":
+            document["compile"] = None
+        else:
+            document["compile"][0]["produced"] = "false"
+    root = tmp_path / "run"
+    _, _, _, result = _run(tmp_path, ReplayExecutor(root, mutate=malformed))
+    assert result["terminal_status"] != "SUCCEEDED"
+    assert any("malformed" in gap or "duplicate" in gap for gap in result["gaps"])
+
+
+@pytest.mark.parametrize(("mode", "expected"), [
+    ("open-world", "COMPLETED_WITH_GAPS"), ("missing", "FAILED"), ("failed", "FAILED"),
+], ids=["partial", "missing", "failed"])
+def test_nested_scope_outcomes_reach_real_aggregate_publication(monkeypatch, tmp_path: Path, mode: str,
+                                                              expected: str) -> None:
+    from types import MappingProxyType
+    from appsec_review.runtime import UnitContext
+    from appsec_review.retrieval import write_manifest
+    import appsec_review.jobs.job_svf_alias_analysis.job as module
+
+    root = tmp_path / "run"
+    accepted = scope(root)
+    context = unit(root)
+    # Freeze an empty upstream index set; actual publication composes the produced SVF shard.
+    manifest_path = root / "manifest.json"
+    context.job.run_id = root.name
+    write_manifest(manifest_path, run_id=root.name, target_snapshot=context.job.source_fingerprint,
+                   target_root=context.job.target_root, indexes=[])
+    context.job.input_manifest_path = manifest_path
+    context.job.input_manifest_sha256 = file_sha256(manifest_path)
+    upstream = {"handoff": {"source_fingerprint": context.job.source_fingerprint}, "handoff_sha256": "e" * 64,
+                "manifest": {"path": "manifest.json", "sha256": file_sha256(manifest_path),
+                             "size_bytes": manifest_path.stat().st_size},
+                "result": {"outputs": {"catalog.projects": {"projects": {
+                    accepted.case_id: {"link_commands": LINK_COMMANDS}}}}}}
+    monkeypatch.setattr(module, "accepted_cpp_scopes", lambda _root: (upstream, [accepted], {}))
+
+    def mutate(document, _outputs):
+        if mode == "missing":
+            document["modules"] = []
+        elif mode == "failed":
+            for outcome in document["modules"]:
+                outcome.update(status="analysis_failed", gaps=["inert tool failure"])
+    executor = ReplayExecutor(root, mutate=mutate)
+    outputs = {}
+    for task in build_job(executor_factory=lambda _unit: executor).units:
+        step, name = task.unit_id.split(".")
+        task_root = context.unit_root / step / name
+        task_root.mkdir(parents=True, exist_ok=True)
+        outputs[task.unit_id] = task.handler(UnitContext(
+            context.job, task.unit_id, step, name, task_root, MappingProxyType(outputs)))
+    analyzed, published = outputs["analyze.scopes"], outputs["acceptance.publish_handoff"]
+    assert analyzed["terminal_status"] == published["terminal_status"] == expected
+    assert published["gaps"] and published["counts"]["gap_count"] == len(published["gaps"])
+    assert published["item_count"] > 0 if mode == "open-world" else published["item_count"] == 0
+    assert all(cause in " ".join(published["gaps"])
+               for _, reason in _coverage(root, analyzed["scopes"][0]).values() if reason
+               for cause in reason.split("; "))
+
+
 # --------------------------------------------------------------------------- configuration
 
 

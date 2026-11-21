@@ -192,8 +192,13 @@ def _call_verdict(fact: GraphFact, rows: Sequence[_Row]) -> tuple[_Verdict | Non
 
 def _alias(compare: Sequence[_Row], sink: Sequence[_Row]) -> str:
     """Alias answer within one module: may when any set intersects; no only when all are complete."""
-    compare = [row for row in compare if row.payload.get("points_to")]
-    sink = [row for row in sink if row.payload.get("points_to")]
+    def modeled_empty(row: _Row) -> bool:
+        return (not row.payload.get("points_to") and not row.payload.get("truncated")
+                and bool(row.payload.get("module_closed_world"))
+                and (row.complete or row.payload.get("incomplete_reasons") == ["empty_points_to_set"]))
+
+    compare = [row for row in compare if not modeled_empty(row)]
+    sink = [row for row in sink if not modeled_empty(row)]
     if not compare or not sink:
         return UNKNOWN
     for left in compare:
