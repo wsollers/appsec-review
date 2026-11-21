@@ -292,9 +292,7 @@ Downstream behavior is deliberately narrower than the available context:
 - Coverage file cells attach by exact source path, with one separate build aggregate, to lane-B
   review packages. Prioritization also consumes accepted coverage and applies the configured
   uncovered-risk boost through composite scoring, retaining the normalized 0..1 score policy.
-  The coverage loader reports the current envelope completion status (with domain/legacy
-  fallbacks), consistently with the cells actually read. Neither covered nor uncovered status is
-  a security conclusion.
+  Neither covered nor uncovered status is a security conclusion.
 - Profile hotspots attach by source path when available and by build unit otherwise. They seed
   hotspot context but do not change numeric prioritization, finding severity, or verification rules.
 - Dependency and Scorecard entities are balanced under the normal context cap so a large package
@@ -310,6 +308,19 @@ Downstream behavior is deliberately narrower than the available context:
   prioritization combines syntax, dependency-graph, Semgrep, CodeQL, and history features with
   configured composite modifiers, including the implemented uncovered-risk boost. Coverage
   context and prioritization modifiers do not alter finding severity or verification requirements.
+
+Prioritization's coverage, change-context, profile, CI, artifact-security and SCA-reachability
+loaders use the accepted envelope's whole-job `completion_status`. Legacy whole-job
+`terminal_status`, then domain publication `terminal_status`, are fallbacks only when the newer
+field is absent. A final publication unit's success must not overwrite partial or failed job
+completion. A successful completion with partial/unavailable coverage is reported as
+`COMPLETED_WITH_GAPS`/`UNAVAILABLE`, not complete evidence; failed execution remains failed.
+Missing admitted producers remain unavailable, and disabled loaders remain disabled;
+this status metadata does not change payload selection, source grants or ranking formulas.
+Focused publication-to-admitted-reader units live in
+`tests/unit/job_review_prioritization/test_engineering_status.py`; they exercise real producer
+publication handlers and JobRunner with normalized unit-fixture inputs, not live acquisition or
+complete scanner/model pipelines.
 
 ## Configuration, operation, and development
 

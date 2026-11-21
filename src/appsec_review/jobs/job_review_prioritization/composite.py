@@ -171,6 +171,21 @@ def _norm_unit_score(raw: Any, *, bonus: float = 0.0) -> float:
     return _clamp01(scaled + bonus)
 
 
+def _completion_status(handoff: Mapping[str, Any], publication: Mapping[str, Any]) -> str:
+    # Whole-job completion takes precedence over a final unit that merely published successfully.
+    status = str(handoff.get("completion_status") or handoff.get("terminal_status")
+                 or publication.get("terminal_status") or "UNAVAILABLE")
+    if handoff.get("execution_status") == "FAILED":
+        return "FAILED"
+    if status in {"SUCCEEDED", "COMPLETE", "COMPLETED"}:
+        coverage = handoff.get("coverage")
+        if isinstance(coverage, Mapping):
+            return {"partial": "COMPLETED_WITH_GAPS", "unavailable": "UNAVAILABLE",
+                    "not_applicable": "NOT_APPLICABLE", "skipped_policy": "SKIPPED_POLICY"}.get(
+                        coverage.get("disposition"), status)
+    return status
+
+
 def _load_change_context(run_root: Path, enabled: bool) -> tuple[
     str, dict[str, float], dict[tuple[str, str], float],
     list[tuple[str, int, int, int | None, int | None, float]],
@@ -180,8 +195,8 @@ def _load_change_context(run_root: Path, enabled: bool) -> tuple[
     if not has_handoff(run_root, "job_change_context_analysis"):
         return "UNAVAILABLE", {}, {}, []
     handoff, _ = accepted_handoff(run_root, "job_change_context_analysis")
-    status = str(handoff.get("terminal_status") or "UNAVAILABLE")
     out = handoff.get("outputs", {}).get("publish.publish_handoff") or {}
+    status = _completion_status(handoff, out)
     art = out.get("artifact")
     if not isinstance(art, Mapping):
         return status, {}, {}, []
@@ -251,8 +266,7 @@ def _load_test_coverage(run_root: Path, enabled: bool) -> tuple[str, dict[str, d
         return "UNAVAILABLE", {}
     handoff, _ = accepted_handoff(run_root, "job_test_coverage")
     out = handoff.get("outputs", {}).get("acceptance.publish_handoff") or {}
-    status = str(handoff.get("completion_status") or out.get("terminal_status")
-                 or handoff.get("terminal_status") or "UNAVAILABLE")
+    status = _completion_status(handoff, out)
     art = out.get("artifact")
     if not isinstance(art, Mapping):
         return status, {}
@@ -319,8 +333,8 @@ def _load_profile_data(run_root: Path, enabled: bool) -> tuple[str, dict[str, fl
     if not has_handoff(run_root, "job_profile_data"):
         return "UNAVAILABLE", {}, {}, []
     handoff, _ = accepted_handoff(run_root, "job_profile_data")
-    status = str(handoff.get("terminal_status") or "UNAVAILABLE")
     out = handoff.get("outputs", {}).get("acceptance.publish_handoff") or {}
+    status = _completion_status(handoff, out)
     art = out.get("artifact")
     if not isinstance(art, Mapping):
         return status, {}, {}, []
@@ -373,8 +387,8 @@ def _load_ci_leads(run_root: Path, enabled: bool) -> tuple[str, list[dict[str, A
     if not has_handoff(run_root, "job_ci_configuration_analysis"):
         return "UNAVAILABLE", []
     handoff, _ = accepted_handoff(run_root, "job_ci_configuration_analysis")
-    status = str(handoff.get("terminal_status") or "UNAVAILABLE")
     out = handoff.get("outputs", {}).get("ci_coverage.publish_handoff") or {}
+    status = _completion_status(handoff, out)
     candidates: list[Mapping[str, Any]] = []
     art = out.get("artifact")
     if isinstance(art, Mapping):
@@ -434,8 +448,8 @@ def _load_artifact_leads(run_root: Path, enabled: bool) -> tuple[str, list[dict[
     if not has_handoff(run_root, "job_artifact_security_analysis"):
         return "UNAVAILABLE", []
     handoff, _ = accepted_handoff(run_root, "job_artifact_security_analysis")
-    status = str(handoff.get("terminal_status") or "UNAVAILABLE")
     out = handoff.get("outputs", {}).get("acceptance.publish_handoff") or {}
+    status = _completion_status(handoff, out)
     candidates: list[tuple[str, str | None, str | None, int | None, Mapping[str, Any]]] = []
     art = out.get("artifact")
     if isinstance(art, Mapping):
@@ -524,8 +538,8 @@ def _load_sca_reachability(
     from appsec_review.runtime.inputs import observe_output
 
     handoff, _ = accepted_handoff(run_root, "job_dependency_intelligence")
-    status = str(handoff.get("terminal_status") or "UNAVAILABLE")
     out = handoff.get("outputs", {}).get("acceptance.publish_handoff") or {}
+    status = _completion_status(handoff, out)
     art = out.get("sca_reachability") or out.get("sca_reachability_artifact")
     if not isinstance(art, Mapping) and isinstance(out.get("artifact"), Mapping):
         observe_output(run_root, "job_dependency_intelligence",
