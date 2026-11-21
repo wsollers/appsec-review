@@ -15,7 +15,7 @@ dagster-postgres==0.29.21
 dagster-shared==1.13.21
 dagster-webserver==1.13.21
 docstring_parser==0.18.0
-filelock==4.0.1
+filelock==4.2.1
 fsspec==2026.9.0
 gql==4.0.0
 graphene==3.4.3
