@@ -8,6 +8,7 @@ import pytest
 
 from appsec_review.jobs.job_owasp_control_assessment import job
 from appsec_review.inference import ModelResult
+from appsec_review.interchange import GapCode, producer_gap
 from appsec_review.owasp_workbench import assessment
 from appsec_review.owasp_workbench import (
     assess_batch, build_applicability, build_finding_packages, classify_components,
@@ -31,10 +32,13 @@ def publish(tmp_path, *, classes, rows, results, configured, loaded_gaps=()):
     outputs = {
         "standards_selection.ingest_catalogs": {"manifest": standards_manifest(catalogs)},
         "standards_selection.select_profiles": {"selection": select_profiles(catalogs)},
-        "characterization.load_inputs": {"gaps": list(loaded_gaps), "limitations": []},
+        "characterization.load_inputs": {"gaps": [
+            producer_gap(GapCode.PRODUCER_REPORTED_GAP, gap, unit_id="characterization.load_inputs")
+            for gap in loaded_gaps], "limitations": []},
         "characterization.classify_components": {"classifications": classes},
         "applicability.build_matrix": {"rows": rows, "ledger": target_class_ledger(classes, rows)},
         "verification.independent_review": {"verified_results": results, "batch_results": []},
+        "batching.build_packages": {"non_dispatch_dispositions": []},
         "publication.publish_indexes": {"manifest": {}},
         **{f"validation.{cell}": {"failed_batch_count": 0} for cell in job.CELLS},
     }

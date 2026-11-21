@@ -1387,9 +1387,13 @@ def load_control_assessment(run_root: Path, snapshot: str, result: Mapping[str, 
 
 
 def control_evidence_candidate(record: Mapping[str, Any]) -> bool:
-    """A control-result row the target-class gate marked ``not_applicable`` (T-5008) is a ledger entry,
-    never a ``control_evidence`` fact; every other row stays a candidate for projection."""
-    return record.get("applicability") != "not_applicable"
+    """Coverage-only rows stay in the workbench ledger, not assessed-subject context."""
+    return (record.get("applicability") in {"applicable", "conditional"}
+            and record.get("control_status") in {"satisfied", "not_satisfied", "cannot_verify"}
+            and (bool(record.get("worker_attempt_count")) or record.get("execution_completion") == "reused")
+            and any(item.get("obligation", {}).get("supported") is True
+                    and item["obligation"].get("subject_id")
+                    for item in record.get("obligations") or ()))
 
 
 def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str, Any], ...]) -> Derived:
@@ -1413,16 +1417,13 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
         consume_named(context.run_root, path, namespace="owasp-shard", expected_sha256=shard["sha256"])
         for record in json.loads(path.read_text(encoding="utf-8")).get("records", ()):
             results.append((shard, record))
+    omitted = sum(not control_evidence_candidate(record) and record.get("applicability") != "not_applicable"
+                  for _, record in results)
     results = [pair for pair in results if control_evidence_candidate(pair[1])]
     results.sort(key=lambda pair: (str(pair[1].get("component_id")), str(pair[1].get("control_identity"))))
-    # T-5009 (reproduced on run 2026-11-16-0005): rows no assessor reached are still projected here as
-    # partial facts. Until T-5009 lands, the shard names that they are not control evidence.
-    unresolved_rows = sum(pair[1].get("applicability") in {"cannot_determine", "unsupported_missing_evidence"}
-                          for pair in results)
-    if unresolved_rows:
-        derived.gap(f"assessment_unavailable: {unresolved_rows} control-result rows are cannot_determine or "
-                    "unsupported_missing_evidence; they are projected as partial facts and are not control "
-                    "evidence (T-5009)")
+    if omitted:
+        derived.gap(f"assessment_unavailable: {omitted} coverage-only control-result rows retained in the "
+                    "workbench ledger; no assessed subject evidence is projected")
     unresolved_total = 0
     for shard, record in results[:context.max_facts]:
         component = str(record.get("component_id"))
@@ -1430,7 +1431,7 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
                      "manifest_path": context.owasp.get("manifest_path"),
                      "manifest_sha256": context.owasp.get("manifest_sha256"),
                      "path": shard["path"], "sha256": shard["sha256"], "row_id": record.get("row_id"),
-                     "query": "query_owasp_workbench family=control-result"}
+                     "query": "query_precomputed query_set=control_evidence"}
         assessment = _control_assessment(record, context.owasp, reference, resolver)
         evidence, gaps = assessment["evidence"], [*assessment["gaps"], *assessment["limitations"]]
         unresolved_total += assessment["unresolved_evidence"]
@@ -1464,7 +1465,7 @@ def _build_control_evidence(context: ProductContext, selected: tuple[Mapping[str
         derived.gap(f"validator_gap: {unresolved_total} evidence citation(s) are free-form and do not resolve to "
                     "accepted retrieval identities")
     if not results:
-        derived.gap("assessment_unavailable: the accepted workbench published no control results")
+        derived.gap("assessment_unavailable: the accepted workbench published no assessed subject-bound control results")
     return _finish(derived, name)
 
 
@@ -1969,7 +1970,7 @@ PRODUCT_RULES: tuple[ProductRule, ...] = (
     ProductRule("ci_trust", "ci-trust/1", _select_ci_trust, _build_ci_trust),
     ProductRule("history_context", "history-context/1", _select_history_context, _build_history_context,
                 links=("history_code",)),
-    ProductRule("control_evidence", "control-evidence/4", _select_control_evidence, _build_control_evidence,
+    ProductRule("control_evidence", "control-evidence/5", _select_control_evidence, _build_control_evidence,
                 owasp=True),
     ProductRule("reference_intelligence", "reference-intelligence/2", _select_reference,
                 _build_reference_intelligence, feeds=("mitre",)),

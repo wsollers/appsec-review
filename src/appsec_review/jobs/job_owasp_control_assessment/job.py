@@ -9,20 +9,20 @@ from typing import Any
 from appsec_review.config.owasp import AssessmentMode, parse_settings
 from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.inference import Infer
-from appsec_review.interchange import CoverageDisposition
+from appsec_review.interchange import CoverageDisposition, GapCode, ProducerStatus, producer_gap
 from appsec_review.observability import PipelineLog
 from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.storage import atomic_json, file_sha256
 from appsec_review.owasp_workbench import (
     assess_batch, build_applicability, build_finding_packages, classify_components,
-    compose, control_records, deterministic_join, fingerprint_inputs, load_catalogs,
-    partition_work, pin_bundle, publish_manifest, publish_shard, select_profiles,
+    control_records, deterministic_join, fingerprint_inputs, load_catalogs,
+    partition_work, publish_manifest, publish_shard, select_profiles,
     standards_manifest, target_class_ledger, verify_results,
 )
 from appsec_review.jobs.job_owasp_control_assessment.datasets import CONTRACT, DATASETS
 from appsec_review.runtime.inputs import feed_input_identity
-from appsec_review.owasp_workbench.assessment import run_batch
+from appsec_review.owasp_workbench.assessment import prepare_guidance, run_batch
 from appsec_review.owasp_workbench.engine import UNRESOLVED_OUTCOMES
 from appsec_review.owasp_workbench.evidence import EvidenceResolver, accepted_inputs
 from appsec_review.owasp_workbench.versions import implemented_parser_versions
@@ -138,10 +138,19 @@ def _resolver(unit: UnitContext) -> EvidenceResolver:
 
 def _characterization_gaps(unit: UnitContext) -> list[str]:
     return sorted({
-        *unit.output("characterization.load_inputs").get("gaps", ()),
+        *(gap["reason"] for gap in unit.output("characterization.load_inputs").get("gaps", ())),
         *(gap for component in unit.output("characterization.classify_components")["classifications"]
           for gap in component.get("gaps", ())),
     })
+
+
+def _control_gaps(unit: UnitContext, reasons) -> list[dict[str, Any]]:
+    return [producer_gap(GapCode.PRODUCER_REPORTED_GAP, reason, unit_id=unit.unit_id)
+            for reason in sorted(set(reasons))]
+
+
+def _status(gapped: bool) -> ProducerStatus:
+    return ProducerStatus.COMPLETED_WITH_GAPS if gapped else ProducerStatus.SUCCEEDED
 
 
 def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Job:
@@ -152,8 +161,8 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
     def ingest(unit: UnitContext) -> Mapping[str, Any]:
         manifest = standards_manifest(_catalogs(unit))
         return {"manifest": manifest, "artifact": _artifact(unit, "standards-manifest.json", manifest),
-                "gaps": manifest["gaps"],
-                "terminal_status": "COMPLETED_WITH_GAPS" if manifest["gaps"] else "SUCCEEDED"}
+                "gaps": _control_gaps(unit, manifest["gaps"]),
+                "terminal_status": _status(bool(manifest["gaps"]))}
 
     def select(unit: UnitContext) -> Mapping[str, Any]:
         settings = unit.job.config.settings
@@ -165,8 +174,8 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         value = _fixture_or_accepted_inputs(unit)
         gaps = list(value.get("gaps", ()))
         return {**value, "component_count": len(value["components"]),
-                "evidence_count": len(value["evidence"]), "gaps": gaps,
-                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
+                "evidence_count": len(value["evidence"]), "gaps": _control_gaps(unit, gaps),
+                "terminal_status": _status(bool(gaps))}
 
     def classify(unit: UnitContext) -> Mapping[str, Any]:
         loaded = unit.output("characterization.load_inputs")
@@ -178,6 +187,7 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
             "schema": "appsec-review/component-classification-set/2", "components": values})
         return {"classifications": values, "artifact": artifact,
                 "target_classes": {value["component_id"]: value["target_classes"] for value in values},
+                "gaps": _control_gaps(unit, (gap for value in values for gap in value["gaps"])),
                 "gap_count": sum(len(value["gaps"]) for value in values)}
 
     def applicability(unit: UnitContext) -> Mapping[str, Any]:
@@ -212,6 +222,7 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         classifications = unit.output("characterization.classify_components")["classifications"]
         rows = unit.output("applicability.build_matrix")["rows"]
         output = {}
+        nondispatch = []
         # T-5013: half the worker's input budget (4 bytes per token) is shared by the batch's packages' evidence;
         # the obligations' own records come first and the rest stays reachable through expansion.
         input_bytes = int(unit.job.config.settings["model"]["max_input_tokens"]) * 4
@@ -222,23 +233,19 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                 max_subjects=parse_settings(unit.job.config.settings).max_subjects_per_control,
                 max_evidence=parse_settings(unit.job.config.settings).max_evidence_per_component,
                 max_evidence_bytes=max(1, input_bytes // 2 // max(1, len(batch["row_ids"])))))
-            task = {"task_id": batch["batch_id"],
-                    "question": "Assess only the supplied control-component proof obligations.",
-                    # T-5013: name the obligations (rule version, row, ids); the packages carry the full objects.
-                    "proof_obligations": [{
-                        "row_id": item["row_id"], "control": item["control"]["identity"],
-                        "rule_version": sorted({str(obligation.get("rule_version")) for obligation in item["proof_obligations"]}),
-                        "obligation_ids": [obligation["obligation_id"] for obligation in item["proof_obligations"]],
-                    } for item in values],
-                    "prohibited_claims": values[0]["prohibited_claims"] if values else []}
-            bundle = compose(unit.job.repository_root, role=batch["assignment"]["role"],
-                             persona=batch["assignment"]["persona"], task=task)
-            guidance = pin_bundle(unit.job.run_root, bundle)
+            guidance = prepare_guidance(unit.job.repository_root, unit.job.run_root, batch)
             for value in values:
-                value["guidance"] = guidance
+                value["guidance"] = guidance["control_assessor"]
+                value["guidance_by_role"] = guidance
+                if loaded["assessment_mode"] == "assessment" and not any(
+                        obligation.get("supported") for obligation in value["proof_obligations"]):
+                    nondispatch.append({"row_id": value["row_id"], "batch_id": batch["batch_id"],
+                        "reason": "; ".join(sorted({obligation.get("reason", "no supported subject")
+                            for obligation in value["proof_obligations"]})) or "no supported subject"})
             output[batch["batch_id"]] = values
         value = {"schema": "appsec-review/finding-package-set/1", "batches": output}
         return {"packages": output, "artifact": _artifact(unit, "finding-packages.json", value),
+                "non_dispatch_dispositions": sorted(nondispatch, key=lambda item: item["row_id"]),
                 "package_count": sum(len(items) for items in output.values())}
 
     def make_cell(cell_id: str):
@@ -250,17 +257,23 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
             index = CELLS.index(cell_id)
             assigned = [batch for position, batch in enumerate(work["batches"])
                         if position % len(CELLS) == index]
-            admitted = {batch["batch_id"] for batch in work["batches"][:typed.max_batches]}
+            ready_batches = [batch for batch in work["batches"]
+                if typed.mode is AssessmentMode.QUALIFICATION or any(
+                    obligation.get("supported") for package in packages_by_batch[batch["batch_id"]]
+                    for obligation in package["proof_obligations"])]
+            admitted = {batch["batch_id"] for batch in ready_batches[:typed.max_batches]}
             resolver = _resolver(unit) if typed.mode is AssessmentMode.ASSESSMENT else None
             results = []
             log = PipelineLog(unit.job.run_root)
             for batch in assigned:
-                log.write("OWASP_WORKER_STARTED", run_id=unit.job.run_id,
+                ready = batch in ready_batches
+                launched = ready and batch["batch_id"] in admitted and fail_cell != cell_id
+                log.write("OWASP_WORKER_STARTED" if launched else "OWASP_WORKER_NOT_DISPATCHED", run_id=unit.job.run_id,
                     job_id="job_owasp_control_assessment", attempt_id=unit.job.attempt_id,
                     step_id="validation", task_id=cell_id, details={"batch_id": batch["batch_id"],
                     "model": dict(unit.job.config.settings["model"]), "cell": cell_id})
                 result = assess_batch(batch, packages_by_batch[batch["batch_id"]],
-                    fail=fail_cell == cell_id or batch["batch_id"] not in admitted,
+                    fail=fail_cell == cell_id or ready and batch["batch_id"] not in admitted,
                     assessment_mode=typed.mode.value,
                     worker=(lambda request: run_batch(repository_root=unit.job.repository_root,
                         run_root=unit.job.run_root, batch=request["batch"], packages=request["packages"],
@@ -269,9 +282,11 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                         resolver=resolver, infer=transport(), independent=False,
                         attempt_id=unit.job.attempt_id, unit_id=unit.unit_id))
                     if resolver is not None else None)
-                if batch["batch_id"] not in admitted:
+                if ready and batch["batch_id"] not in admitted:
+                    result["terminal_state"] = "not_dispatched"
                     for row in result["results"]:
                         row["gaps"] = ["batch not launched: max_batches cap; row remains accounted and unresolved"]
+                        row["execution_completion"] = "not_dispatched"
                 results.append(result)
                 evidence_used = sorted({citation["source_identity"] for item in result["results"]
                                         for citation in item.get("evidence_used", ())})
@@ -286,9 +301,12 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                     "dispositions": [item["status"] for item in result["results"]],
                     **result["metrics"]})
             failed = sum(result["terminal_state"] == "failed" for result in results)
+            gapped = failed or any(row.get("gaps") for result in results for row in result["results"])
             return {"cell": cell_id, "batch_results": results, "assigned_batch_count": len(assigned),
+                    "gaps": _control_gaps(unit, (gap for result in results for row in result["results"]
+                                                for gap in row.get("gaps", ()))),
                     "failed_batch_count": failed, "terminal_status":
-                    "COMPLETED_WITH_GAPS" if failed else "SUCCEEDED"}
+                    _status(bool(gapped))}
         return cell
 
     def verify(unit: UnitContext) -> Mapping[str, Any]:
@@ -298,7 +316,7 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         reviewed_batches = []
 
         def review(batch):
-            if "worker" not in batch:
+            if "worker" not in batch or batch["worker"]["status"] == "not_dispatched":
                 reviewed_batches.append(batch)
                 return batch
             bid = batch["batch_id"]
@@ -329,7 +347,8 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         value = {"schema": "appsec-review/verified-control-results/1", "results": verified}
         return {"verified_results": verified, "artifact": _artifact(unit, "verified-results.json", value),
                 "batch_results": reviewed_batches,
-                "gap_count": gap_count, "terminal_status": "COMPLETED_WITH_GAPS" if gap_count else "SUCCEEDED"}
+                "gaps": _control_gaps(unit, (gap for result in verified for gap in result.get("gaps", ()))),
+                "gap_count": gap_count, "terminal_status": _status(bool(gap_count))}
 
     def join(unit: UnitContext) -> Mapping[str, Any]:
         joined = deterministic_join(unit.output("applicability.build_matrix")["rows"],
@@ -339,8 +358,9 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         disposition = coverage_disposition(joined["results"], gaps=gapped)
         return {"joined": joined, "artifact": _artifact(unit, "control-results.json", joined),
                 "result_count": len(joined["results"]),
-                "gaps": gaps, "coverage_disposition": disposition,
-                "terminal_status": "COMPLETED_WITH_GAPS" if disposition == "partial" else "SUCCEEDED"}
+                "gaps": _control_gaps(unit, [*gaps, *(gap for row in joined["results"] for gap in row["gaps"])]),
+                "coverage_disposition": disposition,
+                "terminal_status": _status(disposition == "partial")}
 
     def publish_indexes(unit: UnitContext) -> Mapping[str, Any]:
         standards = unit.output("standards_selection.ingest_catalogs")["manifest"]
@@ -350,8 +370,19 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         work = unit.output("batching.partition_work")["work"]
         packages_by_batch = unit.output("batching.build_packages")["packages"]
         joined = unit.output("join.deterministic_join")["joined"]
-        guidance_ids = sorted({item["guidance"]["bundle_sha256"]
-            for values in packages_by_batch.values() for item in values})
+        invocation_guidance = {}
+        for batch in unit.output("verification.independent_review")["batch_results"]:
+            roles = {}
+            for key, role in (("worker", "control_assessor"), ("independent_review", "independent_reviewer")):
+                result = batch.get(key, {})
+                if result.get("status") == "reused" or any(
+                        part["status"] == "reused" for part in result.get("parts", ())) or any(
+                        attempt.get("dispatched") for attempt in result.get("attempts", ())):
+                    roles[role] = result["guidance"]
+            if roles:
+                invocation_guidance[batch["batch_id"]] = roles
+        guidance_ids = sorted({pin["bundle_sha256"]
+            for roles in invocation_guidance.values() for pin in roles.values()})
         guidance_hash = hashlib.sha256("\n".join(guidance_ids).encode()).hexdigest()
         fingerprints = fingerprint_inputs(standards=standards, selection=selection,
             classifications=classifications, rows=rows, batches=work["batches"],
@@ -380,14 +411,15 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                 records=[batch], fingerprint_inputs={"batch": batch["fingerprint"]}))
             shards.append(publish_shard(unit.job.run_root, family="finding-package", shard_id=bid,
                 records=packages_by_batch[bid], fingerprint_inputs={"batch": batch["fingerprint"],
-                "guidance": guidance_hash}))
+                "guidance": invocation_guidance.get(bid, {})}))
         accepted = unit.output("characterization.load_inputs")["retrieval_manifest"]
         manifest = publish_manifest(unit.job.run_root, run_id=unit.job.run_id, shards=shards,
             accepted_upstream_manifest=accepted,
             configuration_sha256=resolved_configuration_identity(unit.job.run_root),
             assessment_bounds={"max_source_lines": parse_settings(unit.job.config.settings).max_source_lines},
             assessment_mode=parse_settings(unit.job.config.settings).mode.value)
-        return {"manifest": manifest, "fingerprints": fingerprints, "shard_count": len(shards)}
+        return {"manifest": manifest, "fingerprints": fingerprints, "shard_count": len(shards),
+                "invocation_guidance": invocation_guidance}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         joined = unit.output("join.deterministic_join")["joined"]
@@ -424,6 +456,7 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         ]
         value["telemetry"] = [batch["metrics"] for batch in unit.output(
             "verification.independent_review").get("batch_results", [])]
+        value["non_dispatch_dispositions"] = unit.output("batching.build_packages")["non_dispatch_dispositions"]
         value["input_retrieval"] = unit.output("characterization.load_inputs").get("retrieval_metrics", {})
         # Limitations describe the method; gaps are missing coverage. A target whose class admits no
         # family ends with a not-applicable ledger and no gap (T-5008).
@@ -478,8 +511,9 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
         return {"artifact": artifact, "gap_summary_artifact": gap_artifact,
                 "telemetry": gap_summary["telemetry"],
                 "index_manifest": value["index_manifest"], "accounting": value["accounting"],
+                "gaps": _control_gaps(unit, value["gaps"]),
                 "gap_count": len(value["gaps"]), "coverage_disposition": disposition, "terminal_status":
-                "COMPLETED_WITH_GAPS" if disposition == "partial" else "SUCCEEDED"}
+                _status(disposition == "partial")}
 
     u = Unit
     units = (
@@ -502,14 +536,16 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
           ("standards_selection.ingest_catalogs", "standards_selection.select_profiles",
            "characterization.load_inputs", "characterization.classify_components",
            "applicability.build_matrix", "batching.partition_work", "batching.build_packages",
-           "join.deterministic_join")),
+           "join.deterministic_join", "verification.independent_review")),
         u("publication.publish_handoff", publish,
           ("standards_selection.select_profiles", "standards_selection.ingest_catalogs",
            "applicability.build_matrix", "join.deterministic_join", "publication.publish_indexes",
+           "batching.build_packages", "verification.independent_review",
            *tuple(f"validation.{cell}" for cell in CELLS))),
     )
     identity = None
     return Job("job_owasp_control_assessment", "owasp_control_assessment", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=identity, validation_identity=identity, units=units,
-               datasets=DATASETS, contract=CONTRACT, external_input_identity=feed_input_identity)
+               datasets=DATASETS, contract=CONTRACT, external_input_identity=feed_input_identity,
+               strict_gaps=True)

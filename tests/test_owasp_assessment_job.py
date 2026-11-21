@@ -197,6 +197,7 @@ def _publish_accepted_handoff(fixture, context: JobContext, outputs: dict) -> No
                     "index_manifest": {"path": manifest_ref["path"], "sha256": manifest_ref["sha256"]},
                     "artifact": {"path": pub_handoff["artifact"]["path"], "sha256": pub_handoff["artifact"]["sha256"]},
                     "terminal_status": pub_handoff["terminal_status"],
+                    "gaps": pub_handoff["gaps"],
                 }},
                 "artifacts": sorted(by_path.values(), key=lambda item: item["path"]),
             },
@@ -445,13 +446,18 @@ def test_explicit_mode_does_not_autoselect_qualification_input(tmp_path):
 
 
 def test_batch_cap_accounts_for_every_unlaunched_row_and_unknown_usage(tmp_path):
-    fixture = accepted_fixture(tmp_path)
+    from tests.test_owasp_proof_procedures import PASSWORD, SQL
+    fixture = accepted_fixture(tmp_path, source=SQL + "\n" + PASSWORD)
     transport = ScriptedAssessment(usage=False)
     outputs = execute(fixture, transport, max_batches=1, max_batch_size=1)
     joined = outputs["join.deterministic_join"]["joined"]
     assert joined["accounting"]["exactly_once"] is True
     capped = [row for row in joined["results"] if any("max_batches cap" in gap for gap in row["gaps"])]
     assert capped and all(not row["lead_eligible"] for row in capped)
+    assert all(row["execution_completion"] == "not_dispatched" and row["worker_attempt_count"] == 0
+               for row in capped)
+    assert all(outputs[f"validation.{cell}"]["failed_batch_count"] == 0
+               for cell in ("cell_01", "cell_02", "cell_03", "cell_04"))
     for batch in outputs["verification.independent_review"]["batch_results"]:
         if batch["metrics"]["model_calls"]:
             assert batch["metrics"]["input_tokens_reported"] is None

@@ -540,6 +540,9 @@ def test_scoped_effective_controls_reach_blue_context_without_claiming_component
         jsonschema.Draft202012Validator(SCHEMA).validate(raw)
         document = package.resolved()
         controls = [entry["control_assessment"] for entry in document["context"] if entry["role"] == "control_context"]
+        if fixture.ids["svc/api/handler.py"] not in document["scope"]["source_ids"]:
+            assert not controls
+            continue
         assert controls and all(item["component_id"] == COMPONENT for item in controls)
         assert controls[0]["control_status"] == "satisfied"
         assert controls[0]["obligations"] == row["obligations"]
@@ -797,22 +800,27 @@ def test_full_pinned_catalog_reuses_verified_publication_and_component_work(tmp_
     started = perf_counter()
     downstream = project_and_assemble(fixture)
     elapsed = perf_counter() - started
-    assert len(downstream.product_rows) == len(rows)
+    assert len(downstream.product_rows) == 1
     assert {row["payload"]["result"]["workbench_reference"]["row_id"] for row in downstream.product_rows} == {
-        row["row_id"] for row in rows}
+        row["row_id"] for row in rows if row["control_status"] == "not_satisfied"}
     assert all(row["payload"]["result"]["unresolved_evidence"] == 0 for row in downstream.product_rows)
     assert sum(row["payload"]["result"]["control_status"] == "cannot_verify"
-               for row in downstream.product_rows) == len(rows) - 1
+               for row in downstream.product_rows) == 0
+    ledger = json.loads(shard_path.read_text())["records"]
+    assert {row["row_id"] for row in ledger} == {row["row_id"] for row in rows}
+    assert any(f"{len(rows) - 1} coverage-only" in gap for gap in downstream.derived.gaps)
     assert len([lead for lead in downstream.collection.leads if lead.family == "owasp_control"]) == 1
     assert {identity: lookups[identity] for identity in component_ids} == {
-        identity: 3 for identity in component_ids}
+        identity: 0 for identity in component_ids}
     assert hashes == Counter({shard_path: 3, manifest_path: 2})
     assert consumptions == Counter({shard_path: 3, manifest_path: 3})
     assert downstream.assembly.packages
     assert all(len(package.body) <= downstream.assembly.manifest["settings"]["max_package_bytes"]
                for package in downstream.assembly.packages)
-    assert any(gap.producer == "owasp_control" and "max_package_bytes" in gap.reason
-               for gap in downstream.assembly.gaps)
+    assert not any(gap.producer == "owasp_control" and "max_package_bytes" in gap.reason
+                   for gap in downstream.assembly.gaps)
+    assert len([package for package in downstream.assembly.packages
+                if package.lead_family == "owasp_control"]) == 1
     assert any(entry.get("control_assessment", {}).get("control_status") == "not_satisfied"
                for view in downstream.views.values() for entry in view.document["other_context"])
     print(json.dumps({"catalog_control_rows": len(rows), "component_find_queries": sum(

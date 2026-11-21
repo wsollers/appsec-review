@@ -354,6 +354,8 @@ def test_publication_unit_emits_the_actual_resolving_metrics_receipt(tmp_path, m
         "standards_selection.ingest_catalogs": {"manifest": {"gaps": []}},
         "applicability.build_matrix": {"ledger": {"schema": "appsec-review/target-class-ledger/1", "entries": []}},
         "characterization.load_inputs": {"retrieval_metrics": {"attempts": 2}},
+        "characterization.classify_components": {"classifications": []},
+        "batching.build_packages": {"non_dispatch_dispositions": []},
         "publication.publish_indexes": {"manifest": {"sha256": "f" * 64}},
         "verification.independent_review": {"batch_results": [{
             "metrics": {"model_calls": 0, "reused_model_results": 2, "retrieval": {"attempts": 3}}}]},
@@ -361,7 +363,7 @@ def test_publication_unit_emits_the_actual_resolving_metrics_receipt(tmp_path, m
     }
     events = EventLog(tmp_path / "attempt-events.jsonl", PipelineLog(tmp_path),
                       {"run_id": "run", "job_id": "job_owasp_control_assessment", "attempt_id": "a"})
-    context = SimpleNamespace(run_root=tmp_path, attempt_root=tmp_path / "data" / "attempts" / "a",
+    context = SimpleNamespace(run_root=tmp_path, run_id="run", attempt_root=tmp_path / "data" / "attempts" / "a",
                               events=events, config=SimpleNamespace(settings={}))
     unit = SimpleNamespace(job=context, unit_id="publication.publish_handoff", output=outputs.__getitem__)
     handler = next(unit.handler for unit in job.build_job().units if unit.unit_id == "publication.publish_handoff")

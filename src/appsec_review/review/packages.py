@@ -1517,7 +1517,7 @@ class _Assembler:
         self.routing_tags: dict[str, list[ContextEntry]] = defaultdict(list)
         # Collation facets (T-5008) by subject logical id, path and component id: tag, basis, ids.
         self.facet_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        self.control_context: dict[str, list[ContextEntry]] = defaultdict(list)
+        self.control_context: dict[tuple[str, str], list[ContextEntry]] = defaultdict(list)
         self.document_context: dict[str, list[ContextEntry]] = defaultdict(list)
         self.document_gaps: list[ScopeGap] = []
         from appsec_review.indexing.products import load_control_assessment
@@ -1528,9 +1528,26 @@ class _Assembler:
                 if result.get("assessment_mode") != "assessment":
                     continue
                 result = load_control_assessment(scope.run_root, scope.target_snapshot, result, cache=control_cache)
+                from appsec_review.indexing.products import control_evidence_candidate
+                if not control_evidence_candidate(result):
+                    continue
                 cid = str(result.get("component_id"))
-                self.control_context[cid].append(context_entry(row["identity"], "control_context",
-                    scope.shard_sha256(shard), control_assessment=result))
+                resolved = {item["source_identity"] for item in result["evidence"] if item["resolved"]}
+                sources = set()
+                for item in result["obligations"]:
+                    if not item["obligation"].get("supported") or not item["obligation"].get("subject_id"):
+                        continue
+                    for assessment in (item, item.get("independent_assessment") or {}):
+                        for check in assessment.get("citation_checks", ()):
+                            ref = check.get("reference", {})
+                            if (check.get("subject_binding") is True and check.get("resolution") == "resolved"
+                                    and ref.get("source_identity") in resolved):
+                                source = scope.source_for(ref.get("locator", {}).get("path"))
+                                if source:
+                                    sources.add(source.identity)
+                for source_id in sorted(sources):
+                    self.control_context[(cid, source_id)].append(context_entry(
+                        row["identity"], "control_context", scope.shard_sha256(shard), control_assessment=result))
         for shard in scope.producer("security_tagging").shards:
             for row in scope.store.entities((shard,), kinds=("tag_assignment",)):
                 subject = row["payload"].get("subject") or {}
@@ -1628,6 +1645,11 @@ class _Assembler:
 
     def scoped_tags(self, component_id: str, source_ids: Iterable[str], paths: Iterable[str]) -> list[ContextEntry]:
         return [entry for key in {component_id, *source_ids, *paths} for entry in self.routing_tags.get(key, ())]
+
+    def scoped_controls(self, component_id: str, source_ids: Iterable[str]) -> list[ContextEntry]:
+        entries = {entry.id: entry for source_id in source_ids
+                   for entry in self.control_context.get((component_id, source_id), ())}
+        return [entries[key] for key in sorted(entries)]
 
     def corroboration(self, lead: Lead) -> tuple[list[NeighborhoodRow], int]:
         """Other observations on the lead's own line, strongest first, bounded by ``MAX_CORROBORATION``."""
@@ -2027,7 +2049,7 @@ class _Assembler:
             context.append(context_entry(unit.identity, "build_unit"))
         paths = tuple(dict.fromkeys(member.path for member in leads if member.path))
         context.extend(self.scoped_tags(component_id, sources, paths))
-        context.extend(self.control_context.get(component_id, ()))
+        context.extend(self.scoped_controls(component_id, sources))
         context.extend(self.document_entries(paths))
         context.extend(context_entry(row["identity"], "priority", row["shard_sha256"])
                        for row in _matching_routes(self.priority_by_key, paths, leads))
@@ -2178,7 +2200,7 @@ class _Assembler:
         graph_context, graph_omitted = ([], 0) if unit.operation else self.graph.unit_context(unit.paths, budget)
         context, omitted, gaps = self._cap(
             (*unit.context, *graph_context, *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths),
-             *self.control_context.get(unit.component_id, ()), *self.document_entries(unit.paths)),
+             *self.scoped_controls(unit.component_id, unit.source_ids), *self.document_entries(unit.paths)),
             unit.key, "lane_b_hunt")
         gaps.extend(self.document_gaps)
         if graph_omitted:

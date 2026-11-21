@@ -35,7 +35,7 @@ def test_cli_target_ends_after_applicability_with_a_not_applicable_ledger(tmp_pa
     assert all(outputs[f"validation.cell_0{index}"]["assigned_batch_count"] == 0 for index in range(1, 5))
     handoff = outputs["publication.publish_handoff"]
     report = json.loads((fixture.run_root / handoff["artifact"]["path"]).read_text(encoding="utf-8"))
-    catalog_gaps = set(outputs["standards_selection.ingest_catalogs"]["gaps"])
+    catalog_gaps = {gap["reason"] for gap in outputs["standards_selection.ingest_catalogs"]["gaps"]}
     assert set(report["gaps"]) == catalog_gaps, "the not-applicable ledger is a result, not a gap"
     assert handoff["terminal_status"] == ("COMPLETED_WITH_GAPS" if catalog_gaps else "SUCCEEDED")
     # D5: a typed coverage disposition travels with the status (outcomes.json recorded None before).
@@ -52,8 +52,8 @@ def test_cli_target_ends_after_applicability_with_a_not_applicable_ledger(tmp_pa
     # Projection: a not_applicable row is a ledger entry, never a control_evidence fact.
     from appsec_review.indexing.products import control_evidence_candidate
     assert not any(control_evidence_candidate(row) for row in joined)
-    assert control_evidence_candidate({**joined[0], "applicability": "applicable"})
-    assert control_evidence_candidate({**joined[0], "applicability": "cannot_determine"})
+    assert not control_evidence_candidate({**joined[0], "applicability": "applicable"})
+    assert not control_evidence_candidate({**joined[0], "applicability": "cannot_determine"})
 
 
 def test_network_service_target_admits_only_the_transport_agnostic_asvs_chapters(tmp_path) -> None:

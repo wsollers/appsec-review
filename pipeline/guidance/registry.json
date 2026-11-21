@@ -39,13 +39,13 @@
       "responsibility": "Resolve one bounded control-component applicability question."
     },
     "control_assessor": {
-      "responsibility": "Assess assigned proof obligations and return observations with citations."
+      "responsibility": "Assess named subject-bound proof obligations against accepted evidence, preserving uncertainty and cited provisional hypotheses."
     },
     "evidence_verifier": {
       "responsibility": "Resolve cited observations to accepted source or run artifacts."
     },
     "independent_reviewer": {
-      "responsibility": "Independently review elevated or ship-blocking proposed claims."
+      "responsibility": "Independently assess the original named obligations and accepted evidence in a fresh blinded context, without a previous assessor's conclusions."
     },
     "result_adjudicator": {
       "responsibility": "Apply deterministic acceptance rules while preserving disagreement."

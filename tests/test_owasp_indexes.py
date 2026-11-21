@@ -166,6 +166,7 @@ def test_job_publishes_changed_packages_and_preserves_pointer_on_failure(tmp_pat
         "batching.partition_work": {"work": {"batches": [
             {"batch_id": "batch:one", "fingerprint": "stable", "component_ids": []}]}},
         "batching.build_packages": {"packages": {"batch:one": [package]}},
+        "verification.independent_review": {"batch_results": []},
         "join.deterministic_join": {"joined": {"results": []}},
     }
     settings = deepcopy(dict(load_config(Path(__file__).parents[1] / "appsec-review.toml").job(

@@ -135,6 +135,13 @@ class WorkbenchIndex:
             assignment = record.get("assignment")
             if isinstance(assignment, Mapping) and field in assignment:
                 return assignment[field]
+        nested = record.get("component") if key in {"component", "project"} else record.get("control")
+        fields = {"component": ("component_id",), "project": ("project_id",),
+                  "control": ("identity", "id")}
+        if isinstance(nested, Mapping):
+            for field in fields.get(key, ()):
+                if field in nested:
+                    return nested[field]
         return None
 
     def query(self, *, family: str | None = None, limit: int = 50, cursor: str | None = None,

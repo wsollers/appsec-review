@@ -175,8 +175,12 @@ component until a per-request byte budget (half the worker's `max_input_tokens`,
 token, shared by the batch's packages); every accepted record of the component stays reachable
 through bounded expansion by identity (`expansion_identities`), and the omitted count is a package
 limitation. Before this a package repeated the whole component evidence set, so a 12-row C/C++ batch
-never fitted the input budget. The pinned guidance task names the obligations (rule version, row,
-ids) rather than embedding them, which keeps the composed prompt under its 48 KiB bound. A row's
+never fitted the input budget. The pinned guidance task names the obligation rule version while
+the bounded request carries the actual rows and subjects, keeping the composed prompt under its
+48 KiB bound. Packages pin both role bundles once; investigation verifies and loads those exact
+pins. Published fingerprints include actual dispatched/reused role identities, not unused
+package-time bundles. Applicable rows with no supported subject retain explicit non-dispatch
+dispositions and unresolved results, without a worker-start event or a failed model batch. A row's
 verification status is decided on its supported obligations: an unsupported coverage obligation is a
 gap on the row, not a missing independent review. `select_profiles` records a
 `reasons` list per family, and `deterministic_join` and the handoff publish a typed
@@ -243,7 +247,7 @@ The accepted manifest joins `standards`, `component-classification`, `applicabil
 accepted upstream manifest, immutable configuration identity and `assessment_bounds`, including
 the resolved `max_source_lines` used when later projections re-resolve citations.
 
-Accepted results become PRECOMPUTED `control_evidence`, then provisional `owasp_control` leads and
+Attempted or reused, subject-bound results become PRECOMPUTED `control_evidence`, then provisional `owasp_control` leads and
 lead/hunt packages. Deep custody and obligations stay lossless in the hash-pinned workbench
 authority rather than being corrupted by depth-limited index summaries. Consumers re-open that
 authority and re-resolve original refs, preserving proof scope, counterevidence, dissent and gaps.
@@ -251,6 +255,11 @@ Component-level leads do not invent an exact source line. Every PRECOMPUTED inte
 **indirect for every final predicate**; a naked source-file identity alone is also not a direct
 predicate fact. Red/blue/verifier claims must retrieve underlying evidence and establish their own
 predicates. Duplicate underlying sources do not multiply rank or corroboration.
+Unassessed, unsupported and subjectless rows remain in the workbench coverage ledger; omitted
+unresolved rows are counted as coverage gaps, never promoted to context evidence. Package control
+context matches both component and the resolved primary subject's source file. Worker references
+use `query_precomputed query_set=control_evidence`; `query_owasp_workbench` remains
+application-side and its finding-package filters read nested component/project/control identities.
 
 Model receipts live at `data/indexes/owasp/receipts/<semantic-key>.json` in the registered shared
 namespace. Their key binds assessment mode, local evidence/routing, catalogs/proof/rules, guidance,

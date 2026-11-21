@@ -43,7 +43,7 @@ def _semantic(value: Any) -> Any:
     if isinstance(value, Mapping):
         return {key: _semantic(child) for key, child in value.items()
                 if key not in {"publication", "retrieval_manifest", "package_id", "evidence_id", "evidence_ids",
-                               "guidance"}}
+                               "guidance", "guidance_by_role"}}
     if isinstance(value, (tuple, list)):
         return [_semantic(child) for child in value]
     return value
@@ -163,6 +163,33 @@ def _guidance(root: Path, run_root: Path, batch: Mapping[str, Any], role: str) -
     return pinned, render_prompt(bundle)
 
 
+def prepare_guidance(root: Path, run_root: Path, batch: Mapping[str, Any]) -> dict[str, dict[str, str]]:
+    return {role: _guidance(root, run_root, batch, role)[0]
+            for role in ("control_assessor", "independent_reviewer")}
+
+
+def _package_guidance(root: Path, run_root: Path, batch: Mapping[str, Any], role: str,
+                      packages: Sequence[Mapping[str, Any]]) -> tuple[dict[str, str], str]:
+    pins = [package.get("guidance_by_role") for package in packages]
+    if not any(pin is not None for pin in pins):
+        return _guidance(root, run_root, batch, role)
+    if any(not isinstance(pin, Mapping) or role not in pin for pin in pins):
+        raise ValueError("OWASP packages have incomplete per-role guidance")
+    guidance = dict(pins[0][role])
+    if any(pin[role] != guidance for pin in pins):
+        raise ValueError("OWASP packages disagree on per-role guidance")
+    from appsec_review.guidance.compose import load_pinned_prompt
+    text = load_pinned_prompt(run_root, guidance["bundle_sha256"])
+    expected_path = f"data/guidance/{guidance['bundle_sha256']}/bundle.json"
+    if guidance.get("path") != expected_path:
+        raise ValueError("OWASP guidance path differs from its pinned identity")
+    bundle = json.loads((run_root / expected_path).read_text(encoding="utf-8"))
+    tasks = [section for section in bundle["sections"] if section["name"] == "task"]
+    if bundle["role_id"] != role or len(tasks) != 1 or tasks[0]["id"] != batch["batch_id"]:
+        raise ValueError("OWASP pinned guidance belongs to another role or batch")
+    return guidance, text
+
+
 def _rebind(proposal: Mapping[str, Any], resolver: EvidenceResolver,
             packages: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     value = json.loads(json.dumps(proposal))
@@ -238,7 +265,7 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
     log = PipelineLog(run_root)
     correlation = {"run_id": resolver.scope.run_id, "job_id": "job_owasp_control_assessment",
                    "attempt_id": attempt_id, "step_id": step_id, "task_id": task_id}
-    guidance, text = _guidance(repository_root, run_root, batch, role)
+    guidance, text = _package_guidance(repository_root, run_root, batch, role, packages)
     budget = int(profile["max_input_tokens"])
 
     def estimate(view: Mapping[str, Any]) -> int:
@@ -568,7 +595,7 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
     retrieval_before = dict(resolver.metrics)
     ready = [package for package in packages if any(item.get("supported") for item in package["proof_obligations"])]
     ready_ids = {package["row_id"] for package in ready}
-    empty = {"status": "missing_evidence", "proposal": None, "attempts": []}
+    empty = {"status": "not_dispatched", "proposal": None, "attempts": []}
     worker = dict(worker_result) if worker_result is not None else investigate(repository_root=repository_root, run_root=run_root, batch=batch, packages=ready,
         role="control_assessor", profile=worker_profile, settings=settings, resolver=resolver, infer=infer,
         attempt_id=attempt_id, unit_id=unit_id) if ready else empty
@@ -631,7 +658,7 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
             "row_id": package["row_id"], "package_id": package["package_id"],
             "status": status, "execution_completion": row_completion,
             "verification_status": verification, "coverage_completeness": "partial"
-            if any(state == "cannot_verify" for state in states) else "scoped",
+            if not states or any(state == "cannot_verify" for state in states) else "scoped",
             "assessment_mode": "assessment", "obligations": assessed,
             "observations": observations, "disagreements": disagreements,
             "worker_attempt_count": sum(attempt.get("dispatched", False)
@@ -654,7 +681,9 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
     return {
         "schema": "appsec-review/validator-batch-result/1", "batch_id": batch["batch_id"],
         "fingerprint": batch["fingerprint"], "terminal_state": "succeeded"
-        if worker["status"] in {"succeeded", "reused"} else "failed",
+        if worker["status"] in {"succeeded", "reused"} else "failed"
+        if worker["proposal"] is not None or any(item.get("dispatched") for item in worker["attempts"])
+        else "not_dispatched",
         "results": results, "worker": worker, "independent_review": reviewer,
         "metrics": {"model_calls": sum(item.get("dispatched", True) for item in attempts), "attempts": attempts,
                     "model_requested_retrievals": sum(
