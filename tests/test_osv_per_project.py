@@ -215,11 +215,7 @@ def test_memory_override_reaches_the_docker_command_and_the_receipt(tmp_path: Pa
 
 def test_artifact_osv_mounts_only_the_lockfile_ecosystem_with_the_configured_memory(tmp_path: Path) -> None:
     requests: list = []
-    runner = object.__new__(ContainerScannerRunner)
-    runner.scratch_root = tmp_path / "scratch"
-    runner.run_root = tmp_path
-    runner.catalog = load_catalog(ROOT)
-    runner.osv_memory = "3g"
+    runner = ContainerScannerRunner(ROOT, tmp_path, tmp_path / "scratch", osv_memory="3g")
     runner._identities = {"osv": {"scanner": OSV, "adapter": "fixture"}}
     runner._osv_ecosystems = {"PyPI": tmp_path / "PyPI.zip", "npm": tmp_path / "npm.zip"}
 

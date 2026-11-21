@@ -370,13 +370,15 @@ def _metadata(wrapper: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _gzip_properties(path: Path) -> tuple[int, str]:
+def _gzip_properties(path: Path, *, max_bytes: int) -> tuple[int, str]:
     digest = hashlib.sha256()
     size = 0
     with gzip.open(path, "rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
+        while chunk := stream.read(min(64 * 1024, max_bytes - size + 1)):
             size += len(chunk)
+            if size > max_bytes:
+                raise ValueError("NVD_UNCOMPRESSED_BYTE_LIMIT: expanded bytes exceed metadata/configured bound")
+            digest.update(chunk)
     return size, digest.hexdigest()
 
 
@@ -525,16 +527,25 @@ class NvdPublisher:
         index_path.unlink()
         return pointer
 
-    @staticmethod
-    def _verify_year(path: Path, year: int, metadata: Mapping[str, Any]) -> None:
+    def _year_byte_bound(self, metadata: Mapping[str, Any]) -> int:
+        size = metadata["size"]
+        if type(size) is not int or size < 1:
+            raise ValueError("NVD yearly uncompressed size must be a positive integer")
+        if size > self.settings.max_uncompressed_bytes:
+            raise ValueError("NVD_UNCOMPRESSED_BYTE_LIMIT: declared expansion exceeds configured bound")
+        return size
+
+    def _verify_year(self, path: Path, year: int, metadata: Mapping[str, Any]) -> None:
+        bound = self._year_byte_bound(metadata)
         if path.stat().st_size != metadata["gzSize"]:
             raise ValueError(f"NVD {year} transport length mismatch")
-        size, digest = _gzip_properties(path)
+        size, digest = _gzip_properties(path, max_bytes=bound)
         if size != metadata["size"] or digest.lower() != metadata["sha256"].lower():
             raise ValueError(f"NVD {year} uncompressed hash or size mismatch")
 
     def _year_download(self, year: int, source_url: str, metadata: Mapping[str, Any],
                        api_key: str | None) -> Path:
+        self._year_byte_bound(metadata)
         if not 0 < metadata["gzSize"] <= self.settings.max_download_bytes:
             raise ValueError(f"NVD {year} download exceeds configured byte bound")
         cache = self.root / "downloads" / f"nvdcve-2.0-{year}.json.gz"

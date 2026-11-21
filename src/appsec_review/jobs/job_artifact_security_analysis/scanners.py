@@ -18,7 +18,6 @@ import xml.etree.ElementTree as ET
 
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, Mount, load_catalog
 from appsec_review import blint_report
-from appsec_review.jobs.job_third_party_data_sync.publication import verify_current
 from appsec_review.jobs.job_third_party_data_sync.steps.osv_sync import feed as osv_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build import (
     database as cve_bin_tool_feed,
@@ -352,7 +351,7 @@ class ContainerScannerRunner:
                     current = cve_bin_tool_feed.verify_consumer(settings, tool_version=tool.version)
                 else:
                     settings = osv_feed.consumer_settings(self.repository_root, self.run_root)
-                    current = verify_current(settings.feed_root, feed)
+                    current = osv_feed.verify(settings)
                 self._feeds[capability] = current
                 if capability == "osv":
                     self._osv_ecosystems = snapshot_ecosystems(Path(str(current["directory"])))
@@ -365,6 +364,8 @@ class ContainerScannerRunner:
                 # capability (the job records the message), never a scanner failure.
                 safety.fail(f"artifact feed integrity failed: {type(exc).__name__}", action="artifact.feed")
                 value["unavailable"] = f"verified immutable {feed} database unavailable: {type(exc).__name__}"
+                if capability == "osv" and str(exc).startswith("OSV_SCANNER_REVISION_CONFLICT"):
+                    value["unavailable"] = "OSV_SCANNER_REVISION_CONFLICT: verified OSV scanner inputs are unavailable"
         self._identities[capability] = value
         return value
 

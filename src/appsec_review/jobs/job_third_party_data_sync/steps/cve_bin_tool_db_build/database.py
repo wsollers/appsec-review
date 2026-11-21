@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import gzip
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
-import shutil
 import sqlite3
 import subprocess
 import uuid
@@ -16,7 +17,7 @@ from appsec_review.jobs.job_third_party_data_sync.publication import publish_sna
 from appsec_review.signing.core import SignatureVerificationError
 from appsec_review.signing.images import ImageSignatureVerifier
 from appsec_review.signing.policy import default_image_verifier
-from appsec_review.storage import file_sha256
+from appsec_review.storage import atomic_json, file_sha256
 
 
 _IMAGE_ID = re.compile(r"sha256:[0-9a-f]{64}")
@@ -32,6 +33,8 @@ class CveBinToolSettings:
     # Optional exact image ID for ``image``. When set, the tag must resolve to it and the image is
     # never built here; when unset, whatever the tag resolves to is verified (or built unverified).
     image_id: str | None = None
+    max_layer_bytes: int = 512 * 1024 * 1024
+    max_total_layer_bytes: int = 512 * 1024 * 1024
 
     @classmethod
     def from_mapping(cls, root: Path, value: Mapping[str, Any]) -> "CveBinToolSettings":
@@ -42,6 +45,12 @@ class CveBinToolSettings:
         image_id = value.get("image_id")
         if image_id is not None and (not isinstance(image_id, str) or not _IMAGE_ID.fullmatch(image_id)):
             raise ValueError("cve-bin-tool image_id must be sha256:<64 lowercase hex>")
+        limits = {key: value.get(key, 512 * 1024 * 1024)
+                  for key in ("max_layer_bytes", "max_total_layer_bytes")}
+        if any(type(bound) is not int or bound < 1 for bound in limits.values()):
+            raise ValueError("cve-bin-tool byte bounds must be positive integers")
+        if limits["max_layer_bytes"] > limits["max_total_layer_bytes"]:
+            raise ValueError("cve-bin-tool per-layer byte bound exceeds total byte bound")
         settings = cls(
             feed_root=(root / feed).resolve() if not feed.is_absolute() else feed.resolve(),
             image=str(value.get("image", "")),
@@ -50,6 +59,7 @@ class CveBinToolSettings:
             build_timeout_seconds=int(value.get("build_timeout_seconds", 1800)),
             run_timeout_seconds=int(value.get("run_timeout_seconds", 3600)),
             image_id=image_id,
+            **limits,
         )
         if not settings.image or not settings.tool_version or min(settings.build_timeout_seconds, settings.run_timeout_seconds) < 1:
             raise ValueError("cve-bin-tool image, version, and positive timeouts are required")
@@ -264,19 +274,65 @@ def _check(directory: Path, tool_version: str) -> dict[str, Any]:
             "layer_records": build_record.get("layer_records")}
 
 
+def _check_layer_bytes(size: int, per_layer: int, remaining: int, domain: str) -> None:
+    if size > per_layer:
+        raise ValueError(f"CVE_BIN_TOOL_LAYER_BYTE_LIMIT: {domain} layer exceeds configured byte bound")
+    if size > remaining:
+        raise ValueError(f"CVE_BIN_TOOL_TOTAL_LAYER_BYTE_LIMIT: cumulative {domain} bytes exceed configured bound")
+
+
+def _copy_layer(source: Path, target: Path, expected: Mapping[str, Any],
+                per_layer: int, remaining: int) -> int:
+    size = 0
+    digest = hashlib.sha256()
+    with source.open("rb") as stream, target.open("xb") as output:
+        while chunk := stream.read(min(64 * 1024, min(per_layer, remaining) - size + 1)):
+            size += len(chunk)
+            _check_layer_bytes(size, per_layer, remaining, "compressed")
+            digest.update(chunk)
+            output.write(chunk)
+    if size != expected["size_bytes"] or digest.hexdigest() != expected["sha256"]:
+        raise ValueError("NVD layer changed while staging cve-bin-tool input")
+    return size
+
+
+def _expanded_layer_bytes(path: Path, per_layer: int, remaining: int) -> int:
+    size = 0
+    with gzip.open(path, "rb") as stream:
+        while chunk := stream.read(min(64 * 1024, min(per_layer, remaining) - size + 1)):
+            size += len(chunk)
+            _check_layer_bytes(size, per_layer, remaining, "expanded")
+    return size
+
+
 def build(settings: CveBinToolSettings, resolved: Mapping[str, Any], work: Path,
           runner: Callable[[CveBinToolSettings, Path, Path], Mapping[str, str]] | None = None) -> dict[str, Any]:
+    declared_total = 0
+    for layer in resolved["layers"]:
+        declared = layer["size_bytes"]
+        if type(declared) is not int or declared < 1:
+            raise ValueError("NVD layer compressed size must be a positive integer")
+        _check_layer_bytes(declared, settings.max_layer_bytes,
+                           settings.max_total_layer_bytes - declared_total, "compressed")
+        if Path(layer["path"]).stat().st_size != declared:
+            raise ValueError("NVD layer changed while staging cve-bin-tool input")
+        declared_total += declared
     input_dir = work / "input" / "layers"
     output_dir = work / "output"
     input_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
-    grant_runtime_user(output_dir, application_runtime_user("65532:65532"))
+    compressed_total = expanded_total = 0
     for index, layer in enumerate(resolved["layers"]):
         source = Path(layer["path"])
         target = input_dir / f"{index:06d}.json.gz"
-        shutil.copyfile(source, target)
-        if target.stat().st_size != layer["size_bytes"] or file_sha256(target) != layer["sha256"]:
-            raise ValueError("NVD layer changed while staging cve-bin-tool input")
+        compressed_total += _copy_layer(source, target, layer, settings.max_layer_bytes,
+                                        settings.max_total_layer_bytes - compressed_total)
+        expanded_total += _expanded_layer_bytes(target, settings.max_layer_bytes,
+                                                settings.max_total_layer_bytes - expanded_total)
+    atomic_json(input_dir.parent / "limits.json", {
+        "max_layer_bytes": settings.max_layer_bytes, "max_total_layer_bytes": settings.max_total_layer_bytes,
+    })
+    grant_runtime_user(output_dir, application_runtime_user("65532:65532"))
     try:
         tool = dict((runner or _docker_builder)(settings, input_dir.parent, output_dir))
     finally:

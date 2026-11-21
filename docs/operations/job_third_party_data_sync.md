@@ -117,6 +117,8 @@ cve-bin-tool branch depends on this execution's NVD publication.
    Retain the oldest verified metadata date as the cursor, so subsequent API windows cannot
    skip the interval before download time. Parse the entire yearly envelope and require exact,
    stable API pagination counts with no within-window duplicates.
+   Enforce the configured 512 MiB default expanded-byte ceiling before transport and during
+   gzip reads; dishonest size metadata cannot force a complete unbounded expansion.
 3. Parse raw CVEs into metadata layers, reject invalid/duplicate identities and construct
    `index/nvd.sqlite` from the parent index or replayable metadata chain plus new layers.
 4. Publish the immutable snapshot and advance its pointer only after verification. In
@@ -138,6 +140,9 @@ cve-bin-tool branch depends on this execution's NVD publication.
 4. Check SQLite integrity; publish source archives and `index/osv.sqlite` as one snapshot,
    verify the returned immutable publication pointer and write matching global feed metadata.
    Scanners resolve the publisher root from their run's frozen settings.
+   Before publication and scanner consumption, compare bounded raw ZIP records against the
+   selected index revisions and ecosystem membership. Divergence is the named
+   `OSV_SCANNER_REVISION_CONFLICT` gap, not a rewritten raw archive or stale scanner input.
 
 ### `grype_db_sync`
 
@@ -168,8 +173,13 @@ cve-bin-tool branch depends on this execution's NVD publication.
 
 1. Resolve the exact NVD snapshot from `nvd_sync.publish`; require current pointer and manifest
    hash to match. Verify the acyclic parent chain and raw layers in oldest-first replay order.
-2. Copy and rehash those layers into build input (independent decompression/replay bounds remain
-   [T-5247](../TODO.md#t-5247--resolve-third-party-data-sync-conditional-audit-boundaries)). Use the configured builder/tool
+2. Bound, copy and rehash those layers into build input. Account compressed and expanded bytes
+   separately against per-layer and cumulative ceilings (512 MiB defaults). Check declarations
+   before copying and actual remaining+1 reads before builder launch. Oversize is a named failed
+   coverage gap preserving the previous snapshot, even for a legitimate large historical replay.
+   Pass the same frozen bounds through private `limits.json` to the baked builder script;
+   updating that script requires an operator tooling-image rebuild, not just source reload.
+   Use the configured builder/tool
    image and record its observed identity; this database build does not download NVD again.
 3. The Docker path can build an unpinned missing builder image, but an explicit missing or
    mismatched image pin refuses that fallback. Run database construction without network and

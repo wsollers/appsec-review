@@ -315,6 +315,7 @@ request_delay_with_key_seconds = 0.6
 request_delay_without_key_seconds = 6.0
 max_download_bytes = 536870912
 max_api_response_bytes = 67108864
+max_uncompressed_bytes = 536870912
 request_timeout_seconds = 120
 download_timeout_seconds = 90
 max_attempts = 6
@@ -454,6 +455,10 @@ tool_version = "3.4"
 build_context = "tools/cve-bin-tool"
 build_timeout_seconds = 1800
 run_timeout_seconds = 3600
+# Conservative ceilings apply independently to compressed and expanded layer bytes.
+# A legitimate full replay may exceed the cumulative ceiling and fail with a named gap.
+max_layer_bytes = 536870912
+max_total_layer_bytes = 536870912
 
 [jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.tasks.resolve_nvd_snapshot]
 workers = 1

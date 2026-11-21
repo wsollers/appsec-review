@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -76,6 +76,8 @@ def index(settings: OsvSettings, fetched: Mapping[str, Any], work: Path) -> dict
             CREATE INDEX alias_lookup ON alias(alias, advisory_id);
         """)
         for ecosystem, entry in fetched["archives"].items():
+            if Path(entry["path"]).stat().st_size > settings.max_archive_bytes:
+                raise ValueError("OSV archive exceeds configured compressed byte bound")
             with zipfile.ZipFile(entry["path"]) as archive:
                 for member in archive.infolist():
                     if member.is_dir():
@@ -157,6 +159,7 @@ def consumer_settings(repository_root: Path, run_root: Path) -> OsvSettings:
 
 
 def publish(settings: OsvSettings, fetched: Mapping[str, Any], indexed: Mapping[str, Any]) -> dict[str, Any]:
+    _require_consistent_scanner_archives(settings, fetched, Path(indexed["database_path"]))
     files = {f"sources/{urllib.parse.quote(name, safe='')}.zip": Path(entry["path"])
              for name, entry in fetched["archives"].items()}
     files["index/osv.sqlite"] = Path(indexed["database_path"])
@@ -169,13 +172,61 @@ def publish(settings: OsvSettings, fetched: Mapping[str, Any], indexed: Mapping[
                                              "limitations": ["OSV matches are applicability leads, not findings."]})
 
 
+def _require_consistent_scanner_archives(settings: OsvSettings, fetched: Mapping[str, Any], database: Path) -> None:
+    """Keep raw archive provenance: refuse publication when scanners would see another revision."""
+    gap = "OSV_SCANNER_REVISION_CONFLICT"
+    if set(fetched["archives"]) != set(settings.ecosystems):
+        raise ValueError(f"{gap}: configured ecosystem archives are incomplete")
+    expanded = 0
+    with sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True) as connection:
+        for ecosystem, entry in fetched["archives"].items():
+            if Path(entry["path"]).stat().st_size > settings.max_archive_bytes:
+                raise ValueError("OSV archive exceeds configured compressed byte bound")
+            expected = {row[0] for row in connection.execute(
+                "SELECT DISTINCT advisory_id FROM package WHERE ecosystem = ? LIMIT ?",
+                (ecosystem, settings.max_records + 1))}
+            if len(expected) > settings.max_records:
+                raise ValueError("OSV record count exceeded configured bound")
+            with zipfile.ZipFile(entry["path"]) as archive:
+                for member in archive.infolist():
+                    if member.is_dir():
+                        continue
+                    expanded += member.file_size
+                    if expanded > settings.max_uncompressed_bytes:
+                        raise ValueError("OSV extraction exceeded configured uncompressed byte bound")
+                    if Path(member.filename).suffix.lower() != ".json":
+                        continue
+                    document = json.loads(archive.read(member))
+                    identifier = document.get("id") if isinstance(document, dict) else None
+                    selected = connection.execute("SELECT raw_json FROM advisory WHERE id = ?",
+                                                  (identifier,)).fetchone()
+                    raw = json.dumps(document, sort_keys=True, separators=(",", ":"))
+                    if selected is None or selected[0] != raw:
+                        raise ValueError(f"{gap}: {ecosystem} archive disagrees with selected advisory {identifier}")
+                    expected.discard(identifier)
+            if expected:
+                raise ValueError(f"{gap}: {ecosystem} archive omits selected advisory {min(expected)}")
+
+
 def verify(settings: OsvSettings, *, pointer: Mapping[str, Any] | None = None) -> dict[str, Any]:
     identity = verify_current(settings.feed_root, "osv", pointer=pointer)
-    database = Path(identity["directory"]) / "index" / "osv.sqlite"
-    with sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True) as connection:
-        if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
-            raise ValueError("OSV SQLite verification failed")
-        count = connection.execute("SELECT COUNT(*) FROM advisory").fetchone()[0]
+    directory = Path(identity["directory"])
+    database = directory / "index" / "osv.sqlite"
+    manifest = json.loads((directory / "manifest.json").read_bytes())
+    ecosystems = manifest.get("ecosystems")
+    if not isinstance(ecosystems, list) or not ecosystems or any(
+            not isinstance(name, str) or not name.strip() or "/" in name or "\\" in name for name in ecosystems):
+        raise ValueError("OSV_SCANNER_REVISION_CONFLICT: snapshot ecosystem identities are unavailable")
+    fetched = {"archives": {name: {"path": str(directory / "sources" / (urllib.parse.quote(name, safe="") + ".zip"))}
+                           for name in ecosystems}}
+    try:
+        with sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True) as connection:
+            if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                raise ValueError("OSV SQLite verification failed")
+            count = connection.execute("SELECT COUNT(*) FROM advisory").fetchone()[0]
+        _require_consistent_scanner_archives(replace(settings, ecosystems=tuple(ecosystems)), fetched, database)
+    except (sqlite3.Error, zipfile.BadZipFile) as error:
+        raise ValueError("OSV_SCANNER_REVISION_CONFLICT: snapshot index cannot verify archive revisions") from error
     return {**identity, "record_count": count}
 
 

@@ -17,6 +17,7 @@ class NvdSettings:
     request_delay_without_key_seconds: float
     max_download_bytes: int
     max_api_response_bytes: int
+    max_uncompressed_bytes: int = 512 * 1024 * 1024
     request_timeout_seconds: float = 120
     download_timeout_seconds: float = 90
     max_attempts: int = 6
@@ -29,6 +30,9 @@ class NvdSettings:
         if not str(configured_root):
             raise ValueError("feed_root is required")
         feed_root = (root / configured_root).resolve() if not configured_root.is_absolute() else configured_root.resolve()
+        max_uncompressed_bytes = value.get("max_uncompressed_bytes", 512 * 1024 * 1024)
+        if type(max_uncompressed_bytes) is not int or max_uncompressed_bytes < 1:
+            raise ValueError("NVD max_uncompressed_bytes must be a positive integer")
         settings = cls(
             feed_root=feed_root,
             api_key_env=str(value.get("api_key_env", "NVD_API_KEY")),
@@ -39,6 +43,7 @@ class NvdSettings:
             request_delay_without_key_seconds=float(value.get("request_delay_without_key_seconds", 6.0)),
             max_download_bytes=int(value.get("max_download_bytes", 512 * 1024 * 1024)),
             max_api_response_bytes=int(value.get("max_api_response_bytes", 64 * 1024 * 1024)),
+            max_uncompressed_bytes=max_uncompressed_bytes,
             request_timeout_seconds=float(value.get("request_timeout_seconds", 120)),
             download_timeout_seconds=float(value.get("download_timeout_seconds", 90)),
             max_attempts=int(value.get("max_attempts", 6)),

@@ -180,6 +180,7 @@ def test_artifact_osv_missing_ecosystem_gap_names_the_data_coverage(tmp_path: Pa
 
 
 def _osv_snapshot(root: Path, ecosystems: tuple[str, ...]) -> Path:
+    from appsec_review.jobs.job_third_party_data_sync.steps.osv_sync import feed as osv
     work = root / "work"
     work.mkdir(parents=True, exist_ok=True)
     files = {}
@@ -188,8 +189,9 @@ def _osv_snapshot(root: Path, ecosystems: tuple[str, ...]) -> Path:
         with zipfile.ZipFile(archive, "w") as handle:
             handle.writestr(f"OSV-{name}.json", json.dumps({"id": f"OSV-{name}"}))
         files[f"sources/{name}.zip"] = archive
-    publish_snapshot(root / "data" / "feeds" / "osv", feed_id="osv", schema="appsec-review/osv-snapshot/1",
-                     files=files, manifest_fields={"ecosystems": list(ecosystems)})
+    settings = osv.OsvSettings.from_mapping(root, {"feed_root": "data/feeds/osv", "ecosystems": list(ecosystems)})
+    fetched = {"archives": {name: {"path": str(files[f"sources/{name}.zip"])} for name in ecosystems}}
+    osv.publish(settings, fetched, osv.index(settings, fetched, work))
     return root / "data" / "feeds" / "osv"
 
 

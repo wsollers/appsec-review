@@ -104,6 +104,24 @@ Database verification counts actual NVD `cve_range` rows, requires the range col
 consumers, rejects foreign/null sources and orphan CVE references, and compares nonnegative
 integer counts with `build.json`. Replay record counts cannot be below the number of stored CVEs.
 These checks validate database consistency, not compatibility with an unexecuted native release.
+The NVD `max_uncompressed_bytes` and cve-builder `max_layer_bytes` / `max_total_layer_bytes`
+default to **536870912 (512 MiB)**. For cve, the same ceilings apply independently to compressed
+staging bytes and expanded replay bytes: those two counters are not added together. The per-layer
+limit cannot exceed the total. These are conservative admission budgets, not measured feed sizes;
+a legitimate full historical replay may exceed them and must fail closed rather than silently
+raise the budget. Metadata/stat preflight is followed by actual streaming checks that read at
+most remaining+1 bytes, including when metadata is dishonest or a staged file grows.
+`NVD_UNCOMPRESSED_BYTE_LIMIT`, `CVE_BIN_TOOL_LAYER_BYTE_LIMIT` and
+`CVE_BIN_TOOL_TOTAL_LAYER_BYTE_LIMIT` name the resulting failed-unit coverage gaps; no new
+snapshot or cursor is published and the prior accepted state remains available.
+
+The builder receives the frozen bounds in private `/input/limits.json`. Its `build_db.py` is
+**baked** into `/opt/builder/build_db.py` by `tools/cve-bin-tool/Dockerfile`, not source-mounted.
+An operator must rebuild that specific tooling image and refresh/verify its configured identity
+under the existing signing policy before relying on the new in-image reader. Application-source
+reload alone cannot replace the baked script. The producer independently bounds staging and
+expansion before any builder launch. No image build, signature change or rollout is implied by
+offline unit validation.
 
 With the opt-in `[signing] image_enforcement = "required"`, a pre-existing `image` is launched by ID
 only after its signature verifies (see [signing](signing.md)); a freshly built one is derived and
@@ -180,6 +198,9 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   total before publication. API pages must match the requested size and remaining total, preserve
   one total within each window, and contain no repeated CVEs within that window. Inclusive
   boundaries may repeat a CVE across different windows.
+  The yearly metadata's declared expanded size must fit `max_uncompressed_bytes` before a download
+  or cached-year replay begins. Actual gzip expansion is capped by that declared size as well,
+  so a false small declaration fails before the full expansion is consumed.
   Every snapshot (manifest schema `nvd-snapshot-manifest/2`) also publishes `index/nvd.sqlite`, keyed
   by CVE id with the English description, CWE weakness ids, CVSS metrics (family, version, vector,
   base score, base severity), `vulnStatus`, published and last-modified timestamps, and the raw
@@ -217,6 +238,13 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   Identical revisions are deduplicated; conflicting equal-time revisions or unorderable duplicate
   timestamps fail indexing without publication. Both scanner consumers resolve the publisher's
   `feed_root` from the run's frozen configuration, never a hard-coded default store.
+  A newest SQLite revision alone is insufficient: scanners mount the original ecosystem ZIPs.
+  Publication therefore refuses `OSV_SCANNER_REVISION_CONFLICT` when any archive record differs
+  from its selected index revision, or an archive omits an indexed advisory affecting that
+  ecosystem. Raw archives are never rewritten or relabelled. Both scanner prerequisites repeat
+  this bounded consistency check before exposing archives, including for older hash-valid
+  snapshots; inconsistent or unverifiable inputs become named gaps without launching a scanner.
+  This check reads the bounded feed archives, not target trees; index-only retrieval stays indexed.
 - MITRE requires Enterprise ATT&CK, CAPEC, and CWE in `source_selections`; configuration that omits
   any of them is rejected. Mobile and ICS ATT&CK are optional: they remain fully configured but
   become active only when added to `source_selections`.
@@ -241,9 +269,8 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
 - Every download has a transport bound, source URL, retrieval timestamp, size, and SHA-256. Archive
   member paths are validated. General feed redirects must retain the initial HTTPS host and port,
   without credentials, at every hop; receipts record effective URL and redirect destinations.
-  Grype continues to prohibit all redirects. NVD expanded-byte and cumulative cve-bin-tool replay
-  bounds remain tracked under [T-5247](../TODO.md#t-5247--resolve-third-party-data-sync-conditional-audit-boundaries); compressed-byte limits are not
-  independent decompression limits.
+  Grype continues to prohibit all redirects. NVD expansion and both cve replay byte domains have
+  independent accounting; compressed-byte checks alone never establish a decompression bound.
 - KEV and EPSS snapshot identities exclude retrieval timestamps and HTTP validators, so republishing
   identical content yields the same content-addressed snapshot.
 

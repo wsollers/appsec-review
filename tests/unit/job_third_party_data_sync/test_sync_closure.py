@@ -167,8 +167,9 @@ def test_osv_newest_revision_replaces_all_associations(tmp_path, order):
     fetched = _fetched(tmp_path, {name: {"a.json": record} for name, record in zip(("PyPI", "npm"), records)})
     settings = _settings(tmp_path)
     result = osv.index(settings, fetched, tmp_path / "index")
-    pointer = osv.publish(settings, fetched, result)
-    assert osv.verify(settings)["snapshot_id"] == pointer["snapshot_id"]
+    with pytest.raises(ValueError, match="OSV_SCANNER_REVISION_CONFLICT"):
+        osv.publish(settings, fetched, result)
+    assert not (settings.feed_root / "current.json").exists()
     with sqlite3.connect(result["database_path"]) as db:
         raw, withdrawn = db.execute("SELECT raw_json, withdrawn FROM advisory").fetchone()
         assert json.loads(raw) == new and withdrawn == new["withdrawn"]
