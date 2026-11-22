@@ -318,7 +318,9 @@ def test_all_packages_allocation_has_no_lane_quota(lead_count, hunt_count, share
     ("prod", {Lane.LEAD: 485, Lane.HUNT: 114}),
     ("copilot-prod", {Lane.LEAD: 485, Lane.HUNT: 114}),
     ("dev", {Lane.LEAD: 100, Lane.HUNT: 100}),
-    ("copilot-dev", {Lane.LEAD: 100, Lane.HUNT: 100}),
+    ("copilot-dev", {Lane.LEAD: 386, Lane.HUNT: 114}),
+    ("copilot-dev-astra-6.2", {Lane.LEAD: 386, Lane.HUNT: 114}),
+    ("copilot-dev-gemini", {Lane.LEAD: 386, Lane.HUNT: 114}),
 ])
 @pytest.mark.parametrize("lane_order", [(Lane.LEAD, Lane.HUNT), (Lane.HUNT, Lane.LEAD)])
 def test_lane_dispatch_and_shared_reservations_follow_profile(tmp_path, monkeypatch, profile, expected,
@@ -347,8 +349,10 @@ def test_lane_dispatch_and_shared_reservations_follow_profile(tmp_path, monkeypa
         signal = json.loads((tmp_path / "signals" / f"{lane.value}.json").read_text())
         assert signal["queue_empty"] and signal["declared"] == counts[lane]
     assert budget.team_packages() == expected
-    assert budget.snapshot().exhausted == (None if settings.budgets.budget_team_packages == "all"
-                                           else "budget_team_packages")
+    package_limit = settings.budgets.budget_team_packages
+    assert budget.snapshot().exhausted == ("budget_team_packages"
+                                           if package_limit != "all" and sum(expected.values()) == package_limit
+                                           else None)
 
 
 # ------------------------------------------------------------------------------------------------ triage

@@ -9,10 +9,11 @@ last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 # Runtime model profiles
 
 **Selection:** set `APPSEC_REVIEW_PROFILE=prod`, or use `--profile prod` on the stack and review
-scripts (`-Profile prod` in PowerShell). The default is `dev`; `copilot-dev` selects the separate
-Copilot subscription transport with development limits. `copilot-prod` uses that transport with
+scripts (`-Profile prod` in PowerShell). The default is `dev`; `copilot-dev` retains its existing
+model bindings with increased aggregate AI budgets. `copilot-dev-astra-6.2` and `copilot-dev-gemini`
+are uniform-model Copilot comparison profiles with the same increased budgets. `copilot-prod` uses that transport with
 production settings; `copilot-carbon-prod` selects Gemini 4 Carbon with its own production overrides.
-These five names are the accepted profiles. Nothing selects a production profile implicitly.
+These seven names are the accepted profiles. Nothing selects a production profile implicitly.
 The stack's profile is the container default, set when its containers are created. `review-start
 --profile` selects another profile of the same provider family for one run without a restart (see
 [per-run profile and overlay](operator-scripts.md#per-run-profile-and-overlay)); switching between the
@@ -50,21 +51,80 @@ prod stack to dev the same way.
 | --- | --- | --- | --- |
 | `dev` (default) | `appsec-review.toml` exactly as checked in | Haiku 5.5 for primary workers; Sonnet 5.5 for the inference verifier and hunt planner, all through Claude CLI | development limits in the base file |
 | `prod` | `profiles/prod.toml` merged over `appsec-review.toml` | `claude-fable-5-2` through Claude CLI for every configured model profile, including verification | large token limits and budgets; same-model verification remains qualified |
-| `copilot-dev` | `profiles/copilot-dev.toml` merged over `appsec-review.toml` | Haiku 5.5 through Copilot for overridden profiles; inherited inference `planner` and `verifier` still use Claude CLI/Sonnet | base development limits; not an entirely Copilot-resolved configuration |
+| `copilot-dev` | `profiles/copilot-dev.toml` merged over `appsec-review.toml` | Haiku 5.5 through Copilot for overridden profiles; inherited inference `planner` and `verifier` still use Claude CLI/Sonnet | 4× development aggregate AI budgets; not an entirely Copilot-resolved configuration |
+| `copilot-dev-astra-6.2` | [`profiles/copilot-dev-astra-6.2.toml`](../../profiles/copilot-dev-astra-6.2.toml) merged over `appsec-review.toml` | `copilot-sdk` / `gpt-6.2-astra` / `high` for every configured model slot | 4× development aggregate AI budgets; base per-call and host limits |
+| `copilot-dev-gemini` | [`profiles/copilot-dev-gemini.toml`](../../profiles/copilot-dev-gemini.toml) merged over `appsec-review.toml` | `copilot-sdk` / `gemini-4-carbon` / `high` for every configured model slot | 4× development aggregate AI budgets; base per-call and host limits |
 | `copilot-prod` | `profiles/copilot-prod.toml` merged over `appsec-review.toml` | Copilot Sonnet 5.5 primary workers and Opus 5.5 `strong` verifier/judge; inherited inference `planner` and `verifier` still use Claude CLI/Sonnet | production review budgets; per-model overrides are not identical to `prod` |
 | `copilot-carbon-prod` | `profiles/copilot-carbon-prod.toml` merged over `appsec-review.toml` | Gemini 4 Carbon through Copilot (`gemini-4-carbon`) at `high` reasoning across all jobs and roles | production budgets, exploration lane and active-claim cap, with output token caps sized within `gemini-4-carbon`'s 64k output limit |
+
+## Reusable Copilot development comparisons
+
+Select the exact profile name, including the dot in `copilot-dev-astra-6.2`. The first selected
+smoke profile is Astra; future comparisons can select Gemini explicitly without changing the
+binding files. Unattended jobs and CLI commands do not prompt for a model. There is no aliasing,
+fallback or Claude routing in either new profile.
+
+Both files override all configured model slots, not just inference discovery: target planning,
+post-build assessment, dependency intelligence, OWASP worker and nested reviewer, project-build
+model, inference `default`/`triage`/`planner`/`verifier`, PoC writer and remediation writer/reviewer.
+The base has no optional `strong` profile; these comparisons do not introduce one or remap roles.
+The actual resolved `configured_models` inventory is checked in offline regressions.
+
+Only the following aggregate inference-review budgets increase, identically for `copilot-dev`,
+`copilot-dev-astra-6.2` and `copilot-dev-gemini`:
+
+| Budget | Unchanged `dev` | Three Copilot development profiles |
+| --- | --- | --- |
+| `max_input_tokens` | 480,000,000 | 1,920,000,000 |
+| `max_output_tokens` | 48,000,000 | 192,000,000 |
+| `max_model_turns` | 12,000 | 48,000 |
+| `max_retrieval_queries` | 40,000 | 160,000 |
+| `budget_team_packages` | 200 | 800 |
+| `timeout_seconds` | 28,800 (8h) | 28,800 (8h), unchanged |
+
+These are ceilings, not targets. Every per-call cap/deadline, host resource limit, pool, team
+count, exploration setting, role assignment and assurance/citation policy stays at its base
+development value. The unchanged 500-active-claim cap can still limit launches below 800:
+485 lead plus 114 hunt packages allocate 386 lead and 114 hunt launches. Non-Copilot `dev`,
+`prod` and both Copilot production profiles are unchanged. Old `copilot-dev` receives only the
+budget changes; its inherited Claude slots remain the known [T-5270](../TODO.md) limitation.
+
+Uniform-model comparison is **not independent-model confirmation**. Both new profiles preserve
+`verification.require_distinct_model_for_ship_blocking = true`: the resolved settings warn,
+otherwise confirmed ship-blocking candidates stay `ship_blocking_pending_distinct_verification`,
+and a chain verifier requiring a distinct model cannot launch. Fresh blinded roles and resolving
+citations are still required; they do not supply model distinctness.
+
+For an explicitly authorized comparison, after the integration owner reloads signed mounted
+sources with no active run and the dedicated account/catalog is ready:
+
+```bash
+# Reuse the existing verified Copilot tooling image; no image rebuild for profile changes.
+scripts/stack-restart.sh --code-location-only --profile copilot-dev-astra-6.2
+scripts/review-start.sh --profile copilot-dev-astra-6.2 --target appsec-review-smoke-cpp
+# A later, separately authorized comparison on the same Copilot stack:
+scripts/review-start.sh --profile copilot-dev-gemini --target appsec-review-smoke-cpp
+```
+
+PowerShell takes `-Profile copilot-dev-astra-6.2` or `-Profile copilot-dev-gemini` on the same
+stack/review wrappers. The direct CLI takes `appsec-review --profile NAME ...`, and the library
+takes `load_config(path, profile=NAME)`. A per-run switch within Copilot needs no image or login
+change. Record a separate run/contract for each comparison: profile bytes and resolved settings
+are hash-pinned and immutable for an existing run. Offline tests do not establish live catalog,
+reasoning support, throughput or review quality.
 
 ## Copilot production
 
 Each profile is merged over the base, not over another profile. `prod` and `copilot-prod` no
 longer have full model/limit parity: `prod` selects Fable and overrides the hunt planner; the
-Copilot development/production overlays do not override the base `planner` or `verifier`.
+older `copilot-dev`/`copilot-prod` overlays do not override the base `planner` or `verifier`.
 The planner is enabled, and the development independent verifier uses that inherited profile;
-`copilot-prod` binds its independent verifier to `strong` instead. A Copilot account/catalog check
-does not establish readiness of inherited Claude CLI calls. Inspect the resolved configuration
+`copilot-prod` binds its independent verifier to `strong` instead. The Copilot account/catalog check
+refuses a configuration containing any non-Copilot model before contacting the catalog.
+Inspect the resolved configuration
 and arrange any required provider readiness explicitly; do not infer a fallback or silently
-substitute a model. `copilot-carbon-prod` explicitly overrides all these model profiles.
-`dev` and `copilot-dev` retain finite package caps.
+substitute a model. `copilot-carbon-prod` and the two new comparison profiles explicitly override
+all these model profiles. All development profiles retain finite package caps.
 
 In `copilot-prod`, the independent verifier and adjudication judge use `strong` (`claude-opus-5.5`); primary workers
 use `claude-sonnet-5.5`, preserving distinct-model verification. Inference-review ceilings remain
@@ -78,8 +138,9 @@ When packages exceed 1,000, fair-share allocation across both lanes selects laun
 explicit cutoffs for the rest. For example, queues of 485 lead and 114 hunt packages admit all
 599 with nonzero allocations, not 100 per lane. This does not
 guarantee completion: token, turn, query, time, per-cell and concurrency safeguards remain in force,
-and exhaustion still records explicit gaps. `dev` and `copilot-dev` keep the 200-package ceiling and
-fair-share allocation. Existing runs retain their frozen settings; changing these profiles does not
+and exhaustion still records explicit gaps. `dev` keeps the 200-package ceiling; the three
+Copilot development profiles have an 800-package ceiling and the unchanged 500-claim cap.
+All use fair-share allocation. Existing runs retain their frozen settings; changing these profiles does not
 alter historical runs.
 
 Use the dedicated login below, verify the authenticated account and enabled exact model IDs,
@@ -88,15 +149,16 @@ an inference smoke test or proof of production-limit enforcement. There is no mo
 After all existing Dagster runs are terminal and image pins pass:
 
 ```bash
-APPSEC_REVIEW_PROFILE=copilot-prod .venv/bin/python -c \
+# This fully Copilot-bound production profile passes the all-provider guard:
+APPSEC_REVIEW_PROFILE=copilot-carbon-prod .venv/bin/python -c \
   "from appsec_review.inference.copilot_sdk import verify; print(verify())"
-scripts/stack-rebuild.sh --profile copilot-prod
-scripts/review-start.sh --profile copilot-prod --target appsec-multi-vuln
+scripts/stack-restart.sh --code-location-only --profile copilot-carbon-prod
+scripts/review-start.sh --profile copilot-carbon-prod --target appsec-multi-vuln
 ```
 
-PowerShell uses `-Profile copilot-prod` on the corresponding scripts. Rebuild only when the image's
+PowerShell uses `-Profile copilot-carbon-prod` on the corresponding scripts. Rebuild only when the image's
 dependencies, SDK/runtime or verifier need changing; profile TOML is mounted source, not an
-image payload. All three Copilot profiles use the same Copilot image
+image payload. All five Copilot profiles use the same Copilot image
 tag and overlay; changing profiles does not change the login or borrow Git credentials.
 
 ## Copilot with a separate GitHub identity
@@ -115,7 +177,7 @@ python -m copilot download-runtime
 env -u GH_TOKEN -u GITHUB_TOKEN -u COPILOT_GITHUB_TOKEN \
   COPILOT_HOME="$HOME/.config/appsec-review/copilot" copilot login --device-code
 # Authorize with the account whose Copilot subscription should run the jobs, not the Git account.
-APPSEC_REVIEW_PROFILE=copilot-dev python -c \
+APPSEC_REVIEW_PROFILE=copilot-dev-astra-6.2 python -c \
   "from appsec_review.inference.copilot_sdk import verify; print(verify())"
 ```
 
@@ -126,7 +188,8 @@ credential helper and GitHub CLI configuration are not changed.
 
 The check above authenticates and checks the model catalog, without starting a review or making
 an inference request. Missing login, missing SDK/runtime, disabled models, unavailable exact model
-IDs, or unsupported reasoning settings fail explicitly; there is no model or account fallback.
+IDs fail explicitly; reasoning support must also be verified and is checked when sending a
+model request. There is no model or account fallback.
 Copilot's Haiku ID is dotted (`claude-haiku-5.5`); Claude CLI's is `claude-haiku-5-5`.
 The inherited profiles described above are separate selections. Do not change to a different
 model merely to pass preflight.
@@ -137,15 +200,16 @@ operations. Only application-supplied bounded prompts reach the model. Session-s
 and infinite-session compaction are disabled; timeout cancellation aborts the request and shuts
 down the owned runtime. The transport records usage and verifies the returned model identity.
 
-For Dagster, run bootstrap after the separate login, then select `copilot-dev` (or explicitly
+For Dagster, run bootstrap after the separate login, then select `copilot-dev-astra-6.2` or
+`copilot-dev-gemini` (or explicitly
 `copilot-prod` / `copilot-carbon-prod` for production) for every lifecycle
-command (or save only `APPSEC_REVIEW_PROFILE=copilot-dev` in the ignored deployment `.env`):
+command (or save only `APPSEC_REVIEW_PROFILE=copilot-dev-astra-6.2` in the ignored deployment `.env`):
 
 ```bash
 python deploy/dagster/bin/bootstrap.py
-APPSEC_REVIEW_PROFILE=copilot-dev python deploy/dagster/bin/lifecycle.py build
-APPSEC_REVIEW_PROFILE=copilot-dev python deploy/dagster/bin/smoke.py --platform wsl --mode config
-scripts/stack-start.sh --profile copilot-dev
+APPSEC_REVIEW_PROFILE=copilot-dev-astra-6.2 python deploy/dagster/bin/lifecycle.py build
+APPSEC_REVIEW_PROFILE=copilot-dev-astra-6.2 python deploy/dagster/bin/smoke.py --platform wsl --mode config
+scripts/stack-start.sh --profile copilot-dev-astra-6.2
 ```
 
 The profile selects `compose.copilot.yaml` and the separate `<platform>-copilot` image tag. Only
@@ -179,7 +243,7 @@ rejected with a message that names the key.
 | `jobs.job_inference_security_review.settings.rounds` | `max_active_claims` (integer 1-100,000) |
 
 Medium/low exploration is **on in all three production profiles**, and remains **off in `dev` and
-`copilot-dev`**. The production files explicitly set `exploration_enabled = true` and
+all Copilot development profiles**. The production files explicitly set `exploration_enabled = true` and
 `exploration_reserve = 20`: bounded otherwise-unadmitted medium/low packages alternate between
 severities, in identity order within each severity, with unused slots going to the other population.
 When both are plentiful this selects 10 medium and 10 low; launch-time cutoffs preserve the same
@@ -237,7 +301,8 @@ become `budget_team_packages = "all"`, `max_model_turns = 60000`, `max_input_tok
 The distinct-model requirement remains enabled. `dev` binds the independent verifier to Sonnet
 while primary workers use Haiku. `copilot-prod` binds the verifier/judge to Opus `strong`, distinct
 from its Sonnet primary workers. In contrast, `prod` and `copilot-carbon-prod` bind `strong` but
-select the same model as their primary workers. A different profile name or blinded request does
+select the same model as their primary workers. Both new Copilot comparison profiles keep the
+base `verifier` assignment but select the same model across all slots. A different profile name or blinded request does
 not supply model distinctness: otherwise ship-blocking candidates remain
 `ship_blocking_pending_distinct_verification`, and a weakest-link chain verification requiring
 distinctness cannot launch. No profile name alone certifies a finding.
@@ -245,7 +310,8 @@ distinctness cannot launch. No profile name alone certifies a finding.
 ## Visibility and safety
 
 - The active profile is printed by `stack-start`, `stack-restart`, `stack-rebuild` and `review-start`,
-  and shown by `stack-status`. All three production profiles print a notice. The Carbon notice names
+  and shown by `stack-status`. Copilot development profiles print their aggregate-budget notice;
+  the comparison notices name their exact model family. All three production profiles print a notice. The Carbon notice names
   Gemini; the current generic notice still says Sonnet/Opus even for `prod`. Read the resolved
   model declarations above rather than treating that notice as the actual model selection.
 - `review-start --profile X` runs that review under X (tag `appsec/profile=X`) when X is in the running

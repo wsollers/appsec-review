@@ -1,4 +1,5 @@
-# Opt-in Copilot subscription transport; retain every dev budget and reasoning setting.
+# Opt-in Copilot subscription transport; retain the existing model and reasoning policy.
+# Aggregate AI budgets are 4x dev; the 8h deadline and per-call/host limits stay unchanged.
 # Copilot uses dotted model versions. No aliasing or fallback is performed by the transport.
 [jobs.job_target_analysis_plan.settings.model]
 provider = "copilot-sdk"
@@ -43,3 +44,11 @@ model = "claude-haiku-5.5"
 [jobs.job_remediation_validation.settings.reviewer]
 provider = "copilot-sdk"
 model = "claude-haiku-5.5"
+
+[jobs.job_inference_security_review.settings.budgets]
+budget_team_packages = 800
+max_model_turns = 48000
+max_input_tokens = 1920000000
+max_output_tokens = 192000000
+max_retrieval_queries = 160000
+timeout_seconds = 28800

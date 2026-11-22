@@ -18,8 +18,10 @@ from appsec_review.config import PROFILE_ENVIRONMENT, load_config, profile_overr
 from appsec_review.jobs.cataloging import source_fingerprint
 from appsec_review.jobs.job_model_connectivity import build_job as build_connectivity
 from appsec_review.jobs.job_review_intake import build_job as build_intake
+from appsec_review.jobs.job_review_intake.job import configured_models
 from appsec_review.review.cells import cell_fingerprint
 from appsec_review.runtime import GraphRunner
+from appsec_review.runtime.runner import JobRunner
 
 from tests.review.test_cells import capability, spec
 
@@ -28,6 +30,10 @@ JOB = "job_inference_security_review"
 OVERLAY = "[orchestration.dagster.pools]\ninference_teams = 1\n"
 MODEL_JOBS = ("job_target_analysis_plan", "job_post_build_security_assessment", "job_dependency_intelligence",
               "job_owasp_control_assessment")
+COMPARISON_PROFILES = [
+    pytest.param("copilot-dev-astra-6.2", "gpt-6.2-astra", id="astra"),
+    pytest.param("copilot-dev-gemini", "gemini-4-carbon", id="gemini"),
+]
 
 
 def _checkout(tmp_path: Path, *, profile_text: str | None = None) -> Path:
@@ -106,6 +112,69 @@ def test_cli_profile_flag_is_global_and_defaults_to_the_environment() -> None:
     assert parser().parse_args(["--profile", "copilot-prod", "schedules"]).profile == "copilot-prod"
     with pytest.raises(SystemExit):
         parser().parse_args(["--profile", "staging", "schedules"])
+
+
+@pytest.mark.parametrize("profile,model", COMPARISON_PROFILES)
+def test_comparison_profiles_bind_every_configured_model_without_changing_call_or_host_limits(profile, model):
+    from appsec_review.cli import parser
+
+    assert parser().parse_args(["--profile", profile, "schedules"]).profile == profile
+    dev = load_config(ROOT / "appsec-review.toml", profile="dev")
+    config = load_config(ROOT / "appsec-review.toml", profile=profile)
+    before, after = json.loads(dev.resolved_json), json.loads(config.resolved_json)
+    required = configured_models(after)
+    assert required and len(required) == len(configured_models(before))
+    for item in required:
+        actual, original = after["jobs"][item["job_id"]], before["jobs"][item["job_id"]]
+        for key in item["setting"].split("."):
+            actual, original = actual[key], original[key]
+        assert (actual["provider"], actual["model"], actual["reasoning"]) == ("copilot-sdk", model, "high"), item
+        for key in ("provider", "model", "reasoning"):
+            actual[key] = original[key]
+    budgets = after["jobs"][JOB]["settings"]["budgets"]
+    assert budgets == {
+        "max_input_tokens": 1920000000, "max_output_tokens": 192000000,
+        "max_model_turns": 48000, "max_retrieval_queries": 160000,
+        "budget_team_packages": 800, "timeout_seconds": 28800,
+    }
+    for key, value in before["jobs"][JOB]["settings"]["budgets"].items():
+        assert budgets[key] == value * (1 if key == "timeout_seconds" else 4)
+    after["jobs"][JOB]["settings"]["budgets"] = before["jobs"][JOB]["settings"]["budgets"]
+    assert after["jobs"] == before["jobs"]
+    assert config.runtime == dev.runtime and config.dagster == dev.dagster
+    assert config.review_policy == dev.review_policy and config.signing == dev.signing
+    distinctness = _review(config).verifier_distinctness()
+    assert distinctness["require_distinct_model_for_ship_blocking"] is True
+    assert distinctness["distinct"] is False
+    assert f"copilot-sdk/{model}" in distinctness["warning"]
+    assert "ship_blocking_pending_distinct_verification" in distinctness["warning"]
+
+
+@pytest.mark.parametrize("profile,model", COMPARISON_PROFILES)
+def test_comparison_profile_bytes_and_resolved_identity_are_frozen(tmp_path, profile, model):
+    path = _checkout(tmp_path)
+    layer = tmp_path / "profiles" / f"{profile}.toml"
+    shutil.copyfile(ROOT / "profiles" / layer.name, layer)
+    config = load_config(path, profile=profile)
+    frozen = config.resolved_json
+    expected = hashlib.sha256(layer.read_bytes()).hexdigest()
+    assert config.profile_sha256 == expected
+    assert config.layers[1] == {"path": str(layer.resolve()), "sha256": expected, "layer": "runtime_profile"}
+    record = json.loads(frozen)["configuration_profile"]
+    assert record["name"] == profile and record["sha256"] == expected
+    assert record["document"] == tomllib.loads(layer.read_text(encoding="utf-8"))
+    assert {item["model"] for item in configured_models(json.loads(frozen))} == {model}
+    run_root = tmp_path / "frozen-run"
+    JobRunner(config)._bind_configuration(run_root)
+    manifest = json.loads((run_root / "data" / "configuration" / "manifest.json").read_text())
+    assert manifest["selection"]["profile"] == profile
+    assert manifest["sources"] == [dict(source) for source in config.layers]
+    layer.write_bytes(layer.read_bytes() + b"\n# independently edited binding bytes\n")
+    changed = load_config(path, profile=profile)
+    assert changed.profile_sha256 != expected and changed.resolved_sha256 != config.resolved_sha256
+    assert config.resolved_json == frozen
+    with pytest.raises(ValueError, match="configuration"):
+        JobRunner(changed)._bind_configuration(run_root)
 
 
 # ---------------------------------------------------------------- the prod values
@@ -240,7 +309,8 @@ def test_profile_keys_outside_the_allowlist_are_rejected(tmp_path: Path, text: s
 
 
 @pytest.mark.parametrize("profile,expected", [
-    ("dev", 200), ("copilot-dev", 200), ("prod", "all"), ("copilot-prod", "all"), ("copilot-carbon-prod", "all")])
+    ("dev", 200), ("copilot-dev", 800), ("copilot-dev-astra-6.2", 800), ("copilot-dev-gemini", 800),
+    ("prod", "all"), ("copilot-prod", "all"), ("copilot-carbon-prod", "all")])
 def test_package_budget_profile_selection_preserves_other_safeguards(profile, expected) -> None:
     config = load_config(ROOT / "appsec-review.toml", profile=profile)
     review = _review(config)

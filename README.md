@@ -774,16 +774,21 @@ provider family (Claude or Copilot) for one run, and a family switch needs a sta
 | --- | --- | --- |
 | `dev` (default) | [Central configuration](appsec-review.toml) | Development sizing; not a production test environment |
 | `prod` | [Production profile](profiles/prod.toml) | Explicit production model, reasoning and budget selections |
-| `copilot-dev` | [Copilot development profile](profiles/copilot-dev.toml) | Opt-in Copilot provider; Git and inference accounts stay separate |
+| `copilot-dev` | [Copilot development profile](profiles/copilot-dev.toml) | Existing bindings with 4× aggregate dev AI budgets; inherited Claude planner/verifier remain |
+| `copilot-dev-astra-6.2` | [Copilot Astra comparison](profiles/copilot-dev-astra-6.2.toml) | Every model slot uses `gpt-6.2-astra` / `high`, with 4× aggregate dev AI budgets |
+| `copilot-dev-gemini` | [Copilot Gemini comparison](profiles/copilot-dev-gemini.toml) | Every model slot uses `gemini-4-carbon` / `high`, with 4× aggregate dev AI budgets |
 | `copilot-prod` | [Copilot production profile](profiles/copilot-prod.toml) | Opt-in production selections through the Copilot provider |
 | `copilot-carbon-prod` | [Copilot Gemini 4 Carbon production profile](profiles/copilot-carbon-prod.toml) | Opt-in production selections targeting `gemini-4-carbon` (`high` reasoning) across all model-calling jobs |
 
 For Copilot installation, separate-account login, catalog verification and deployment commands, see
 [Copilot with a separate GitHub identity](docs/operations/model-profiles.md#copilot-with-a-separate-github-identity).
-The existing `dev` and `prod` profiles use Claude. `copilot-carbon-prod` overrides the active
+The existing `dev` and `prod` profiles use Claude. Both new comparison profiles and
+`copilot-carbon-prod` override the active
 planner bindings too; the two older Copilot profiles still inherit Claude planner/verifier
-bindings and can therefore require both providers ([T-5270](docs/TODO.md)). Inspect resolved
-configuration rather than inferring every task's provider from a profile's name.
+bindings ([T-5270](docs/TODO.md)), which the all-Copilot catalog guard refuses. Inspect resolved
+configuration rather than inferring every task's provider from a profile's name. Uniform-model
+comparisons retain pending-distinct-verification warnings; the approved development budget increase
+does not change the 8h deadline, per-call limits, host resources, role assignments or assurance.
 
 ```bash
 scripts/stack-restart.sh --profile prod

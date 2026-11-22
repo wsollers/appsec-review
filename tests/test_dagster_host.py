@@ -138,7 +138,8 @@ def test_review_host_pins_are_not_committed_and_compose_mounts_them_read_only():
         assert mount["read_only"] is True and mount["bind"]["create_host_path"] is False
 
 
-@pytest.mark.parametrize("profile", ["copilot-dev", "copilot-prod"])
+@pytest.mark.parametrize("profile", ["copilot-dev", "copilot-prod", "copilot-carbon-prod",
+                                    "copilot-dev-astra-6.2", "copilot-dev-gemini"])
 def test_copilot_overlay_and_environment_precedence(tmp_path, monkeypatch, profile):
     environment = tmp_path / ".env"
     environment.write_text(f"APPSEC_REVIEW_PROFILE={profile}\n")

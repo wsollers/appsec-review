@@ -25,9 +25,10 @@ Complete the [repository setup](../../README.md#what-you-need) and
   Bootstrap the deployment before using the stack scripts.
 - Sign in to Claude for `dev`/`prod`, or configure the
   [separate Copilot login](model-profiles.md#copilot-with-a-separate-github-identity) for
-  the three `copilot-*` profiles. A GitHub CLI login is not the Copilot worker login.
+  the five `copilot-*` profiles. A GitHub CLI login is not the Copilot worker login.
   Check inherited model declarations too: `copilot-dev`/`copilot-prod` still have Claude CLI
-  profiles, whose readiness is not established by the Copilot catalog probe.
+  profiles, so the all-Copilot catalog probe refuses them. The comparison profiles
+  `copilot-dev-astra-6.2` and `copilot-dev-gemini` explicitly bind every model through Copilot.
 - Place the target checkout under this repository's `targets/` directory. The guarded Dagster
   launcher requires unchanged tracked source in this appsec checkout and a clean Git target,
   including no untracked files. Leave both checkouts unchanged while a review uses them.
@@ -128,12 +129,21 @@ These are **`review-start` script options**, not `appsec-review start` options.
 | `-Wsl`, `-Distro NAME` | Not applicable | PowerShell routing to the WSL stack; default distribution is `Ubuntu-24.04` unless inferred from the chosen WSL checkout path. |
 | `-Help` | `--help` | Show the script's current option list. |
 
-Profile choices are `dev`, `prod`, `copilot-dev`, `copilot-prod` and `copilot-carbon-prod`. The
+Profile choices are `dev`, `prod`, `copilot-dev`, `copilot-prod`, `copilot-carbon-prod`,
+`copilot-dev-astra-6.2` and `copilot-dev-gemini`. The
 [profile guide](model-profiles.md) and checked-in profile TOMLs own their exact provider, model,
 reasoning and budget selections rather than a second version table here.
 
+For reusable uniform-model development comparisons choose `--profile copilot-dev-astra-6.2`
+(the first selected smoke) or `--profile copilot-dev-gemini`; PowerShell accepts the same exact
+names with `-Profile`. There is no interactive model prompt in unattended jobs or the CLI.
+These profiles and legacy `copilot-dev` have the approved 4× aggregate AI budgets, but retain the
+8h deadline, per-call limits and development host capacity. Same-model ship-blocking findings
+remain pending distinct verification; selecting a comparison profile does not weaken assurance.
+
 All three production profiles use the `"all"` package budget rather than the dev
-200-package ceiling, but launch allocation is still capped by 1,000 active-claim slots.
+200-package ceiling (800 for Copilot development), but launch allocation is still capped by
+1,000 active-claim slots (500 for all development profiles).
 Token, turn, query, time and concurrency limits also apply. Production enables medium/low lead
 exploration with reserve 20; development leaves it off. See [model profiles](model-profiles.md) for exact
 limits and distinct-model verification behavior.

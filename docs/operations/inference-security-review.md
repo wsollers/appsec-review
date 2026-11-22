@@ -607,19 +607,24 @@ model turns, 600,000,000 input tokens, 60,000,000 output tokens, 200,000 retriev
 
 ### Resolved coverage limits and cutoffs
 
-| Setting | dev / copilot-dev | prod / copilot-prod / copilot-carbon-prod |
-| --- | --- | --- |
-| Concurrent teams per run | 3 | 7 |
-| Medium/low exploration | Off (reserve 1 inactive) | On, reserve 20, alternating medium/low |
-| Run-wide active-claim allocation | 500 | 1,000 |
-| Team-package budget | 200 | `"all"` (still claim/usage bounded) |
-| Maximum package launches before usage exhaustion | 200 | 1,000 |
-| Rounds / stable rounds required | 1 / 1 | 1 / 1 |
-| Lead / hunt claims per package across rounds | 3 / 5 | 3 / 5 |
-| Hunt units / attack-chain cap | 10 / 50 | 10 / 50 |
-| Model turns / retrieval queries | 12,000 / 40,000 | 60,000 / 200,000 |
-| Input / output tokens | 480,000,000 / 48,000,000 | 600,000,000 / 60,000,000 |
-| Job timeout | 28,800 seconds | 86,400 seconds |
+| Setting | dev | copilot-dev / copilot-dev-astra-6.2 / copilot-dev-gemini | prod / copilot-prod / copilot-carbon-prod |
+| --- | --- | --- | --- |
+| Concurrent teams per run | 3 | 3 | 7 |
+| Medium/low exploration | Off (reserve 1 inactive) | Off (reserve 1 inactive) | On, reserve 20, alternating medium/low |
+| Run-wide active-claim allocation | 500 | 500 | 1,000 |
+| Team-package budget | 200 | 800 | `"all"` (still claim/usage bounded) |
+| Maximum package launches before usage exhaustion | 200 | 500 (claim capped) | 1,000 |
+| Rounds / stable rounds required | 1 / 1 | 1 / 1 | 1 / 1 |
+| Lead / hunt claims per package across rounds | 3 / 5 | 3 / 5 | 3 / 5 |
+| Hunt units / attack-chain cap | 10 / 50 | 10 / 50 | 10 / 50 |
+| Model turns / retrieval queries | 12,000 / 40,000 | 48,000 / 160,000 | 60,000 / 200,000 |
+| Input / output tokens | 480,000,000 / 48,000,000 | 1,920,000,000 / 192,000,000 | 600,000,000 / 60,000,000 |
+| Job timeout | 28,800 seconds | 28,800 seconds | 86,400 seconds |
+
+The Copilot development budget increase changes only aggregate AI ceilings, not per-call limits,
+role assignments, host resources or verification policy. The reusable Astra/Gemini profiles bind
+all model slots uniformly at high reasoning; same-model ship-blocking candidates remain pending
+distinct verification. See [model comparisons](model-profiles.md#reusable-copilot-development-comparisons).
 
 The approved 1,000-claim production cap doubles the old finite 500 ceiling: it admits the
 previously discussed 485-lead + 114-hunt workload with at least one slot for every package,

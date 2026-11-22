@@ -121,20 +121,38 @@ def sdk(monkeypatch, fake_sdk_modules):
     return state
 
 
-def test_profile_preserves_dev_settings_except_provider_and_model_name():
+def test_profile_preserves_legacy_dev_bindings_and_only_increases_aggregate_budgets():
     dev = load_config(ROOT / "appsec-review.toml", profile="dev")
     copilot = load_config(ROOT / "appsec-review.toml", profile="copilot-dev")
     before, after = json.loads(dev.resolved_json), json.loads(copilot.resolved_json)
     required = configured_models(after)
     assert len(required) == len(configured_models(before))
-    assert {item["provider"] for item in required} == {"copilot-sdk"}
-    assert {item["model"] for item in required} == {"claude-haiku-5.5"}
+    inherited = []
     for item in required:
         settings = after["jobs"][item["job_id"]]
         original = before["jobs"][item["job_id"]]
         for key in item["setting"].split("."):
             settings, original = settings[key], original[key]
-        settings["provider"], settings["model"] = original["provider"], original["model"]
+        if item["provider"] == "claude-cli":
+            inherited.append((item["job_id"], item["setting"]))
+            assert settings == original
+        else:
+            assert (item["provider"], item["model"]) == ("copilot-sdk", "claude-haiku-5.5")
+            settings["provider"], settings["model"] = original["provider"], original["model"]
+    assert sorted(inherited) == [
+        ("job_inference_security_review", "settings.models.planner"),
+        ("job_inference_security_review", "settings.models.verifier"),
+    ]
+    budgets = after["jobs"]["job_inference_security_review"]["settings"]["budgets"]
+    assert budgets == {
+        "max_input_tokens": 1920000000, "max_output_tokens": 192000000,
+        "max_model_turns": 48000, "max_retrieval_queries": 160000,
+        "budget_team_packages": 800, "timeout_seconds": 28800,
+    }
+    original_budgets = before["jobs"]["job_inference_security_review"]["settings"]["budgets"]
+    for key, value in original_budgets.items():
+        assert budgets[key] == value * (1 if key == "timeout_seconds" else 4)
+    after["jobs"]["job_inference_security_review"]["settings"]["budgets"] = original_budgets
     assert after["jobs"] == before["jobs"]
     assert copilot.profile_sha256 and copilot.profile_sha256 != dev.profile_sha256
     assert PROVIDERS["copilot-sdk"] is copilot_sdk.send
@@ -249,15 +267,29 @@ def test_tools_and_oversized_output_are_rejected(sdk):
     assert len(error.value.rejected_output) == 131072
 
 
-def test_verification_uses_selected_configuration_without_inference(sdk, monkeypatch):
+@pytest.mark.parametrize("profile,model", [
+    pytest.param("copilot-dev-astra-6.2", "gpt-6.2-astra", id="astra"),
+    pytest.param("copilot-dev-gemini", "gemini-4-carbon", id="gemini"),
+])
+def test_verification_uses_selected_configuration_without_inference(sdk, monkeypatch, profile, model):
     monkeypatch.setenv("APPSEC_REVIEW_PROFILE", "copilot-dev")
-    assert copilot_sdk.verify()["models"] == ["claude-haiku-5.5"]
+    sdk.models = [model]
+    sdk.reasoning = ["low", "medium", "high"]
+    assert copilot_sdk.verify(profile)["models"] == [model]
     assert sdk.options is None
     sdk.policy = "disabled"
     with pytest.raises(RuntimeError, match="unavailable"):
-        copilot_sdk.verify()
-    monkeypatch.setenv("APPSEC_REVIEW_PROFILE", "dev")
-    with pytest.raises(RuntimeError, match="select the copilot-dev"):
+        copilot_sdk.verify(profile)
+    assert sdk.options is None
+
+
+@pytest.mark.parametrize("profile", ["dev", "copilot-dev", "copilot-prod"])
+def test_verification_refuses_any_inherited_non_copilot_model_before_catalog_access(sdk, monkeypatch, profile):
+    monkeypatch.setenv("APPSEC_REVIEW_PROFILE", profile)
+    def unexpected_catalog(*args, **kwargs):
+        pytest.fail("mixed-provider profile must be refused before catalog access")
+    monkeypatch.setattr(copilot_sdk, "models", unexpected_catalog)
+    with pytest.raises(RuntimeError, match="every configured model to use copilot-sdk"):
         copilot_sdk.verify()
 
 

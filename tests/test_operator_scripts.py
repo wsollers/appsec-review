@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -54,7 +55,9 @@ def box(tmp_path: Path, dagster: FakeDagster) -> Sandbox:
     sandbox = SubmissionSandbox(tmp_path, dagster)
     (sandbox.repo / "targets" / "appsec-multi-vuln").mkdir()
     (sandbox.repo / "profiles").mkdir()
-    for profile in ("prod", "copilot-dev", "copilot-prod", "copilot-carbon-prod"):
+    for profile in ops.PROFILES:
+        if profile == "dev":
+            continue
         (sandbox.repo / "profiles" / f"{profile}.toml").write_text("# test profile\n", encoding="utf-8")
     git = sandbox.bin / "git"
     git.write_text(
@@ -1765,7 +1768,8 @@ def test_stack_status_shows_the_profile(box: Sandbox) -> None:
     assert "profile: prod" in box.run("stack-status").stdout
 
 
-@pytest.mark.parametrize("profile", ["copilot-dev", "copilot-prod", "copilot-carbon-prod"])
+@pytest.mark.parametrize("profile", ["copilot-dev", "copilot-dev-astra-6.2", "copilot-dev-gemini",
+                                    "copilot-prod", "copilot-carbon-prod"])
 def test_copilot_stack_keeps_its_overlay_image_and_account_probe(box: Sandbox, profile: str) -> None:
     box.stack(settings={ops.PROFILE_VARIABLE: profile},
               files=[str(box.deploy / "compose.yaml"), str(box.deploy / "compose.copilot.yaml")])
@@ -1775,7 +1779,13 @@ def test_copilot_stack_keeps_its_overlay_image_and_account_probe(box: Sandbox, p
     assert ("more capable models" in result.stdout) == (profile in {"copilot-prod", "copilot-carbon-prod"})
     if profile == "copilot-carbon-prod":
         assert "Gemini 4 Carbon high across all roles" in result.stdout
+    if profile in {"copilot-dev", "copilot-dev-astra-6.2", "copilot-dev-gemini"}:
+        assert "4x development aggregate AI budgets" in result.stdout
+        assert "8h timeout unchanged" in result.stdout
     assert "model catalog  ok" in result.stdout
+    probes = [call for call in box.docker_calls() if "exec" in call and "-c" in call]
+    assert any("copilot_sdk import verify" in call[-1] for call in probes)
+    assert not any("claude" in call for call in box.docker_calls())
     assert box.lifecycle_calls()[-1]["env"][ops.PROFILE_VARIABLE] == profile
     assert ops.image_tag(profile).endswith("-copilot")
     stopped = box.run("stack-stop")
@@ -1785,8 +1795,43 @@ def test_copilot_stack_keeps_its_overlay_image_and_account_probe(box: Sandbox, p
 
 @pytest.mark.parametrize("name", ["stack-start", "stack-restart", "stack-rebuild", "review-start"])
 def test_powershell_twins_take_a_profile_parameter(name: str) -> None:
-    assert "[ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod', 'copilot-carbon-prod')][string]$Profile" in (SCRIPTS / f"{name}.ps1").read_text(encoding="utf-8")
+    text = (SCRIPTS / f"{name}.ps1").read_text(encoding="utf-8")
+    match = re.search(r"\[ValidateSet\(([^)]*)\)\]\[string\]\$Profile", text)
+    assert match and re.findall(r"'([^']+)'", match[1]) == list(ops.PROFILES)
     assert "--profile" in real(name, "--help").stdout
+
+
+@pytest.mark.parametrize("profile,model", [
+    pytest.param("copilot-dev-astra-6.2", "GPT 6.2 Astra high", id="astra"),
+    pytest.param("copilot-dev-gemini", "Gemini 4 Carbon high", id="gemini"),
+])
+def test_comparison_profile_launch_uses_exact_tags_and_copilot_preflight(box, profile, model):
+    box.stack(settings={ops.PROFILE_VARIABLE: "copilot-dev"})
+    box.dagster.runs()
+    result = box.run("review-start", "--profile", profile, "--id-wait", "1")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"profile:   {profile} (requested)" in result.stdout
+    assert model in result.stdout and "4x development aggregate AI budgets" in result.stdout
+    calls = box.docker_calls()
+    probe = next(call for call in calls if "exec" in call and "-c" in call and "copilot_sdk" in call[-1])
+    assert f"verify({profile!r})" in probe[-1]
+    launch = next(call for call in calls if "launch" in call)
+    assert calls.index(probe) < calls.index(launch)
+    assert json.loads(launch[launch.index("--tags") + 1])["appsec/profile"] == profile
+    assert review_run.read_submission(box.repo)["identity"]["configuration"]["profile"] == profile
+    assert box.lifecycle_calls() == []
+    assert not any("claude" in call for call in calls)
+
+
+@pytest.mark.skipif(shutil.which("pwsh") is None, reason="Linux pwsh is not installed; PowerShell profile execution unverified")
+@pytest.mark.parametrize("name", ["stack-start", "stack-restart", "stack-rebuild", "review-start"])
+@pytest.mark.parametrize("profile", ["copilot-dev-astra-6.2", "copilot-dev-gemini"], ids=["astra", "gemini"])
+def test_powershell_accepts_comparison_profiles_without_launching(name, profile):
+    result = subprocess.run(["pwsh", "-NoProfile", "-File", str(SCRIPTS / f"{name}.ps1"),
+                             "-Profile", profile, "-Help"], text=True, capture_output=True,
+                            env={**os.environ, "APPSEC_PYTHON": sys.executable}, timeout=8, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "--profile" in result.stdout
 
 
 # -- run-readiness --------------------------------------------------------------------------------

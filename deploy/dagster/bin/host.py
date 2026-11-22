@@ -48,8 +48,10 @@ def compose_environment(environ: dict[str, str] | None = None) -> dict[str, str]
     return environment
 
 
-COPILOT_PROFILES = {"copilot-dev", "copilot-prod", "copilot-carbon-prod"}
-RUNTIME_PROFILES = ("dev", "prod", "copilot-dev", "copilot-prod", "copilot-carbon-prod")
+COPILOT_PROFILES = {"copilot-dev", "copilot-prod", "copilot-carbon-prod",
+                   "copilot-dev-astra-6.2", "copilot-dev-gemini"}
+RUNTIME_PROFILES = ("dev", "prod", "copilot-dev", "copilot-prod", "copilot-carbon-prod",
+                   "copilot-dev-astra-6.2", "copilot-dev-gemini")
 # Compose launches the application services only by this exact, host-verified image ID.
 IMAGE_VARIABLE = "APPSEC_REVIEW_DAGSTER_IMAGE"
 # Every Compose service that runs IMAGE_VARIABLE; a unit test keeps this equal to the compose files.

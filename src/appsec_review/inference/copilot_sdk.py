@@ -284,7 +284,8 @@ def verify(profile: str | None = None) -> dict[str, Any]:
     required = configured_models(json.loads(config.resolved_json))
     if not required or any(item["provider"] != "copilot-sdk" for item in required):
         raise RuntimeError(
-            "select the copilot-dev, copilot-prod or copilot-carbon-prod profile before checking Copilot worker authentication"
+            "Copilot worker authentication requires every configured model to use copilot-sdk; "
+            f"profile {config.profile!r} contains non-Copilot models or no configured models"
         )
     names = sorted({item["model"] for item in required})
     report = models(names, timeout_seconds=120)

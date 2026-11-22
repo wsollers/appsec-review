@@ -76,6 +76,29 @@ def test_none_drops_the_containers_overlay(checkout: Path) -> None:
     assert selected.overlay_path is None and selected.profile == base.profile
 
 
+@pytest.mark.parametrize("profile,model", [
+    pytest.param("copilot-dev-astra-6.2", "gpt-6.2-astra", id="astra"),
+    pytest.param("copilot-dev-gemini", "gemini-4-carbon", id="gemini"),
+])
+def test_comparison_run_tags_keep_the_copilot_family_and_capacity_overlay(checkout, profile, model):
+    from appsec_review.jobs.job_review_intake.job import configured_models
+
+    base = load_config(checkout / "appsec-review.toml", profile="copilot-dev")
+    configs = RunConfigurations(base)
+    tags = {PROFILE_TAG: profile, OVERLAY_TAG: _overlay(checkout)}
+    selected = configs.for_tags(tags)
+    assert selected.profile == profile and selected.selection_source == "run_tags"
+    assert selected.dagster.pool_limits["inference_teams"] == 1
+    assert {(item["provider"], item["model"]) for item in configured_models(json.loads(selected.resolved_json))} == {
+        ("copilot-sdk", model)}
+    assert configs.for_tags(tags) is selected
+    assert base.profile == "copilot-dev" and selected.resolved_sha256 != base.resolved_sha256
+    with pytest.raises(ValueError, match="provider is fixed"):
+        RunConfigurations(load_config(checkout / "appsec-review.toml", profile="dev")).for_tags(tags)
+    with pytest.raises(ValueError, match="provider is fixed"):
+        configs.for_tags({PROFILE_TAG: "dev"})
+
+
 @pytest.mark.parametrize(("tags", "message"), [
     ({PROFILE_TAG: "staging"}, "not a runtime profile"),
     ({PROFILE_TAG: "copilot-dev"}, "provider is fixed"),

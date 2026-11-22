@@ -106,8 +106,11 @@ def test_packages_beyond_capacity_never_launch_with_zero_claim_slots(tmp_path, m
     assert len(assigned) == limit
     assert sum(assigned.values()) <= configured.rounds.max_active_claims
     assert len(skipped) == 2 * count - limit
-    assert all(("max_active_claims" if budget == "all" else "budget_team_packages") in reason
-               for reason in skipped.values())
+    package_share = count if budget == "all" else budget // 2
+    for package_id, reason in skipped.items():
+        index = int(package_id.rsplit("-", 1)[1])
+        expected_reason = "max_active_claims" if index < package_share else "budget_team_packages"
+        assert expected_reason in reason
 
 
 @pytest.mark.parametrize(("lead_count", "hunt_count", "expected"), [

@@ -128,7 +128,7 @@ several sessions share one Docker daemon and one Dagster stack.
 
 | Script | Purpose |
 | --- | --- |
-| `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile dev\|prod\|copilot-dev\|copilot-prod\|copilot-carbon-prod]` | Build if asked (or if no image is pinned and the first image is missing), `lifecycle.py start`, then check health, the overlay and the model. |
+| `stack-start [--build] [--no-probe] [--dry-run] [--force] [--target T] [--overlay F] [--recording M] [--profile NAME]` | Build if asked (or if no image is pinned and the first image is missing), `lifecycle.py start`, then check health, the overlay and the model. Profile names are listed below. |
 | `stack-stop [--force] [--purge-volumes --yes] [--dry-run]` | `lifecycle.py stop`: containers stopped, volumes kept. |
 | `stack-restart [--code-location-only] [--no-probe] [--force] [--dry-run] [--target T] ...` | Stop then start; `--code-location-only` uses `lifecycle.py reload`, which verifies the image and recreates `code-location`, `webserver` and `daemon` without restarting PostgreSQL. |
 | `stack-rebuild [--no-probe] [--force] [--dry-run] [--target T] ...` | `lifecycle.py build` (build, sign, verify and select the tooling image) then `start` with that new ID, signing mounted modules and recreating containers whose image changed. |
@@ -151,13 +151,14 @@ After starting, `stack-start`, `stack-restart` and `stack-rebuild` report:
   read-only; on a native Windows stack, sign in again inside the container with
   `claude auth login` as in the deployment README.
 
-For all three `copilot-*` profiles, the probe instead checks the dedicated Copilot login and configured model catalog,
+For all five `copilot-*` profiles, the probe instead checks the dedicated Copilot login and configured model catalog,
 without inference. It does not call Claude or borrow the GitHub CLI account. Follow the
 [separate-account setup](model-profiles.md#copilot-with-a-separate-github-identity) to sign in.
 
 `--target` takes a name under `targets/` or a container path (`/opt/app/targets/...`); `--overlay`
 takes a capacity overlay file under `test/acceptance` (or `none`); `--recording` is `record`, `replay`
-or `off`; `--profile` is `dev` (default), `prod`, `copilot-dev`, `copilot-prod`, or `copilot-carbon-prod`. They set `APPSEC_REVIEW_TARGET`,
+or `off`; `--profile` is `dev` (default), `prod`, `copilot-dev`, `copilot-prod`, `copilot-carbon-prod`,
+`copilot-dev-astra-6.2` or `copilot-dev-gemini`. They set `APPSEC_REVIEW_TARGET`,
 `APPSEC_REVIEW_CONFIG_OVERLAY`, `APPSEC_REVIEW_MODEL_RECORDING` and `APPSEC_REVIEW_PROFILE` for the recreate (see
 [`../processes/local-dagster-parity.md`](../processes/local-dagster-parity.md)). `replay` additionally
 needs `APPSEC_REVIEW_MODEL_REPLAY_DIR`, which the compose file does not pass; the parity walk replays
@@ -165,14 +166,16 @@ locally instead.
 
 The selected base/profile TOML owns model, reasoning and budget values; see
 [`model-profiles.md`](model-profiles.md). The stack scripts set the container's default profile:
-they print the selected profile (and, for all three production profiles, a model/limit notice),
+they print the selected profile (with model/limit notices for production and aggregate-budget
+notices for the three Copilot development profiles),
 carry the running value over on a plain
 restart, and `stack-status` shows it. `review-start --profile X` and `--overlay F` choose the profile
 and capacity overlay for that one run (see below).
-PowerShell accepts the same five names with `-Profile` on the same four scripts. The generic
+PowerShell accepts the same seven names with `-Profile` on the same four scripts. The generic
 production notice still names Sonnet/Opus even though `prod` now selects Fable; it is not an
-authoritative model inventory. Copilot catalog success also does not prove readiness of the
-Claude profiles inherited by `copilot-dev`/`copilot-prod`; see the profile guide.
+authoritative model inventory. The Copilot catalog guard refuses any non-Copilot model, including
+the Claude profiles inherited by `copilot-dev`/`copilot-prod`. Both new comparison profiles bind
+all slots through Copilot; see the profile guide for their exact budgets and same-model warning.
 
 ### Per-run profile and overlay
 

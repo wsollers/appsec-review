@@ -255,10 +255,11 @@ def test_start_verifies_then_launches_exactly_the_verified_id(env_file: Path) ->
         assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
 
 
-def test_explicit_image_is_verified_by_id(env_file: Path) -> None:
+@pytest.mark.parametrize("profile", ["copilot-dev", "copilot-dev-astra-6.2", "copilot-dev-gemini"])
+def test_explicit_image_is_verified_by_id(env_file: Path, profile: str) -> None:
     runner = FakeRunner(verified=OTHER)
     environ = {**ENVIRONMENT, host.IMAGE_VARIABLE: OTHER}
-    assert lifecycle.run_action("reload", "wsl", "copilot-dev", environ, runner=runner) == lifecycle.OK
+    assert lifecycle.run_action("reload", "wsl", profile, environ, runner=runner) == lifecycle.OK
     assert runner.calls[0][0][runner.calls[0][0].index("verify-image") + 1] == OTHER
     (command, kwargs), = runner.compose_calls()
     assert command[-len(host.IMAGE_SERVICES):] == list(host.IMAGE_SERVICES) and "--force-recreate" in command

@@ -52,6 +52,7 @@ PROFILE_VARIABLE = "APPSEC_REVIEW_PROFILE"
 DEFAULT_PROFILE = "dev"
 PROFILES = RUNTIME_PROFILES
 PROD_PROFILES = {"prod", "copilot-prod", "copilot-carbon-prod"}
+COPILOT_DEV_PROFILES = {"copilot-dev", "copilot-dev-astra-6.2", "copilot-dev-gemini"}
 PROFILE_TAG = "appsec/profile"
 OVERLAY_TAG = "appsec/overlay"
 COMPILER_TARGET_TAG = "appsec/compiler_target"
@@ -61,10 +62,18 @@ PROFILE_NOTICE = ("profile {profile} uses the more capable models ({models}) and
                   "see docs/operations/model-profiles.md")
 PROFILE_NOTICE_MODELS = {
     "copilot-carbon-prod": "Gemini 4 Carbon high across all roles",
+    "copilot-dev-astra-6.2": "GPT 6.2 Astra high across all roles",
+    "copilot-dev-gemini": "Gemini 4 Carbon high across all roles",
 }
 
 
 def profile_notice(profile: str) -> str:
+    if profile in COPILOT_DEV_PROFILES:
+        binding = (f" ({PROFILE_NOTICE_MODELS[profile]}; uniform-model comparison)"
+                   if profile in PROFILE_NOTICE_MODELS else "")
+        return (f"profile {profile}{binding} uses 4x development aggregate AI budgets "
+                "(8h timeout unchanged); per-call limits and host capacity unchanged; "
+                "see docs/operations/model-profiles.md")
     models = PROFILE_NOTICE_MODELS.get(profile, "Sonnet 5.5, Opus 5.5 verifier")
     return PROFILE_NOTICE.format(profile=profile, models=models)
 OK, FAILED, USAGE, REFUSED, NOT_FOUND = 0, 1, 2, 3, 4
@@ -486,7 +495,7 @@ def bring_up(args: argparse.Namespace, project: str, containers: list[Container]
         guard_active_runs(url, containers, args.force, action)
     profile = settings.get(PROFILE_VARIABLE) or deployment_profile(DEPLOYMENT / ".env")
     say(f"profile: {profile}")
-    if profile in PROD_PROFILES:
+    if profile in PROD_PROFILES or profile in COPILOT_DEV_PROFILES:
         say(profile_notice(profile))
     for key, value in settings.items():
         say(f"setting {key}={value or '(empty)'}{'' if key in requested else '  (carried over from the running stack)'}")
@@ -884,7 +893,7 @@ def _review_start(args: argparse.Namespace) -> int:
         command += ["--config-json", json.dumps(
             {"execution": {"config": {"safety": safety_policy}}}, sort_keys=True)]
     say(f"profile:   {profile} ({profile_source})")
-    if profile in PROD_PROFILES:
+    if profile in PROD_PROFILES or profile in COPILOT_DEV_PROFILES:
         say(profile_notice(profile))
     say(f"target:    {code.settings.get(TARGET_VARIABLE) or '(default)'}")
     say(f"overlay:   {overlay or '(none)'} ({overlay_source})")

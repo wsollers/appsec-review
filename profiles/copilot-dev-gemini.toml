@@ -1,0 +1,77 @@
+# Uniform-model Copilot comparison: exact Gemini 4 Carbon ID, high reasoning, no fallback.
+# Merge directly over dev, not a production profile. Per-call and host limits stay unchanged.
+# Distinct-model verification remains required: same-model ship-blocking confirmations stay
+# ship_blocking_pending_distinct_verification. See docs/operations/model-profiles.md.
+
+[jobs.job_target_analysis_plan.settings.model]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_post_build_security_assessment.settings.model]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_dependency_intelligence.settings.model]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_owasp_control_assessment.settings.model]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_owasp_control_assessment.settings.models.reviewer]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_project_build.settings.model]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_inference_security_review.settings.models.default]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_inference_security_review.settings.models.triage]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_inference_security_review.settings.models.planner]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_inference_security_review.settings.models.verifier]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_poc_generation.settings.models.default]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_remediation_planning.settings.writer]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_remediation_validation.settings.reviewer]
+provider = "copilot-sdk"
+model = "gemini-4-carbon"
+reasoning = "high"
+
+[jobs.job_inference_security_review.settings.budgets]
+budget_team_packages = 800
+max_model_turns = 48000
+max_input_tokens = 1920000000
+max_output_tokens = 192000000
+max_retrieval_queries = 160000
+timeout_seconds = 28800

@@ -14,7 +14,7 @@ param(
     [string]$Target,
     [string]$Overlay,
     [ValidateSet('record', 'replay', 'off')][string]$Recording,
-    [ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod', 'copilot-carbon-prod')][string]$Profile,
+    [ValidateSet('dev', 'prod', 'copilot-dev', 'copilot-prod', 'copilot-carbon-prod', 'copilot-dev-astra-6.2', 'copilot-dev-gemini')][string]$Profile,
     [string]$Url,
     [switch]$Wsl,
     [string]$Distro = 'Ubuntu-24.04',

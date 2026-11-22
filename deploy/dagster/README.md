@@ -116,7 +116,8 @@ application/configuration/guidance assets. Changes to mounted application code r
 
 ## Build, start, verify, and stop
 
-For the opt-in `copilot-dev`, `copilot-prod` and `copilot-carbon-prod` profiles, follow
+For the opt-in `copilot-dev`, `copilot-dev-astra-6.2`, `copilot-dev-gemini`, `copilot-prod`
+and `copilot-carbon-prod` profiles, follow
 [the separate Copilot account setup](../../docs/operations/model-profiles.md#copilot-with-a-separate-github-identity).
 Bootstrap records `APPSEC_COPILOT_CONFIG_DIR`, and lifecycle/smoke commands select
 `compose.copilot.yaml` instead of the Claude overlays. Its `runtime-copilot` image includes the
@@ -124,12 +125,18 @@ pinned SDK runtime and the native Copilot CLI 1.0.102 on `PATH`. The build retri
 Linux x64 or ARM64 CLI archive, checks its pinned SHA-256 and byte size, and verifies the installed
 version; credentials are never part of the image. Only the code location mounts the dedicated
 worker login. Set
-`APPSEC_REVIEW_PROFILE=copilot-dev` for development, or explicitly select `copilot-prod` /
+`APPSEC_REVIEW_PROFILE=copilot-dev-astra-6.2` or `copilot-dev-gemini` for development comparisons,
+or explicitly select `copilot-prod` /
 `copilot-carbon-prod` for production; the operator scripts accept the same names with `--profile`.
 `copilot-prod` uses Sonnet 5.5 with an Opus 5.5 `strong` verifier/judge, but inherits the base
 Claude CLI hunt-planner profile. `copilot-dev` also inherits the Claude CLI verifier.
+The all-Copilot catalog guard refuses these mixed-provider configurations. The new comparison
+profiles explicitly bind all slots to `gpt-6.2-astra` / `gemini-4-carbon`, respectively, at `high`.
+They and legacy `copilot-dev` have 4× aggregate development AI budgets with unchanged 8h timeout,
+per-call limits and host capacity; legacy model bindings and production profiles are unchanged.
 The Carbon profile explicitly selects Gemini 4 Carbon/high for every model profile and does
-not establish distinct-model verification. See the profile guide for exact inherited limits and
+not establish distinct-model verification, as is also true of both uniform development comparisons.
+See the profile guide for exact inherited limits and
 provider-readiness gaps. Rebuild an older image only when its dependencies, SDK/runtime or verifier
 need changing; changing profile TOML alone requires source reload, not an image build.
 Active-run guards still apply. Git/GitHub CLI credentials remain independent.
