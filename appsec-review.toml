@@ -3,7 +3,7 @@
 # paths are listed once in the catalog, never reported as gaps, and still count in the target's
 # source fingerprint.
 [exclusions]
-patterns = [".gitignore"]
+patterns = [".gitignore", "PLANTED.md"]
 
 # Non-code asset classes, excluded by file-name suffix (case-insensitive, compound suffixes allowed).
 # A policy exclusion, not a coverage gap: intake and the catalog list every excluded file with its

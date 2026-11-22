@@ -119,6 +119,12 @@ The full download steps are in the README section "Download the acceptance targe
 
 ## Smoke runs
 
+`PLANTED.md` is explicitly excluded by the global path policy. It remains part of the immutable
+target fingerprint but is not cataloged as review content; the target checkout is not edited.
+Verify the run's frozen exclusions and actual worker-input delivery before claiming evaluator
+isolation, and keep answer keys outside the target. This filename exclusion is not a general
+answer-key detector; remaining verification is tracked by [T-5269](../TODO.md).
+
 A smoke review runs the checked-in `dev` profile (Haiku primary workers, Sonnet inference
 verifier and hunt planner) with the smoke capacity
 overlay, which is the only checked-in setting that differs from an ordinary dev run:

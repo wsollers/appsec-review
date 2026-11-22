@@ -46132,7 +46132,7 @@
   },
   "schema": "appsec-review/docs-inventory/1",
   "source_hashes": {
-    "appsec-review.toml": "5ecd101f39790034f77b5caf21e340a0cc0aa890235a6e616387b9c104ed2101",
+    "appsec-review.toml": "f9be94177ee292224d1df3d40a4c9d11a2f3429ce79826496dd66f138a20daa9",
     "containers/catalog.toml": "ce886becab3e09d42219ed07f2a1d8facc9b65ad446c6b2daef59a426700c6e9",
     "docs/intelligence-buckets.json": "7b013f1b95576fff52752e4b182ac9594aa5d9267465b5917b78af944ee1ba37",
     "pipeline/guidance/registry.json": "a9575a86592873a248c91cae9cc2c240ee70662df2222e5b09656ed2021a8280",

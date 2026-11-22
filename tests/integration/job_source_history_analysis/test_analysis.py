@@ -1068,7 +1068,8 @@ def test_github_pagination_inputs_bind_job_identity(tmp_path: Path) -> None:
 
 def test_configured_exclusions_leave_the_catalog_and_history_with_their_scope(tmp_path: Path) -> None:
     config = configured(tmp_path, replacements=(
-        ('[exclusions]\npatterns = [".gitignore"]\n', '[exclusions]\npatterns = [".gitignore", ".gitattributes"]\n'),
+        ('[exclusions]\npatterns = [".gitignore", "PLANTED.md"]\n',
+         '[exclusions]\npatterns = [".gitignore", "PLANTED.md", ".gitattributes"]\n'),
         ('[jobs.job_source_history_analysis.settings.github]\nenabled = "auto"',
          '[jobs.job_source_history_analysis.exclusions]\npatterns = ["app/helpers.py"]\n\n'
          '[jobs.job_source_history_analysis.settings.github]\nenabled = "auto"'),

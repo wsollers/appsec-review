@@ -6631,6 +6631,12 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   accepted source/catalog manifests and actual worker-input delivery for the selected target.
   Do not inspect an answer key to steer a review, change a target, or infer blindness from
   another corpus's isolation test. Any policy or target change needs its own authorization.
+  On 2026-11-22 the user explicitly approved excluding `PLANTED.md` without changing the
+  target. The global path exclusion is now configured; a focused inert regression verifies
+  that catalog analysis omits that file while the immutable target fingerprint includes its
+  bytes, and intake/history inherit the same rule.
+  Actual accepted manifests and worker delivery still require verification in the authorized
+  smoke run. No answer-key contents were read; this is not a whole-corpus blindness claim.
 - **Done when:** Exact target/configuration identities and bounded regression or authorized
   run evidence establish that evaluation-only material cannot reach review workers; remaining
   channels and limits are named. No review launch is authorized by this entry.

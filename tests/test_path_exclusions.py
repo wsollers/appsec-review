@@ -65,7 +65,7 @@ def test_job_level_patterns_are_refused_where_a_job_cannot_honour_them() -> None
 
 def _config(tmp_path: Path, *, global_patterns: list[str], catalog_patterns: list[str]) -> Path:
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
-    current = '[exclusions]\npatterns = [".gitignore"]\n'
+    current = '[exclusions]\npatterns = [".gitignore", "PLANTED.md"]\n'
     assert current in text
     text = text.replace(current, f"[exclusions]\npatterns = {json.dumps(global_patterns)}\n")
     text += f"\n[jobs.job_target_catalog.exclusions]\npatterns = {json.dumps(catalog_patterns)}\n"
@@ -113,3 +113,21 @@ def test_inventory_leaves_excluded_paths_out_and_lists_each_once(tmp_path: Path)
     # Exclusions narrow analysis, never the target's identity.
     assert source_fingerprint(target) == fingerprint
     assert inventory(target)["configured_exclusions"] == []
+
+
+def test_smoke_evaluator_inventory_is_excluded_from_analysis_but_fingerprinted(tmp_path: Path) -> None:
+    config = load_config(ROOT / "appsec-review.toml")
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "PLANTED.md").write_text("synthetic evaluator material\n", encoding="utf-8")
+    (target / "main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
+    for job_id in ("job_target_catalog", "job_review_intake", "job_source_history_analysis"):
+        assert config.job(job_id).exclusions.match("PLANTED.md").scope == "global"
+    result = inventory(target, exclusions=config.job("job_target_catalog").exclusions)
+    assert [item["path"] for item in result["files"]] == ["main.c"]
+    assert {"path": "PLANTED.md", "pattern": "PLANTED.md", "scope": "global"} in result["configured_exclusions"]
+    assert "PLANTED.md" in json.loads(config.resolved_json)["exclusions"]["patterns"]
+    assert "synthetic evaluator material" not in json.dumps(result)
+    before = source_fingerprint(target)
+    (target / "PLANTED.md").write_text("changed evaluator fixture\n", encoding="utf-8")
+    assert source_fingerprint(target) != before
