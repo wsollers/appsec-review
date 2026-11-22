@@ -174,11 +174,14 @@ cve-bin-tool branch depends on this execution's NVD publication.
 1. Resolve the exact NVD snapshot from `nvd_sync.publish`; require current pointer and manifest
    hash to match. Verify the acyclic parent chain and raw layers in oldest-first replay order.
 2. Bound, copy and rehash those layers into build input. Account compressed and expanded bytes
-   separately against per-layer and cumulative ceilings (512 MiB defaults). Check declarations
+   separately against the 512 MiB per-layer and 4 GiB cumulative default ceilings. Check declarations
    before copying and actual remaining+1 reads before builder launch. Oversize is a named failed
    coverage gap preserving the previous snapshot, even for a legitimate large historical replay.
    Pass the same frozen bounds through private `limits.json` to the baked builder script;
    updating that script requires an operator tooling-image rebuild, not just source reload.
+   The user-approved cumulative increase changes the frozen limits, not the baked script;
+   previous runs retain their original budgets. It does not demonstrate a real full-feed replay
+   or close the earlier reader rollout gap [T-5263](../TODO.md).
    Use the configured builder/tool
    image and record its observed identity; this database build does not download NVD again.
 3. The Docker path can build an unpinned missing builder image, but an explicit missing or

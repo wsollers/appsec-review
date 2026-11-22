@@ -37,11 +37,11 @@ in-process review-cell retrieval from the external stdio MCP adapter (`appsec-re
    distinguish availability, actual admitted reads and citations; absent, bounded or provisional
    inputs cannot be described as complete evidence. Document navigation is a late input to
    inference, not an upstream input to review-data indexing.
-4. **Provenance-graded evidence.** Every retrieved row retains its `source_id` / `artifact_id`,
-   line span, producing job identity, and confidence tier (`semantic_codeql`, `symbol_clangd`,
-   `debug_dwarf_pdb`, `syntactic_treesitter`, `static_scanner`, or `derived_precomputed`).
-   Syntactic edges narrow search and nominate paths; semantic or source-line verification closes
-   reachability predicates.
+4. **Provenance-graded evidence.** Rows retain their producer-specific resolving identities and
+   qualification contracts, not one universal source/artifact field or confidence vocabulary.
+   Alternate CPG `resolution_tier` values are `codeql_semantic`, `clangd_semantic`, `hybrid_fused`
+   and `syntactic_fallback`. Syntactic edges nominate paths; existing evidence and adjudication
+   rules determine whether supporting source/semantic facts establish a predicate.
 
 ## Hosted index shard families
 
@@ -142,9 +142,14 @@ the querying guidance describes this investigation pattern, subject to each work
    syntax calls (`query_syntax`), `query_guard_dominators`, and exact `read_excerpt` windows together in a single
    `retrieve` turn to minimize round-trip latency and preserve output token budget for reasoning.
 3. **Separate syntactic nomination from semantic proof:** When an edge carries
-   `syntactic_treesitter` provenance (for example dynamic dispatch, callback tables, or buildless
+   `syntactic_fallback` provenance (for example dynamic dispatch, callback tables, or buildless
    targets), verify the concrete receiver, import, or call signature with `read_excerpt` or
-   `query_debug_symbols` before marking a path `confirmed`.
+   `query_debug_symbols`. Such checks supply evidence to adjudication, not a new worker-held
+   authority to mark a path confirmed.
 4. **Treat missing shards as named uncertainty, never safety:** If `query_dataset_inventory`
    reports a degraded build or missing shard, record the exact scope limitation rather than
    concluding that an unverified sink is unreachable.
+
+`query_cpg_slice` currently accepts only `backward` and `forward` in the core, although the
+transport schema also lists `both`; do not describe that advertised value as usable. Transport
+bounds can also be lower than core bounds. [T-5271](../TODO.md) tracks this contract mismatch.

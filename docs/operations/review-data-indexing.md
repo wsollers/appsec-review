@@ -225,6 +225,11 @@ producers use sorted compact UTF-8 JSON with one trailing newline. SQLite object
 exact database bytes. Private objects are never shared between application runs. Public reference
 snapshots use the independently retained publication records described below.
 
+The shared byte reader checks bounded chunks, file stat/identity and hashes; it does not impose
+an aggregate metadata cap. Selected-source custody revalidation also depends on the number of
+locations and opens, with deduplication within a scope. These checks preserve integrity, not a
+measured real-run performance guarantee; no such cost measurement is claimed here.
+
 Each producing or consuming attempt writes
 `data/jobs/<job>/attempts/<attempt>/shared/<namespace>/<fingerprint>.json`.
 The `appsec-review/shared-receipt/1` receipt records the application run/job/attempt, original
@@ -415,7 +420,11 @@ the per-language `code_graph` states they would compose.
 `source_sast` and every CodeQL result) with native severity, normalized *reported* severity
 (`appsec-review/reported-severity/1`), the normalization basis, inline-suppression state matched
 from accepted prioritization syntax facts, duplicate relationship (same exact line and CWE, or same
-scanner rule), flow identities and resolving location. `menu` facts list every High/Critical lead,
+scanner rule), flow identities and resolving location. Without a CWE key, equal path/line/rule
+observations from Semgrep and Opengrep share the `semgrep-rule-pack` family and the
+`same-location-same-rule-shared-pack` method. Canonical selection uses reported severity then
+observation identity, while every original observation remains a member. Shared-pack duplicates
+are not independent proof. `menu` facts list every High/Critical lead,
 including suppressed and duplicate ones, per component in partitions of `menu_partition_size`; an
 unknown native severity has its own menu and is never read as low. An `audit` fact records
 counts; the job fails if any High/Critical or unknown-severity lead is missing from its menu, and a

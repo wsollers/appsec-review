@@ -188,6 +188,16 @@ gap on the row, not a missing independent review. `select_profiles` records a
 `parser_versions` must equal the versions the code implements (`owasp_workbench/versions.py`); the
 job refuses to start otherwise.
 
+`owasp-request-assembly/1` applies a second bound to the fully assembled request, including
+actual guidance, contracts and limits. It hoists shared evidence/component context per request
+and common procedure fields across each row's obligations, not all procedure text across rows.
+Oversized multi-row batches bisect recursively. An oversized singleton trims graph context,
+nonclassifying routing context, shared limitations, uncited evidence and excerpts, in that order.
+Typed subjects/references remain; every trim or undispatched row records estimates, its limit
+and a gap. Recovery of omitted evidence uses only that part's admitted bounded expansion.
+Each part has its own turn/query budget and receipt; row completion and attempt counts do not
+inherit an oversized sibling's result.
+
 Typed references bind run, target, component, build/environment, accepted producer/index membership,
 content/file hashes, span and custody. The application re-resolves citations and binds them to the
 named AST site. A decisive outcome still requires primary subject evidence in its supporting or

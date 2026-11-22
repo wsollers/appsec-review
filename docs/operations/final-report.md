@@ -243,6 +243,12 @@ Active chain membership uses the certified `component_claim_ids` of `confirmed` 
 chains or when already high/critical; neither backlog nor withheld packages inflate those counts.
 Standalone severity and ship-block status are unchanged.
 
+The labels `chain_elevated_findings_count` and `chain_elevated_count` count participating
+publishable findings, not a demonstrated increase over standalone severity. The chain card's
+`trust_boundary_crossed` display text combines component security-domain IDs (or
+`application_trust_boundary` as a fallback); it is not a resolved trust-zone identity or proof
+of a breached boundary. The composed rating still comes only from the certified manifest.
+
 JSON and event telemetry preserve nulls and their reasons, keeping metric reasons separate from
 coverage reasons. Funnel rates with an unavailable corroboration numerator/denominator are also
 null with a reason; an empty measured denominator is separately `denominator_empty`.

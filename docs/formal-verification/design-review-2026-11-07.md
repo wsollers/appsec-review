@@ -16,6 +16,11 @@ is implemented by this document.
 profile; drop CBMC/JBMC; the project IR is the multilingual contract; add a semantic-authority matrix
 and a no-typed-frontend policy.
 
+**Current scope clarification:** The CBMC/JBMC exclusion below concerns this proposed Lean
+proof lane. The separately implemented [CBMC bounded-analysis job](../architecture/cbmc-bounded-analysis.md)
+publishes conditional scanner-seeded context, not Lean proofs, source certification or a
+target-execution capability. That later job does not rewrite these historical review decisions.
+
 ## 1. Summary
 
 The trust-boundary engineering (admission, custody, capability planes, invalidation, gates) is more

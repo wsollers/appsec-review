@@ -34,6 +34,10 @@ Complete the [repository setup](../../README.md#what-you-need) and
 - Provision the enabled tool/build images and licensed CodeQL image, and verify their local
   immutable pins. The review does not build missing supplied images or silently accept moved pins;
   see [image-pin verification](image-pin-verification.md).
+- Include the [CBMC tooling prerequisite](job_cbmc_analysis.md#provisioning-and-configuration)
+  on each review host. Applying host pins resolves configured settings tags even when a job is
+  disabled; disabling CBMC alone cannot bypass a missing image binding. Provisioned/signed WSL
+  tooling does not establish HAL's bindings or native acceptance ([T-5263](../TODO.md)).
 - Prepare the required [third-party metadata](third-party-data-sync.md). Review scanners do not
   refresh their databases during scanning.
 - Confirm resource headroom and required build readiness. A Docker daemon alone does not commission

@@ -16,6 +16,11 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 
 **Revision:** Design-review corrections; assurance gates G0-G4 below govern rollout
 
+**Current implementation boundary:** This remains a proposed Lean/fuzzing system. The separate
+[CBMC bounded-analysis producer](../architecture/cbmc-bounded-analysis.md) is implemented as
+conditional review context; its bounded judgments implement neither this proof pipeline nor
+its dynamic lab.
+
 The file-level implementation sequence, job contracts, run-owned paths, container definitions,
 MCP tools, and runtime-guidance changes are specified in the companion
 [buildout plan](buildout-plan.md).

@@ -17,7 +17,8 @@ and exposes flow graphs, analyzer results and clangd symbols to models and workf
 ## 1. Decision
 
 Every producer that scales with the program runs **from the findings outward**: it analyzes only the
-code around the finding locations ("seeds"), publishes that neighborhood into the existing `graph`
+code around admitted source-range seeds (observations and, for CodeQL, bounded structural
+candidates), publishes that neighborhood into the existing `graph`
 index as another producer, and names every bound it hit as a gap. A seeded scope is never `complete`.
 There is no whole-program fallback in seeded mode: a seed no unit can carry is a named gap.
 
@@ -31,9 +32,13 @@ There is no whole-program fallback in seeded mode: a seed no unit can carry is a
 
 ## 2. Seeds and ordering
 
-Seeds are `tool_observation` entities in hash-verified `observations` shards, as for CodeQL. The seed set
-excludes every seeded producer's own observations, so it is identical for all producers and does not
-depend on which of them already ran. Dagster ordering (`orchestration/dagster/adapter.py`) runs the
+The shared upstream pass extracts located `tool_observation` rows from admitted, hash-verified
+observation shards and excludes seeded producers' observations from that pass. CodeQL export
+additionally supplies its own current-scope normalized observations and fills remaining capacity
+with admitted priority hotspots, Tree-sitter CFG functions and catalog symbols, in that order.
+Selection is deterministic for the supplied inputs; different producers need not have identical
+seed populations. Origin, tier and nonadditive counts remain visible in seed records and cards.
+Dagster ordering (`orchestration/dagster/adapter.py`) runs the
 seeded producers after `job_evidence_collection`; the clang-static job additionally reads the accepted IR
 function ranges when they exist, to label diagnostics against the neighborhood.
 
@@ -41,7 +46,8 @@ function ranges when they exist, to label diagnostics against the neighborhood.
 
 The **mode, depth and seed limit are defined once**, in
 `[jobs.job_codeql_analysis.settings.export_queries]`. The loader (`config/loader.py`) copies them into a
-`seeded` table of each Clang-family job, so a producer cannot disagree with CodeQL about what is seeded
+`seeded` table of each Clang-family job, so configured mode, depth and seed limit agree with CodeQL;
+supplied seed populations can still differ
 (`config/seeding.py`, `SeededSettings`). A job whose settings carry no `seeded` table is `whole_program`.
 
 Each producer names its own bounds in `[jobs.<job>.settings.seeded_bounds]`:

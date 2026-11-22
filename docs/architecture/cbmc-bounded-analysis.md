@@ -31,7 +31,8 @@ flowchart LR
     GOTO["goto-cc<br/>original translation unit"]
     FUN["goto-instrument<br/>source-located GOTO functions"]
     BMC["CBMC function-entry analysis<br/>recorded safety checks and unwind bounds"]
-    RAW["Protected GOTO, native JSON<br/>counterexample traces and execution receipts"]
+    RAW["Verified raw closure: staged source, GOTO,<br/>function JSON, stdout/stderr and receipts"]
+    ACCEPT["Accepted publication / reuse<br/>reverify nested raw artifact identities"]
     INDEX["Normalized CBMC judgments<br/>seed links, assumptions and coverage"]
     DATA["Review-data indexing<br/>accepted dataset inventory"]
     PACKAGE["Review packages<br/>exact originating-lead context"]
@@ -41,8 +42,9 @@ flowchart LR
     SAST --> PLAN
     PLAN --> GOTO --> FUN --> BMC
     BMC --> RAW
-    BMC --> INDEX --> DATA --> PACKAGE --> REVIEW --> REPORT
+    BMC --> INDEX --> ACCEPT --> DATA --> PACKAGE --> REVIEW --> REPORT
     RAW -. hash-bound provenance .-> INDEX
+    RAW --> ACCEPT
 ```
 
 ## Inputs and selection
@@ -89,6 +91,13 @@ Increasing unwind limits are
 tried only for a remaining unwinding obligation, within the same total budget.
 Always retain unwinding assertions. No exhausted bound is reported as a successful proof.
 
+Every unwind round records `validated`, `failed` or `not_attempted`, plus its gaps. Attempted
+bounds include failed rounds that actually produced an execution receipt; a deadline refusal
+before launch is not an attempted bound. If a later round fails, the final judgment is
+`inconclusive` with no candidate count. Any retained parsed `native_output` stays paired with
+the `native_execution` receipt from the last validated round, not the last failed invocation.
+The failed round still retains its own raw output/receipt pair and the prior unwinding gap.
+
 Each result records the function-entry model: parameters are symbolic, caller preconditions
 are not established, translation-unit globals have the engine's initialization semantics,
 and only the modeled compilation context and selected safety properties are covered.
@@ -102,7 +111,17 @@ External/missing bodies, engine warnings and unsupported constructs qualify cove
 | `cbmc_results` | Indexed, source-bound per-entry judgments; exact seed observation IDs; property counts; selected function; assumptions and bounds; bounded trace previews and raw-output/receipt identities | Conditional `review_signal` evidence, exposed through existing scoped find/search and explicitly embedded as bounded-analysis review context |
 | `cbmc_coverage` | Indexed selection/execution coverage, omissions and named gaps | Coverage only; indexing, review packages and reporting |
 | `cbmc_summary` | Versioned accepted summary, settings identity, input/image identities, counts and artifact references | Auditable job summary; no claim-state transition |
-| `cbmc_raw` | GOTO programs, function tables, complete bounded engine JSON/traces, argv and execution receipts | Protected run-owned material; sanitized identity/status only in the dataset inventory |
+| `cbmc_raw` | Staged accepted source, GOTO programs, function tables, bounded stdout/stderr and engine JSON/traces, argv and execution receipts | Protected run-owned material; sanitized identity/status only in the dataset inventory |
+
+Load, analysis and acceptance outputs expose their verified nested artifact closure. Acceptance
+reopens the bound plan and analysis and verifies the raw references, including compilation and
+function-discovery outputs even when no solver result was produced. Missing or mutated raw
+bytes refuse acceptance or accepted reuse; intact summary JSON alone is insufficient. Shared
+planning/execution gaps are canonical job-level producer gaps (`unit_id = null`), so all three
+unit outcomes retain the same gaps without assigning them to the wrong unit.
+Whenever a parsed native output exists, publication must invoke the shared native-retention
+boundary. Missing or foreign active publication ownership refuses; the job cannot silently
+omit native provenance and still publish a result.
 
 Judgments are payload values, never additions to `ProducerStatus`:
 
@@ -141,7 +160,10 @@ adjudication and publication gates still decide those outcomes from resolving ev
 Dossiers/reports carry the cited context and limitations through the existing review products,
 not a second competing verdict.
 
-## Implementation and verification plan
+## Implemented scope and verification boundary
+
+The registered source implements the following path, including the raw-closure and failed-round
+repairs. This is a source reconciliation, not a real-engine acceptance record.
 
 1. Add closed typed settings and immutable dataset/input contracts; register one job and its
    three steps: accepted input/selection, bounded analysis, accepted publication.

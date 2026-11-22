@@ -298,6 +298,9 @@ manifest. An environment named by a declaration must match exactly one declarati
 effective user or fail. An environment no declaration names follows
 `preinstalled_undeclared`: `"fail"` (default) refuses it, `"derive"` (shipped) uses bounded
 preparation. An absent mapping preserves bounded preparation.
+An explicitly declared runtime whose image is absent refuses; `"derive"` does not repair or
+override that declaration. An ID-only daemon match establishes local presence, not how the
+runtime was built or whether its separate release/signature requirements have been met.
 An explicit ordinary-only `runner_source = "application"` mounts the fixed current platform
 wrapper read-only rather than mislabeling an older wrapper inside the image. Its declared release
 and source mode participate in provenance and identity; there is no arbitrary host-path option

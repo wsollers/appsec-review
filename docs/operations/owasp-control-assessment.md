@@ -124,7 +124,12 @@ values. `max_discovery_files`, `max_discovery_bytes`, `max_tag_records` and
 | `standards.<family>` | complete catalog pins in TOML | pinned catalog path/hash and upstream identity | Reviewed ASVS, MASVS, MASTG and risk-context catalogs |
 
 Selected model profiles require `enabled`, `provider`, `model`, `reasoning`, `max_input_tokens`,
-`max_output_tokens`, `timeout_seconds` and `retries`. Enabling assessment requires both selected
+`max_output_tokens`, `timeout_seconds` and `retries`. Fully assembled requests undergo a second
+size check: oversized batches split, and oversized single rows trim bounded context in recorded
+order while retaining subject/reference identities. Inspect each part's receipt, estimates,
+trim/non-dispatch gaps and independent turn/query budget, not just the original batch count.
+See [request assembly](../architecture/owasp-control-workbench.md) for the exact trimming order.
+Enabling assessment requires both selected
 profiles enabled; enabling qualification requires both disabled. Token estimates bound requests;
 provider output, time, turn and retrieval limits are enforced. No prompt may widen these bounds.
 

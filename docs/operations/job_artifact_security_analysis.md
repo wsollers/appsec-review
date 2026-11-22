@@ -266,15 +266,18 @@ Generated task/tool bindings remain [T-147](../TODO.md); the following follows e
 
 ### `index`
 
-1. Gather capability results and split each scan into one summary plus bounded individual
-   scanner finding records where a splitter exists. Built-in and Syft inventory are not made into
-   synthetic vulnerability findings. Record finding truncation and incomplete scan outcomes.
+1. Split each scan into a summary and bounded native findings or built-in risk candidates.
+   Package configuration matches and ELF header/segment indicators retain unknown severity,
+   redacted evidence and explicit assessment gaps. They are investigation candidates, not
+   adjudicated vulnerabilities; inventory alone is not a finding. Record truncation and
+   incomplete scan outcomes.
 2. Validate exact [native-result provenance](../architecture/job-interchange.md#native-result-and-common-observation).
    Index artifact and observation entities with `OBSERVED_AT` edges to artifacts, not invented
    source locations. Installer-record findings also reference verified matching package anchors.
-3. Fingerprint the observations shard from scan fingerprints, splitting normalizer and upstream
-   artifact manifest. Compose it with inherited indices, replacing only this shard, and verify
-   the full manifest.
+3. Fingerprint the observations shard from immutable result artifacts, normalized
+   summaries/findings and gaps, parser/normalizer identities and the upstream artifact manifest.
+   Equal input fingerprints do not authorize reuse of different result content or changed
+   coverage. Compose with inherited indices, replacing only this shard, and verify the manifest.
 
 ### `acceptance`
 

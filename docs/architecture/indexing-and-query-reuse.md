@@ -136,7 +136,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | clangd symbol graph; `job_cpp_symbol_index` | Definitions, references and direct calls | Current `analysis`; cross-check input for `call_site` facts and `SAME_AS` symbol links | `symbol_links`; cross-check of the `graph` index | `core`, `QP`; no skill |
 | Build-bound DWARF/native PDB; `job_debug_symbol_indexing` | Artifact-specific symbols, layouts, inline frames and checksum-verified source mappings | Current `debug_symbols`; raw inputs and reader executions remain protected | none | `query_debug_symbols`, `coverage`; no runtime execution |
 | SVF points-to over linked `-O0` bitcode; `job_svf_alias_analysis` (opt-in) | Bounded points-to sets of dereferenced, compared and passed pointers; indirect-call target sets; per-module closed-world state | Current `analysis` (`points_to_set`, `indirect_call_targets`); cross-check input for indirect `call_site` and pointer `guard_fact` facts ([`svf-alias-producer.md`](svf-alias-producer.md)) | cross-check of the `graph` index | `core`, `query_code_graph`; no skill |
-| ASan/UBSan-instrumented native rebuild; `job_sanitizer_build` | Hash-bound catalog of instrumented outputs with the sanitizer runtime evidence read from each ELF, for a later execution stage | Artifact only: protected workspaces and a sanitized handoff summary; nothing is indexed as text ([`../operations/sanitizer-build.md`](../operations/sanitizer-build.md)) | none | `coverage`; no skill |
+| ASan/UBSan-instrumented native rebuild; `job_sanitizer_build` | Hash-bound instrumented-output catalog and per-unit runtime-reference readiness; never execution evidence | Protected workspaces/artifacts stay private; per-unit inventory readiness is indexed ([operations](../operations/sanitizer-build.md)) | `inventory` readiness | `coverage`, `query_sanitizer_readiness`; registration is not a worker grant |
 | Compile-checked proof-of-concept unit-test functions; `job_poc_generation` (default enabled for new configurations) | Protected developer reproducers; final report receives only certified status/function-name/file refs | Artifact-only `/2` summary; protected writer cells and immutable `package.files` attempt-owned source/compile/README/provenance; never indexed as text, linked or executed ([operations](../operations/poc-generation.md)) | none | `coverage`; no general retrieval grant |
 | Joern CPG; `job_cpg_analysis` | Retained CPG and bounded seeded context | Publication depends on selected scope; no general CPG/PDG completeness claim | none | Accepted scoped indexes and coverage as declared by the canonical job; no new skill |
 | Ghidra decompilation publications of configured third-party binaries; `job_review_intake` freezes them, `job_binary_evidence_indexing` indexes them | Review code that ships without source: functions, import callers, call neighbourhoods and strings | Current bounded `binary` shards (`binary_function`, `binary_call_site`, `binary_import`, `binary_string`; `CALLS`/`CONTAINS`/`REFERENCES`); pseudo-C detached into the run and cited by binary hash, function address and line ([`binary-decompilation.md`](binary-decompilation.md)) | none | `core`, `coverage`; registered `binary-evidence` runtime skill attached only when a binary shard exists |
@@ -152,7 +152,7 @@ a silent allowlist. `query_precomputed` is abbreviated `QP`; existing generic `f
 | Blint binary scan; `job_evidence_collection` | Binary hardening leads | Current observations; link exact produced artifact | `scanner_correlation`, `artifact_inventory` | `query_artifacts`, `query_observations`; no skill |
 | OWASP catalogs, applicability, validators and assessments; `job_owasp_control_assessment` | Control coverage and evidence obligations | Current workbench shards; extend links to findings/tests | `control_evidence`, `review_package` | `query_owasp_workbench`, `QP`; no skill |
 | Taxonomy, crosswalk and assignments; `job_security_tagging` | Security facets and review routing | Current `tags`; retain assignment basis and gaps | `scanner_correlation`, `hotspot_context` | `core`, `QP`; no skill |
-| Generated DFD and threat model; `job_threat_model_generation` (default disabled) | Routing context: processes, flows, trust boundaries, candidate threats, unknowns and input ledger | Artifact-only generated documents, distinct from externally supplied designs; an admitted candidate model can feed bounded review-behavior routing | None | Sanitized inventory metadata and the explicit application reader; no raw worker retrieval grant |
+| Generated DFD and threat model; `job_threat_model_generation` (default disabled) | Routing context: processes, flows, trust boundaries, candidate threats, unknowns and input ledger | Original generated documents remain artifacts distinct from external designs; admitted bounded projection is navigation, not proof | `precomputed/threat_boundaries` | `query_threat_boundaries`, `query_precomputed`, sanitized inventory; registration is not a raw-payload or worker grant |
 | NVD feed; `job_third_party_data_sync.nvd_sync` | CVE/CVSS/advisory reference | Current: hash-pinned `index/nvd.sqlite` (CVE id → description, CWE ids, CVSS metrics, `vulnStatus`, dates, raw hash) built deterministically from the metadata layers; pinned per run and joined by CVE id | `dependency_advisories` (implemented), `reference_intelligence` | `QP` or typed reference query if exact filters exceed it; no skill |
 | CISA KEV catalog; `job_third_party_data_sync.kev_sync` | Known-exploited listing | Current: hash-pinned `index/kev.sqlite` (CVE id, vendor/product, name, date added, due date, ransomware use, catalog version); pinned per run (freshness 7 days) | `dependency_advisories` (implemented); lane A KEV admission and lane B rank | `QP`; no skill |
 | FIRST EPSS daily scores; `job_third_party_data_sync.epss_sync` | Exploitation probability | Current: hash-pinned `index/epss.sqlite` (CVE id, EPSS, percentile, score date, model version); pinned per run (freshness 3 days) | `dependency_advisories` (implemented); lane B rank | `QP`; no skill |
@@ -585,15 +585,16 @@ inference jobs never scan raw target trees:
   `query_owasp_gaps` use the same strict verification predicate; provisional dissent remains
   available as assessment context, not as a verified gap. Indexing reads the admitted producer
   handoff before its pinned OWASP manifest, never the mutable workbench pointer.
-- API drift (`appsec-review/document-drift-issue/1`): undocumented routes, auth-annotation
-  mismatches, and schema-less body parameters across Python, JS/TS, Java, Go, C#, Ruby, Rust, PHP,
-  and C++ HTTP frameworks.
+- API drift (`appsec-review/document-drift-issue/1`): bounded literal-registration/annotation
+  comparisons emit `missing_auth_middleware`, `undocumented_route`, `unmapped_declared_operation`
+  and `role_or_scope_mismatch`. Parameter-constraint drift is schema/query vocabulary, not an
+  implemented emission branch. Non-HTTP declarations retain unsupported-mapping gaps.
 - `sca_reachability.jsonl` (`appsec-review/sca-reachability/1`), `corroborated_clusters.jsonl`
   (`appsec-review/corroborated-sast-evidence/1`), and `binary_pseudo_c.jsonl` from
   `job_binary_evidence_indexing`.
 - Bounded `RetrievalCore` methods (`query_cfg_function`, `query_guard_dominators`,
-  `query_cpg_slice`, `query_call_paths`, `query_corroborated_clusters`, `query_sca_reachability`,
-  `query_threat_boundaries`, `query_owasp_gaps`, `query_doc_drift`, `query_binary_pseudo_c`)
+  `query_cpg_slice`, `query_call_paths`, `query_sca_reachability`, `query_engineering_signals`,
+  `query_threat_boundaries`, `query_owasp_gaps`, `query_doc_drift`, `query_sanitizer_readiness`)
   documented in [Hosted querying and indexing skills](querying-and-indexing-skills.md).
 
 `query_doc_drift` emits only the drift schema's recognized kinds; missing declarations and

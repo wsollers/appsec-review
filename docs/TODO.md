@@ -500,6 +500,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5266 | [Separate optional SARIF capabilities from completion gaps](#t-5266-separate-optional-sarif-capabilities-from-completion-gaps) | review | done (2026-11-21, 65880fb539713e6037ccb5b4ba5d34c22fa61312) |
 | T-5267 | [Repair review-cell telemetry profile fixtures](#t-5267-repair-review-cell-telemetry-profile-fixtures) | testing | open |
 | T-5268 | [Admit shared-artifact retry fixtures through verified stop state](#t-5268-admit-shared-artifact-retry-fixtures-through-verified-stop-state) | testing | open |
+| T-5269 | [Establish the smoke-target evaluator isolation boundary](#t-5269-establish-the-smoke-target-evaluator-isolation-boundary) | testing | open |
+| T-5270 | [Align shipped profile notices and inherited model bindings](#t-5270-align-shipped-profile-notices-and-inherited-model-bindings) | pipeline | open |
+| T-5271 | [Align Alternate CPG transport directions with the core](#t-5271-align-alternate-cpg-transport-directions-with-the-core) | graph | open |
 
 ## Active entries
 
@@ -6170,6 +6173,13 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   cases and refusal before publication. Compressed staging and expanded replay use independent
   counters under the same ceilings; the builder receives frozen private limits.
   Offline boundary repair is complete; native rollout and positive acceptance remain T-5263.
+  Subsequent capacity decision (2026-11-22, `42ad2890d874ace6a34baac84924c591df17791b`):
+  after user-reported HAL measurements of 398 MB for the largest year and 3018 MB expanded
+  total, the user approved a 4 GiB cumulative CVE-builder ceiling for new configurations.
+  NVD per-file and CVE per-layer limits remain 512 MiB, with every refusal/custody check intact.
+  The 34-case focused limits run passed in 2.56 s; its conservative 3018 MiB accounting
+  allocates no feed-sized data and is not a real HAL replay. Frozen prior limits remain intact,
+  and T-5263 remains open for the earlier baked-reader rollout.
 - **Refs:** `audit-results/job-audit-job_third_party_data_sync.md`.
 
 ### T-5248 — Resolve tree sitter ast conditional audit boundaries
@@ -6505,13 +6515,24 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   `tools/cve-bin-tool/Dockerfile` copies `build_db.py` into `/opt/builder/build_db.py`; a source
   reload does not deploy its new bounded reader. Rebuild/verify that specific image before
   claiming in-image enforcement; producer-side staging/expansion bounds are implemented independently.
+  The later 4 GiB cumulative budget change at `42ad2890` updates typed defaults and central
+  configuration only; `limits.json` carries it. It neither changes the baked script again nor
+  establishes that the earlier reader change was deployed or that HAL replay succeeded.
+  CBMC provisioning, exact host pinning, signature verification under the configured policy and
+  positive native acceptance belong here too. On 2026-11-22 the coordinating host reported WSL's
+  CBMC image provisioned and signed; the user separately reported HAL missing its image/pin.
+  Those observations are not interchangeable and no HAL change is implied. Host-pins application
+  resolves configured settings tags even when a job is disabled, so disabling CBMC alone does not
+  avoid the missing-binding refusal. Handwritten CBMC JSON fixtures and warning/missing-body
+  heuristics are not native-release acceptance; qualify real function/trace/output shapes.
 - **Done when:** The operator-authorized evidence identifies the rebuilt/verified affected tools,
   current host bindings and positive native results. Mounted application-source reload remains
   separate from tooling rebuilds; prior run pins stay immutable. No real target, review restart,
   key provisioning, enforcement change or broad integration suite is authorized by this entry.
 - **Refs:** T-5095, T-5106, T-5117, T-5247, T-5257, T-5259;
   `docs/architecture/deployment-image-and-source-mount.md`,
-  `docs/operations/clang-static-analysis.md`; cumulative feedback, 2026-11-20.
+  `docs/operations/clang-static-analysis.md`, `docs/operations/job_cbmc_analysis.md`;
+  cumulative feedback, 2026-11-20 and 2026-11-22.
 
 ### T-5264 — Parse LCOV function end-line records without duplicate functions
 
@@ -6598,6 +6619,55 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   admission checks preserved, allowing their explicit selection exclusion to be removed.
 - **Refs:** `tests/test_shared_artifacts.py`, `src/appsec_review/runtime/repair.py`,
   `src/appsec_review/runtime/runner.py`; OWASP default-path baseline, 2026-11-21.
+
+### T-5269 — Establish the smoke-target evaluator isolation boundary
+
+- **State:** open
+- **Area:** testing
+- **Why:** The user-reported C++ smoke-target listing contains `PLANTED.md`. Generic configured
+  catalog exclusions are not an automatic answer-key detector, so that listing alone cannot
+  establish a blind review. No answer-key contents were read during documentation reconciliation.
+- **Scope:** Determine the intended evaluation-only paths and verify frozen exclusions,
+  accepted source/catalog manifests and actual worker-input delivery for the selected target.
+  Do not inspect an answer key to steer a review, change a target, or infer blindness from
+  another corpus's isolation test. Any policy or target change needs its own authorization.
+- **Done when:** Exact target/configuration identities and bounded regression or authorized
+  run evidence establish that evaluation-only material cannot reach review workers; remaining
+  channels and limits are named. No review launch is authorized by this entry.
+- **Refs:** `README.md`; `docs/architecture/inference-security-review.md`;
+  `src/appsec_review/config/exclusions.py`, `src/appsec_review/jobs/cataloging.py`;
+  user feedback and source-backed documentation reconciliation, 2026-11-22.
+
+### T-5270 — Align shipped profile notices and inherited model bindings
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** The two older Copilot profiles inherit active Claude planner/verifier bindings,
+  while the generic production notice names Sonnet/Opus rather than the current Fable choice.
+  Profile names and launch prose therefore do not fully describe resolved model requirements.
+- **Scope:** Decide explicit intended bindings for `copilot-dev` and `copilot-prod`, and make
+  the operator notice reflect resolved configuration. Preserve task budgets and independence
+  policy; documentation work does not authorize a provider switch or model call.
+- **Done when:** Focused offline profile-resolution and notice checks agree with the approved
+  bindings, and documentation no longer implies an unavailable single-provider guarantee.
+- **Refs:** `profiles/copilot-dev.toml`, `profiles/copilot-prod.toml`, `profiles/prod.toml`,
+  `deploy/dagster/bin/ops.py`; `docs/operations/model-profiles.md`.
+
+### T-5271 — Align Alternate CPG transport directions with the core
+
+- **State:** open
+- **Area:** graph
+- **Why:** The MCP and generated worker-turn contracts advertise `query_cpg_slice.direction`
+  value `both`, while the core accepts only `backward` or `forward`. An advertised request
+  can therefore be rejected before retrieval.
+- **Scope:** Align the explicit transport/core direction vocabulary and preserve source
+  custody, grants and bounded traversal. Transport's lower hop bound is a separate admission
+  limit, not authority to widen the core. Do not silently implement unapproved traversal.
+- **Done when:** Focused offline contract tests show every advertised direction is admitted
+  and behaves as documented, with unsupported values refused and generated schemas in parity.
+- **Refs:** `src/appsec_review/mcp/schema.py`, `src/appsec_review/retrieval/graph.py`,
+  `docs/schemas/inference-security-review/worker-turn.schema.json`;
+  `docs/architecture/querying-and-indexing-skills.md`.
 
 ## Legacy backlog
 

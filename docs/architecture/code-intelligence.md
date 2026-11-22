@@ -141,30 +141,16 @@ normalizer/seed identities, not permission to bypass those gates.
 
 **Coverage rows versus canonical status**
 
-SQLite coverage, nested scope results and root canonical outcomes are distinct products. In SVF,
-[normalization reasons](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L410) join module
-coverage at lines 424–425, but only tool-supplied module gaps enter the returned gap list at line
-426. The [scope status](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L452) accounts for
-partial module rows; the [aggregate](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py#L499)
-recomputes success from returned gap strings, without projecting nested scope statuses as root
-dispositions. Thus an analyzed open-world scope with no tool gaps can remain partial in published
-SQLite/nested results while its aggregate declares success.
+SQLite coverage, nested scope results and root outcomes remain distinct products. The root reads
+declared unit control fields rather than traversing arbitrary nested objects. The enabled
+[SVF path](../../src/appsec_review/jobs/job_svf_alias_analysis/job.py) now explicitly carries
+module normalization reasons and missing-module causes into scope and aggregate gaps.
+An aggregate with only failed scopes is `FAILED`, not successful empty coverage.
 
-The root does **not** silently repair that discrepancy:
-[outcome projection](../../src/appsec_review/runtime/handoff.py#L196) reads each configured unit's
-explicit gap/status/dispositions fields, and
-[publication](../../src/appsec_review/runtime/runner.py#L965) calls it over configured unit IDs.
-It does not traverse nested `scopes` or open SQLite coverage. Published module coverage survives;
-canonical aggregate coverage can understate it. This is a source-demonstrated propagation
-limitation, not a live-run reproduction or proof that the underlying alias facts were lost.
-
-Similarly, the compiled producer's
-[missing exact compile/link relationship](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L510)
-is a partial coverage row while that branch returns an empty declared-gap list. Its
-[summary](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1256) intentionally joins
-declared branch gaps, not every shard's coverage. That narrower summary must not be used as proof
-of complete relationship coverage; changing what should become a canonical gap is separate from
-documenting the current projection.
+The [compiled producer](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py) likewise
+returns a missing exact compile-output/captured-link relationship as a declared branch gap,
+so it reaches the published summary as well as SQLite coverage. These source-level propagation
+repairs do not establish live analyzer acceptance or complete alias/build coverage.
 
 ## Decisions
 
@@ -186,9 +172,9 @@ bounded path while still publishing zero security observations and no general CP
 
 ## Named gaps
 
-[T-159](../TODO.md) tracks the SVF module-reason/root-outcome discrepancy described above.
-The module coverage survives; canonical aggregate accounting does not reconstruct those nested
-reasons. This is source-inspected, not a newly reproduced live failure.
+[T-159](../TODO.md) retains its historical retirement closure. Later SVF propagation repairs
+are recorded under T-5189/T-5190; neither retirement nor offline repair establishes native
+acceptance or enables the manual tooling.
 
 The registry is [docs/TODO.md](../TODO.md); the following are scoped references, not another backlog.
 No item or known limitation automatically joins a walk's user-approved expected-gap list.
@@ -217,8 +203,8 @@ No item or known limitation automatically joins a walk's user-approved expected-
   verification over the implemented first-party graph scoping, `tree-sitter` cross-check,
   `code_graph_scorecard` and `network_output`/`file_write` sink classifications.
 
-The SVF aggregate propagation detail is tracked by T-159, not silently assigned to T-126 or
-repaired by this document.
+The source propagation repairs remain distinct from T-126's broader cross-producer strategy
+and from separately authorized native acceptance.
 
 ## Jobs and pages
 

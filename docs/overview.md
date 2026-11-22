@@ -29,6 +29,11 @@ auditable; they do not prove every claim is correct or every relevant behavior w
 
 ## End-to-end architecture dataflow
 
+This is a conceptual evidence flow, not the complete scheduling graph or a grant to consume
+every predecessor. Typed contracts and actual read receipts govern consumption. The checked-in
+recipe registers 48 jobs: 46 review-graph declarations, of which 43 are enabled; maintenance
+sync and internal build iteration have separate dispatch boundaries.
+
 ```mermaid
 flowchart TB
   subgraph S12["Stages 1-2: Acquire, Catalog & Build"]
@@ -53,7 +58,7 @@ flowchart TB
     retired["job_cpg_analysis / job_svf_alias_analysis: disabled by default; manual = true"]
   end
   subgraph S4["Stage 4: Unified Indexing & Prioritization"]
-    cgi --> prio["job_review_prioritization: appsec-review/review-prioritization-signals/1"]
+    prio["job_review_prioritization: appsec-review/review-prioritization-signals/1"]
     ev --> prio
     dep --> prio
     ctx --> prio
@@ -66,9 +71,9 @@ flowchart TB
   end
   subgraph S5["Stage 5: Dual-Lane AI Review, Chains & Static Validation"]
     idx --> pkg["job_review_package_assembly"]
-    pkg --> inf["job_inference_security_review: Lane A reachability + Lane B hunt + Round 2 RetrievalCore + chains"]
-    inf --> poc["job_poc_generation: appsec-review/poc-compile-check/1 (compile-only; execution blocked)"]
-    inf --> rem["job_remediation_planning / job_remediation_validation: 9-lang static verification"]
+    pkg --> inf["job_inference_security_review: review + hunt lanes; one round by default; bounded follow-ups + chains"]
+    inf --> poc["job_poc_generation: policy/syntax checks; optional compile replay defaults off; no target execution"]
+    inf --> rem["job_remediation_planning / job_remediation_validation: risk-first patches; qualified static/compiler assurance"]
   end
   subgraph S6["Stage 6: Gate, Executive Report, Dossiers & Exports"]
     inf --> dos["job_dossier_publication: appsec-review/dossier/1"]
@@ -79,7 +84,7 @@ flowchart TB
     poc --> gate
     rem --> gate
     gate --> rep["job_final_report_publication: appsec-review/final-report/4 + radar/2 + SARIF 2.1.0"]
-    gate --> vex["job_openvex_export: CVE-bound reachability VEX"]
+    gate --> vex["job_openvex_export: confirmed affected-only export; separate optional dependency companion"]
   end
 ```
 
@@ -89,6 +94,8 @@ receipt distinguish rendered, failed and disabled output; the initial JSON's pre
 `not_rendered` declaration is not that outcome. Radar `/2` retains unknown measurements as
 `null` with reasons (**N/A** in renderings), not measured zero. Protected dossier PDFs remain
 separate. See [final report publication](operations/final-report.md#the-report).
+Report-design mockups are proposals, not the output of this implementation or evidence of a
+successful renderer run.
 
 ## What makes the result trustworthy
 

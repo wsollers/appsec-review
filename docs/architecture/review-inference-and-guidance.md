@@ -280,9 +280,10 @@ Image-backed engineering follows [host pins](../operations/image-pin-verificatio
 ### Dual-lane retrieval fulfillment, multi-step chains, and static compile-only PoC/remediation (T-171..T-175)
 
 - **Prioritization & SAST-silence hunt boost (`T-171`)**: `job_review_prioritization` emits
-  `appsec-review/review-prioritization-signals/1`, incorporating Alternate CPG reachability,
-  proportional repository-churn hotspots, CI/artifact lead promotion, 9-language danger signals,
-  and a Hunt-lane boost for high-risk attack surfaces with zero SAST hits.
+  `appsec-review/review-prioritization-signals/1`, combining change-context, coverage, profile
+  and dependency source-use modifiers with CI/artifact/SCA lead promotion, nine-language
+  source signals and a SAST-silence hunt queue. History hotspot selection is fixed by default;
+  proportional selection is opt-in. Alternate CPG is a separate downstream navigation facility.
 - **Bounded follow-up delivery (`T-173`, `T-174`)**: If configured rounds permit another pass,
   canonical open obligations select at most four requests (also bounded by `red_output`).
   Fulfillment calls `find` for the package's existing entity grant, prioritizes anchors and

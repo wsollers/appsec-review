@@ -48,7 +48,9 @@ Relevant bounded procedures and design references:
 - [`operations/ssh.md`](operations/ssh.md) — SSH from Windows into the WSL checkout: server, key, named connection, the connectivity check the testing protocol runs first, and the desktop-app registration.
 - [`operations/image-pin-verification.md`](operations/image-pin-verification.md) — mandatory pre-intake verification that local images match their pins, its failure report, and the host rebuild/re-pin/reload procedure.
 - [`operations/signing.md`](operations/signing.md) — Ed25519 container-image and `appsec_review` module signing: threat model, key custody, `[signing]`, enforcement points, operator runbook, tests and named gaps.
-- [`operations/model-profiles.md`](operations/model-profiles.md) — the `dev` (default) and `prod` runtime profiles: selection with `APPSEC_REVIEW_PROFILE` or `--profile`, the exact prod models and limits, the distinct verifier model, and how fingerprints and the model contract treat a profile.
+- [`operations/model-profiles.md`](operations/model-profiles.md) — the five shipped runtime profiles,
+  selection with `APPSEC_REVIEW_PROFILE` or `--profile`, resolved models and limits, verifier
+  policy and inherited planner bindings, and profile fingerprints.
 - [`operations/inference-security-review.md`](operations/inference-security-review.md) — model selection and upgrade, local capacity overlay, and outcomes for the inference security review; design in [`architecture/inference-security-review.md`](architecture/inference-security-review.md).
 - [`operations/lead-severity-triage.md`](operations/lead-severity-triage.md) — deterministic-first severity ordering for scanner leads that reported no severity, its bounded Haiku fallback, audit artifact, and recovery.
 - [`operations/review-data-indexing.md`](operations/review-data-indexing.md) — dataset inventory and publication audit, lead menus, stage-1 products, and offline FTS validation; design in [`architecture/indexing-and-query-reuse.md`](architecture/indexing-and-query-reuse.md).
@@ -64,8 +66,10 @@ Relevant bounded procedures and design references:
 - [`operations/svf-alias-analysis.md`](operations/svf-alias-analysis.md) — `job_svf_alias_analysis` settings, image pin, coverage rows, resume and verification commands.
 - [`operations/sanitizer-build.md`](operations/sanitizer-build.md) — `job_sanitizer_build`: ASan/UBSan rebuild of accepted native units, sanitizer settings, the no-execution invariant, ELF runtime evidence, named gaps, and how a later execution stage would consume the handoff.
 - [`operations/smoke-scorecard.md`](operations/smoke-scorecard.md) — scoring a smoke run against the answer key: the per-item loss-funnel stage and its owner, axes derived from the key or the CWE, per-axis recall, precision, coverage and severity handling, the radar-chart PDF and its receipt, and the `--compare` trend.
-- [`operations/test-targets.md`](operations/test-targets.md) — where to get the repositories the reviews and acceptance tests run against (`appsec-multi-vuln`, the pinned commit, the evaluator guide kept outside the repository, the paired case-094 tag and the blind CASTLE-C250 corpus).
-- [`operations/poc-generation.md`](operations/poc-generation.md) — `job_poc_generation`: the `poc_writer` turn, AST/compile checks, immutable protected attempt outputs, pre-gate `/2` outcomes and explicit manual admission.
+- [`operations/test-targets.md`](operations/test-targets.md) — pinned evaluation repositories,
+  external evaluator guides, case-094 and CASTLE-C250; fixture isolation does not establish
+  automatic answer-key exclusion for an arbitrary target.
+- [`operations/poc-generation.md`](operations/poc-generation.md) — `job_poc_generation`: the `poc_writer` turn, policy/syntax checks, optional compile replay, immutable protected attempt outputs, pre-gate `/2` outcomes and explicit manual admission.
 - [`architecture/openvex-export.md`](architecture/openvex-export.md) — automatic standalone affected-only
   local OpenVEX generation/validation: tool author, no-setup snapshot namespace, strict frozen
   overrides, source-snapshot/full-configuration identity, protected companion,
@@ -74,7 +78,7 @@ Relevant bounded procedures and design references:
   certified-gate/independent-export diagrams, operator status, privacy and metrics refresh;
   whole-chain/manual validation and final exact-main reconciliation remain separately tracked.
 - [`operations/final-report.md`](operations/final-report.md) — `job_final_publication_gate` and
-  `job_final_report_publication`: certified gate `/2`, report `/3` and radar `/2`, separate package
+  `job_final_report_publication`: certified gate `/2`, report `/4` and radar `/2`, separate package
   accounting and unknown metrics, deterministic Markdown/HTML and receipted executive PDF outcomes.
 - [`architecture/evidence-completion-and-remediation.md`](architecture/evidence-completion-and-remediation.md) —
   delivered completion source and approved dossier decisions: compile-only PoC before one final gate,
@@ -130,7 +134,8 @@ Specialized operator procedures (canonical job contracts are in the entrypoints 
   [`operations/profile-data.md`](operations/profile-data.md), and
   [`operations/dependency-intelligence.md`](operations/dependency-intelligence.md) — engineering
   security-signal production and recovery.
-- [`operations/cpp-index-jobs.md`](operations/cpp-index-jobs.md) — clangd symbol index and Joern CPG jobs.
+- [`operations/cpp-index-jobs.md`](operations/cpp-index-jobs.md) — accepted clangd symbol generations
+  and the disabled-by-default/manual Joern CPG boundary.
 - [`operations/target-acquisition.md`](operations/target-acquisition.md) — multi-component review systems:
   the `job_target_acquisition` gate and `acquire-target` acquire pinned Git (default, with submodules),
   Perforce, and GitLab/Gerrit/Azure DevOps review-export components in parallel into `targets/<system>/`.

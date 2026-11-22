@@ -18,6 +18,10 @@ Provision [`tool-cbmc`](../../containers/tools/cbmc/README.md) on the review hos
 host-local image binding and sign/verify it with the existing operator policy. The job
 requires the catalog tag and immutable configured image ID to agree. Do not copy another
 host's image ID, provision new keys implicitly, or rebuild the image for application-code edits.
+Host-pins application checks configured settings tags even for disabled jobs, so merely setting
+CBMC `enabled = false` does not bypass a missing binding. Provisioning, exact pin verification,
+signature policy and native acceptance are per-host prerequisites; WSL readiness is not HAL
+readiness. [T-5263](../TODO.md) retains the rollout and real-engine acceptance boundary.
 
 The central `[jobs.job_cbmc_analysis.settings]` table selects:
 
@@ -52,6 +56,14 @@ function tables, native solver JSON and container receipts under the attempt's
 `artifacts/cbmc/` tree. Only files bound by the accepted source mapping reach the container:
 unlisted workspace files and symlink ancestors cannot supply headers.
 
+Load, analysis and acceptance expose nested raw artifact references. Acceptance and accepted
+reuse reverify staged source, GOTO, compilation/discovery/solver stdout and stderr, and their
+execution receipts. Deleted or changed raw bytes refuse reuse even when the summary JSON is
+unchanged. Shared selection/execution gaps remain job-level canonical records across the three
+unit outcomes, not gaps falsely attributed to a different unit.
+Native-result retention requires the active run-owned publication attempt. An absent or foreign
+owner refuses publication instead of producing a seemingly usable result without native evidence.
+
 The acceptance step publishes result and coverage shards plus `summary.json`. Results use
 the existing **`review_signal`** entity kind, which is indirect for every security predicate.
 They do not become duplicate scanner leads. Source-mapped property and trace previews remain
@@ -67,6 +79,12 @@ statuses, model warnings and coverage together:
 - `inconclusive`: no accepted positive/negative conclusion; examine the named gap and receipt.
 - `not_attempted`: a selection, staging, function or time budget prevented analysis.
 
+Also inspect each `rounds` entry: `validated`, `failed` or `not_attempted`, its gaps and its
+output/receipt pair. `unwind_limits_attempted` includes executed failed retries, not unlaunched
+bounds. After a failed retry the result is inconclusive with zero candidates; retained parsed
+`native_output` and `native_execution` still identify the last validated round. The failed
+retry's separate artifacts and earlier unwinding gap are not discarded.
+
 No eligible native work produces `NOT_APPLICABLE`; missing applicable build/scanner evidence
 or omitted supported work produces canonical producer gaps. Review packages join results by
 the originating observation IDs **and exact source hash/line range**, include their bounded
@@ -81,6 +99,8 @@ They are not a real-engine or Dagster acceptance claim. A separately authorized 
 cover a real accepted safe/failing native pair, sufficient/insufficient unwinding, an external
 body gap, unsupported C++, deadline exhaustion and end-to-end finding-package visibility.
 Do not run a target merely because this job or image is now registered.
+Handwritten native JSON fixtures do not qualify an actual CBMC release's warning, missing-body,
+function-discovery or trace shapes; those remain named real-engine acceptance gaps.
 
 <!-- generated:begin job=job_cbmc_analysis -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->

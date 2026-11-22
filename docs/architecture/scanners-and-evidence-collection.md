@@ -57,15 +57,18 @@ Platform content is not customer-artifact input. Unknown delivery is a coverage 
 proof that a binary ships or can be ignored.
 
 The artifact lane combines bounded built-in format facts with applicable SpotBugs, blint, Syft,
-Grype and OSV adapters. Installed npm package coverage uses a verified installer record rather than
+Grype, OSV and cve-bin-tool adapters. Built-in package/ELF readers also emit bounded risk
+candidates with unknown severity and explicit assessment gaps, not adjudicated findings.
+Installed npm package coverage uses a verified installer record rather than
 repeating equivalent package scans; package anchors, record presentation, dev-package omissions
 and unreported anchors remain explicit. Built-in native/JVM headers and Wasm capabilities are not
 substitutes for all scanner rules or policy validation.
 
 [CI analysis](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py) has its own
 accepted-catalog discovery, provider routing, external linters and structural rules. Its exact-only
-correlator joins matching provider/path/range/category/message observations, adding mapping provenance
-to the equality condition when locations are ambiguous. A structural preceding job/step label is
+correlator requires matching provider/path/range/category/message, compatible byte spans and
+identical mapping provenance, confidence and ambiguity for precise as well as coarse records.
+A structural preceding job/step label is
 not runtime pipeline control-flow proof. A canonical CI “finding” is still a correlated judgment,
 not adjudicated exploitability.
 
@@ -136,8 +139,8 @@ summary is not necessarily lost canonical evidence: post-build's
 [final summary](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L895) joins
 indexed-case gaps, while a missing family handoff is already declared by
 [the load unit](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L270).
-The root projects that originating unit. This differs from SVF's unprojected nested scope detail,
-described in [code intelligence](code-intelligence.md).
+The root projects that originating unit. SVF and compiled relationship branches now explicitly
+propagate their scope/module reasons too; see [code intelligence](code-intelligence.md).
 
 Task/checkpoint identities and read receipts must agree with the
 [frozen run and runtime](jobs-and-runtime.md#wave-1-resumability); [input contracts](job-input-contracts.md)
@@ -147,13 +150,16 @@ are shared launch boundaries, not redefined here. Accepted indices are read thro
 [bounded retrieval](python-and-retrieval.md#query-boundary), including observation, artifact,
 build-security, dataset-inventory and declared precomputed queries.
 
-**Narrowing the coverage/profile identity concern**
+**Coverage and profile shard identity**
 
-The local coverage/profile shard keys omit explicit ingestion bounds and normalized row content:
-[coverage key/reuse](../../src/appsec_review/jobs/job_test_coverage/job.py#L343) and
-[profile key/reuse](../../src/appsec_review/jobs/job_profile_data/job.py#L300). At the helper level,
-different bounds could produce different rows from unchanged report identities and collide at
-that local key. That observation alone is **not an admitted stale-reuse defect**:
+Profile shard identity includes a digest of the normalized build-unit record, including rows,
+report metadata and coverage. Changed normalized content does not reuse an old shard merely
+because report bytes match ([profile key](../../src/appsec_review/jobs/job_profile_data/job.py)).
+
+The local test-coverage shard key still omits explicit ingestion bounds and normalized row
+content ([coverage key](../../src/appsec_review/jobs/job_test_coverage/job.py)). Different bounds
+could change rows under unchanged report identities at this helper boundary. That observation
+alone is **not an admitted stale-reuse defect**:
 
 1. [Run binding](../../src/appsec_review/runtime/runner.py#L61) rejects a different resolved
    configuration for an existing run. A bounds-only same-run configuration change is not an
@@ -167,7 +173,7 @@ that local key. That observation alone is **not an admitted stale-reuse defect**
    [named consumption](../../src/appsec_review/storage/shared.py#L434) refuses to relabel an
    incompatible registered computation as legacy.
 
-No actual admitted path returning stale coverage/profile shards was established by this source-only
+No actual admitted path returning stale test-coverage shards was established by this source-only
 inspection. The missing local inputs are therefore a **conditional identity risk** if a future
 supported reuse/import/repair path permits changed computation under that key, not a reproduced
 bug or authority to bypass the existing guards. This narrows the earlier Stage 4 handoff wording.

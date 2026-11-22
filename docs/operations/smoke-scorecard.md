@@ -149,6 +149,10 @@ and marked "not keyed" in the key); twelve at most. Three series:
 | Precision | dashed | confirmed / (confirmed + false reports) |
 | Coverage | dotted | items at stage `no_claim` or later / planted true positives |
 
+Undefined JSON rates remain `null`, but this keyed diagnostic renderer maps them to a `0.0`
+vertex and displays the raw fraction (for example `0/0`). That is not measured zero and differs
+from the primary executive radar, which omits unknown vertices and breaks the polygon.
+
 The key table below the chart shows the raw fraction per spoke; the legend explains each series and lists
 each axis with its planted, confirmed, covered, negative and false-report counts, and marks an axis with
 fewer than 3 planted items *low confidence*. Then follow the per-axis funnel table, the per-item table
@@ -169,6 +173,11 @@ names the key version. The scorer accepts both: without `axis` it derives the ax
 
 It measures the run's published records against the planted items of one small corpus: a loss is a loss
 of the run on a planted item, never a statement about the target, and a high score is not a clearance of
-anything. Precision counts only planted negatives that were reported; findings the run reported outside
+anything. Scorecard headline/per-axis precision counts only planted negatives that were reported;
+findings the run reported outside
 the planted items are counted in `smoke-score.json` as unmatched and are neither right nor wrong here. An
 axis with fewer than 3 planted items is low-confidence.
+
+The separate `smoke-score.json` `keyed.metrics.precision` uses matching true-positive reported
+claim IDs divided by **all** reported claim IDs; unmatched findings remain in that denominator.
+It is not interchangeable with the scorecard's planted-item precision.

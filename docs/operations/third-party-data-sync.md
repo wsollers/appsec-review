@@ -104,12 +104,17 @@ Database verification counts actual NVD `cve_range` rows, requires the range col
 consumers, rejects foreign/null sources and orphan CVE references, and compares nonnegative
 integer counts with `build.json`. Replay record counts cannot be below the number of stored CVEs.
 These checks validate database consistency, not compatibility with an unexecuted native release.
-The NVD `max_uncompressed_bytes` and cve-builder `max_layer_bytes` / `max_total_layer_bytes`
-default to **536870912 (512 MiB)**. For cve, the same ceilings apply independently to compressed
-staging bytes and expanded replay bytes: those two counters are not added together. The per-layer
-limit cannot exceed the total. These are conservative admission budgets, not measured feed sizes;
-a legitimate full historical replay may exceed them and must fail closed rather than silently
-raise the budget. Metadata/stat preflight is followed by actual streaming checks that read at
+The NVD `max_uncompressed_bytes` and cve-builder `max_layer_bytes` default to
+**536870912 (512 MiB)** each. The cve-builder `max_total_layer_bytes` default is
+**4294967296 (4 GiB)**. For cve, the per-layer and cumulative ceilings apply independently to
+compressed staging bytes and expanded replay bytes: those two counters are not added together.
+The per-layer limit cannot exceed the total. On 2026-11-22 the user selected the 4 GiB cumulative
+budget after reporting HAL's largest expanded NVD year as 398 MB and its expanded total as
+3018 MB. This supersedes the earlier deliberate 512 MiB cumulative choice for new
+configurations; frozen runs retain their prior values. Offline tests conservatively account
+for 3018 MiB without allocating feed-sized data; they do not establish a real HAL replay.
+Larger future replays can still exceed the ceiling and must fail closed rather than silently
+raise it. Metadata/stat preflight is followed by actual streaming checks that read at
 most remaining+1 bytes, including when metadata is dishonest or a staged file grows.
 `NVD_UNCOMPRESSED_BYTE_LIMIT`, `CVE_BIN_TOOL_LAYER_BYTE_LIMIT` and
 `CVE_BIN_TOOL_TOTAL_LAYER_BYTE_LIMIT` name the resulting failed-unit coverage gaps; no new
@@ -122,6 +127,9 @@ under the existing signing policy before relying on the new in-image reader. App
 reload alone cannot replace the baked script. The producer independently bounds staging and
 expansion before any builder launch. No image build, signature change or rollout is implied by
 offline unit validation.
+The 4 GiB setting change alters typed defaults and frozen `limits.json`, not `build_db.py`;
+it does not itself require another script change or clear the pre-existing baked-reader
+rollout gap [T-5263](../TODO.md).
 
 With the opt-in `[signing] image_enforcement = "required"`, a pre-existing `image` is launched by ID
 only after its signature verifies (see [signing](signing.md)); a freshly built one is derived and
@@ -245,6 +253,8 @@ schedule live in `appsec-review.toml` under the semantic job/step/task hierarchy
   this bounded consistency check before exposing archives, including for older hash-valid
   snapshots; inconsistent or unverifiable inputs become named gaps without launching a scanner.
   This check reads the bounded feed archives, not target trees; index-only retrieval stays indexed.
+  Verification reparses those archives. Its real-run recurrence and performance cost have not
+  been measured here; hash-valid storage alone does not replace revision-consistency checks.
 - MITRE requires Enterprise ATT&CK, CAPEC, and CWE in `source_selections`; configuration that omits
   any of them is rejected. Mobile and ICS ATT&CK are optional: they remain fully configured but
   become active only when added to `source_selections`.

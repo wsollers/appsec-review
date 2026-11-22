@@ -17,7 +17,7 @@ The upgraded job JSON contract, native scanner provenance, migration rules, and 
 Schema are documented in [job interchange](docs/architecture/job-interchange.md).
 Admission, execution, and coverage are separate; scanner observations are not confirmed findings.
 
-The [final report](docs/operations/final-report.md) publishes report `/3` with radar `/2`.
+The [final report](docs/operations/final-report.md) publishes report `/4` with radar `/2`.
 Unknown exposure, inspection and corroboration remain `null` with reasons (**N/A** in renderings),
 not measured zero. Protected [dossiers](docs/operations/dossier-publication.md) preserve accepted
 evidence and exact-edit patch references without inventing paths, guard conclusions or fix verification.
@@ -430,8 +430,12 @@ between runs, never while a run or test suite reads it:
 git -C targets/appsec-multi-vuln checkout 29943842cc0c6a8ed5171417b0bccf5c6769f4ef
 ```
 
-The target is blind: it carries no answers, and `tests/test_blind_target_isolation.py` fails if
-its paths or prose name a weakness. Do **not** clone the evaluator guide (`appsec-multi-vuln-guide`)
+That pinned fixture is intended for blind evaluation; `tests/test_blind_target_isolation.py`
+checks its isolation when available. This is not an automatic guarantee for another checkout:
+generic catalog exclusions do not detect answer keys. In particular, a target listing that
+contains `PLANTED.md` needs an explicit frozen exclusion and verified worker-input boundary
+before its review can be called blind ([T-5269](docs/TODO.md)).
+Do **not** clone the evaluator guide (`appsec-multi-vuln-guide`)
 under `targets/` or anywhere a review can see it. It holds the answer key and a per-defect inventory
 (`data/defect-inventory.json`, validated with its `scripts/defect_inventory.py`). If you need it for
 evaluation, keep it outside this repository and point `APPSEC_EVALUATOR_GUIDE` at it.
@@ -535,6 +539,12 @@ validation. A failed refresh keeps the previous last-known-good snapshot. Host-l
 pointers are written to `runs/metadata/`. Feed data and run receipts are local state and are never
 committed. Full details are in
 [`docs/operations/third-party-data-sync.md`](docs/operations/third-party-data-sync.md).
+
+New configurations bound each expanded NVD file and each cve-builder layer to **512 MiB**.
+The cve-builder cumulative ceiling is **4 GiB**, independently for compressed staging and
+expanded replay; it is not an unlimited-feed guarantee. Frozen configurations retain their
+original limits. The baked builder reader still has a separately authorized rollout gap
+([T-5263](docs/TODO.md)); no real-feed replay is implied by offline accounting tests.
 
 Run the sync once before your first review, and again whenever you want fresher data. Docker must be
 running.
@@ -705,7 +715,7 @@ build/static information → prioritization/code graph → security tagging/tag 
 review data indexing (`control_evidence`) → package assembly → hunt and red/blue/independent
 verification. Tags and classifications route work, never prove controls. Full pinned catalogs
 contain 345 ASVS controls, 24 MASVS controls, 292 MASTG supporting tests and two 10-record risk
-catalogs; **only four narrow Python static procedures are implemented**, not full compliance
+catalogs; narrow Python and C/C++ static procedures cover selected subjects, not full compliance
 coverage. Configured assessment calls a worker and a fresh blinded reviewer. Qualification is an
 explicit synthetic mode, not selected by input-file presence and never production-eligible.
 Downstream OWASP interpretations remain provisional and indirect for every final predicate:
@@ -722,8 +732,10 @@ review and pre-gate completion evidence, and the report reads only that certifie
 write `final-report.json` and a deterministic `final-report.md`; see
 [`docs/operations/final-report.md`](docs/operations/final-report.md).
 Enabled PoC generation, remediation planning/validation and dossier publication run **before**
-the single final gate by default for new reviews. PoC and remediation checks are compile-only:
-functions are never linked or run, and checks establish neither runtime reproduction nor a verified
+the single final gate by default for new reviews. PoC generation performs nonexecuting policy/
+syntax validation; project compile replay is optional and defaults off. Remediation validation
+distinguishes lexical, AST and compiler assurance instead of claiming every language was compiled.
+Produced functions are never run, and checks establish neither runtime reproduction nor a verified
 fix. New-run defaults do not change frozen historical configurations; manual
 disabled PoC output requires explicit gate admission. See
 [`docs/operations/poc-generation.md`](docs/operations/poc-generation.md),
@@ -768,8 +780,10 @@ provider family (Claude or Copilot) for one run, and a family switch needs a sta
 
 For Copilot installation, separate-account login, catalog verification and deployment commands, see
 [Copilot with a separate GitHub identity](docs/operations/model-profiles.md#copilot-with-a-separate-github-identity).
-The existing `dev` and `prod` profiles still use Claude; selecting either Copilot profile does not require a
-Claude login.
+The existing `dev` and `prod` profiles use Claude. `copilot-carbon-prod` overrides the active
+planner bindings too; the two older Copilot profiles still inherit Claude planner/verifier
+bindings and can therefore require both providers ([T-5270](docs/TODO.md)). Inspect resolved
+configuration rather than inferring every task's provider from a profile's name.
 
 ```bash
 scripts/stack-restart.sh --profile prod

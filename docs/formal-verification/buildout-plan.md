@@ -11,6 +11,12 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 **Status:** Proposed implementation plan; no capability described here is implemented merely by
 this document
 
+**Current boundary:** The separate [CBMC producer](../architecture/cbmc-bounded-analysis.md)
+now supplies conditional original-source function-entry evidence. It does not implement the
+Lean verifier, source certification, fuzz lab or execution authority proposed here. References
+below to SVF as an available producer retain the historical plan; SVF is disabled by default
+and its tooling is manual.
+
 **Design authority:** [SAST-to-Lean Verification and Proof-Directed
 Fuzzing](sast-to-lean-and-proof-directed-fuzzing.md)
 

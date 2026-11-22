@@ -239,6 +239,8 @@ the [topology architecture](../architecture/build-topology-and-iterations.md) ow
 
 1. Read the accepted catalog and hash-verify its child documents and schemas. Require the
    catalog snapshot to equal the claim, not just a plausible target path.
+   The early descriptor helper's type filter at depth three and deeper is not full-schema
+   certification; downstream descriptor and proposal validation still decide admission.
 2. Read available accepted source history as routing context; explicitly mark another snapshot
    stale. Load the signed environment availability contract; missing expected-current evidence
    blocks instead of silently becoming optional.

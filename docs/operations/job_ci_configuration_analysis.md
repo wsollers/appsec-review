@@ -258,7 +258,8 @@ The job declares strict structured gaps; generated task bindings remain [T-147](
 1. Enrich normalized records with pipeline/workflow and hierarchy context. Map retained locations
    against source bytes while preserving mapping confidence and ambiguity.
 2. Write one observations shard per provider/tool with scan coverage: complete for successful scan,
-   unavailable for failed/not-applicable scan, partial otherwise. Publication's own status remains
+   unavailable for failed/not-applicable or `CONFIGURED_DISABLED` scans, partial otherwise.
+   Publication's own status remains
    success, carrying scan gaps only as payload.
 
 ### `ci_correlation`
