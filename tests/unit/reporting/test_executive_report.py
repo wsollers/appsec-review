@@ -15,8 +15,9 @@ from appsec_review.reporting.executive_report import (
     NOT_CLEAN, POLICY_STATEMENT, RENDERER, BoundDossier, executive_document, words,
 )
 from appsec_review.reporting.dimensions import DIMENSIONS, dimension_counts
-from appsec_review.reporting.latex import render_latex
-from appsec_review.reporting.model import Box, Document, Heading, RadarChart
+from appsec_review.reporting.executive_latex import _chunks, render_latex, template_identity
+from appsec_review.reporting.model import Box, Document, Heading, Table
+from appsec_review.reporting.technical_evidence import citations, source_location, standards
 from appsec_review.review.identity import sha256_hex
 from tests.unit.review_decision_audit_wiring.helpers import verified_document
 
@@ -74,22 +75,23 @@ def test_confirmed_finding_is_explained_in_plain_language_from_its_dossier() -> 
     assert isinstance(document, Document) and document.renderer == RENDERER
     assert document.status_badge == "COMPLETE" and document.named_gaps == ()
     tex = tex_of(report, (bound(dossier),))
-    # What, where, why it is bad, severity, verification and shipment, in words.
-    assert "1. Synthetic finding 0" in tex
+    # Accepted narrative and evidence remain; release recommendations and inferred impact do not.
+    assert "F01 — Synthetic finding 0" in tex
     assert "attacker{-}controlled length reaches a fixed{-}size copy" in tex
     assert "src/\\allowbreak{}parser.c, lines 40{-}52" in tex
     assert "memory corruption" in tex and "network access to the parser endpoint" in tex
     assert "CWE{-}120" in tex
-    assert "High: a serious weakness that an attacker could turn into real damage" in tex
-    assert "Blocks shipping: under the policy this must be fixed before a release" in tex
+    assert r"\technicalfield{Technical severity}{high}" in tex
+    assert "Blocks shipping" not in tex and "Release readiness" not in tex
     assert "Yes: an independent verifier confirmed this finding" in tex
     assert "bound the copy length" in tex and "not a verified fix" in tex
-    assert "qualified supported; reach the parser" in tex
+    assert "Attack path: entry to vulnerable function" in tex
+    assert "not established in accepted evidence" in tex
     # The verification backlog is listed as unconfirmed, never as a finding.
-    assert "supported but not independently confirmed" in tex and "Synthetic finding 1" in tex
+    assert "Supported but not independently confirmed" in tex and "Synthetic finding 1" in tex
     # The executive summary and the policy statement.
     assert "It may be presented as complete." in tex
-    assert "1 finding: Blocks shipping" in tex and "1 finding: Needs verification" in tex
+    assert tex.count("An attacker{-}controlled length reaches a fixed{-}size copy") == 1
     assert "compiled only and never executed" in POLICY_STATEMENT and "compiled only and never executed" in tex
 
 
@@ -111,7 +113,7 @@ def test_none_available_sections_name_their_reason_and_never_read_as_clean() -> 
         assert report[key]["status"] == "none_available"
     document = executive_document(report, ())
     boxes = [block for block in document.blocks if isinstance(block, Box)]
-    for title in ("Connected attack chains", "Proof-of-concept outcomes (compile only)", "Remediation proposals",
+    for title in ("Proof-of-concept outcomes (compile only)", "Remediation proposals",
                   "Remediation validation"):
         box = next(block for block in boxes if block.title == title)
         assert box.kind.value == "gap"
@@ -119,13 +121,12 @@ def test_none_available_sections_name_their_reason_and_never_read_as_clean() -> 
         assert "None available." in texts and NOT_CLEAN in texts
         assert "frozen configuration" in texts
     tex = tex_of(report)
-    assert tex.count(NOT_CLEAN.replace("-", "{-}")) >= 5
+    assert NOT_CLEAN.replace("-", "{-}") in tex
     headings = [block.text for block in document.blocks if isinstance(block, Heading)]
-    assert headings == ["Executive summary", "Review coverage by security dimension",
-                        "Prioritized remediation roadmap", "Confirmed findings",
-                        "Attack chains", "Proof-of-trigger outcomes",
-                        "Remediation", "Verification backlog and withheld packages", "Limitations and coverage",
-                        "Appendix: provenance"]
+    assert headings == ["Scope and summary", "Technical findings", "F01 — Synthetic finding 0",
+                        "Verification backlog and withheld packages", "Related analysis and validation",
+                        "Coverage and limitations", "References and provenance"]
+    assert r"\makecover" not in tex and r"\begin{longtable}" in tex
 
 
 def test_incomplete_review_says_why_and_lists_gaps_by_kind() -> None:
@@ -136,9 +137,9 @@ def test_incomplete_review_says_why_and_lists_gaps_by_kind() -> None:
     assert report["status"]["review_complete"] is False
     tex = tex_of(report)
     assert "It may not be presented as complete" in tex
-    assert "Why the review is not complete" in tex and "review degraded" in tex
-    assert "Gaps (" in tex and "Notices (" in tex and "Stages not run (" in tex
-    assert "compile only nonexecution" in tex
+    assert "review\\_degraded" in tex.replace(r"\allowbreak{}", "")
+    assert "Coverage and limitations" in tex
+    assert "compile\\_only\\_nonexecution" in tex.replace(r"\allowbreak{}", "")
     assert report["provenance"]["ledger_head_sha256"][:14] in tex.replace("\\allowbreak{}", "")
 
 
@@ -168,17 +169,13 @@ def test_rendering_is_deterministic_and_order_independent_of_dossier_input() -> 
     assert words("ship_blocking_pending_distinct_verification") == "ship blocking pending distinct verification"
 
 
-def test_consequence_classes_are_explained_in_business_terms_and_locations_deduplicated() -> None:
-    from appsec_review.reporting import executive_report as E
-    from appsec_review.review.models import SecurityPredicate
-    # Every value of the closed vocabulary has a plain-language meaning, except "other".
-    assert {p.value for p in SecurityPredicate} - {"other"} <= set(E.CONSEQUENCES)
-    dossier = {"security_predicate": "command_injection", "preconditions": [],
-               "sources": [{"path": "src/a.cpp", "start_line": 3, "end_line": 5},
-                           {"path": "src/a.cpp", "start_line": 3, "end_line": 5},
-                           {"path": "src/a.cpp", "start_line": 9, "end_line": 9}]}
-    assert "operating-system commands" in E._attacker_gain(dossier, {})
-    assert E._locations(dossier) == ["src/a.cpp, lines 3-5", "src/a.cpp, line 9"]
+def test_consequence_category_does_not_invent_attacker_gain_or_a_source_identity() -> None:
+    report = report_document()
+    dossier = dossier_for(report["findings"][0], security_predicate="command_injection", statement="")
+    tex = tex_of(report, (bound(dossier),))
+    assert "command injection" in tex and "gain beyond the accepted statement is not established" in tex
+    assert "run operating{-}system commands" not in tex
+    assert "Source span not established" in source_location({"path": "invented.c", "start_line": 3, "end_line": 5})
 
 
 def test_connected_line_ranges_of_one_file_collapse_to_their_union() -> None:
@@ -188,13 +185,10 @@ def test_connected_line_ranges_of_one_file_collapse_to_their_union() -> None:
     assert E.merge_spans([(6, 12), (5, 10), (11, 12), (20, 22), (23, 23)]) == [(5, 12), (20, 23)]   # touching joins
     assert E.merge_spans([(5, 10), (12, 14)]) == [(5, 10), (12, 14)]                                # a gap stays
     assert E.merge_spans([(10, 5)]) == [(5, 10)]                                                    # order-insensitive
-    dossier = {"sources": [{"path": "src/request.cpp", "start_line": 77, "end_line": 81},
-                           {"path": "src/request.cpp", "start_line": 74, "end_line": 78},
-                           {"path": "src/request.cpp", "start_line": 26, "end_line": 30},
-                           {"path": "src/request.cpp", "start_line": 65, "end_line": 83},
-                           {"path": "src/other.cpp", "start_line": 4, "end_line": None}]}
-    assert E._locations(dossier) == ["src/request.cpp, lines 26-30", "src/request.cpp, lines 65-83",
-                                     "src/other.cpp, line range not recorded"]
+    # Evidence register does not merge spans across snapshots merely because their paths agree.
+    source = dossier_for(report_document()["findings"][0])["sources"][0]
+    assert "snapshot t" in source_location(source)
+    assert "snapshot other" in source_location({**source, "target_snapshot": "other"})
 
 
 def dimension_report() -> dict[str, Any]:
@@ -205,12 +199,9 @@ def dimension_report() -> dict[str, Any]:
     return report_document(verified)
 
 
-def _chart_of(document: Document) -> RadarChart:
-    return next(block for block in document.blocks if isinstance(block, RadarChart))
-
-
-def _by_axis(chart: RadarChart, series_index: int) -> dict[str, float | None]:
-    return dict(zip((axis.key for axis in chart.axes), chart.series[series_index].values))
+def coverage_table(document: Document) -> Table:
+    return next(item for block in document.blocks if isinstance(block, Box) for item in block.items
+                if isinstance(item, Table) and item.headers[0] == "Domain")
 
 
 def test_coverage_by_dimension_counts_findings_and_claims_per_axis_and_agrees_with_markdown() -> None:
@@ -220,33 +211,19 @@ def test_coverage_by_dimension_counts_findings_and_claims_per_axis_and_agrees_wi
     finding = report["findings"][0]
     dossier = dossier_for(finding, security_predicate="command_injection", weakness_cwe="CWE-78", title=finding["title"])
     document = executive_document(report, (bound(dossier),))
-    chart = _chart_of(document)
+    table = coverage_table(document)
     assert len(DIMENSIONS) == 12
-    assert [axis.key for axis in chart.axes] == [
+    assert [axis["key"] for axis in report["radar_tracker"]["axes"]] == [
         "Auth", "AzZ", "Inj", "Mem", "Pars", "Cryp", "API", "Path", "Logi", "Deps", "CICD", "Hard"
     ]
-    assert [series.label for series in chart.series] == [
-        "Surface exposure", "Verified coverage", "Corroborated leads", "Confirmed High/Critical"
-    ]
-    surface, verified_cov, leads, confirmed_hc = (_by_axis(chart, idx) for idx in range(4))
-    assert confirmed_hc["Inj"] == 1.0 and sum(confirmed_hc.values()) == 1.0
-    assert all(value is None for value in leads.values())
-    assert surface["Inj"] is None and surface["Mem"] is None
-    assert verified_cov["Inj"] is None and chart.clamped == 0
+    assert len(table.rows) == 12
+    assert table.rows[2][4].text == "1"
+    assert all(row[1].text == row[2].text == row[3].text == "N/A" for row in table.rows)
     headings = [block.text for block in document.blocks if isinstance(block, Heading)]
-    assert headings[:4] == [
-        "Executive summary",
-        "Review coverage by security dimension",
-        "Prioritized remediation roadmap",
-        "Confirmed findings",
-    ]
+    assert headings[:2] == ["Scope and summary", "Technical findings"]
     tex = tex_of(report, (bound(dossier),))
-    assert r"\radarkeyrow{Inj}{Injection \& Command/\allowbreak{}SQL/\allowbreak{}Template}" in tex
-    assert r"\draw[verdict-contradicted,radarline,densely dashdotted]" in tex
-    assert "NEVER evidence that a security domain is clean" in tex
-    assert "Uncovered: no claim was examined here." in tex and "1 accepted package, none confirmed. Not a clearance." in tex
-    assert r"1 confirmed finding (1 high/\allowbreak{}critical) of 1 accepted package." in tex
-    assert "Every accepted package names a member of the vocabulary" in tex
+    assert r"Injection \& Command/\allowbreak{}SQL/\allowbreak{}Template" in tex
+    assert "Package counts do not establish exposure" in tex
     # Markdown parity: 12-axis security radar & verification funnel agrees with dimension_counts.
     markdown = render_markdown(report, evidence_ids=8, gap_ids=16)
     assert "## Coverage by security dimension" in markdown
@@ -263,25 +240,100 @@ def test_certified_radar_is_not_reclassified_by_format_specific_dossiers() -> No
     report = report_document()                     # titles "Synthetic finding n" name no predicate
     dossier = dossier_for(report["findings"][0])   # the dossier says memory_corruption
     document = executive_document(report, (bound(dossier),))
-    assert _by_axis(_chart_of(document), 3)["Mem"] == 0 and _by_axis(_chart_of(document), 2)["Mem"] is None
+    table = coverage_table(document)
+    assert table.rows[3][4].text == "0" and table.rows[3][3].text == "N/A"
     tex = tex_of(report, (bound(dossier),))
-    assert "2 packages named no member of the vocabulary and are counted in no dimension" in tex
-    # Without the dossier nothing is classified: the chart says so instead of drawing a guess.
+    assert "2 packages are unclassified by the accepted domain vocabulary" in tex
+    # Without the dossier nothing is reclassified by this presentation.
     tex = tex_of(report)
-    assert r"\chartempty{N/A: unknown metrics; known values are zero}" in tex
-    assert "2 packages named no member of the vocabulary and are counted in no dimension" in tex
+    assert "2 packages are unclassified by the accepted domain vocabulary" in tex
 
 
 def test_dimension_section_with_nothing_bound_reads_as_uncovered_not_clean() -> None:
     from appsec_review.reporting import executive_report as E
-    blocks = E._dimension_blocks({"findings": [], "verification_backlog": [], "withheld": []}, ())
-    chart = blocks[1]
-    assert isinstance(chart, RadarChart)
-    assert all(value is None for series in chart.series[:3] for value in series.values)
-    assert all(value == 0 for value in chart.series[3].values)
+    report = report_document()
+    report["findings"] = report["verification_backlog"] = report["withheld"] = []
+    del report["radar_tracker"]
+    blocks = E._coverage_blocks(report, ())
     document = Document(title="x", run_id="r", subtitle="", status_badge="EMPTY", status_tone="unresolved",
                         source_date_epoch=0, ledger_head="ab" * 32, blocks=tuple(blocks))
     tex = render_latex(document, TEMPLATE)
-    assert r"\chartempty{N/A: unknown metrics; known values are zero}" in tex
-    assert tex.count("Uncovered: no claim was examined here.") == len(DIMENSIONS)
+    table = coverage_table(document)
+    assert all(row[1].text == row[2].text == row[3].text == "N/A" for row in table.rows)
+    assert all(row[4].text == "0" for row in table.rows)
     assert NOT_CLEAN.replace("-", "{-}") in tex
+
+
+@pytest.mark.parametrize("count", [0, 1, 70], ids=["empty", "single", "many"])
+def test_real_projection_keeps_every_finding_and_complete_long_text(count: int) -> None:
+    report = report_document()
+    seed = report["findings"][0]
+    report["findings"] = [{**seed, "claim_id": f"claim-{n}", "finding_package_id": f"package-{n}",
+                           "title": ("Long & title_%#{} " * 90) + f"END-TITLE-{n}"} for n in range(count)]
+    dossiers = tuple(bound(dossier_for(row, statement=("Accepted mechanism & details. " * 100)
+                                      + f"END-NARRATIVE-{n}"))
+                     for n, row in enumerate(report["findings"]))
+    tex = tex_of(report, dossiers)
+    for n in range(count):
+        assert tex.count(f"END{{-}}NARRATIVE{{-}}{n}" + "}") == 1
+        assert f"END{{-}}TITLE{{-}}{n}" in tex
+    assert tex.count(r"\technicalnote{Attack path: entry to vulnerable function}") == count
+    assert "more characters" not in tex and r"\resizebox" not in tex and r"\begin{minipage}" not in tex
+    assert "".join(_chunks("longword" * 1000, 111)) == "longword" * 1000
+
+
+@pytest.mark.parametrize("ambiguous", [False, True])
+def test_evidence_attribution_and_unknown_transitions_survive_projection(ambiguous: bool) -> None:
+    report = report_document()
+    dossier = dossier_for(report["findings"][0])
+    source = dossier["sources"][0]
+    source["mapping_ambiguous"] = ambiguous
+    dossier["evidence"] = [
+        {"relation_id": "r-input", "entity_id": source["entity_id"], "predicate": "attacker_input_control",
+         "kind": "supports", "strength": "counted_direct", "complete": True, "admissibility": "direct",
+         "content_sha256": "a" * 64, "retrieval_receipt_sha256": "b" * 64, "locator": "PRIVATE_RAW_LOCATOR"},
+        {"relation_id": "r-sink", "entity_id": source["entity_id"], "predicate": "source_to_sink_reachability",
+         "kind": "supports", "strength": "analyst_assessed_not_counted", "complete": False,
+         "admissibility": "analyst_assessed"},
+    ]
+    dossier["taint_path_timeline"] = [{"symbol": "fabricatedOrderedFunction", "step_index": 1}]
+    tex = tex_of(report, (bound(dossier),))
+    assert "PRIVATE" not in tex and "fabricatedOrderedFunction" not in tex
+    assert "Analyst{-}assessed, not counted" in tex and "Cited, counted direct" in tex
+    assert "conditional CBMC witness" in tex and "not established in accepted evidence" in tex
+    assert ("lines 40{-}52" in tex) is not ambiguous
+    assert "a" * 14 in tex and "b" * 14 in tex
+    assert citations(dossier)[0].relation_id == "r-input"
+
+
+def test_scores_and_advisory_patterns_are_not_upgraded_to_official_scores() -> None:
+    report = report_document()
+    report["findings"][0]["title"] = "Unverified title references: " + " ".join(
+        f"CVE-2026-{index:05}" for index in range(100))
+    dossier = dossier_for(report["findings"][0])
+    dossier.update(cvss={"version": "3.1", "vector": "CVSS:3.1/AV:N", "score": 9.8},
+                   epss={"probability": .9}, cves=["CVE-2021-44228"])
+    dossier["scores"] = [{"score_id": "score-one", "sha256": "a" * 64, "provider": "accepted-provider",
+                          "technical_severity": {"scale": "vendor-scale", "rating": "high", "value": "8.7"},
+                          "missing_factors": ["configuration"]}]
+    tex = tex_of(report, (bound(dossier),))
+    assert "accepted{-}provider" in tex and "vendor{-}scale" in tex and "8.7" in tex
+    assert "CVE{-}2021" not in tex and "9.8" not in tex
+    assert "CVE{-}2026{-}00099" in tex
+    assert dict(standards(dossier))["CVSS"].startswith("N/A")
+    assert dict(standards(dossier))["EPSS"].startswith("N/A")
+    assert "taxonomy name not supplied" in tex
+
+
+def test_actual_template_identity_binds_executive_not_telemetry_skeleton(tmp_path: Path) -> None:
+    import shutil
+    from appsec_review.review.models import IntegrityError
+    for name in ("appsec-report.cls", "appsec-palette.tex", "technical-report-skeleton.tex"):
+        shutil.copyfile(TEMPLATE / name, tmp_path / name)
+    before = template_identity(tmp_path)
+    path = tmp_path / "technical-report-skeleton.tex"
+    path.write_text(path.read_text() + "% layout change\n")
+    assert template_identity(tmp_path)["sha256"] != before["sha256"]
+    path.unlink()
+    with pytest.raises(IntegrityError, match="missing or symbolic"):
+        template_identity(tmp_path)

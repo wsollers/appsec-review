@@ -65,8 +65,9 @@ These are export-completeness semantics, not independent verification, runtime v
 or a clean-target verdict. The gate's real review/coverage gaps remain status-affecting.
 Reachability is not inferred from a
 confirmed adjudication; chain severity is copied from the certified manifest, with missing
-ratings explicitly `unrated`. The executive release banner follows ship-block decisions;
-high severity alone does not impose a new release policy. Proposed patches and static checks
+ratings explicitly `unrated`. JSON and Markdown retain the accepted ship-block decisions;
+the technical executive report does not make release recommendations. High severity alone
+does not impose a new release policy. Proposed patches and static checks
 are not labelled verified fixes.
 
 ## The gate
@@ -380,32 +381,47 @@ the separately qualified exact remediation described in [export integrity](#fina
 `report.render` writes `final-report.html`; `report.render_pdf` writes `final-report.pdf`, executive
 reports whose readers are the project's tech lead and business owner. Their common document model is built by
 `appsec_review.reporting.executive_report.executive_document` (a pure function of `final-report.json`
-and the bound dossier documents) and rendered with the shared LaTeX template and `tool-report-latex`
-image exactly as the dossiers are (`SOURCE_DATE_EPOCH` 0; the `.tex` is byte-identical for the same
+and the bound dossier documents). `reporting.executive_latex` renders the executive-only
+`technical-report-skeleton.tex` with the common class and the existing `tool-report-latex`
+image (`SOURCE_DATE_EPOCH` 0; the `.tex` is byte-identical for the same
 inputs). The container rendering, receipt and dossier binding live in
 `appsec_review.jobs.job_final_report_publication.pdf`.
 
 It contains, in plain language:
 
-- an executive summary: confirmed, backlog and withheld counts, the review status and whether the
-  review may be presented as complete (and, from `limitations`, why not), the ship-block counts in
-  words, and what "not performed by policy" means (generated PoCs and regressions were compiled only,
-  never executed; compilation is not runtime proof);
-- review coverage by security dimension: the same report-owned twelve-axis, four-series radar
+- a compact scope/summary with confirmed, backlog and withheld counts and finding IDs pointing to
+  details. Ordinary headings replace the cover, slogans, readiness banner and remediation roadmap.
+  No owners, deadlines or release recommendations are invented;
+- review coverage by security dimension: pageable tables of the report-owned domain measurements
   and metric reasons used by JSON/Markdown, described in
   [domain coverage](#domain-coverage-and-unknown-measurements-t-5088). Format-specific dossier
   metadata does not reclassify the certified radar. Unknown metrics remain N/A, not measured zero
   or clean coverage;
 - one entry per confirmed finding: what the weakness is (the dossier statement and CWE), where it is
-  (file and line range), what an attacker gains (the accepted security predicate and preconditions),
-  the technical severity in words, whether an independent verifier confirmed it (state, label,
-  independence and judge verdict), the ship-block status in words, and the remediation proposals;
-- attack chains, proof-of-trigger outcomes, remediation proposals and remediation validation, each with
-  its status in words and its items; a `none_available` section states its reason and that this is a
+  (snapshot/file-bound source spans), accepted mechanism/impact and preconditions, technical severity,
+  independence and judge qualifications, remediation invariants, proposed checks and recorded check
+  outcomes. Full narratives are not repeated in the summary;
+- a per-finding entry-to-function attack-path table and evidence register. The current dossier
+  contract supplies predicate citations and source context, **not authenticated ordered calls,
+  function symbols, guard dispositions or entry-to-sink edges**. Those entries explicitly say
+  “not established in accepted evidence.” Citation order and the legacy timeline never become
+  execution order. Counted citations, analyst-assessed/noncounted evidence, assumed prerequisites
+  and unknown transitions remain distinct. Conditional CBMC witnesses are not promoted to external
+  reachability or exploitability proof;
+- CWE IDs only from the accepted mechanism mapping; absent taxonomy names are explicit. The
+  current accepted contract carries no verified affected-version/advisory CVE linkage, supported
+  CVSS version/vector/provenance, or date-pinned FIRST EPSS input: those panels are **N/A with
+  reasons**, not zero. Separately attributed provider scores retain their scale, rating, value,
+  source ID/hash and missing factors without being relabelled CVSS/EPSS. No network lookup,
+  severity-to-vector inference, local EPSS calculation or synthetic fallback fills a panel;
+- attack-chain membership, compile-only outcomes, remediation proposals and remediation validation, each with
+  its status and its items. Chain composed severity remains separately attributed; domain transitions
+  are not source-resolved boundaries, and component roles do not establish call order.
+  A `none_available` section states its reason and that this is a
   limit of the review, never evidence that the target is clean;
 - the verification backlog and withheld packages, listed as unconfirmed or withheld, never as findings;
 - limitations grouped as gaps, stages not run and notices, the coverage summary, and which dossiers
-  were available; and an appendix with the provenance hashes (gate handoff, gate document, review
+  were available; and references with the provenance hashes (gate handoff, gate document, review
   handoff, configuration, ledger head, policy) and the dossier and renderer references.
 
 The finding narratives come only from the dossier JSON the gate binds
@@ -419,6 +435,16 @@ without loaded documents, it retains the certified count and explicitly says
 Neither HTML nor PDF contains exploit code, prompts, payloads, generated functions, exact patch
 text or dossier source excerpts (`sources[*].excerpt` is protected developer content): only
 approved narrative fields and source paths/line ranges appear.
+
+The executive PDF uses breakable prose and repeated-header `longtable` rows. Oversized table cells
+are partitioned into continuation rows without truncation; long finding headings continue as
+readable prose. Fonts are fixed at 10 pt body / 9 pt notes and tables, not shrunk to fit.
+Upstream dossier truncations retain their original field/count/hash notices. Zero, one and many
+findings use the same renderer. The template receipt retains exactly the three consumed files:
+`appsec-report.cls`, `appsec-palette.tex`, and `technical-report-skeleton.tex`. Templates are
+read-only mounts, so source/template changes need the normal source reload, **not an image rebuild**.
+The renderer-family and report/receipt schemas are unchanged; source and template hashes identify
+this presentation. Historical report `/2` and `/3` values remain attributed historical values.
 
 Verification wording preserves the distinction between accepted state, R6 independence and
 provider/model distinctness. A schema-supported `confirmed` finding with explicit false independence

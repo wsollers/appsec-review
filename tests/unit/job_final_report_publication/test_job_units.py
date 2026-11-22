@@ -81,7 +81,9 @@ def dossier_for(finding: dict[str, Any], run_id: str) -> dict[str, Any]:
                     "admissibility": "direct", "complete": True}
                    for key in finding["direct_evidence"] + finding["analyst_assessed_evidence"]],
         excerpts=[{"identity": "asr:source_file:" + "f" * 64,
-                   "location": {"path": "src/parser.c", "source_id": "s", "file_sha256": "f" * 64},
+                   "location": {"path": "src/parser.c", "source_id": "s", "file_sha256": "f" * 64,
+                                "target_snapshot": "synthetic-snapshot", "mapping_method": "exact",
+                                "ambiguous": False},
                    "excerpt_start_line": 40, "excerpt_end_line": 52, "excerpt": EXCERPT}],
         provenance={},
     )
@@ -386,7 +388,7 @@ def test_units_execute_clean_and_gapped_flows_and_claim_every_written_file(
     assert published["pdf"] == {"state": "rendered", "reason": receipt["reason"], "file": files["pdf"],
                                 "sha256": files["pdf"]["sha256"], "latex": files["latex"], "receipt": files["receipt"]}
     tex = (fx.root / files["latex"]["path"]).read_text(encoding="utf-8")
-    assert "Executive security review report" in tex and "Synthetic finding 0" in tex
+    assert "Application security review" in tex and "Synthetic finding 0" in tex
 
     # Verify every file written under data/jobs/job_final_report_publication is claimed by DATASETS.
     claims = runtime_claims({JOB_ID: ("load", "report", "acceptance")}) + [
@@ -506,7 +508,9 @@ def test_assemble_render_and_publish_integrity_guards_fail_closed(
     #    bound dossiers, a receipt that hashes other bytes, and a PDF published without a rendered receipt all fail.
     tex_path = fx.root / pdf["files"]["latex"]["path"]
     original_tex = tex_path.read_bytes()
-    atomic_bytes(tex_path, original_tex.replace(b"Executive security review report", b"Edited report"))
+    tampered = original_tex.replace(b"Application security review", b"Edited report")
+    assert tampered != original_tex
+    atomic_bytes(tex_path, tampered)
     forged_pdf = {**pdf, "files": {**pdf["files"], "latex": artifact_ref(fx.root, tex_path)}}
     with pytest.raises(IntegrityError, match="final-report.tex is not the rendering"):
         publish.handler(fx.unit("acceptance.publish_handoff", {**all_outputs, "report.render_pdf": forged_pdf}))

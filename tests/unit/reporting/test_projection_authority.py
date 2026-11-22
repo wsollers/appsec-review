@@ -19,6 +19,7 @@ from tests.unit.job_final_report_publication.test_report_and_render import (
     ROOT, SCHEMAS, _gate_and_report, _memory_axis, _serialized_review, _validator,
 )
 from tests.dossier_fixture import seed as dossier_seed
+from tests.unit.reporting.test_executive_report import coverage_table
 
 
 @pytest.mark.parametrize(
@@ -110,10 +111,9 @@ def test_nullable_metrics_survive_real_schemas_and_renderers(tmp_path, telemetry
     assert telemetry_out["reporting.funnel_conversion_rates"]["leads_to_confirmed_rate"] is None
     assert telemetry_out["reporting.funnel_gap_reasons"]["leads_to_confirmed_rate"] == ["denominator_unknown"]
     document = executive_document(report, ())
-    chart = next(block for block in document.blocks if isinstance(block, RadarChart))
-    assert chart.series[0].values[3] == axis["series"]["surface_exposure"]["unit"]
-    assert chart.series[1].values[3] == axis["series"]["verified_coverage"]["unit"]
-    assert chart.clamped == 0
+    row = coverage_table(document).rows[3]
+    assert row[1].text == ("N/A" if exposure is None else str(exposure))
+    assert row[2].text == ("N/A" if score is None else f"{score:g}%")
     markdown = render_markdown(report, evidence_ids=8, gap_ids=16)
     html = render_executive_html(report)
     latex = render_executive_latex(report, (), ROOT / "containers" / "report" / "latex" / "template").decode()
@@ -121,7 +121,7 @@ def test_nullable_metrics_survive_real_schemas_and_renderers(tmp_path, telemetry
     assert "N/A" in markdown and "N/A" in html and "N/A" in latex
     assert gap in markdown and gap in html and gap.replace("_", r"\_") in latex
     if score == 0:
-        assert chart.series[1].values[3] == 0.0 and chart.series[1].displays[3] == "0% GAP"
+        assert row[2].text == "0%" and "uninspected_exposed_units" in row[5].text
         assert "| 0% |" in markdown
 
 
@@ -174,9 +174,8 @@ def test_corroboration_requires_measurement_not_publication_packages(tmp_path, m
     assert exported["reporting.radar_counts_by_axis_and_series"]["memory_safety_native"]["corroborated_leads"] == measured_leads
     assert exported["reporting.radar_metric_gap_reasons_by_axis"]["memory_safety_native"] == expected_gaps
     document = executive_document(report, ())
-    chart = next(block for block in document.blocks if isinstance(block, RadarChart))
-    assert chart.series[2].values[3] == metric["unit"]
-    assert chart.series[2].displays[3] == ("N/A" if measured_leads is None else str(measured_leads))
+    row = coverage_table(document).rows[3]
+    assert row[3].text == ("N/A" if measured_leads is None else str(measured_leads))
     markdown = render_markdown(report, evidence_ids=8, gap_ids=16)
     html = render_executive_html(report)
     latex = render_executive_latex(report, (), ROOT / "containers" / "report" / "latex" / "template").decode()

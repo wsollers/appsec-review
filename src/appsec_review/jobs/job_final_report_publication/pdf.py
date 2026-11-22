@@ -23,10 +23,10 @@ from appsec_review.container_runtime.catalog import load_catalog
 from appsec_review.container_runtime.executor import ContainerExecutor, ExecutionRequest, Mount
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound_json
 from appsec_review.jobs.completion_contracts import DOSSIER_SCHEMA
-from appsec_review.reporting.dossier_render import TOOL_ID, template_identity
+from appsec_review.reporting.dossier_render import TOOL_ID
 from appsec_review.reporting.dossier_receipts import verify_additional_formats
 from appsec_review.reporting.executive_report import RENDERER, BoundDossier, executive_document
-from appsec_review.reporting.latex import render_latex
+from appsec_review.reporting.executive_latex import render_latex, template_identity
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.secret_redaction import redact_message
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, platform_file_sha256

@@ -1,0 +1,43 @@
+\documentclass{appsec-report}
+%% Executive-only presentation, mounted read-only with the common class.
+\usepackage{longtable}
+\definecolor{technicalInk}{HTML}{20272D}
+\definecolor{technicalMuted}{HTML}{4D5963}
+\definecolor{technicalRule}{HTML}{CDD4D9}
+\geometry{left=19mm,right=19mm,top=20mm,bottom=20mm,headheight=19pt,headsep=6mm,footskip=10mm}
+\setmainfont{Inter-Regular}[Path=/usr/share/fonts/opentype/inter/,Extension=.otf,
+  BoldFont=Inter-SemiBold,ItalicFont=Inter-Italic,BoldItalicFont=Inter-SemiBoldItalic,
+  RawFeature={-calt;-liga;-dlig}]
+\setsansfont{Inter-Regular}[Path=/usr/share/fonts/opentype/inter/,Extension=.otf,
+  BoldFont=Inter-SemiBold,ItalicFont=Inter-Italic,BoldItalicFont=Inter-SemiBoldItalic,
+  RawFeature={-calt;-liga;-dlig}]
+\color{technicalInk}
+\linespread{1.04}
+\setlength{\parskip}{4pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{\fill}
+\setlength{\tabcolsep}{4pt}
+\fancyhf{}
+\fancyhead[L]{\fontsize{8}{10}\selectfont Application security review}
+\fancyhead[R]{\fontsize{8}{10}\selectfont\color{technicalMuted}Technical report}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{technicalRule}\leaders\hrule height 0.4pt\hfill}}
+\fancyfoot[L]{\fontsize{8}{10}\selectfont\color{technicalMuted}Accepted evidence; limitations retained}
+\fancyfoot[R]{\fontsize{8}{10}\selectfont\color{technicalMuted}\thepage\ / \pageref{LastPage}}
+\makeatletter\let\ps@plain\ps@fancy\makeatother
+\newcommand{\technicaltitle}[1]{{\fontsize{18}{22}\selectfont\bfseries #1\par}\vspace{3pt}}
+\newcommand{\technicalheading}[2]{\par\needspace{5\baselineskip}\vspace{8pt}%
+  \hypertarget{#2}{}\pdfbookmark[1]{#1}{#2}%
+  {\fontsize{12}{15}\selectfont\bfseries #1\par}\nobreak\vspace{2pt}}
+\newcommand{\technicalsubheading}[1]{\par\needspace{4\baselineskip}\vspace{5pt}%
+  {\fontsize{10}{13}\selectfont\bfseries #1\par}\nobreak}
+\newcommand{\technicalpara}[1]{{\raggedright\fontsize{10}{13.5}\selectfont #1\par}}
+\newcommand{\technicalnote}[1]{{\raggedright\fontsize{9}{12.2}\selectfont\color{technicalMuted}#1\par}}
+\newcommand{\technicalfield}[2]{\technicalpara{\textbf{#1.} #2}}
+\newcommand{\technicaltablesize}{\fontsize{9}{12.2}\selectfont\renewcommand{\arraystretch}{1.12}}
+\hypersetup{pdftitle={%%TITLE%%},pdfauthor={appsec-review},
+  pdfsubject={Accepted technical security review},pdfcreator={%%RENDERER%%}}
+\begin{document}
+\technicaltitle{%%TITLE%%}
+\technicalnote{Run: %%RUN%% \quad Accepted review status: %%STATUS%%}
+%%BODY%%
+\end{document}

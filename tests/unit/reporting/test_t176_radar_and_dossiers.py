@@ -258,14 +258,12 @@ def test_executive_report_posture_chains_roadmap_and_multi_format_rendering() ->
     assert md == render_markdown(report, evidence_ids=True, gap_ids=True)
     assert html == render_executive_html(report)
     assert tex == render_latex(executive_document(report, ()), TEMPLATE)
-    assert "<svg" in html
-    svg_start = html.index("<svg")
-    svg_end = html.index("</svg>") + len("</svg>")
-    ET.fromstring(html[svg_start:svg_end])
-    assert html.count('data-series=') == 1
-    assert 'data-series="Surface exposure"' not in html
-    assert 'data-series="Verified coverage"' not in html
-    assert 'data-series="Corroborated leads"' not in html
+    # The technical report shows pageable domain measurements, not the old radar banner.
+    from tests.unit.reporting.test_executive_report import coverage_table
+    table = coverage_table(executive_document(report))
+    assert len(table.rows) == 12
+    assert all(row[1].text == row[2].text == row[3].text == "N/A" for row in table.rows)
+    assert "<svg" not in html
     assert "N/A" in html and "N/A" in md
 
 

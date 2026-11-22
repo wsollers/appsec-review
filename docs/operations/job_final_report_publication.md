@@ -132,6 +132,15 @@ The [handler](../../src/appsec_review/jobs/job_final_report_publication/job.py) 
    configured, invoke the pinned PDF tool. Unknown metrics remain N/A in the source; the receipt
    distinguishes rendered, disabled and failed outcomes.
 
+Executive HTML/PDF use the [technical report presentation](final-report.md#the-executive-pdf):
+compact summary, technical finding narratives, per-finding attack-path evidence/unknowns, separate
+backlog/withheld packages, and coverage/provenance. The PDF's executive-only mounted skeleton uses
+pageable prose/tables rather than the shared diagnostic renderer's cover and radar. Missing
+source-resolved ordered calls, verified advisory linkage, CVSS vectors and date-pinned FIRST EPSS
+are explicit unavailable states, never inferred from labels or filled with mockup data.
+The separate telemetry report, scoring/adjudication policy, model settings and producer contracts
+are unchanged. The three actual executive template files are hash-bound in its PDF receipt.
+
 Optional SARIF enrichment is reported separately from completion gaps. The existing SARIF
 properties bag holds `optional_capability_limitations`: at most one `codeFlows` and one `fixes`
 limitation per supplied finding, each with `finding_id`, `capability` and a bounded reason
