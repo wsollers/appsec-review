@@ -11,7 +11,7 @@ from typing import Any, Mapping, Sequence
 from uuid import UUID
 
 from appsec_review.observability.model_metrics import aggregate_model_calls, label, USAGE_FIELDS
-from appsec_review.observability.monitor_inputs import frozen_inputs, read_json
+from appsec_review.observability.monitor_inputs import frozen_inputs, observation_epoch, read_json
 from appsec_review.observability.operator import OperatorFollower
 from appsec_review.reporting.telemetry.inputs import event_timestamp, JOB_TERMINALS, RUN_TERMINALS, STATUS_ALIASES
 from appsec_review.storage import atomic_json
@@ -28,7 +28,7 @@ class MonitorFollower(OperatorFollower):
     @staticmethod
     def _key(record: Mapping[str, Any]) -> str:
         kind = record["event_type"]
-        if (kind.startswith(("MODEL_CALL_", "JOB_", "TASK_", "RUN_", "GRAPH_", "RESOURCE_"))
+        if (kind == "RESUME_PLANNED" or kind.startswith(("MODEL_CALL_", "JOB_", "TASK_", "RUN_", "GRAPH_", "RESOURCE_"))
                 or "BLOCKED" in kind or kind.endswith(("FAILED", "TIMED_OUT", "CANCELLED"))):
             return OperatorFollower._key(record)
         if kind == "OPERATION_PROGRESS":
@@ -65,6 +65,20 @@ class MonitorFollower(OperatorFollower):
                     projected["provider_charge"] = {
                         "amount": amount, "currency": label(charge.get("currency")),
                         "source": label(charge.get("source"))}
+            if event["event_type"] == "RESUME_PLANNED":
+                decisions = details.get("decisions")
+                projected["resume_decisions_incomplete"] = (
+                    details.get("resume_decisions_incomplete") is True
+                    or not isinstance(decisions, list) or len(decisions) > 200)
+                projected["decisions"] = []
+                for decision in decisions[:200] if isinstance(decisions, list) else ():
+                    if (not isinstance(decision, Mapping) or decision.get("action") not in {
+                            "RUN", "REUSE", "REVALIDATE"} or not isinstance(decision.get("job_id"), str)):
+                        projected["resume_decisions_incomplete"] = True
+                        continue
+                    projected["decisions"].append({
+                        "job_id": label(decision["job_id"]), "action": decision["action"],
+                        "handoff_sha256": label(decision.get("handoff_sha256"))})
             self.records[key] = {
                 **{name: event[name] for name in ("schema", "sequence", "event_id", "timestamp")},
                 **{name: label(event.get(name)) if event.get(name) is not None else None for name in
@@ -86,7 +100,7 @@ def _age(now: datetime, stamp: str | None) -> float | None:
     return max(0, (now - parsed).total_seconds()) if parsed else None
 
 
-def _state(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
+def _lifecycle(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
            *, now: datetime, complete: bool, max_rows: int) -> dict[str, Any]:
     attempts: dict[tuple[str, str], dict[str, Any]] = {}
     units: dict[tuple[str, ...], dict[str, Any]] = {}
@@ -97,8 +111,15 @@ def _state(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
     terminals: set[str] = set()
     blocked = []
     reused_units: set[tuple[str, ...]] = set()
+    planned_reuse: set[str] = set()
+    reused_jobs: set[str] = set()
+    incomplete_reuse_plan = False
     for event in events:
         kind, details, stamp = event["event_type"], event["details"], event["timestamp"]
+        if kind == "RESUME_PLANNED":
+            incomplete_reuse_plan |= details.get("resume_decisions_incomplete") is True
+            planned_reuse.update(decision["job_id"] for decision in details.get("decisions", [])
+                                 if decision["action"] == "REUSE")
         progress_event = kind in {
             "OPERATION_PROGRESS", "JOB_STARTED", "TASK_STARTED", "TASK_COMPLETED", "TASK_SUCCEEDED",
             "TASK_COMPLETED_WITH_GAPS", "TASK_FAILED", "MODEL_CALL_COMPLETED", "TOOL_INVOCATION_COMPLETED",
@@ -143,6 +164,7 @@ def _state(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
         elif kind == "JOB_QUEUED":
             row["status"] = "QUEUED"
         elif kind == "JOB_REUSED":
+            reused_jobs.add(job)
             row["reused"] = True
             status = details.get("completion_status")
             if status in _FINISHED and not row["terminals"]:
@@ -194,7 +216,13 @@ def _state(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
                 continue
             current_units.append({**unit, "elapsed_seconds": _age(now, unit["started_at"]),
                                   "progress_age_seconds": _age(now, unit["last_progress"])})
-    reliable = complete and selected is not None and not gaps and run_status != "CONFLICT"
+    reliable = (complete and selected is not None and not gaps and run_status != "CONFLICT"
+                and not planned_reuse - reused_jobs and not incomplete_reuse_plan)
+    reuse_gaps = (["planned_reuse_without_observed_consumption"] if planned_reuse - reused_jobs else [])
+    if incomplete_reuse_plan:
+        reuse_gaps.append("resume_decisions_incomplete")
+    if reused_jobs:
+        reuse_gaps.append("whole_job_task_reuse_unmeasured")
     return {
         "status": run_status if complete else "UNKNOWN", "run_epoch_sequence": run_epoch,
         "terminal_confirmed": complete and run_status in _FINISHED and not gaps["unsupported_run_status"],
@@ -205,8 +233,14 @@ def _state(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
                  "by_status": dict(sorted(partition.items())), "accounting_complete": reliable},
         "attempts": {"total_observed": len(attempts),
                      "by_status": dict(sorted(Counter(row["status"] for row in attempts.values()).items())),
-                     "reused": sum(row["reused"] for row in attempts.values()),
-                     "retry_attempts": len(attempts) - len(latest), "reused_tasks": len(reused_units)},
+                     "reused": (None if planned_reuse - reused_jobs or incomplete_reuse_plan
+                                else sum(row["reused"] for row in attempts.values())),
+                     "reused_observed": sum(row["reused"] for row in attempts.values()),
+                     "retry_attempts": len(attempts) - len(latest),
+                     "reused_tasks": (None if reused_jobs or incomplete_reuse_plan or planned_reuse - reused_jobs
+                                      else len(reused_units)),
+                     "reused_tasks_observed": len(reused_units), "reuse_gaps": reuse_gaps,
+                     "reuse_accounting_complete": complete and not reuse_gaps},
         "current": [{key: value for key, value in row.items() if key != "terminals"} | {
             "elapsed_seconds": _age(now, row["started_at"]),
             "progress_age_seconds": _age(now, row["last_progress"])} for row in active[:max_rows]],
@@ -216,6 +250,52 @@ def _state(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
         "blocked": blocked[-3:], "omitted_blockage_rows": max(0, len(blocked) - 3),
         "gaps": dict(sorted(gaps.items())),
     }
+
+
+def _state(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
+           *, now: datetime, complete: bool, max_rows: int, dispatch: str | None = None,
+           require_dispatch: bool = False) -> dict[str, Any]:
+    epoch, _ = observation_epoch(events)
+    historical = _lifecycle(events, None, now=now, complete=complete, max_rows=max_rows)
+    prior: dict[tuple[str, str], set[str]] = {}
+    prior_attempts = set()
+    admitted = set()
+    current = []
+    ignored = Counter()
+    for event in events:
+        key = (event["job_id"], event["attempt_id"])
+        kind, details = event["event_type"], event["details"]
+        if event["sequence"] < epoch:
+            prior_attempts.add(key)
+            if kind in JOB_TERMINALS:
+                status = details.get("completion_status") or JOB_TERMINALS[kind]
+                prior.setdefault(key, set()).add(STATUS_ALIASES.get(status, status))
+            continue
+        dispatch_terminal = details.get("dagster_run_id") is not None or event.get("orchestrator") == "dagster"
+        if (kind in RUN_TERMINALS and (
+                dispatch is None and dispatch_terminal
+                or dispatch and details.get("dagster_run_id") != dispatch and (require_dispatch or dispatch_terminal))):
+            ignored["terminal_dispatch_identity_unconfirmed"] += 1
+            continue
+        if kind in {"JOB_STARTED", "JOB_QUEUED", "JOB_REUSED"}:
+            admitted.add(key)
+        if key[0] != "-" and key in prior_attempts and key not in admitted:
+            ignored["prior_epoch_job_event_without_current_admission"] += 1
+            continue
+        if kind == "JOB_REUSED" and details.get("completion_status") is None and len(prior.get(key, ())) == 1:
+            event = {**event, "details": {**details, "completion_status": next(iter(prior[key]))}}
+        current.append(event)
+    state = _lifecycle(current, graph, now=now, complete=complete, max_rows=max_rows)
+    if epoch and state["status"] == "UNKNOWN" and complete:
+        state["status"] = "ACTIVE_UNCONFIRMED"
+    state["run_epoch_sequence"] = epoch
+    state["progress_scope"] = "current_epoch"
+    state["epoch_attempts"] = state["attempts"]
+    state["attempts"] = {**historical["attempts"], "scope": "application_run_all_epochs"}
+    state["gaps"].update(ignored)
+    if ignored:
+        state["jobs"]["accounting_complete"] = False
+    return state
 
 
 def snapshot_delta(current: Mapping[str, Any], previous: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -232,6 +312,8 @@ def snapshot_delta(current: Mapping[str, Any], previous: Mapping[str, Any] | Non
         reason = "snapshot_scope_changed"
     elif any(current.get(key) is None for key in ("configuration_sha256", "source_sha256", "graph_sha256")):
         reason = "snapshot_identity_unavailable"
+    elif current["state"]["progress_scope"] != previous["state"].get("progress_scope"):
+        reason = "progress_semantics_changed"
     elif (current["coverage"]["reset_reason"]
           or current["coverage"]["generation"] != previous.get("coverage", {}).get("generation")
           or current["state"]["run_epoch_sequence"] != previous.get("state", {}).get("run_epoch_sequence")
@@ -316,12 +398,17 @@ def poll_run(run_root: Path, *, dagster_run_id: str | None = None, save: bool = 
     identities = frozen_inputs(run_root, events, max_rows=max_rows)
     graph = identities.pop("graph")
     graph_dagster = graph.get("dagster_run_id") if graph else None
-    if dagster_run_id and graph_dagster and dagster_run_id != graph_dagster:
-        gaps.append("dagster_graph_identity_mismatch")
+    require_dispatch = dagster_run_id is not None
+    if dagster_run_id and dagster_run_id != graph_dagster:
+        gaps.append("dagster_graph_identity_mismatch" if graph_dagster else "dagster_graph_identity_unconfirmed")
         graph, complete = None, False
     dagster_run_id = dagster_run_id or graph_dagster
     last_event = events[-1]["timestamp"] if events else None
-    state = _state(events, graph, now=now, complete=complete, max_rows=max_rows)
+    state = _state(events, graph, now=now, complete=complete, max_rows=max_rows,
+                   dispatch=dagster_run_id, require_dispatch=require_dispatch)
+    if follower.counts["RESUME_PLANNED"] != sum(event["event_type"] == "RESUME_PLANNED" for event in events):
+        state["attempts"].update(reused=None, reused_tasks=None, reuse_accounting_complete=False)
+        state["attempts"]["reuse_gaps"].append("resume_observation_coverage_incomplete")
     report = {
         "schema": SCHEMA, "run_id": run_root.name, "dagster_run_id": dagster_run_id,
         "observed_at": now.isoformat(), **identities, "state": state,
@@ -340,6 +427,7 @@ def poll_run(run_root: Path, *, dagster_run_id: str | None = None, save: bool = 
         "signals": ["no_recent_events_is_not_proof_of_dead_worker"] if (
             _age(now, last_event) is None or _age(now, last_event) >= 300) else [],
     }
+    report["models"]["scope"] = "application_run_all_epochs"
     report["gaps"] = sorted(set(report["gaps"] + gaps + (
         ["pipeline_" + follower.read_status] if not complete else [])))
     if state["terminal_confirmed"] and report["models"]["totals"]["statuses"].get("RUNNING"):
@@ -375,13 +463,16 @@ def render_report(report: Mapping[str, Any]) -> str:
         f"Profile {shown(report['profile'])} | source {shown(report['source_sha256'])}",
         "Frozen models: " + (", ".join(f"{row['provider']}/{row['model']}"
                                       for row in report["configured_models"]) or "unknown"),
-        f"{state['status']} | jobs total/completed/running/remaining "
+        f"{state['status']} | current epoch {state['run_epoch_sequence']} jobs total/completed/running/remaining "
         f"{shown(jobs['total'])}/{shown(jobs['completed'])}/{shown(jobs['running'])}/{shown(jobs['remaining'])}"
         f" | states {json.dumps(jobs['by_status'], sort_keys=True)}"
         + (" (provisional/incomplete)" if not jobs["accounting_complete"] else ""),
-        f"Attempts {state['attempts']['total_observed']} (retries {state['attempts']['retry_attempts']}, "
-        f"reused {state['attempts']['reused']}, reused tasks {state['attempts']['reused_tasks']}); "
+        f"Historical attempts {state['attempts']['total_observed']} (retries {state['attempts']['retry_attempts']}, "
+        f"reused {shown(state['attempts']['reused'])}, reused tasks {shown(state['attempts']['reused_tasks'])}); "
         f"{json.dumps(state['attempts']['by_status'], sort_keys=True)}",
+        f"Current epoch observed attempts {state['epoch_attempts']['total_observed']}; "
+        f"reused jobs {shown(state['epoch_attempts']['reused'])}, "
+        f"reused tasks {shown(state['epoch_attempts']['reused_tasks'])}.",
     ]
     for row in state["current"]:
         lines.append(f"  {row['job']}/{row['attempt']} {row['status']} elapsed "
@@ -389,7 +480,7 @@ def render_report(report: Mapping[str, Any]) -> str:
     for row in state["current_steps"]:
         lines.append(f"  step {row['job']}/{row['step']}/{row['task']} elapsed "
                      f"{shown(row['elapsed_seconds'])}s; progress age {shown(row['progress_age_seconds'])}s")
-    lines.append(f"Model totals: fresh/reused/retry {model['fresh_calls']}/{model['reused_calls']}/"
+    lines.append(f"Model totals (all epochs): fresh/reused/retry {model['fresh_calls']}/{model['reused_calls']}/"
                  f"{model['retry_calls']}; statuses {json.dumps(model['statuses'], sort_keys=True)}; "
                  f"invalid-output {model['invalid_output_calls']}; "
                  + "/".join(usage(model["usage"][name]) for name in USAGE_FIELDS)
@@ -417,7 +508,8 @@ def render_report(report: Mapping[str, Any]) -> str:
         lines.append(f"Top {metric}: " + (", ".join(
             f"{row['job']}/{row['role']}={row['known_value']}" for row in rows) or "unknown"))
     lines.append("Delta: " + json.dumps(report["delta"], sort_keys=True))
-    gaps = list(report["gaps"]) + list(state["gaps"]) + list(report["models"]["gaps"])
+    gaps = sorted(set(list(report["gaps"]) + list(state["gaps"]) + list(report["models"]["gaps"])
+                      + state["attempts"]["reuse_gaps"] + state["epoch_attempts"]["reuse_gaps"]))
     lines.append(f"Coverage {report['coverage']['status']} @ sequence {report['coverage']['sequence']}; "
                  f"last event {shown(report['coverage']['last_event_at'])}; "
                  f"gaps {', '.join(gaps) or 'none detected in bounded telemetry'}.")

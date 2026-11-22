@@ -36,12 +36,16 @@ guidance, not runtime worker guidance and not a model tool.
 > total/completed/running/remaining, status and attempt/reuse partitions, current jobs/steps and
 > elapsed/last-progress age, model counts/status/retries/usage/timing, top hotspots and reliable deltas.
 > Include null usage/costs, lower bounds, stale/missing/corrupt/bounded data and receipt coverage.
+> Current-epoch job progress is distinct from historical attempts and all-epoch model/cost totals.
+> Never count an earlier completion as current before current admission or observed reuse.
 > Distinguish quiet or blocked work from a proved dead process, and retry/invalid-output work worth
 > investigating from proved waste. High token use alone is not waste or a finding.
 > On a trustworthy terminal run status, post a final summary (including any incomplete jobs,
 > telemetry and expected/unexpected gaps), then clear **this monitor's** session schedule using
 > `save_session_automation(clear=true)`. If terminal evidence conflicts with the exact Dagster
 > dispatch, keep status unconfirmed and ask the owner to reconcile; do not stop the schedule silently.
+> For an explicit Dagster UUID, require a valid graph bound to that UUID and a current terminal event
+> naming it; missing, invalid, unbound or unrelated evidence never authorizes schedule cleanup.
 > Monitoring is read-only except the bounded run-owned monitor checkpoint and snapshot.
 > Never stop/restart/retry/resume a run, execute target code or models, rebuild/reload services,
 > change frozen sources/profiles, relax policies, or claim review/security quality without separate

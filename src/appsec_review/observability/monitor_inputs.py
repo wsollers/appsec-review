@@ -10,10 +10,37 @@ from uuid import UUID
 
 from appsec_review.observability.model_metrics import label
 from appsec_review.runtime.selection import resolved_job_is_enabled
+from appsec_review.reporting.telemetry.inputs import RUN_TERMINALS
 from appsec_review.storage import canonical_json
 
 GRAPH_SCHEMA = "appsec-review/run-graph/1"
 MAX_JSON_BYTES = 8 * 1024 * 1024
+
+
+def observation_epoch(events: Sequence[Mapping[str, Any]]) -> tuple[int, int]:
+    """Current execution boundary and the earliest graph selection that can belong to it."""
+    epoch = graph_floor = last_sequence = selection = 0
+    dispatch = graph_identity = None
+    terminal = False
+    for event in events:
+        kind, details, sequence = event["event_type"], event["details"], event["sequence"]
+        if kind == "RUN_GRAPH_SNAPSHOT":
+            identity = details.get("graph_reference", {}).get("sha256")
+            candidate_dispatch = details.get("dagster_run_id")
+            if (not epoch or terminal or identity != graph_identity
+                    or candidate_dispatch != dispatch):
+                epoch = graph_floor = sequence
+                terminal = False
+            selection, graph_identity, dispatch = sequence, identity, candidate_dispatch
+        elif kind == "RUN_STARTED":
+            # Dagster may admit inputs between selection and its first RUN_STARTED.
+            graph_floor = selection if selection and (selection == epoch or selection == last_sequence) else sequence
+            epoch, terminal = sequence, False
+        elif kind in RUN_TERMINALS:
+            terminal = (not dispatch or details.get("dagster_run_id") == dispatch
+                        or details.get("dagster_run_id") is None and event.get("orchestrator") != "dagster")
+        last_sequence = sequence
+    return epoch, graph_floor
 
 
 def read_json(root: Path, relative: str, *, limit: int = MAX_JSON_BYTES,
@@ -159,9 +186,11 @@ def frozen_inputs(root: Path, events: Sequence[Mapping[str, Any]], *, max_rows: 
         enabled, models = [], set()
     graph = None
     graph_sha = None
-    latest_graph = next((event for event in reversed(events)
-                         if event["event_type"] in {"GRAPH_STARTED", "RUN_GRAPH_SNAPSHOT"}
-                         and event["details"].get("graph_reference")), None)
+    _, graph_floor = observation_epoch(events)
+    latest_graph = next((event for event in reversed(events) if event["sequence"] >= graph_floor
+                         and (event["event_type"] == "RUN_GRAPH_SNAPSHOT"
+                              or event["event_type"] == "GRAPH_STARTED"
+                              and event["details"].get("graph_reference"))), None)
     try:
         ref = latest_graph["details"]["graph_reference"] if latest_graph else None
         if not isinstance(ref, dict) or config_sha is None:

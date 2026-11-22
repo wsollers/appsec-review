@@ -215,6 +215,13 @@ class GraphRunner:
                                                 "attempt_id": handoff["attempt_id"],
                                                 "handoff_sha256": decision.handoff_sha256,
                                                 "attempt_root": str((run_root / pointer["handoff_path"]).parent)}
+                        PipelineLog(run_root).write(
+                            "JOB_REUSED", run_id=run_id, job_id=job.job_id,
+                            attempt_id=handoff["attempt_id"], trigger=trigger,
+                            orchestrator=correlation.get("system", "application"),
+                            details={"handoff_sha256": decision.handoff_sha256,
+                                     "completion_status": handoff["completion_status"],
+                                     "dagster_run_id": correlation.get("run_id")})
                         continue
                     execute = runner.run_or_reuse if decision.action == "REVALIDATE" else runner.run
                     outcome = execute(job, run_id=run_id, trigger=trigger, orchestration=orchestration,
@@ -230,7 +237,9 @@ class GraphRunner:
                 PipelineLog(run_root).write("GRAPH_FAILED", run_id=run_id, level="ERROR", trigger=trigger,
                     orchestrator=dict(orchestration or {}).get("system", "application"),
                     message="application graph stopped at failed job",
-                    details={"error_type": type(exc).__name__, "completed_handoffs": upstream})
+                    details={"error_type": type(exc).__name__, "completed_handoffs": upstream,
+                             "dagster_run_id": correlation.get("run_id")
+                             if correlation.get("system") == "dagster" else None})
                 terminal["run_root"] = run_root
                 raise
             graph_status = ("COMPLETED_WITH_GAPS" if any(
@@ -241,10 +250,14 @@ class GraphRunner:
                 run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
                 details={"handoffs": completed_handoffs, "completion_status": graph_status,
+                         "dagster_run_id": correlation.get("run_id")
+                         if correlation.get("system") == "dagster" else None,
                          "duration_ms": max(0, int((datetime.now(timezone.utc) - graph_started).total_seconds() * 1000))})
             PipelineLog(run_root).write("RUN_COMPLETED", run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
-                details={"completion_status": graph_status, "handoffs": completed_handoffs})
+                details={"completion_status": graph_status, "handoffs": completed_handoffs,
+                         "dagster_run_id": correlation.get("run_id")
+                         if correlation.get("system") == "dagster" else None})
             terminal["run_root"] = run_root
             orchestration_receipt = None
             if correlation.get("system") and correlation.get("run_id"):

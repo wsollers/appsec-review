@@ -53,6 +53,26 @@ status command, names its observation time and resolves conflicting evidence exp
   includes queued/unknown jobs, not running or terminal jobs. One latest observed attempt per job
   contributes to these counts; attempts/retries and reused work are reported separately.
   Reuse with no terminal disposition is unknown, never presumed fresh successful execution.
+- Progress belongs to the **current execution epoch**, beginning at a fresh `RUN_STARTED` or
+  a new dispatch/graph selection. Old attempts remain in the explicitly historical attempt totals
+  and model/cost totals (`application_run_all_epochs`), but old completions do not advance the current
+  graph. A prior attempt enters current progress only after a current start/queue admission or
+  an actual `JOB_REUSED` observation. A plan alone is not consumption. Graphs missing from the current
+  epoch cannot borrow the older epoch's denominator; current subset graphs exclude historical jobs.
+  `epoch_attempts` and `attempts` keep these scopes separate, and epoch changes invalidate deltas.
+- With explicit `--dagster-run-id`, terminal confirmation requires both a valid graph bound to that
+  UUID and a current terminal event positively naming the same UUID. Missing, invalid or unbound graph
+  evidence, an untagged terminal, and another dispatch's terminal cannot trigger a final summary or
+  schedule cleanup. Matching graph metadata alone does not make a late old terminal current.
+  Direct GraphRunner runs without a Dagster UUID still use their application-run/current-epoch
+  terminal events. Event-stream coverage and lifecycle/dispatch confirmation are distinct flags.
+- Direct GraphRunner writes the existing `JOB_REUSED` observation when it actually consumes its
+  accepted reuse decision, retaining attempt, disposition and handoff identity without reexecuting
+  work or changing admission/reuse policy. Historical `RESUME_PLANNED` records retain only bounded
+  structured job/action/hash fields in the monitor; unmatched planned reuse is unknown, not zero
+  consumption. Whole-job reuse does not emit task reuse measurements: `reused_tasks` stays null,
+  `reused_tasks_observed` remains the known count, and `reuse_gaps` / `reuse_accounting_complete`
+  disclose that limitation. Old checkpoints missing structured resume observations name the gap.
 - Models are grouped by served provider/model when available, requested pair otherwise; frozen
   configured pairs are shown separately. Roles/jobs identify hotspots. A retry count of three is
   not three new calls: only distinct invocation IDs count. Replay/cache results and reused tasks/
