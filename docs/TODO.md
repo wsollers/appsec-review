@@ -503,6 +503,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5269 | [Establish the smoke-target evaluator isolation boundary](#t-5269-establish-the-smoke-target-evaluator-isolation-boundary) | testing | open |
 | T-5270 | [Align shipped profile notices and inherited model bindings](#t-5270-align-shipped-profile-notices-and-inherited-model-bindings) | pipeline | open |
 | T-5271 | [Align Alternate CPG transport directions with the core](#t-5271-align-alternate-cpg-transport-directions-with-the-core) | graph | open |
+| T-5272 | [Carry authenticated attack paths and standard scores into report inputs](#t-5272-carry-authenticated-attack-paths-and-standard-scores-into-report-inputs) | review | open |
 
 ## Active entries
 
@@ -6674,6 +6675,29 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 - **Refs:** `src/appsec_review/mcp/schema.py`, `src/appsec_review/retrieval/graph.py`,
   `docs/schemas/inference-security-review/worker-turn.schema.json`;
   `docs/architecture/querying-and-indexing-skills.md`.
+
+### T-5272 — Carry authenticated attack paths and standard scores into report inputs
+
+- **State:** open
+- **Area:** review
+- **Why:** The approved technical report format can display evidence and explicit unavailable
+  states, but its current gate-bound dossier inputs do not carry authenticated ordered function
+  edges, affected-version CVE associations, standard CVSS vectors or date-pinned FIRST EPSS
+  records. The synthetic design examples are not production data; the renderer must not infer
+  these values from severity words, unordered citations or unverified advisory text.
+- **Scope:** Extend the owning typed producer/dossier/report projections and admitted read
+  contracts with exact evidence identities, path-edge qualification, validated versioned vectors
+  and verified advisory/EPSS provenance. Preserve existing claim authority and source custody,
+  and leave genuinely unavailable or unsupported fields explicit. Do not add live feed fetching
+  or model calls to rendering, or treat a bounded CBMC result as external reachability.
+- **Done when:** Focused producer-to-report tests demonstrate a fully source-bound ordered path,
+  applicable CVE/CWE associations, reproducible supported CVSS calculation and dated FIRST EPSS
+  alongside missing/partial/unsupported negative controls, without fabricated values or new
+  finding promotion. An existing accepted input with no such evidence still renders unavailable.
+- **Refs:** `src/appsec_review/reporting/technical_evidence.py`,
+  `src/appsec_review/reporting/executive_report.py`,
+  `src/appsec_review/jobs/job_dossier_publication/job.py`,
+  `docs/operations/final-report.md`; approved report design and production integration, 2026-11-22.
 
 ## Legacy backlog
 
