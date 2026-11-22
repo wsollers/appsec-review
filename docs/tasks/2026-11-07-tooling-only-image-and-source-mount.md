@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "images and deployment"
 status: "historical"
 jobs: []
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # TASK - TOOLING-ONLY DAGSTER IMAGE WITH A MOUNTED SOURCE CHECKOUT
 

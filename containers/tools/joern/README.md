@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "images and deployment"
 status: "current"
 jobs: ["job_cpg_analysis"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # tool-joern: pinned Joern/c2cpg runtime closure
 

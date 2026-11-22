@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: ["job_final_report_publication", "job_inference_security_review"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Report rendering (PDF and single-page HTML)
 

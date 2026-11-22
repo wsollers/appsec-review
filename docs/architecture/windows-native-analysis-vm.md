@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "target acquisition and build"
 status: "historical"
 jobs: []
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Future Windows native-analysis project
 

@@ -4,7 +4,7 @@ kind: "history"
 subsystem: "review inference and guidance"
 status: "historical"
 jobs: ["job_cpp_compiled_analysis", "job_review_data_indexing", "job_tree_sitter_ast"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Design Review: Formal Verification Docs (2026-11-07)
 

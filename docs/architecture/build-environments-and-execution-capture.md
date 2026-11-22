@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "target acquisition and build"
 status: "current"
 jobs: ["job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_cpp_compiled_analysis", "job_language_build", "job_post_build_security_assessment", "job_project_build"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Build environments, execution capture, and secret scanning
 

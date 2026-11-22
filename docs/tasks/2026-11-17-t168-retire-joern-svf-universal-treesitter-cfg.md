@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "code intelligence"
 status: "current"
 jobs: ["job_cpg_analysis", "job_image_pin_verification", "job_svf_alias_analysis", "job_tree_sitter_ast"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Task plan T-168: Retire Joern and SVF active paths and standardize universal Tree-sitter CFG extraction
 

@@ -4,7 +4,7 @@ kind: "review"
 subsystem: "code intelligence"
 status: "historical"
 jobs: ["job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_inference_security_review", "job_review_data_indexing"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Code-graph precomputation: implementation record
 

@@ -4,7 +4,7 @@ kind: "review"
 subsystem: "scanners and evidence collection"
 status: "historical"
 jobs: ["job_clang_static_analysis", "job_dependency_intelligence", "job_profile_data", "job_test_coverage"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Engineering-signal jobs implementation
 

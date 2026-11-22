@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_cpp_compiled_analysis", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_evidence_collection", "job_inference_security_review"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Task plan T-170: Preserve Semgrep codeFlows deduplicate scanner leads and verify SCA reachability
 

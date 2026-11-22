@@ -4,7 +4,7 @@ kind: "process"
 subsystem: "testing and operations"
 status: "current"
 jobs: ["job_project_build", "job_third_party_data_sync"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Test-tier walk: the per-job session brief (T-113)
 

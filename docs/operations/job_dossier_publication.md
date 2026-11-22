@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: ["job_dossier_publication"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 
 # dossier_publication

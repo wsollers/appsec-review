@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_inference_security_review", "job_review_data_indexing", "job_review_package_assembly", "job_review_prioritization", "job_security_tagging", "job_threat_model_generation"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Threat-driven hunting enhancement
 

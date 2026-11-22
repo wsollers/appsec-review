@@ -4,9 +4,11 @@ kind: "operations"
 subsystem: "code intelligence"
 status: "current"
 jobs: ["job_cbmc_analysis"]
-last reconciled: "b9aad27b40ea7e3cb52080254c1f7e60f1fa0556"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # CBMC bounded analysis
+
+## Purpose
 
 `job_cbmc_analysis` adds bounded function-entry analysis to eligible, accepted C/C++ scanner
 leads before review indexing. It is enabled by default, uses no model, and never executes a
@@ -47,6 +49,36 @@ integrity failures propagate; the job does not catch or bypass `ReviewStopped`.
 Set `settings.enabled = false` to omit the job from a newly resolved graph. Frozen runs
 retain their original configuration and must not be edited to follow this setting.
 Disabling a producer or selecting no eligible seeds never establishes safety.
+
+## Process
+
+### `load`
+
+1. Read admitted C/C++ case material and eligible scanner datasets through the typed input
+   contract. Verify snapshot, source/compile identities and source-mapped seed locations.
+2. Select deterministic bounded scope/translation-unit/function work. Keep missing inputs,
+   unsupported selections and budget omissions explicit; no whole-program fallback is inferred.
+3. Publish `plan.json` with its verified nested references and canonical job-level gaps.
+
+### `analyze`
+
+1. Reverify the retained plan. Stage only accepted source bytes; reject unsupported semantic
+   compiler arguments instead of silently dropping them.
+2. Compile the original translation unit to GOTO and resolve source-located function entries
+   from bounded discovery output. Reuse verified GOTO read-only within the attempt.
+3. Run increasing configured unwind bounds through the pinned executor. Classify consistent
+   native results, retain each launched round's output/receipt pair and name unlaunched bounds.
+4. Publish `analysis.json`, source/GOTO/native artifacts, counts and preserved selection/
+   execution gaps. A later failed round cannot borrow the earlier output's receipt identity.
+
+### `acceptance`
+
+1. Reopen the plan/analysis and verify every nested artifact, including failed-discovery
+   diagnostics. Retain parsed native evidence through the active run-owned publication boundary.
+2. Publish indirect `review_signal` results and coverage shards with source/seed identities,
+   bounded property/trace previews and explicit omissions.
+3. Validate the manifest and summary against the exact image, counts and analysis gaps.
+   These immutable outputs are review context, not a final finding decision.
 
 ## Read the result
 
@@ -91,6 +123,52 @@ the originating observation IDs **and exact source hash/line range**, include th
 previews and preserve missing/partial coverage. Existing review adjudication, dossiers and
 publication gates remain authoritative.
 
+## Dataflow
+
+```mermaid
+flowchart LR
+  inputs["Admitted C/C++ source, compile records and scanner seeds"] --> job["job_cbmc_analysis"]
+  job --> plan["load: bounded plan and input identities"]
+  plan --> analysis["analyze: source to GOTO to conditional unwind rounds"]
+  analysis --> raw["Protected source, GOTO, stdout/stderr and paired receipts"]
+  analysis --> acceptance["acceptance: reverified raw closure and summary"]
+  raw --> acceptance
+  acceptance --> index["Indirect results and coverage shards"]
+  index --> packages["Review-data indexing and exact-seed package context"]
+```
+
+## Gaps
+
+Missing applicable inputs, unsupported compilation/mapping, absent function bodies, warnings,
+partial unwinding and exhausted budgets remain explicit coverage limitations. No eligible work
+is not the same as a failed applicable scope. Shared canonical producer gaps have
+`unit_id = null` and are deliberately retained through load, analysis and acceptance; payload
+judgments never widen `ProducerStatus`. Integrity and publication-owner failures refuse
+acceptance/reuse rather than yielding a gap-bearing successful evidence record.
+
+## Acceptance
+
+These are the charter checks for a separately authorized walk, not a claim they ran here:
+
+1. **A. Inputs:** Compare admitted upstream hashes, selected source/compile mappings, seed
+   identities, frozen budgets and the host's actual tooling pin with the accepted plan.
+2. **B. Independent comparison:** Compare a bounded, version-attributed native sample with its
+   raw properties, source locations, unwind status and matching execution receipt. Handwritten
+   JSON fixtures cannot settle real warning/missing-body or function-table behavior.
+3. **C. Gaps:** Reconcile plan omissions, round outcomes, raw-retention failures, indexed coverage
+   and canonical job gaps against the walk's confirmed expected causes; absence is not safety.
+4. **D. Baseline:** Record the exact source, target, configuration, image and accepted artifacts
+   before any later comparison. Preserve old evidence and do not infer another host's readiness.
+
+## Resume and invalidation
+
+Runtime reuse requires matching admitted implementation/configuration/upstream identities and
+an intact accepted artifact closure. Missing or changed source copies, GOTO, discovery/solver
+output or receipts invalidate reuse even when summary bytes remain unchanged. Changed code
+requires normal repair admission; changed host settings require an appropriate newly resolved
+configuration, not edits to a frozen run. Application-code reload and tool-image provisioning
+remain separate, per-host operations; [T-5263](../TODO.md) tracks native rollout/acceptance.
+
 ## Manual validation boundary
 
 Focused units fake only external container/upstream service boundaries and exercise parsing,
@@ -115,9 +193,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cbmc_analysis/job.py#L338) |
-| `analyze` | `analyze.bounded_checks` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cbmc_analysis/job.py#L328) |
-| `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cbmc_analysis/job.py#L322) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cbmc_analysis/job.py#L344) |
+| `analyze` | `analyze.bounded_checks` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cbmc_analysis/job.py#L333) |
+| `load` | `load.accepted_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cbmc_analysis/job.py#L326) |
 
 ### Accepted input declarations
 

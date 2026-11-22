@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "testing and operations"
 status: "current"
 jobs: ["job_poc_generation", "job_sanitizer_build"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Task plan T-175: Gate dynamic PoC and sanitizer execution on sandboxing architecture review
 

@@ -1,30 +1,6 @@
 {
   "documents": [
     {
-      "decision_record": true,
-      "disposition": "keep",
-      "kind": "architecture",
-      "path": "docs/architecture/cbmc-bounded-analysis.md",
-      "reason": "Define source-level bounded CBMC artifacts, judgment limits, consumer integration and implementation plan.",
-      "subsystem": "code intelligence"
-    },
-    {
-      "decision_record": false,
-      "disposition": "keep",
-      "kind": "operations",
-      "path": "docs/operations/job_cbmc_analysis.md",
-      "reason": "Document provisioning, typed budgets, protected evidence, conditional judgments and manual validation.",
-      "subsystem": "code intelligence"
-    },
-    {
-      "decision_record": false,
-      "disposition": "keep",
-      "kind": "operations",
-      "path": "containers/tools/cbmc/README.md",
-      "reason": "Document standalone manual CBMC image acquisition, bounded cross-project use, validation and license obligations without adding a review consumer.",
-      "subsystem": "images and deployment"
-    },
-    {
       "decision_record": false,
       "disposition": "keep",
       "kind": "process",
@@ -174,6 +150,14 @@
       "kind": "operations",
       "path": "containers/tools/blint/README.md",
       "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
+      "subsystem": "images and deployment"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "containers/tools/cbmc/README.md",
+      "reason": "Document manual CBMC tooling acquisition, bounded cross-project use, per-host validation and license obligations; application job behavior remains separately source-mounted.",
       "subsystem": "images and deployment"
     },
     {
@@ -503,6 +487,14 @@
       "path": "docs/architecture/build-topology-and-iterations.md",
       "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": true,
+      "disposition": "keep",
+      "kind": "architecture",
+      "path": "docs/architecture/cbmc-bounded-analysis.md",
+      "reason": "Document implemented source-level CBMC artifacts, conditional judgments, raw-evidence custody and bounded consumer integration without claiming native acceptance.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
@@ -1447,6 +1439,14 @@
       "path": "docs/operations/job_build_iteration.md",
       "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
       "subsystem": "target acquisition and build"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job_cbmc_analysis.md",
+      "reason": "Document provisioning, typed budgets, protected evidence, conditional judgments and manual validation.",
+      "subsystem": "code intelligence"
     },
     {
       "decision_record": false,
@@ -2660,6 +2660,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/dossier/dossier-rendering-receipt-v2.schema.json",
+      "reason": "Retain the protected dossier-format receipt contract and exact artifact custody fields.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/dossier/finding-dossier.schema.json",
       "reason": "Keep finding-dossier.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "reporting and metrics"
@@ -2708,8 +2716,40 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/final-report/final-report-v3.schema.json",
+      "reason": "Retain the versioned historical report contract for existing frozen publications.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/final-report/final-report-v4.schema.json",
+      "reason": "Retain the current final-report contract without treating declared fields as measured outcomes.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/final-report/final-report.schema.json",
       "reason": "Keep final-report.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/final-report/sarif-export-result.schema.json",
+      "reason": "Retain bounded SARIF export outcome and optional-capability accounting.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/final-report/security-radar-tracker-v2.schema.json",
+      "reason": "Retain versioned radar measurements with unknown-versus-zero semantics.",
       "subsystem": "reporting and metrics"
     },
     {
@@ -2727,6 +2767,14 @@
       "path": "docs/schemas/graph-quality-scorecard.schema.json",
       "reason": "Keep graph-quality-scorecard.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "code intelligence"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/history-hotspots-v2.schema.json",
+      "reason": "Retain bounded history-hotspot selection and attribution identities.",
+      "subsystem": "scanners and evidence collection"
     },
     {
       "decision_record": false,
@@ -3014,6 +3062,14 @@
       "kind": "schema",
       "path": "docs/schemas/openvex-export/manifest.schema.json",
       "reason": "Keep manifest.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/openvex-export/openvex-dependencies.schema.json",
+      "reason": "Retain the separate conservative dependency OpenVEX companion contract.",
       "subsystem": "reporting and metrics"
     },
     {
@@ -3485,7 +3541,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-01-model-connectivity.md",
-      "reason": "Preserve Job pass 01 \u2014 `job_model_connectivity` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 01 — `job_model_connectivity` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "review inference and guidance"
     },
     {
@@ -3493,7 +3549,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-02-image-pin-verification.md",
-      "reason": "Preserve Job pass 02 \u2014 `job_image_pin_verification` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 02 — `job_image_pin_verification` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "images and deployment"
     },
     {
@@ -3501,7 +3557,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-03-target-acquisition.md",
-      "reason": "Preserve Job pass 03 \u2014 `job_target_acquisition` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 03 — `job_target_acquisition` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "target acquisition and build"
     },
     {
@@ -3509,7 +3565,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-04-review-intake.md",
-      "reason": "Preserve Job pass 04 \u2014 `job_review_intake` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 04 — `job_review_intake` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "target acquisition and build"
     },
     {
@@ -3517,7 +3573,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-05-target-catalog.md",
-      "reason": "Preserve Job pass 05 \u2014 `job_target_catalog` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 05 — `job_target_catalog` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "target acquisition and build"
     },
     {
@@ -3525,7 +3581,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-06-build-environment-analysis.md",
-      "reason": "Preserve Job pass 06 \u2014 `job_build_environment_analysis` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 06 — `job_build_environment_analysis` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "target acquisition and build"
     },
     {
@@ -3533,7 +3589,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-07-ci-configuration-analysis.md",
-      "reason": "Preserve Job pass 07 \u2014 `job_ci_configuration_analysis` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 07 — `job_ci_configuration_analysis` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "scanners and evidence collection"
     },
     {
@@ -3776,12 +3832,11 @@
     "subsystems": "The eight Stage 6 subsystems plus overview for the executive front page and its SVG."
   },
   "survey": {
-    "inventory_commit": "4f32730db5b5dcaba64e1b64cb376f07cab29fbd",
-    "method": "Surveyed the cumulative changed-file inventory and first-parent history, then classified the full tracked documentation set using headings, navigation, contract references and decision/status text.",
-    "reconciliation": "The cumulative behavior delta has not been fully reconciled; docs/docs-sync.json retains its existing watermark.",
-    "since_commit": "aba6bbb6bef1763a17e5bb8bc94fdd0d13e1d8d4",
-    "status": "inventory-only",
-    "upstream_difference": "The observed upstream smoke-targets prompt is not in this checkout's inventory commit and is not claimed as inventoried here.",
-    "upstream_observed_commit": "3757c8ce30ff0137b39e2992ca219d725495d171"
+    "inventory_commit": "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73",
+    "method": "Reconciled disjoint job/runtime, review/evidence and operations documentation partitions against actual cumulative implementation, configuration, guidance-as-data, schema and related regression assertion changes; closed remaining source-diff coverage and integrated final CBMC/feed-capacity deltas serially.",
+    "reconciliation": "Current prose and diagrams are reconciled to the exact source watermark. Historical decisions, audit evidence and validation outcomes remain historical; generated views are projected from the same checked-in source. This is documentation reconciliation, not runtime acceptance or a claim that every test fixture was re-audited.",
+    "since_commit": "7dce146454df1a220fe6e1772207503aa655ef43",
+    "status": "source-reconciled",
+    "upstream_difference": "The source endpoint is the explicitly assigned local-main commit, including local CBMC and feed-capacity repairs; no push, remote synchronization or active-run deployment is implied."
   }
 }

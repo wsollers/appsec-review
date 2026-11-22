@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "images and deployment"
 status: "current"
 jobs: []
-last reconciled: "b9aad27b40ea7e3cb52080254c1f7e60f1fa0556"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Reusable CBMC tooling image
 

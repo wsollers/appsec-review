@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_change_context_analysis", "job_ci_configuration_analysis", "job_image_pin_verification", "job_model_connectivity", "job_review_intake", "job_review_prioritization", "job_source_history_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_tree_sitter_ast"]
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Source history analysis
 

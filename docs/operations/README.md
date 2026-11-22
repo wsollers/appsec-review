@@ -4,7 +4,7 @@ kind: "generated"
 subsystem: "testing and operations"
 status: "current"
 jobs: []
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 
 <!-- generated from: document frontmatter by scripts/generate-docs.py; do not edit -->
@@ -137,7 +137,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 | [Generic language-build operations](language-build.md) | target acquisition and build | current |
 | [Lead severity triage](lead-severity-triage.md) | review inference and guidance | current |
 | [Review metrics](metrics.md) | reporting and metrics | current |
-| [Model profiles: dev, prod, copilot-dev and copilot-prod](model-profiles.md) | review inference and guidance | current |
+| [Runtime model profiles](model-profiles.md) | review inference and guidance | current |
 | [Native SPDX inventory](native-sbom.md) | scanners and evidence collection | current |
 | [OpenVEX findings export](openvex-export.md) | reporting and metrics | current |
 | [Operator scripts](operator-scripts.md) | testing and operations | current |

@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "code intelligence"
 status: "current"
 jobs: ["job_cbmc_analysis", "job_inference_security_review", "job_review_data_indexing", "job_review_package_assembly"]
-last reconciled: "b9aad27b40ea7e3cb52080254c1f7e60f1fa0556"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Finding-seeded CBMC bounded analysis
 

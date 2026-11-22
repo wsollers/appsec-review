@@ -4,7 +4,7 @@ kind: "generated"
 subsystem: "runtime interchange"
 status: "current"
 jobs: []
-last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py, docs/intelligence-buckets.json, src/appsec_review/tool_inputs.py, src/appsec_review/jobs/cataloging.py, src/appsec_review/review/capability.py by scripts/generate-docs.py; do not edit -->
