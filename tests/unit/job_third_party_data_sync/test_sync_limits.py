@@ -31,6 +31,26 @@ def test_cve_layer_limit_cannot_exceed_total(tmp_path):
         _settings(tmp_path, max_layer_bytes=128, max_total_layer_bytes=64)
 
 
+@pytest.mark.parametrize("domain", ["compressed", "expanded"])
+def test_cve_default_budget_admits_full_replay_without_relaxing_layer_bounds(tmp_path, domain):
+    """Exercise 3018 MiB of accounting without allocating feed-sized fixtures."""
+    settings = _settings(tmp_path)
+    mib = 1024 * 1024
+    remaining = settings.max_total_layer_bytes
+    for size in [398 * mib] * 7 + [232 * mib]:
+        cve._check_layer_bytes(size, settings.max_layer_bytes, remaining, domain)
+        remaining -= size
+    assert remaining == (4096 - 3018) * mib
+    with pytest.raises(ValueError, match="CVE_BIN_TOOL_LAYER_BYTE_LIMIT"):
+        cve._check_layer_bytes(512 * mib + 1, settings.max_layer_bytes, remaining, domain)
+    with pytest.raises(ValueError, match="CVE_BIN_TOOL_TOTAL_LAYER_BYTE_LIMIT"):
+        cve._check_layer_bytes(1, settings.max_layer_bytes, 0, domain)
+    frozen = _settings(tmp_path, max_total_layer_bytes=512 * mib)
+    with pytest.raises(ValueError, match="CVE_BIN_TOOL_TOTAL_LAYER_BYTE_LIMIT"):
+        cve._check_layer_bytes(398 * mib, frozen.max_layer_bytes,
+                              frozen.max_total_layer_bytes - 398 * mib, domain)
+
+
 def _document(size=512):
     return json.dumps({"format": "NVD_CVE", "version": "2.0", "padding": "x" * size,
                        "vulnerabilities": []}).encode()

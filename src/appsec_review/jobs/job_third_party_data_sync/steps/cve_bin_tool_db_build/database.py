@@ -34,7 +34,7 @@ class CveBinToolSettings:
     # never built here; when unset, whatever the tag resolves to is verified (or built unverified).
     image_id: str | None = None
     max_layer_bytes: int = 512 * 1024 * 1024
-    max_total_layer_bytes: int = 512 * 1024 * 1024
+    max_total_layer_bytes: int = 4 * 1024 * 1024 * 1024
 
     @classmethod
     def from_mapping(cls, root: Path, value: Mapping[str, Any]) -> "CveBinToolSettings":
@@ -45,8 +45,10 @@ class CveBinToolSettings:
         image_id = value.get("image_id")
         if image_id is not None and (not isinstance(image_id, str) or not _IMAGE_ID.fullmatch(image_id)):
             raise ValueError("cve-bin-tool image_id must be sha256:<64 lowercase hex>")
-        limits = {key: value.get(key, 512 * 1024 * 1024)
-                  for key in ("max_layer_bytes", "max_total_layer_bytes")}
+        limits = {key: value.get(key, default) for key, default in (
+            ("max_layer_bytes", 512 * 1024 * 1024),
+            ("max_total_layer_bytes", 4 * 1024 * 1024 * 1024),
+        )}
         if any(type(bound) is not int or bound < 1 for bound in limits.values()):
             raise ValueError("cve-bin-tool byte bounds must be positive integers")
         if limits["max_layer_bytes"] > limits["max_total_layer_bytes"]:

@@ -458,7 +458,7 @@ run_timeout_seconds = 3600
 # Conservative ceilings apply independently to compressed and expanded layer bytes.
 # A legitimate full replay may exceed the cumulative ceiling and fail with a named gap.
 max_layer_bytes = 536870912
-max_total_layer_bytes = 536870912
+max_total_layer_bytes = 4294967296
 
 [jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build.tasks.resolve_nvd_snapshot]
 workers = 1
