@@ -25,7 +25,9 @@ Complete the [repository setup](../../README.md#what-you-need) and
   Bootstrap the deployment before using the stack scripts.
 - Sign in to Claude for `dev`/`prod`, or configure the
   [separate Copilot login](model-profiles.md#copilot-with-a-separate-github-identity) for
-  `copilot-dev`/`copilot-prod`. A GitHub CLI login is not the Copilot worker login.
+  the three `copilot-*` profiles. A GitHub CLI login is not the Copilot worker login.
+  Check inherited model declarations too: `copilot-dev`/`copilot-prod` still have Claude CLI
+  profiles, whose readiness is not established by the Copilot catalog probe.
 - Place the target checkout under this repository's `targets/` directory. The guarded Dagster
   launcher requires unchanged tracked source in this appsec checkout and a clean Git target,
   including no untracked files. Leave both checkouts unchanged while a review uses them.
@@ -53,7 +55,7 @@ work around another session's active review.
 
 Replace `your-app` with the directory name of your checkout under `targets/`. These examples
 explicitly select **`prod`**, which uses production models and larger budgets; use `dev` for a
-smaller pipeline trial. Neither production profile is selected automatically.
+smaller pipeline trial. No production profile is selected automatically.
 
 For a prepared WSL deployment, run from its owning checkout in PowerShell:
 
@@ -108,7 +110,7 @@ These are **`review-start` script options**, not `appsec-review start` options.
 | PowerShell | Shell | Default / when to specify |
 | --- | --- | --- |
 | `-Target your-app` | `--target your-app` | Uses the running container's target when omitted; the checked-in fallback is `appsec-multi-vuln`. Accepts a name under `targets/` or its container path. This checks the target; it does not switch the stack. A different target requires `stack-restart --target` first. |
-| `-Profile prod` | `--profile prod` | New runs inherit the container's profile (`dev` if unset). Choose `prod` or `copilot-prod` explicitly for production models/budgets. A same-family profile change is per run; changing Claude/Copilot family requires a stack restart. |
+| `-Profile prod` | `--profile prod` | New runs inherit the container's profile (`dev` if unset). Choose `prod`, `copilot-prod` or `copilot-carbon-prod` explicitly for production models/budgets. A same-family profile change is per run; changing Claude/Copilot family requires a stack restart. |
 | `-CompilerTarget clang\|msvc` | `--compiler-target clang\|msvc` | Selects the frozen native debug-symbol lane; default `clang`. Resume restores the recorded choice. This does not provision a compiler or select the build-host OS. |
 | `-Overlay none` | `--overlay none` | New runs inherit the container's capacity overlay. `none` explicitly disables it for this run. A file must be under `test/acceptance`; it may change review-team count, Dagster pools, and `review_policy.resources.*`, not models, assurance, or feature gates. |
 | `-Recording off` | `--recording off` | Inherits the container's model recording mode; unset means off. Choices: `off`, `record`, `replay`. Must match the container, so change it with `stack-restart --recording` first. Replay also needs a replay directory that the standard Compose deployment does not pass; use the [local parity procedure](../processes/local-dagster-parity.md), not this launch sequence, for replay. |
@@ -122,13 +124,14 @@ These are **`review-start` script options**, not `appsec-review start` options.
 | `-Wsl`, `-Distro NAME` | Not applicable | PowerShell routing to the WSL stack; default distribution is `Ubuntu-24.04` unless inferred from the chosen WSL checkout path. |
 | `-Help` | `--help` | Show the script's current option list. |
 
-Profile choices are `dev`, `prod`, `copilot-dev` and `copilot-prod`. The
+Profile choices are `dev`, `prod`, `copilot-dev`, `copilot-prod` and `copilot-carbon-prod`. The
 [profile guide](model-profiles.md) and checked-in profile TOMLs own their exact provider, model,
 reasoning and budget selections rather than a second version table here.
 
-Both production profiles admit all generated team packages rather than imposing the dev
-200-package ceiling. Token, turn, query, time and concurrency limits still apply. Production
-does **not** enable medium/low lead exploration. See [model profiles](model-profiles.md) for exact
+All three production profiles use the `"all"` package budget rather than the dev
+200-package ceiling, but launch allocation is still capped by 1,000 active-claim slots.
+Token, turn, query, time and concurrency limits also apply. Production enables medium/low lead
+exploration with reserve 20; development leaves it off. See [model profiles](model-profiles.md) for exact
 limits and distinct-model verification behavior.
 
 For an approved host capacity increase, select the checked-in
@@ -158,10 +161,11 @@ their frozen configuration.
 | Full assessment branches | Both drivers include enabled CI configuration analysis, post-build security assessment, OWASP control assessment and security tagging. | Choose the direct or Dagster route for its execution/operations boundary, not different semantic job membership. |
 | ASan/UBSan rebuild evidence | `jobs.job_sanitizer_build.settings.enabled = true` | No opt-in needed. Rebuilds accepted native units; does **not** execute produced binaries. See [sanitizer builds](sanitizer-build.md). |
 | SVF points-to cross-checks | `jobs.job_svf_alias_analysis.settings.enabled = false` | Set `true` and provision the pinned SVF image and accepted C/C++ inputs. See [SVF analysis](svf-alias-analysis.md). |
-| PoC unit-test generation | `jobs.job_poc_generation.settings.enabled = true` for new runs | Automatic pre-gate inclusion; historical disabled runs remain disabled. This generates and compile-checks bounded test functions, never linking or executing them. See [PoC generation](poc-generation.md). |
+| PoC unit-test generation | `jobs.job_poc_generation.settings.enabled = true`; `settings.build.compile_check = false` | Automatic pre-gate inclusion; historical disabled runs remain disabled. Validators parse generated functions with Clang AST, but the shipped setting does not replay the project's compile command. No linking or execution. See [PoC generation](poc-generation.md). |
 | Remediation and dossiers | Planning, nonexecuting validation and dossier publication are enabled for new runs. | They precede the final gate; validation requires planning. Frozen historical configurations are unchanged. See [remediation](remediation.md) and [dossiers](dossier-publication.md). |
 | OpenVEX export | `jobs.job_openvex_export.settings.enabled = true` for new runs | Independent model-free post-gate export; not a report prerequisite or authorization to disclose findings. See [OpenVEX operations](openvex-export.md). |
-| Medium/low scanner-lead exploration | `jobs.job_inference_security_review.settings.lanes.exploration_enabled = false`; `exploration_reserve = 1` | Set `exploration_enabled = true` in the selected runtime profile or base configuration; choose the reserve within existing budgets. Does not admit informational leads or change unknown-severity handling. See [exploration admission](inference-security-review.md#opt-in-mediumlow-exploration). |
+| Medium/low scanner-lead exploration | Base/dev: `jobs.job_inference_security_review.settings.lanes.exploration_enabled = false`, reserve 1; all production profiles: enabled, reserve 20 | Select the intended profile before freezing the run; the bounded alternating sample is not exhaustive coverage. Does not admit informational leads or change unknown-severity handling. See [exploration admission](inference-security-review.md#opt-in-mediumlow-exploration). |
+| Native binary/component advisory leads | `tools.enable_cve_bin_tool = true`; `tools.enable_native_advisory_lookup = true` | Supply the verified offline cve-bin-tool snapshot and image. Binary version-string scans and corroborated-component CPE range lookups are separate lead producers, not vulnerability confirmation. See [artifact security](artifact-security-analysis.md) and [dependency intelligence](dependency-intelligence.md). |
 | Grype scanning | `tools.disable_grype = true` | Set `false` to restore normal applicability; still requires Syft SBOM and offline database prerequisites. See [static analysis](static-analysis.md). |
 | Swift execution | `tools.enable_swift = false` | Set `true` only to remove the policy gate. This does not supply a Swift grammar or a supported macOS CodeQL executor; unsupported lanes remain gaps. See [Swift policy](swift-execution-policy.md). |
 | Joern CPG analysis | `jobs.job_cpg_analysis.settings.enabled = false` | Deprecated, not required for the code-graph index. Leave disabled unless deliberately opting into that producer; see [C++ index jobs](cpp-index-jobs.md). |

@@ -12,7 +12,7 @@ Status: producers `6278e580`, central wiring `b702eb7` and follow-up `e769645f`,
 are real registered jobs, enabled in new configurations by the user's rollout decision.
 The shared reader now verifies review `/3` and nested chain/package bindings (`18eae9f`).
 The `dd9c9ad` integration introduced gate/report `/2` certification of these exact attachments.
-The gate remains `/2`; current report `/3` preserves their bindings while representing unknown
+The gate remains `/2`; current report `/4` preserves their bindings while representing unknown
 domain metrics explicitly ([report contract](final-report.md#domain-coverage-and-unknown-measurements-t-5088)).
 The owner-reported historical `039b24e4` all-lane check passes native and manual outcomes with
 offline model/compiler/renderer boundary doubles; it is not live compiler/runtime reproduction.
@@ -124,7 +124,7 @@ as worker guidance. These are provenance records, not dossier raw-prompt payload
 | --- | --- |
 | Both `.settings.enabled` | `true` for new configurations; never retroactively changes frozen runs. |
 | Shared `.bounds` | 16 candidates, 10000 packages, 8 source files / 64000 source bytes, 4 patch files / 64000 patch bytes, 262144 bytes/file, 32 edits/list items, 4000 text chars, 100000 workspace files / 1073741824 bytes. |
-| Planning `.writer` | 64000 input / 16000 output tokens, 6 turns, 4 queries, 600 seconds. |
+| Planning `.writer` | 64000 input / 32000 output tokens, 6 turns, 4 queries, 600 seconds. |
 | Validation `.reviewer` | 64000 input / 8000 output tokens, 2 turns, 0 queries, 600 seconds. |
 | Validation adapters / execution bounds | `["native_syntax"]` (or `[]` for selected static checks only), 120 seconds/command, 65536 retained diagnostic bytes. |
 

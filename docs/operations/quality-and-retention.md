@@ -60,7 +60,10 @@ They do not send external notifications. `snapshot()` exposes `stale_seconds`,
 `alert_after_seconds` and `max_alerts`; the watch interval does not change lifecycle durability.
 Late span progress cannot revoke a resource-release record; an admission timeout means the
 resource was not acquired, not that cleanup is overdue.
-Every critical central event retains synchronous fsync. Oversized critical records fail
+Central events at `ERROR`/`CRITICAL`, event names ending in `FAILED`, and `STOP` retain
+synchronous fsync. Other records are written through under the same lock immediately and
+fsynced at interpreter exit by `sync_all`; they are not buffered out of other readers' view.
+A machine crash may lose records since the last sync. Oversized critical records fail
 explicitly; oversized progress retains its span/sequence plus an explicit truncation marker.
 Existing operation spans measure `telemetry.lock_wait`, `telemetry.fsync` and
 `telemetry.aggregate`; outside an active span those measurements are unavailable, not zero.

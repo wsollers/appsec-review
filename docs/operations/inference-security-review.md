@@ -104,7 +104,9 @@ not accepted chain evidence; source/seed/model prose never enters these event pa
 The checked-in models are the `dev` profile. Real reviews select a production profile with larger
 limits; `prod` binds the verifier to `strong`, but a distinct profile name does not guarantee a
 distinct provider/model identity. The checked-in `prod` default and strong profiles both name
-`claude-fable-5-2`; `copilot-prod` uses distinct Sonnet and Opus identities. See
+`claude-fable-5-2`; `copilot-carbon-prod` likewise uses Gemini 4 Carbon for both.
+`copilot-prod` uses distinct Sonnet and Opus identities for those roles, but inherits a Claude CLI
+hunt planner; the Copilot account/catalog probe does not prove that inherited provider is ready. See
 [`model-profiles.md`](model-profiles.md) (`APPSEC_REVIEW_PROFILE=prod`, or `--profile prod` on the scripts).
 
 Models are configured as named profiles. Each role uses one profile, and a role without an entry
@@ -112,17 +114,18 @@ uses `default`:
 
 ```toml
 [jobs.job_inference_security_review.settings.models.default]
-provider = "claude-cli"          # claude-cli | anthropic-api
+provider = "claude-cli"          # claude-cli | anthropic-api | copilot-sdk
 model = "claude-haiku-5-5"       # development default; upgrade for real reviews
 reasoning = "high"
 max_input_tokens = 128000        # per turn; the request byte bound is 4x this (T-5023)
 max_output_tokens = 32000        # per turn; thinking tokens count (a final turn over it is kept, see below)
 max_queries = 40                 # retrieval requests per cell
-max_turns = 12                   # model turns per cell
+max_turns = 4                    # model turns per cell in the shipped development profile
 timeout_seconds = 600            # per-cell deadline
+thinking_min_output_tokens = 4096
 
 [jobs.job_inference_security_review.settings.roles.independent_verifier]
-model_profile = "default"
+model_profile = "verifier"       # the base declares this separately on Sonnet
 ```
 
 The checked-in default is the current Haiku model, which keeps development and fixture runs cheap.
@@ -268,9 +271,11 @@ Coverage is derived from hunt cells and their receipts, never from the plan.
 
 ## Capacity and local runs
 
-`[...settings.teams].review_teams` is **3 in dev/copilot-dev and 7 in prod/copilot-prod**.
+`[...settings.teams].review_teams` is **3 in dev/copilot-dev and 7 in all three production profiles**.
 It limits concurrent package-review teams within one run, not individual model calls or all runs
-on a host. Each team has 3 red, 2 blue and 1 blind verifier tasks. To run a single team locally without
+on a host. The shipped team settings are `red_per_team = 1`, `blue_per_team = 1` and
+`verifier_per_team = 1`; widths are not logical task counts (see
+[effective assignments](#effective-production-assignments-and-bounds)). To run a single team locally without
 editing the checked-in file, supply a capacity overlay:
 
 ```toml
@@ -500,11 +505,12 @@ expected specialist or strategy, and does not mean the package is defect-free.
 
 Exploration and follow-ups run inside `job_inference_security_review` (Dagster
 `inference_security_review`); there is no separate exploration job, pool, model, or persona.
-The resolved profiles retain `max_rounds = 3` (rounds 0-2), `stable_rounds_required = 1`,
+The resolved profiles use `max_rounds = 1` (round 0), `stable_rounds_required = 1`,
 and `max_attack_chains = 50`; production raises `max_active_claims` to 1,000 while dev retains
 500. Lead/hunt per-package claim caps remain
-3/5 across all rounds; hunt assembly retains its 50-unit cutoff. Variant hunting has no additional
-enable flag: round 1+ selects it only after that same hunt package produces confirmed R5/R6 seeds.
+3/5 across all rounds; hunt assembly has a 10-unit cutoff. Variant hunting has no additional
+enable flag, but the shipped one-round limit does not reach it: if later rounds are configured,
+round 1+ selects it only after that same hunt package produces confirmed R5/R6 seeds.
 Lead follow-ups receive accepted known claims but do not become hunt-lane variant workers.
 
 The following assignments apply to the initial and subsequent rounds, including exploratory leads:
@@ -515,14 +521,16 @@ The following assignments apply to the initial and subsequent rounds, including 
 | Hunt `variant`, `sink_up`, `entry_down`, `persona_sweep` / `hypothesis_hunter` | `default`, high | Ranked hunt-panel persona and accepted package stack | `generative-investigation` |
 | Hunt `control_gap` / `hypothesis_hunter` | `default`, high | Ranked hunt-panel persona and accepted package stack | `generative-investigation`, `effective-control-verification` |
 | `blue_control`, `blue_reachability` / `blue_team_refuter` | `default`, high | Proposing claim's persona and package stack | `effective-control-verification` |
-| `blind_verifier` / `independent_verifier` | `verifier` (dev), `strong` (prod/copilot-prod), high | Proposing claim's persona and package stack | `predicate-verification` |
-| `adjudicate_claim` / `adjudication_judge` | `default` (dev), `strong` (prod/copilot-prod), high | `generalist` and package stack, with blinded A/B sides | `conflict-resolution` |
-| Upstream `triage.lead_severity` / `lead_triager` | `triage`, medium | Lean governing-rule/role/task bundle; no routed persona or stack | None |
+| `blind_verifier` / `independent_verifier` | `verifier` (development), `strong` (all production profiles), high | Proposing claim's persona and package stack | `predicate-verification` |
+| `adjudicate_claim` / `adjudication_judge` | `default` (development), `strong` (all production profiles), high | `generalist` and package stack, with blinded A/B sides | `conflict-resolution` |
+| Upstream `triage.lead_severity` / `lead_triager` | `triage`, medium (high for Carbon) | Lean governing-rule/role/task bundle; no routed persona or stack | None |
 
 For dev, `default` and `triage` use `claude-haiku-5-5`, while `verifier` uses `claude-sonnet-5-5`.
 For `prod`, `default`, `triage` and `strong` all use `claude-fable-5-2` through `claude-cli`.
 For `copilot-prod`, the provider is `copilot-sdk`: `default` and `triage` use
-`claude-sonnet-5.5`, and `strong` uses `claude-opus-5.5`. These are configured identities, not a
+`claude-sonnet-5.5`, and `strong` uses `claude-opus-5.5`; its inherited hunt planner still uses
+Claude CLI/Sonnet. Carbon explicitly selects `copilot-sdk` / `gemini-4-carbon` at high reasoning
+for every model profile. These are configured identities, not a
 claim of model availability. Same-model production verification remains subject to the existing
 distinct-verification ship-block qualification; no configuration or policy is changed here.
 The judge does not replace independent
@@ -592,22 +600,23 @@ usage budget sooner; in-flight calls are still charged if they finish after a ce
 
 Production `default`/`strong` retain 200,000 input tokens, 64,000 output tokens, 60 retrieval
 queries and 16 turns per cell, with 1,800/2,400-second deadlines. `triage` remains tool-free:
-64,000 input, 16,000 output, one turn and 600 seconds. Shared review ceilings remain 60,000
+64,000 input, 16,000 output, one turn and 600 seconds in `prod`/`copilot-prod`;
+Carbon triage has a 32,000-output cap and high reasoning. Shared review ceilings remain 60,000
 model turns, 600,000,000 input tokens, 60,000,000 output tokens, 200,000 retrieval queries and
 86,400 seconds. Follow-ups consume those existing ceilings, not a fresh budget each round.
 
 ### Resolved coverage limits and cutoffs
 
-| Setting | dev / copilot-dev | prod / copilot-prod |
+| Setting | dev / copilot-dev | prod / copilot-prod / copilot-carbon-prod |
 | --- | --- | --- |
 | Concurrent teams per run | 3 | 7 |
 | Medium/low exploration | Off (reserve 1 inactive) | On, reserve 20, alternating medium/low |
 | Run-wide active-claim allocation | 500 | 1,000 |
 | Team-package budget | 200 | `"all"` (still claim/usage bounded) |
 | Maximum package launches before usage exhaustion | 200 | 1,000 |
-| Rounds / stable rounds required | 3 / 1 | 3 / 1 |
+| Rounds / stable rounds required | 1 / 1 | 1 / 1 |
 | Lead / hunt claims per package across rounds | 3 / 5 | 3 / 5 |
-| Hunt units / attack-chain cap | 50 / 50 | 50 / 50 |
+| Hunt units / attack-chain cap | 10 / 50 | 10 / 50 |
 | Model turns / retrieval queries | 12,000 / 40,000 | 60,000 / 200,000 |
 | Input / output tokens | 480,000,000 / 48,000,000 | 600,000,000 / 60,000,000 |
 | Job timeout | 28,800 seconds | 86,400 seconds |
@@ -637,7 +646,7 @@ package's allowance is full. In the 485-lead + 114-hunt example, remainder order
 extra 401 slots to lead packages, so hunt packages each retain one slot.
 Cross-package/cross-lane seed sharing and automatic specialist delegation remain unimplemented.
 
-These settings affect **future production runs** using the updated checkout/image. Frozen
+These settings affect **future production runs** using the updated measured source. Frozen
 settings on existing runs do not change. Focused offline tests resolve both production profiles
 and exercise admission, scheduling, shared 3/7-team capacity, follow-up rounds, and confirmed-only local variants using
 scripted inference. No paid/live model run, deployment, integration or acceptance run is implied;

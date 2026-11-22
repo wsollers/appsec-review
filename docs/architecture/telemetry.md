@@ -106,8 +106,9 @@ deployed runtime has been rebuilt or accepted.
 
 [`observability/spans.py`](../../src/appsec_review/observability/spans.py) wraps bounded units of
 job work in `operation_span`. Each span writes `OPERATION_STARTED` and `OPERATION_COMPLETED`
-through the job's `EventLog`, so records land in the attempt `events.jsonl` and the fsynced
-`pipeline.jsonl`. Correlation is `span_id`, `parent_span_id`, `operation_id` (the stage) and the
+through the job's `EventLog`, so records land in the attempt `events.jsonl` and the write-through
+`pipeline.jsonl` (synchronous fsync for error/failure/stop events; otherwise at interpreter exit).
+Correlation is `span_id`, `parent_span_id`, `operation_id` (the stage) and the
 inherited `unit_id`, `scope_id`, `query_profile`, `resource_lease_id` and `tool_invocation_id`.
 The completion record carries `terminal_status`, `duration_ms`, `resources` and `work`.
 

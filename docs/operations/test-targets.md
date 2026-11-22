@@ -119,7 +119,8 @@ The full download steps are in the README section "Download the acceptance targe
 
 ## Smoke runs
 
-A smoke review runs the checked-in `dev` profile (Haiku for every role) with the smoke capacity
+A smoke review runs the checked-in `dev` profile (Haiku primary workers, Sonnet inference
+verifier and hunt planner) with the smoke capacity
 overlay, which is the only checked-in setting that differs from an ordinary dev run:
 
 ```bash
@@ -185,18 +186,21 @@ each job's `latest.json` handoff and the attempt artifacts it binds, the review 
 projection, the finding packages, the gate and report documents, the graph scorecard, the model-execution
 receipts and the review budget ledger), writes `data/verification/smoke-score.json`
 (schema id appsec-review/smoke-score/1, closed JSON schema `docs/schemas/smoke-score.schema.json`) and the one-screen
-`smoke-score.txt` beside it, and prints that summary. It changes nothing else in the run, never opens the
-target and never runs a tool or a model. The module is `appsec_review.reporting.smoke_score`.
+`smoke-score.txt` beside it, and prints that summary. It never opens the target or calls a model.
+With an answer key it also renders a scorecard PDF through the pinned LaTeX image by default;
+use `--no-pdf` for scoring without tool execution. Those optional scorecard files and their receipt
+also live under `data/verification/`. The module is `appsec_review.reporting.smoke_score`.
 
 ```bash
 .venv/bin/python scripts/smoke-score.py --run runs/2026-11-14-0005
-.venv/bin/python scripts/smoke-score.py --run runs/2026-11-14-0005 --answer-key ~/smoke-work/cpp/answer-key.json
+.venv/bin/python scripts/smoke-score.py --run runs/2026-11-14-0005 --answer-key ~/smoke-work/cpp/answer-key.json --no-pdf
 ```
 
 Without `--answer-key` only the structural checks run; the key stays where the user keeps it (never under
 `targets/`, never in the repository) and is read only when the user names it on the command line. Each
 structural check is `pass`, `fail` or `not_applicable` (the dataset it needs was not published) and lists
 the evidence paths it read; `not_applicable` is a named coverage gap of the run, not a pass.
+See the [scorecard guide](smoke-scorecard.md) for separately authorized rendering and `--compare`.
 
 | Check | What passes |
 | --- | --- |

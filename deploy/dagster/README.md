@@ -116,7 +116,7 @@ application/configuration/guidance assets. Changes to mounted application code r
 
 ## Build, start, verify, and stop
 
-For the opt-in `copilot-dev` and `copilot-prod` profiles, follow
+For the opt-in `copilot-dev`, `copilot-prod` and `copilot-carbon-prod` profiles, follow
 [the separate Copilot account setup](../../docs/operations/model-profiles.md#copilot-with-a-separate-github-identity).
 Bootstrap records `APPSEC_COPILOT_CONFIG_DIR`, and lifecycle/smoke commands select
 `compose.copilot.yaml` instead of the Claude overlays. Its `runtime-copilot` image includes the
@@ -124,11 +124,15 @@ pinned SDK runtime and the native Copilot CLI 1.0.102 on `PATH`. The build retri
 Linux x64 or ARM64 CLI archive, checks its pinned SHA-256 and byte size, and verifies the installed
 version; credentials are never part of the image. Only the code location mounts the dedicated
 worker login. Set
-`APPSEC_REVIEW_PROFILE=copilot-dev` for development or `APPSEC_REVIEW_PROFILE=copilot-prod` for
-production; the operator scripts also accept `--profile copilot-dev` or `--profile copilot-prod`.
-The production Copilot profile retains the `prod` limits and uses Sonnet 5.5 with an independent
-Opus 5.5 verifier and judge. Rebuild an older image with `scripts/stack-rebuild.sh --profile copilot-prod`
-before selecting it; active-run guards still apply. Git/GitHub CLI credentials remain independent.
+`APPSEC_REVIEW_PROFILE=copilot-dev` for development, or explicitly select `copilot-prod` /
+`copilot-carbon-prod` for production; the operator scripts accept the same names with `--profile`.
+`copilot-prod` uses Sonnet 5.5 with an Opus 5.5 `strong` verifier/judge, but inherits the base
+Claude CLI hunt-planner profile. `copilot-dev` also inherits the Claude CLI verifier.
+The Carbon profile explicitly selects Gemini 4 Carbon/high for every model profile and does
+not establish distinct-model verification. See the profile guide for exact inherited limits and
+provider-readiness gaps. Rebuild an older image only when its dependencies, SDK/runtime or verifier
+need changing; changing profile TOML alone requires source reload, not an image build.
+Active-run guards still apply. Git/GitHub CLI credentials remain independent.
 The Claude-specific requirements below apply to `dev` and `prod`, not the Copilot profiles.
 
 The operator scripts in `scripts/` wrap the commands below (stack start, stop, restart, rebuild,
@@ -300,7 +304,7 @@ The shared runtime image also loads the container runtime catalog during its bui
 profile-specific stages. Every enabled tool manifest must survive `.dockerignore`, including
 manual tools such as `containers/report/latex/tool.toml`; manual selection does not make a
 manifest optional. The report renderer's downloads and build assets remain excluded. This check
-applies to `dev`, `prod`, `copilot-dev`, and `copilot-prod` without changing image-pin requirements.
+applies to all five runtime profiles without changing image-pin requirements.
 Run the offline packaging regression tests with
 `python -m pytest tests/test_runtime_catalog_packaging.py --basetemp=test/tmp/catalog-packaging`.
 These tests stage catalog assets through the build-context exclusion rules and exercise the same

@@ -190,7 +190,7 @@ hash-invalid claim is an audit violation.
 The producer-consumer matrix now distinguishes `available`, `supplied` and observed `read`
 identities. `cited` remains unknown: framework reads do not attest model reasoning. Historical
 receipts without reader observations remain unknown rather than being retroactively marked read.
-The complete registered/configured matrix includes all 47 jobs, including disabled graph jobs,
+The complete registered/configured matrix includes all 48 jobs, including CBMC and disabled graph jobs,
 maintenance and internal transactions; only eligible producers enter the publication-stage audit.
 See [job input contracts](../architecture/job-input-contracts.md) for missing/partial policies.
 

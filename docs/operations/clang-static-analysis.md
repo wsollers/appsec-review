@@ -83,10 +83,11 @@ For development verification, collect the desired files first, then use the boun
 with that exact count (replace `COUNT` below):
 
 ```text
-scripts/run-tests.sh --expect-tests COUNT --parallel --test-workers 2 --shuffle-seed 221122 -- tests/unit/job_clang_static_analysis/
+scripts/run-tests.sh --expect-tests COUNT --parallel --test-workers 2 --shuffle-seed 221122 -- tests/unit/job_clang_static_analysis/test_diagnostic_fidelity.py tests/unit/job_clang_static_analysis/test_plist_fidelity.py tests/unit/job_clang_static_analysis/test_outcomes_and_reuse.py
 ```
 
-These tests validate bounded normalization and injected execution. The tool-image acceptance is a
+These example selectors validate diagnostic fidelity, outcome accounting and reuse with injected
+execution; select other affected files explicitly for other changes. The tool-image acceptance is a
 separate container check; a mocked run never proves that the pinned image is locally available.
 
 ## Seeded mode

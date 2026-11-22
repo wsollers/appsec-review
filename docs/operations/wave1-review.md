@@ -19,8 +19,9 @@ hand-maintained job list. The [generated inventory](../generated/inventory.json)
 jobs, standalone maintenance and internal build transactions retain distinct dispatch classes.
 
 Both surfaces verify in `image_pin_verification`, after the model gate and before intake, that every
-enabled catalog image, build profile and CodeQL source image resolves on the local daemon to exactly
-its pin; any missing image or moved tag fails the run (see
+enabled non-manual catalog image and enabled job/reporting image reference resolves locally to
+its pin. Explicitly referenced manual images and declared CodeQL build/runtime IDs are checked too;
+any missing required image or moved tag fails the run (see
 [`image-pin-verification.md`](image-pin-verification.md)). This readiness gate never builds an image;
 separately commissioned build paths can request bounded derived images. Setting
 `jobs.job_image_pin_verification.settings.enabled = false` removes that step from both graphs.

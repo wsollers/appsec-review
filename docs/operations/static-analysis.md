@@ -29,10 +29,12 @@ scanners to run. In Dagster's `wave1_review`, it runs after `job_target_analysis
 
 Every enabled `kind = "tool"` entry whose tool manifest does not set `static_adapter = false` must
 have exactly one adapter. The opt-out reserves tools owned by other jobs; a static catalog/adapter
-mismatch fails job validation and cannot silently omit an in-scope tool. `tool-cve-bin-tool`
-remains deferred because the catalog still records an unresolved GPL policy decision. The completed
-NVD-derived database lineage removes the former database blocker, but it does not resolve that
-license acceptance. The scan adapter is therefore not enabled and the contract was not weakened.
+mismatch fails job validation and cannot silently omit an in-scope tool. `tool-cve-bin-tool` is
+enabled in the catalog following the recorded license decision, but opts out of this source-scanner
+adapter set. Its produced-binary adapter belongs to `job_artifact_security_analysis` and runs
+against a verified offline snapshot when `tools.enable_cve_bin_tool` is true (the shipped default).
+See [artifact security](artifact-security-analysis.md) and the
+[image contract](../../containers/tools/cve-bin-tool/README.md); a version match is a lead, not a finding.
 
 The shared `[tools].disable_grype` Boolean applies to this job and produced-artifact analysis. Its
 repository default is `true`: neither a process nor container is launched, and the producer emits
@@ -80,6 +82,13 @@ violations remain framework failures.
 An active execution-safety policy can stop at an invocation failure before its fallback gap
 publishes. The [canonical job page](job_evidence_collection.md) distinguishes those exceptions,
 originating scan dispositions, native-result retention and coverage-only output.
+
+Local Linux process capture drains stdout/stderr incrementally while retaining only each bounded
+prefix plus an overflow sentinel. A capture deadline also bounds descendants that keep pipes open.
+If draining still fails after process-group termination, the executor preserves available prefixes
+and a partial receipt with `capture_complete=false`, `cleanup=UNCONFIRMED`, then fails closed.
+An untruncated prefix is not evidence of complete capture. External cancellation stays fatal and
+does not become an invented execution timeout.
 
 ## Evidence and retrieval
 

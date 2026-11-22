@@ -99,7 +99,7 @@ several sessions share one Docker daemon and one Dagster stack.
    containers were created from another checkout's compose files, because `lifecycle.py` would
    recreate them from this checkout's mounts. Run the scripts from the checkout that owns the stack.
 3. **Lifecycle only.** Stack changes call `deploy/dagster/bin/lifecycle.py`, which adds the provider
-   overlay (`compose.copilot.yaml` for `copilot-dev` and `copilot-prod`; otherwise `compose.claude.yaml` on WSL and
+   overlay (`compose.copilot.yaml` for all three `copilot-*` profiles; otherwise `compose.claude.yaml` on WSL and
    Linux or `compose.windows.yaml` on Windows). The scripts
    never run `docker compose` on `compose.yaml` alone. The only direct docker calls that change
    state are `docker exec ... dagster job launch` and, for `--purge-volumes`, removal of this
@@ -151,13 +151,13 @@ After starting, `stack-start`, `stack-restart` and `stack-rebuild` report:
   read-only; on a native Windows stack, sign in again inside the container with
   `claude auth login` as in the deployment README.
 
-For `copilot-dev` and `copilot-prod`, the probe instead checks the dedicated Copilot login and configured model catalog,
+For all three `copilot-*` profiles, the probe instead checks the dedicated Copilot login and configured model catalog,
 without inference. It does not call Claude or borrow the GitHub CLI account. Follow the
 [separate-account setup](model-profiles.md#copilot-with-a-separate-github-identity) to sign in.
 
 `--target` takes a name under `targets/` or a container path (`/opt/app/targets/...`); `--overlay`
 takes a capacity overlay file under `test/acceptance` (or `none`); `--recording` is `record`, `replay`
-or `off`; `--profile` is `dev` (default), `prod`, `copilot-dev`, or `copilot-prod`. They set `APPSEC_REVIEW_TARGET`,
+or `off`; `--profile` is `dev` (default), `prod`, `copilot-dev`, `copilot-prod`, or `copilot-carbon-prod`. They set `APPSEC_REVIEW_TARGET`,
 `APPSEC_REVIEW_CONFIG_OVERLAY`, `APPSEC_REVIEW_MODEL_RECORDING` and `APPSEC_REVIEW_PROFILE` for the recreate (see
 [`../processes/local-dagster-parity.md`](../processes/local-dagster-parity.md)). `replay` additionally
 needs `APPSEC_REVIEW_MODEL_REPLAY_DIR`, which the compose file does not pass; the parity walk replays
@@ -165,11 +165,14 @@ locally instead.
 
 The selected base/profile TOML owns model, reasoning and budget values; see
 [`model-profiles.md`](model-profiles.md). The stack scripts set the container's default profile:
-they print `profile: dev|prod|copilot-dev|copilot-prod` (and, for either production profile, a notice
-that it uses the more capable models and larger token limits), carry the running value over on a plain
+they print the selected profile (and, for all three production profiles, a model/limit notice),
+carry the running value over on a plain
 restart, and `stack-status` shows it. `review-start --profile X` and `--overlay F` choose the profile
 and capacity overlay for that one run (see below).
-PowerShell: `-Profile dev|prod|copilot-dev|copilot-prod` on the same four scripts.
+PowerShell accepts the same five names with `-Profile` on the same four scripts. The generic
+production notice still names Sonnet/Opus even though `prod` now selects Fable; it is not an
+authoritative model inventory. Copilot catalog success also does not prove readiness of the
+Claude profiles inherited by `copilot-dev`/`copilot-prod`; see the profile guide.
 
 ### Per-run profile and overlay
 
@@ -195,7 +198,7 @@ See [build-bound debug symbols](../architecture/debug-symbol-indexing.md).
 Some values stay fixed per container and are refused instead of silently ignored:
 
 - The provider family. Copilot profiles need the `-copilot` image and compose overlay, so switching between
-  `dev`/`prod` and `copilot-dev`/`copilot-prod` is refused (exit 3) with the `scripts/stack-restart --profile X`
+  `dev`/`prod` and any `copilot-*` profile is refused (exit 3) with the `scripts/stack-restart --profile X`
   command. Within a family the switch is per run.
 - `--target` and `--recording`. They must match the container, as before.
 - Native execution. Its operator contract pins one configuration and resource budget, so any

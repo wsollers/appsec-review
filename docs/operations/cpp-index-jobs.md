@@ -11,8 +11,9 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 Two independent jobs index accepted C/C++ projects after `job_cpp_compiled_analysis` completes.
 Joern (`job_cpg_analysis`) is deprecated and shipped disabled
 (`jobs.job_cpg_analysis.settings.enabled = false`): the direct CLI and Dagster planners leave a
-disabled job out of the graph entirely, so by default only clangd runs, `job_codeql_analysis`
-waits only for clangd, and no Joern rows or artifacts are written. The third consumer of the same
+disabled job out of the graph entirely, so of these two jobs only clangd runs by default and
+no Joern rows or artifacts are written. CodeQL also waits for its other enabled declared
+predecessors; it is not solely gated by clangd. The third consumer of the same
 index scopes, `job_clang_static_analysis`, is documented in
 [`clang-static-analysis.md`](clang-static-analysis.md).
 
@@ -48,6 +49,8 @@ them:
    upstream reason.
 3. Before a tool runs:
    - the accepted compile database is re-hashed;
+   - its decoded rows must equal the accepted command context, and retained build files
+     (including generated headers) must match their accepted hashes;
    - every materialized source file under `data/cpp/projects/<case>/source/` is re-hashed against
      the accepted mapping;
    - a mismatch fails the job.
@@ -60,8 +63,10 @@ them:
    scope with no supported unit is not launched and is listed in `not_applicable_scopes`.
 
 Tools see only the run-owned case root, mounted read-only at `/target`, plus a read-write
-`/scratch`. The compile commands are rewritten to `/target/source/...` paths (driver normalized to
-`clang`/`clang++`, MSVC-style flags preserved) and written to `/scratch/compile_commands.json`.
+`/scratch`. The compile commands are rewritten to `/target/source/...` and `/target/build/...` paths
+(driver normalized to `clang`/`clang++`, MSVC-style flags preserved) and written to
+`/scratch/compile_commands.json`. Each accepted source/build working directory is preserved.
+Only path operands are rebased; a macro value containing a similar prefix remains compiler data.
 The tool runs as the application/Dagster uid and gid. Execution follows the central container
 policy: no network, read-only root, all capabilities dropped, `no-new-privileges`, and
 bounded memory, CPU, PIDs, time, and output.
@@ -77,16 +82,23 @@ For each scope:
    guess.
 3. **Index symbols.** Each symbol whose definition (or, failing that, canonical declaration) is in
    an accepted source becomes a `symbol` entity with an exact `SourceLocation`. clangd's 0-based
-   positions are converted to 1-based, using mapping method `clangd-uri-exact-path`. Symbols
+   UTF-16 positions are resolved to exact byte spans in the hash-verified UTF-8 source, using
+   mapping method `clangd-uri-utf16-verified-bytes`. Invalid or saturated coordinates, split
+   surrogate pairs and unavailable accepted-byte locations are gaps, not whole-file spans. Symbols
    declared only outside the accepted sources (system, SDK, or engine headers) are counted as
    `external_symbols`, not indexed.
 4. **Index edges.** References whose `Container` (the enclosing function) and target are both
    accepted symbols become edges. The edge is `CALLS` when clangd's `RefKind` has the call bit,
-   otherwise `REFERENCES`. Repeated references are aggregated into one edge, with an occurrence
+   otherwise `REFERENCES`; recursive self-calls remain `CALLS`, while declaration self-references
+   add no edge. Repeated references are aggregated into one edge, with an occurrence
    count and a bounded number of locations.
 5. **Record coverage.** Coverage is per project: `complete` when the indexer exits 0, processes
-   every translation unit, and the output parses within bounds; `partial` with named gaps
-   otherwise; `unavailable` when the run failed without producing symbols.
+   every unambiguous compile context, and the output parses and accounts for documents within
+   bounds; `partial` with named gaps otherwise; `unavailable` when the run failed without symbols.
+   Filename-only processing markers cannot distinguish multiple commands for one file.
+   Missing system headers, explicit processing errors, omitted contexts and truncated stderr
+   prevent those contexts from being credited as processed. Unknown document tags, unsupported
+   symbol/reference shapes and conflicting duplicate symbol IDs also remain explicit gaps.
 
 Bounds live in `[jobs.job_cpp_symbol_index.settings]`: `workers` (concurrent scopes),
 `max_documents_per_scope`, `max_symbols_per_scope`, `max_relations_per_scope`, and
@@ -145,8 +157,8 @@ All of these live under `runs/<run-id>/` and are never committed.
 
 | Path | Content |
 | --- | --- |
-| `data/code-index/clangd/<scope>/run/compile_commands.json` | The container compile database the tool read. |
-| `data/code-index/clangd/<scope>/run/raw/{stdout,stderr}.bin`, `execution.json` | Bounded tool output and the hash-bound execution receipt. |
+| `data/code-index/clangd/<scope>/<identity>/execution-NNNN/run/compile_commands.json` | The container compile database the tool read. |
+| `data/code-index/clangd/<scope>/<identity>/execution-NNNN/run/raw/{stdout,stderr}.bin`, `execution.json` | Bounded tool output and the hash-bound execution receipt; fresh generations preserve earlier evidence. |
 | `data/code-index/clangd/<scope>/checkpoint.json` | Scope result plus identity (scope, tool image and manifest, normalizer, bounds). |
 | `data/code-index/joern/<scope>/run/cpg.bin` | The retained CPG (evidence; not served over MCP). |
 | `data/code-index/joern/<scope>/run/…`, `checkpoint.json` | As for clangd. |
@@ -161,6 +173,12 @@ matches and its shard still hash-verifies. The identity covers:
 - the normalizer or adapter version;
 - the bounds;
 - for Joern, the blocked-reason text.
+
+Clangd additionally verifies the original execution receipt and both raw-stream hashes before
+normalization and checkpoint reuse. Changed, missing or symlinked matching evidence is an
+integrity failure, not a cache miss; it is never repaired by hashing the replacement bytes.
+All-inapplicable scopes retain explicit disposition metadata in an empty analysis shard, not
+measured or unavailable coverage.
 
 ## Verification
 

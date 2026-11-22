@@ -31,7 +31,7 @@ private `dossier-rendering-receipt/2`, and removes only its run-owned input/scra
 Its additional Markdown/HTML references are hash-bound and gate-certified without changing
 the public four-file map; legacy receipt `/1` remains readable without certifying those formats.
 Integration
-`dd9c9ad` introduced gate/report `/2` certification; current gate `/2` and report `/3` preserve
+`dd9c9ad` introduced gate/report `/2` certification; current gate `/2` and report `/4` preserve
 that boundary. Dossier Markdown, HTML and LaTeX now share one bounded document, including accepted
 counterevidence and exact-edit patch displays, without inventing paths or validation outcomes.
 Report radar `/2` keeps unknown measurements as `null` with reasons (**N/A** in renderings);

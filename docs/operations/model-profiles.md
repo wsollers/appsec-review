@@ -1,17 +1,18 @@
 ---
-title: "Model profiles: dev, prod, copilot-dev and copilot-prod"
+title: "Runtime model profiles"
 kind: "operations"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_dependency_intelligence", "job_inference_security_review", "job_model_connectivity", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_project_build", "job_review_intake", "job_target_analysis_plan"]
 last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
-# Model profiles: dev, prod, copilot-dev and copilot-prod
+# Runtime model profiles
 
 **Selection:** set `APPSEC_REVIEW_PROFILE=prod`, or use `--profile prod` on the stack and review
 scripts (`-Profile prod` in PowerShell). The default is `dev`; `copilot-dev` selects the separate
 Copilot subscription transport with development limits. `copilot-prod` uses that transport with
-production settings. Other values are errors. Nothing selects either production profile implicitly.
+production settings; `copilot-carbon-prod` selects Gemini 4 Carbon with its own production overrides.
+These five names are the accepted profiles. Nothing selects a production profile implicitly.
 The stack's profile is the container default, set when its containers are created. `review-start
 --profile` selects another profile of the same provider family for one run without a restart (see
 [per-run profile and overlay](operator-scripts.md#per-run-profile-and-overlay)); switching between the
@@ -47,27 +48,30 @@ prod stack to dev the same way.
 
 | Profile | Source | Models | Limits |
 | --- | --- | --- | --- |
-| `dev` (default) | `appsec-review.toml` exactly as checked in | Haiku 5.5 everywhere | the small limits in the file; cheap, for testing the pipeline |
-| `prod` | `profiles/prod.toml` merged over `appsec-review.toml` | Sonnet 5.5, with Opus 5.5 for the independent verifier | large token limits and budgets for real reviews |
-| `copilot-dev` | `profiles/copilot-dev.toml` merged over `appsec-review.toml` | Haiku 5.5 through Copilot (`claude-haiku-5.5`) | exactly the dev reasoning settings, limits, roles and budgets |
-| `copilot-prod` | `profiles/copilot-prod.toml` merged over `appsec-review.toml` | Sonnet 5.5 through Copilot (`claude-sonnet-5.5`), Opus 5.5 verifier and judge (`claude-opus-5.5`) | exactly the prod reasoning settings, limits, roles and budgets |
+| `dev` (default) | `appsec-review.toml` exactly as checked in | Haiku 5.5 for primary workers; Sonnet 5.5 for the inference verifier and hunt planner, all through Claude CLI | development limits in the base file |
+| `prod` | `profiles/prod.toml` merged over `appsec-review.toml` | `claude-fable-5-2` through Claude CLI for every configured model profile, including verification | large token limits and budgets; same-model verification remains qualified |
+| `copilot-dev` | `profiles/copilot-dev.toml` merged over `appsec-review.toml` | Haiku 5.5 through Copilot for overridden profiles; inherited inference `planner` and `verifier` still use Claude CLI/Sonnet | base development limits; not an entirely Copilot-resolved configuration |
+| `copilot-prod` | `profiles/copilot-prod.toml` merged over `appsec-review.toml` | Copilot Sonnet 5.5 primary workers and Opus 5.5 `strong` verifier/judge; inherited inference `planner` and `verifier` still use Claude CLI/Sonnet | production review budgets; per-model overrides are not identical to `prod` |
 | `copilot-carbon-prod` | `profiles/copilot-carbon-prod.toml` merged over `appsec-review.toml` | Gemini 4 Carbon through Copilot (`gemini-4-carbon`) at `high` reasoning across all jobs and roles | production budgets, exploration lane and active-claim cap, with output token caps sized within `gemini-4-carbon`'s 64k output limit |
 
 ## Copilot production
 
-`profiles/prod.toml` remains the authoritative production settings source. `copilot-prod.toml`
-mirrors its overrides, changing only providers to `copilot-sdk` and model IDs to the exact dotted
-Copilot catalog names. A regression test compares all resolved job settings with `prod`, including
-disabled model settings, retries, query/turn limits, timeouts, budgets and role bindings. When
-production settings change, update both files together. `dev` and `copilot-dev` retain their finite
-package caps.
+Each profile is merged over the base, not over another profile. `prod` and `copilot-prod` no
+longer have full model/limit parity: `prod` selects Fable and overrides the hunt planner; the
+Copilot development/production overlays do not override the base `planner` or `verifier`.
+The planner is enabled, and the development independent verifier uses that inherited profile;
+`copilot-prod` binds its independent verifier to `strong` instead. A Copilot account/catalog check
+does not establish readiness of inherited Claude CLI calls. Inspect the resolved configuration
+and arrange any required provider readiness explicitly; do not infer a fallback or silently
+substitute a model. `copilot-carbon-prod` explicitly overrides all these model profiles.
+`dev` and `copilot-dev` retain finite package caps.
 
-The independent verifier and adjudication judge use `strong` (`claude-opus-5.5`); primary workers
+In `copilot-prod`, the independent verifier and adjudication judge use `strong` (`claude-opus-5.5`); primary workers
 use `claude-sonnet-5.5`, preserving distinct-model verification. Inference-review ceilings remain
 60,000 model turns, 600,000,000 input tokens, 60,000,000 output tokens, 200,000 retrieval queries
 and 86,400 seconds. These are limits, not consumption targets.
 
-Both production profiles set `budgets.budget_team_packages = "all"` and
+All three production profiles set `budgets.budget_team_packages = "all"` and
 `rounds.max_active_claims = 1000`. There is no separate package-count budget, but package launches
 are bounded by claim capacity: every launched package receives at least one claim slot.
 When packages exceed 1,000, fair-share allocation across both lanes selects launches and records
@@ -92,7 +96,7 @@ scripts/review-start.sh --profile copilot-prod --target appsec-multi-vuln
 
 PowerShell uses `-Profile copilot-prod` on the corresponding scripts. Rebuild only when the image's
 dependencies, SDK/runtime or verifier need changing; profile TOML is mounted source, not an
-image payload. Both Copilot profiles use the same Copilot image
+image payload. All three Copilot profiles use the same Copilot image
 tag and overlay; changing profiles does not change the login or borrow Git credentials.
 
 ## Copilot with a separate GitHub identity
@@ -123,8 +127,9 @@ credential helper and GitHub CLI configuration are not changed.
 The check above authenticates and checks the model catalog, without starting a review or making
 an inference request. Missing login, missing SDK/runtime, disabled models, unavailable exact model
 IDs, or unsupported reasoning settings fail explicitly; there is no model or account fallback.
-Copilot uses a dotted model version while Claude CLI uses `claude-haiku-5-5`; both profiles select
-Haiku 5.5. Do not change to a different model merely to pass preflight.
+Copilot's Haiku ID is dotted (`claude-haiku-5.5`); Claude CLI's is `claude-haiku-5-5`.
+The inherited profiles described above are separate selections. Do not change to a different
+model merely to pass preflight.
 
 Workers run in SDK `empty` mode with a temporary working directory, no tools, no MCP servers,
 no skills, no extensions, no repository/user instruction discovery, and no file hooks or host Git
@@ -133,7 +138,7 @@ and infinite-session compaction are disabled; timeout cancellation aborts the re
 down the owned runtime. The transport records usage and verifies the returned model identity.
 
 For Dagster, run bootstrap after the separate login, then select `copilot-dev` (or explicitly
-`copilot-prod` for production) for every lifecycle
+`copilot-prod` / `copilot-carbon-prod` for production) for every lifecycle
 command (or save only `APPSEC_REVIEW_PROFILE=copilot-dev` in the ignored deployment `.env`):
 
 ```bash
@@ -164,25 +169,24 @@ rejected with a message that names the key.
 | --- | --- |
 | `jobs.<job>.settings.model` for `job_target_analysis_plan`, `job_project_build`, `job_post_build_security_assessment`, `job_dependency_intelligence`, `job_owasp_control_assessment` | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `timeout_seconds`, `retries` |
 | `jobs.job_owasp_control_assessment.settings.models.reviewer` (only this named profile) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `timeout_seconds`, `retries` |
-| `jobs.job_inference_security_review.settings.models.<profile>` (created or updated) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
-| `jobs.job_poc_generation.settings.models.<profile>` (existing profiles only) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
-| `jobs.job_remediation_planning.settings.writer`, `jobs.job_remediation_validation.settings.reviewer` | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds` |
+| `jobs.job_inference_security_review.settings.models.<profile>` (created or updated) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds`, `thinking_min_output_tokens` |
+| `jobs.job_poc_generation.settings.models.<profile>` (existing profiles only) | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds`, `thinking_min_output_tokens` |
+| `jobs.job_remediation_planning.settings.writer`, `jobs.job_remediation_validation.settings.reviewer` | `provider`, `model`, `reasoning`, `max_input_tokens`, `max_output_tokens`, `max_queries`, `max_turns`, `timeout_seconds`, `thinking_min_output_tokens` |
 | `jobs.job_inference_security_review.settings.roles.<role>` (the role must exist in the base) | `model_profile` |
 | `jobs.job_inference_security_review.settings.budgets` | `budget_team_packages` (positive integer or `"all"`), `max_model_turns`, `max_input_tokens`, `max_output_tokens`, `max_retrieval_queries`, `timeout_seconds` |
 | `jobs.job_inference_security_review.settings.lanes` | `exploration_enabled` (Boolean), `exploration_reserve` (positive integer) |
 | `jobs.job_inference_security_review.settings.teams` | `review_teams` (integer 1-64, capacity only) |
 | `jobs.job_inference_security_review.settings.rounds` | `max_active_claims` (integer 1-100,000) |
 
-Medium/low exploration is **on in `prod` and `copilot-prod`**, and remains **off in `dev` and
-`copilot-dev`**. Both production files explicitly set `exploration_enabled = true` and
+Medium/low exploration is **on in all three production profiles**, and remains **off in `dev` and
+`copilot-dev`**. The production files explicitly set `exploration_enabled = true` and
 `exploration_reserve = 20`: bounded otherwise-unadmitted medium/low packages alternate between
 severities, in identity order within each severity, with unused slots going to the other population.
 When both are plentiful this selects 10 medium and 10 low; launch-time cutoffs preserve the same
 alternation (medium first for a single-slot tie). This is not exhaustive coverage of both severities.
-Informational leads and unknown-severity handling do not change. Package-local follow-ups retain
-three rounds and stop after one stable round; only confirmed, in-scope seeds unlock local
-round-1+ variants. No model, usage-budget, OWASP, or PoC enablement changes accompany this
-coverage policy. The approved coverage follow-up sets 7 production / 3 development concurrent
+Informational leads and unknown-severity handling do not change. The shipped base now limits
+reviews to one round (`max_rounds = 1`, `stable_rounds_required = 1`), inherited by every profile;
+the optional later-round machinery does not imply that a second round runs. The coverage settings use 7 production / 3 development concurrent
 teams and raises production active-claim capacity to 1,000 (dev stays 500), with fair launch
 cutoffs instead of zero-claim reviews. All other model, usage, and round limits are retained.
 See the [resolved comparison and cutoff policy](inference-security-review.md#resolved-coverage-limits-and-cutoffs)
@@ -202,16 +206,18 @@ than being inferred from this core-family summary.
 
 | Setting | Model | Reasoning | Max input | Max output | Timeout (s) |
 | --- | --- | --- | --- | --- | --- |
-| `job_target_analysis_plan` | `claude-sonnet-5-5` | high | 200000 | 64000 | 900 |
-| `job_post_build_security_assessment` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
-| `job_dependency_intelligence` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
-| OWASP worker `model` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
-| OWASP blinded `models.reviewer` | `claude-opus-5-5` | high | 200000 | 32000 | 600 |
-| `job_project_build` | `claude-sonnet-5-5` | medium | 128000 | 16000 | 600 |
-| inference review `models.default` | `claude-sonnet-5-5` | high | 200000 | 64000 | 1800 |
-| inference review `models.triage` | `claude-sonnet-5-5` | medium | 64000 | 16000 | 600 |
-| inference review `models.strong` (new) | `claude-opus-5-5` | high | 200000 | 64000 | 2400 |
-| PoC generation `models.default` | `claude-sonnet-5-5` | high | 200000 | 32000 | 600 |
+| `job_target_analysis_plan` | `claude-fable-5-2` | high | 200000 | 64000 | 900 |
+| `job_post_build_security_assessment` | `claude-fable-5-2` | high | 200000 | 32000 | 600 |
+| `job_dependency_intelligence` | `claude-fable-5-2` | high | 200000 | 32000 | 600 |
+| OWASP worker `model` | `claude-fable-5-2` | high | 200000 | 32000 | 600 |
+| OWASP blinded `models.reviewer` | `claude-fable-5-2` | high | 200000 | 32000 | 600 |
+| `job_project_build` | `claude-fable-5-2` | medium | 128000 | 16000 | 600 |
+| inference review `models.default` | `claude-fable-5-2` | high | 200000 | 64000 | 1800 |
+| inference review `models.triage` | `claude-fable-5-2` | medium | 64000 | 16000 | 600 |
+| inference review `models.planner` | `claude-fable-5-2` | high | 200000 | 32000 | 1200 |
+| inference review `models.verifier` | `claude-fable-5-2` | high | 128000 | 32000 | 600 |
+| inference review `models.strong` | `claude-fable-5-2` | high | 200000 | 64000 | 2400 |
+| PoC generation `models.default` | `claude-fable-5-2` | high | 200000 | 32000 | 600 |
 
 OWASP is enabled by default in all shipped profiles. Its separate job-level `settings.enabled = false`
 opts out before a run is frozen; selecting a model profile does not override that gate.
@@ -226,21 +232,22 @@ not a provider overlay. See [OWASP operations](owasp-control-assessment.md).
 become `budget_team_packages = "all"`, `max_model_turns = 60000`, `max_input_tokens = 600000000`, `max_output_tokens = 60000000`,
 `max_retrieval_queries = 200000` and `timeout_seconds = 86400`.
 
-## The verifier uses a different model
+## Distinct-model verification depends on the profile
 
-`profiles/prod.toml` binds `roles.independent_verifier.model_profile` to `strong`, so the verifier's
-model (Opus 5.5) differs from every red cell's (Sonnet 5.5). That is what
-`verification.require_distinct_model_for_ship_blocking` checks: under `prod` a ship-blocking
-candidate can be published as `ship_blocking`, where under `dev` (every role on `default`) it stays
-`ship_blocking_pending_distinct_verification`. `profiles/prod.toml` binds
-`roles.adjudication_judge.model_profile` to `strong` as well, so the judge's model also differs from
-every red cell's.
+The distinct-model requirement remains enabled. `dev` binds the independent verifier to Sonnet
+while primary workers use Haiku. `copilot-prod` binds the verifier/judge to Opus `strong`, distinct
+from its Sonnet primary workers. In contrast, `prod` and `copilot-carbon-prod` bind `strong` but
+select the same model as their primary workers. A different profile name or blinded request does
+not supply model distinctness: otherwise ship-blocking candidates remain
+`ship_blocking_pending_distinct_verification`, and a weakest-link chain verification requiring
+distinctness cannot launch. No profile name alone certifies a finding.
 
 ## Visibility and safety
 
-- The active profile is printed as `profile: dev|prod|copilot-dev|copilot-prod` by `stack-start`, `stack-restart`,
-  `stack-rebuild` and `review-start`, and shown by `stack-status`. Both production profiles also print a
-  notice that prod uses the more capable models and larger token limits.
+- The active profile is printed by `stack-start`, `stack-restart`, `stack-rebuild` and `review-start`,
+  and shown by `stack-status`. All three production profiles print a notice. The Carbon notice names
+  Gemini; the current generic notice still says Sonnet/Opus even for `prod`. Read the resolved
+  model declarations above rather than treating that notice as the actual model selection.
 - `review-start --profile X` runs that review under X (tag `appsec/profile=X`) when X is in the running
   code location's provider family. A Claude/Copilot family switch is refused with exit 3, printing the
   `scripts/stack-restart --profile X` command. Without `--profile` a resumed run keeps its recorded
@@ -249,7 +256,7 @@ every red cell's.
 - `stack-restart`, `stack-start` and `stack-rebuild` carry the running stack's profile over, like the
   target and overlay, so a plain restart never changes it.
 - The model preflight (`job_review_intake`) and `job_model_connectivity` probe the models of the
-  resolved configuration, so a `prod` run confirms Sonnet 5.5 and Opus 5.5 and an unavailable model
+  resolved configuration, so a `prod` run requires its configured Fable model and an unavailable model
   blocks the run.
 - `final-report.json` records `provenance.configuration_profile = {name, sha256}`.
 
@@ -267,8 +274,8 @@ separate contract for `prod`; do not compare a `prod` run with the `dev` contrac
 
 ## A work account whose model names differ
 
-Edit the intended profile's exact model selections, preserving the documented Claude/Copilot
-profile parity and account-supported IDs. Profile files are part of the read-only mounted source,
+Edit the intended profile's exact model selections, checking every inherited profile, transport,
+limit and account-supported ID. Profile files are part of the read-only mounted source,
 not copied into the application image. After the active-run source freeze is released, use the
 documented [source reload](image-pin-verification.md#deploying-changed-application-code) to re-sign
 and recreate services, then create a new run with that profile. Rebuild only for dependency/tool/

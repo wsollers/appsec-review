@@ -380,14 +380,17 @@ Run these steps on the review host from the repository checkout, never during a 
    appsec-review signing verify-image <tag> [<tag> ...]
    ```
 
-   `--all-pinned` signs every enabled catalog image and every configured `*image_id` pin of an
-   enabled job or one of its steps whose tag resolves locally to exactly its pin. A mismatched or
+   `--all-pinned` selects enabled non-manual catalog images, configured image pins of enabled
+   jobs/steps and enabled telemetry PDF rendering; an explicitly referenced manual image is
+   included. Tagged images must resolve locally to exactly their pins. A mismatched or
    missing tag fails and is not signed. An
    unpinned catalog image is reported `skipped_unpinned`; sign it explicitly with
    `sign-image REFERENCE`. CodeQL's declared `preinstalled_runtimes[]` build and runtime images are
    host-derived images named only by ID: one that is not on this daemon is reported `skipped_absent`
-   (nothing to sign; the job derives or refuses it per `preinstalled_undeclared`) and does not fail the
-   command. The envelope directory (`image_signatures_dir`, under `/var/lib` by default) must be
+   and does not fail this signing command. That is not readiness: the review's image-pin gate
+   fails when a declared build/runtime ID is absent. Inspection errors and ID mismatches fail
+   signing too; only a genuinely absent ID-only reference is skipped. The envelope directory
+   (`image_signatures_dir`, under `/var/lib` by default) must be
    writable by the operator; `run-readiness` creates it with `sudo install -d -o <uid> -g <gid>` once.
 
    On a bounded builder service host, add `--builder-service-config <operator service.toml>` (the

@@ -28,15 +28,18 @@ compiler or runtime reproduction. That bounded result and the real
 [acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger).
 
 `job_poc_generation` writes, for admitted judge-qualified candidates within its bounds, a **proof-of-concept unit-test
-function** that a developer can add to a test target and watch in a debugger, and checks that it **compiles**
-against the project's own build. It is the second half of the design in
+function** that a developer can add to a test target and watch in a debugger. It validates the
+function and can check compilation against the project's own build; the shipped
+`settings.build.compile_check = false` disables that latter replay, not AST validation.
+It is the second half of the design in
 [`../architecture/review-judge-and-poc.md`](../architecture/review-judge-and-poc.md) (section 5); the decisions it
 took where that document left a choice open are in its section 8.
 
 - The function has **no `main`**, takes no arguments and uses only in-memory fixtures. A second function, the
   **negative control**, makes the same call with a safe input so the difference is visible.
-- The pipeline **never executes it**. It parses it, runs deterministic validators on the clang AST, compiles it
-  (syntax, plain object, sanitizer object) and checks that the symbols the object needs resolve. Nothing is linked
+- The pipeline **never executes it**. It parses it and runs deterministic validators on the Clang AST.
+  When `build.compile_check` is enabled, it also compiles it (syntax, plain object, sanitizer object)
+  and checks that the symbols the object needs resolve. Nothing is linked
   into an executable and nothing is run.
 - The job is enabled for new configurations; a frozen older configuration can still require
   explicit manual production and gate admission.
@@ -88,7 +91,8 @@ run's frozen settings.
 
 The review handoff lists `poc_candidates` (design section 4; produced by the judge work of
 `job_inference_security_review`): every claim whose state is `supported` or `confirmed`, whose judge verdict is
-`red_correct` (or `partly`, when the producer is configured to include it), that carries a resolved `poc_basis` and
+`red_correct`, or `not_convened` when no judge was convened (also `partly` when the producer is
+configured to include it), that carries a resolved `poc_basis` and
 that the policy asks to document. The reader (`jobs/job_poc_generation/candidates.py`, schema
 [`poc-candidate.schema.json`](../schemas/poc-generation/poc-candidate.schema.json)) is strict:
 
@@ -129,7 +133,8 @@ load.verify_inputs -> plan.briefs -> write.poc_writer -> validate.policy -> comp
    silently trimmed to satisfy the budget; the writer independently rechecks it before consumption.
 3. **`write.poc_writer`** runs the model (below).
 4. **`validate.policy`** assembles the file, runs the textual checks and then the AST validators in the build image.
-5. **`compile.build_check`** runs the compile check.
+5. **`compile.build_check`** runs the compile check only when configured. Otherwise validated
+   source is `artifact_generated` with the explicit compile-check-disabled qualification.
 6. **`package.files`** writes new attempt-owned `candidates/<claim-id>/` directories and refuses an existing candidate directory.
 7. **`publish.publish_handoff`** rehashes all captured review bindings, rejects changed accepted-review pointers,
    validates and publishes `poc-generation/2` and handoff `/2`.
@@ -196,7 +201,14 @@ All of them are deterministic and fail closed; any violation is `policy_denied`.
   validation. Literal presence is not a dataflow or runtime proof that a particular argument meets the trigger.
   Integer constants are otherwise not bounded, because integer-overflow triggers need large values.
 
-The AST is the reduction of `clang -fsyntax-only -Xclang -ast-dump=json`: for a translation unit that includes
+Before native AST validation, `static_compile_check.py` emits the bounded
+`poc-compile-check/2` record retained as `static_check` in protected compile records. It checks
+lexical structure, declared test entrypoints, target-symbol text, oracle/control patterns and
+prohibited primitives; only its Python branch uses an actual language parser. Its multi-language
+helper does not commission additional native build lanes. A lexical pass leaves non-Python
+syntax unverified, and never establishes compilation, symbol resolution or runtime reproduction.
+
+The native AST is the reduction of `clang -fsyntax-only -Xclang -ast-dump=json`: for a translation unit that includes
 `<string>` the dump is tens of megabytes, so `ast_reduce.py` (stdlib only, copied into the scratch workspace) runs inside
 the build image around the compiler and returns only the PoC file's nodes, the identity of everything they reference
 (qualified name, kind, file) and the project's own declarations. `policy.check_ast` is a pure function of that document;
@@ -206,6 +218,10 @@ Replay retains both attached and separated macro definitions/undefinitions (`-DF
 `-D FEATURE=1`, `-UOLD` or `-U OLD`); malformed or missing operands cannot silently change the parse context.
 
 ### The compile check
+
+This optional replay is disabled in the shipped configuration. The validation stage still parses
+the generated function with Clang in the build image; `artifact_generated` is not compile or
+runtime verification. The steps below describe `build.compile_check = true`.
 
 `build.workspace_file_limit` and `build.workspace_bytes_limit` bound the accepted workspace copy.
 `build.object_limit` admits one deterministic path-sorted prefix across object/static-library and
@@ -239,7 +255,7 @@ links; the tests assert this on every recorded argv.
 | --- | --- |
 | `compile_verified` | validators passed; the functions compile with the project's flags plain and under the sanitizers and every undefined symbol resolves |
 | `compile_failed` | validators passed (or the code did not parse) but the generated code does not build, or needs a symbol nothing defines. This **does not contradict the finding** |
-| `artifact_generated` | the source was generated but could not be verified: the build image or the accepted workspace was unavailable, or no accepted object or runtime library could be read (a named gap) |
+| `artifact_generated` | source was generated without compile verification: the compile check was explicitly disabled, the build image/accepted workspace was unavailable, or no accepted object/runtime library could be read (a named qualification/gap) |
 | `policy_denied` | a deterministic validator refused it; the source is kept as data and was not compiled |
 | `insufficient_evidence` | no usable `poc_basis`, no known sink function, or the writer produced no usable answer |
 | `not_applicable` | the judge verdict is not configured for PoC generation, or no accepted native build compiled the sink's file (not C/C++, or a failed build) |
@@ -284,12 +300,12 @@ bound by an earlier accepted attempt.
 | `enabled` | membership in the automatic graph; `true` for new configurations |
 | `workers` | candidates processed concurrently inside a step |
 | `max_candidates` | candidates attempted per run |
-| `accepted_judge_verdicts` | verdicts a candidate may carry; `["red_correct"]` |
+| `accepted_judge_verdicts` | verdicts a candidate may carry; `["red_correct", "not_convened"]` |
 | `models.<profile>`, `roles.poc_writer.model_profile` | provider, model, reasoning, token, query, turn and timeout limits of the writer |
 | `retry` | `max_attempts` and which failures are retried |
 | `bounds` | lines, bytes, includes, list items, text, string literals, loop iterations, array elements, violations |
 | `policy` | `allowed_std_headers`, `project_header_suffixes`, `project_calls`, `call_allowlist`, `type_allowlist`, `call_denylist.<category>` |
-| `build` | command timeout and output bytes, workspace file and byte bounds, `ast_compilers`, `debug_flags`, `sanitizer_flags`, `runtime_libraries`, `runtime_symbol_prefixes`, `object_limit`, `scratch_directory` |
+| `build` | `compile_check` (shipped `false`), command timeout and output bytes, workspace file and byte bounds, `ast_compilers`, `debug_flags`, `sanitizer_flags`, `runtime_libraries`, `runtime_symbol_prefixes`, `object_limit`, `scratch_directory` |
 | `brief` | the package view and brief byte bounds, source lines, type declarations and declaration lines |
 
 The shipped writer profile uses the model the rest of the pipeline already depends on, so enabling the job adds no model
@@ -307,8 +323,8 @@ See [metrics operations](metrics.md).
 
 ## What the job never does
 
-- It never links, loads or runs the PoC or anything it compiled; the only outputs are two object files that are hashed
-  and discarded.
+- It never links, loads or runs the PoC or anything it compiled; when compile replay is enabled,
+  its two object files are hashed and discarded. Generated source and protected records are retained separately.
 - It never reads the target tree; the source copy is the run's accepted build workspace, re-hashed file by file.
 - It never gives the build container a network (`--network none`).
 - It never copies repository guidance, target guidance, development skills or continuation prompts into a prompt.

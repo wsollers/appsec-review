@@ -149,7 +149,7 @@ T-150 adds sanitized decision-audit availability, incomplete-population and scop
 The gate verifies the protected audit and retains certified read hashes; the report still reads
 only the gate snapshot. It does not publish raw audit narratives or change finding, score,
 ship-block or PoC decisions. See [the canonical gate](job_final_publication_gate.md#gaps) for
-the exact limitation IDs; these limitations retain their gate `/2` representation in report `/3`.
+the exact limitation IDs; these limitations retain their gate `/2` representation in report `/4`.
 
 Each limitation is a `limitation_id`, a `kind` and a statement. `gap` limitations make the gate
 status `PUBLISHABLE_WITH_LIMITATIONS` and the job `COMPLETED_WITH_GAPS`; `not_run` limitations name a

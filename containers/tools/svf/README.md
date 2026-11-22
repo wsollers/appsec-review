@@ -13,6 +13,11 @@ bitcode of one accepted C/C++ scope for `job_svf_alias_analysis`
 ([design](../../../docs/architecture/svf-alias-producer.md),
 [operations](../../../docs/operations/svf-alias-analysis.md)).
 
+The retained image is `manual = true` in the catalog and its job is disabled by default.
+Default bulk builds and image-readiness selection omit an unreferenced manual image; an
+explicit image selection or enabled consumer still requires its host binding. These instructions
+do not re-enable the retired lane.
+
 ## Contents
 
 | Path | What it is |
@@ -35,6 +40,7 @@ zlib and libxml2 headers are already in `tool-native-cpp`. The helper resolves m
 against snapshot `20261016T235959Z` with the host CA bundle mounted read-only. Acquisition may use
 the network; the Docker build itself is offline (`--network none`).
 SVF is compiled in its own cached layer, so a driver change rebuilds only the driver.
+Both CMake build steps use two workers (`-j2`), not the host's detected CPU count.
 
 The catalog builder (`python containers/build.py build tool-svf`) rebuilds `tool-native-cpp`
 first, which needs that image's own download cache. When `tool-native-cpp:1.0.0` is already present

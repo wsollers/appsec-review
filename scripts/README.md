@@ -11,7 +11,8 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ## Documentation generation
 
 `scripts/generate-docs.sh` (or `.venv/bin/python scripts/generate-docs.py`) regenerates the
-job inventory, guidance reference, job-page blocks and documentation indexes. `--check` reports
+job inventory, guidance reference, job-page blocks, documentation indexes and the bounded
+inference worker-turn JSON Schema from the capability catalog. `--check` reports
 drift without writing; `--output-root test/tmp/<name>` writes an isolated reproduction.
 The executive overview and its SVG are authored and are never generator outputs.
 

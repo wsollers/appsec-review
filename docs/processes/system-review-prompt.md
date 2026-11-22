@@ -113,7 +113,7 @@ paths are under `src/appsec_review/` unless they start with another top-level di
 - **Code:** `runtime/`, `interchange.py`, `storage/`, `provenance.py`, `jobs/completion_contracts.py`,
   `jobs/engine_contracts.py`, `jobs/accepted_review.py`, `jobs/bound_artifacts.py`,
   `jobs/cataloging.py`.
-- **Jobs:** none of its own; it is the layer beneath all 47.
+- **Jobs:** none of its own; it is the layer beneath all 48 registered jobs.
 - **Docs:** `docs/architecture/job-interchange.md`, `job-input-contracts.md`,
   `job-consumer-read-paths.md`, `docs/operations/recovery-repair.md`.
 - **Look for:** places a job can bypass `runtime.consume.accepted_upstream` or read another
