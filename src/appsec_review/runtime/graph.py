@@ -157,12 +157,17 @@ class GraphRunner:
             from appsec_review.jobs.build_iterations import resume_build_workspace
             resume_build_workspace(run_root)
             graph_started = datetime.now(timezone.utc)
+            from appsec_review.observability.monitor_inputs import record_graph_selection
+            graph_reference = record_graph_selection(
+                self.config, run_root, self.dependencies,
+                dagster_run_id=correlation.get("run_id") if correlation.get("system") == "dagster" else None)
             PipelineLog(run_root).write("RUN_STARTED", run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
                 details={"source_fingerprint": source_fingerprint or "deferred"})
             PipelineLog(run_root).write("GRAPH_STARTED", run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
-                details={"source_fingerprint": source_fingerprint or "deferred"})
+                details={"source_fingerprint": source_fingerprint or "deferred",
+                         "graph_reference": graph_reference})
             head_ids = {job.job_id for job in self.jobs[:position]}
             decisions: list[ResumeDecision] = list(self._planner(
                 run_root, self.jobs[:position], "none", orchestration=orchestration).plan(

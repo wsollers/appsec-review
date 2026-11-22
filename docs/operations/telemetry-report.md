@@ -8,6 +8,9 @@ last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # End-of-review telemetry report (LaTeX/PDF)
 
+While the run is active, the [five-minute run monitor](run-monitor.md) provides bounded textual
+status/model-statistics updates. It does not render this PDF or revalidate every receipt on each poll.
+
 The telemetry report is **one PDF per review run**: an end-of-review rollup of the run's telemetry,
 runtimes and metrics. The first pages describe the run as a whole; every job follows as supporting
 detail. It is produced by `src/appsec_review/reporting/telemetry/` (document model) and

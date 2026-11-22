@@ -176,6 +176,8 @@ class CallReceipt:
     served_model: str | None
     failure_code: str | None = None
     accounting_error_class: str | None = None
+    queue_delay_ms: int | None = None
+    call_latency_ms: int | None = None
 
 
 class Execution:
@@ -225,9 +227,9 @@ class Execution:
             "request_sha256": request_hash, "guidance_bundle_sha256": guidance_hash,
             "execution_id": self.execution_id, "retry_count": retry_count, "retry_reason": retry_reason,
         }
+        fields.update(role=_identity(request.role), persona=_identity(request.persona))
         if isinstance(request, ReviewModelRequest):
-            fields.update(role=_identity(request.role), persona=_identity(request.persona),
-                          cell_id=_identity(request.cell_id))
+            fields.update(cell_id=_identity(request.cell_id))
         for name in ("package_id", "lane", "batch_id", "build_unit_id", "case_id"):
             value = getattr(context, name)
             if value is not None:
@@ -265,6 +267,8 @@ class Execution:
         error: BaseException | None = None
         dispatched = False
         reservation: str | None = None
+        queue_delay_ms: int | None = None
+        call_latency_ms: int | None = None
         from .recording import MODE_ENVIRONMENT
         usage = (Usage(source="replay", unavailable_reason="recorded_replay")
                  if os.environ.get(MODE_ENVIRONMENT) == "replay" else Usage.from_result(None))
@@ -277,12 +281,20 @@ class Execution:
             if len(encoded) > request_bound:
                 raise ExecutionLimit("input_byte_bound")
             if self.accounting is not None:
-                reservation = self.accounting.reserve(request)
+                queued = self.deadline.clock()
+                try:
+                    reservation = self.accounting.reserve(request)
+                finally:
+                    queue_delay_ms = max(0, int((self.deadline.clock() - queued) * 1000))
             self.deadline.remaining()
             self._emit("MODEL_CALL_STARTED", fields)
             dispatched = True
             self.calls += 1
-            result = infer(request, timeout_seconds=timeout)
+            call_started = self.deadline.clock()
+            try:
+                result = infer(request, timeout_seconds=timeout)
+            finally:
+                call_latency_ms = max(0, int((self.deadline.clock() - call_started) * 1000))
             usage = Usage.from_result(result)
             result = usage.normalize(result)
             payload = _json(result.proposal, response=True)
@@ -311,6 +323,10 @@ class Execution:
             return result
         except BaseException as exc:
             error = exc
+            if isinstance(exc, ModelOutputError) and result is None and exc.usage is not None:
+                usage = Usage.from_result(ModelResult(
+                    {}, **{name: exc.usage.get(name) for name in ("input_tokens", "output_tokens", "cache_tokens")},
+                    usage_source=usage.source))
             safety.retain_failure("inference.execution", exc, request_sha256=request_hash,
                                   execution_id=self.execution_id)
             raise
@@ -344,7 +360,8 @@ class Execution:
                 type(error).__name__ if error is not None else None, status, retry_count, retry_reason,
                 max(0, int((self.deadline.clock() - started) * 1000)), usage,
                 _identity(request.provider), _identity(request.model), served_provider, served_model, failure_code,
-                type(accounting_error).__name__ if accounting_error is not None else None)
+                type(accounting_error).__name__ if accounting_error is not None else None,
+                queue_delay_ms, call_latency_ms)
             self.receipts.append(receipt)
             if self.context is not None:
                 context = self.context
@@ -357,6 +374,8 @@ class Execution:
             if dispatched:
                 self._emit("MODEL_CALL_COMPLETED", fields, terminal_status=status,
                     duration_ms=receipt.elapsed_ms, error_class=receipt.error_class,
+                    queue_delay_ms=receipt.queue_delay_ms, call_latency_ms=receipt.call_latency_ms,
+                    queue_scope="accounting_reserve", latency_scope="infer_dispatch",
                     failure_category=receipt.category, served_provider=served_provider, served_model=served_model,
                     failure_code=receipt.failure_code,
                     accounting_error_class=receipt.accounting_error_class,

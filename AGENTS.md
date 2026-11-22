@@ -214,6 +214,22 @@ agents that inspect or change the repository. It is not a prompt for review work
   environment), fixes and expectation changes stay with the agent that owns the change. Focused
   single-file runs are run inline.
 
+## Monitoring an admitted run
+
+- A repository agent assigned to monitor a review must read
+  `.claude/skills/monitor-review-run/SKILL.md` and use its standalone kickoff prompt, with the exact
+  application run ID, optional Dagster UUID, owning Linux checkout, frozen profile/source identity,
+  last snapshot and owner-confirmed expected gaps. Never monitor a guessed `latest` run.
+- Poll and post a concise run-state/model-statistics report every **5 minutes** while active, using
+  host session scheduling (`get_session_automation` / `save_session_automation`) when available.
+  This is a session schedule, not an app-wide automation, shell loop or permanent daemon. If the
+  host cannot schedule, say automatic polling is unavailable rather than claiming it is running.
+- Use the bounded one-shot monitor documented in `docs/operations/run-monitor.md`; preserve unknowns,
+  lower bounds, graph/attempt/reuse denominators, telemetry/receipt gaps and observation timestamps.
+  On confirmed terminal status, post the final summary and clear that monitor's session schedule.
+  Monitoring authorizes no restart, retry, target execution, policy change or source-freeze change,
+  and progress/usage are not security findings or quality assurance.
+
 ## Signing policy
 
 - Container-image signing and launch verification are implemented. The typed `[signing]`

@@ -65,6 +65,73 @@ def test_hash_only_correlated_receipts_are_immutable_and_not_replaced(tmp_path):
     assert paths[0].read_bytes() == first
 
 
+@pytest.mark.parametrize("outcome", ["success", "timeout", "cancelled", "invalid"], ids=str)
+def test_transport_latency_and_admission_are_measured_separately_on_all_paths(tmp_path, outcome):
+    clock = Clock()
+
+    class Accounting:
+        def reserve(self, _request):
+            clock.sleep(2)
+            return "reservation"
+
+        def settle(self, _reservation, *, usage, dispatched):
+            assert dispatched
+            clock.sleep(3)
+
+    engine = Execution(timeout_seconds=30, max_calls=1, clock=clock, accounting=Accounting(),
+                       context=CallContext(tmp_path, "run", "job", "attempt"))
+
+    def provider(*args, **kwargs):
+        clock.sleep(5)
+        if outcome == "timeout":
+            raise TimeoutError("private timeout text")
+        if outcome == "cancelled":
+            raise ModelCancelled("private cancellation text")
+        if outcome == "invalid":
+            raise ModelOutputError("private invalid text", usage={"input_tokens": 70, "output_tokens": 30})
+        return answer()
+
+    if outcome == "success":
+        engine.call(provider, request(), timeout_seconds=20)
+    else:
+        with pytest.raises((TimeoutError, ModelCancelled, ModelOutputError)):
+            engine.call(provider, request(), timeout_seconds=20)
+    receipt = engine.receipts[0]
+    assert receipt.queue_delay_ms == 2000 and receipt.call_latency_ms == 5000 and receipt.elapsed_ms == 10000
+    events, _ = PipelineLog(tmp_path).read()
+    details = events[-1]["details"]
+    assert details["queue_delay_ms"] == 2000 and details["call_latency_ms"] == 5000
+    assert details["terminal_status"] == {
+        "success": "SUCCEEDED", "timeout": "TIMED_OUT", "cancelled": "CANCELLED", "invalid": "FAILED"}[outcome]
+    if outcome == "invalid":
+        assert details["input_tokens"] == receipt.usage.input_tokens == 70
+        assert details["output_tokens"] == 30 and details["cache_tokens"] is None
+    assert "private" not in json.dumps(events)
+
+
+def test_uninstrumented_admission_is_unknown_and_legacy_request_role_is_retained(tmp_path):
+    clock = Clock()
+    model_request = ModelRequest(
+        "fixture/1", "persona", "planner", "PRIVATE_GUIDANCE", {}, (), (), (), (), (),
+        "provider", "model", "high", 10000, 1000)
+    engine = Execution(timeout_seconds=30, max_calls=1, clock=clock,
+                       context=CallContext(tmp_path, "run", "job", "attempt"))
+
+    def provider(*args, **kwargs):
+        clock.sleep(1)
+        return answer()
+
+    engine.call(provider, model_request, timeout_seconds=10)
+    details = PipelineLog(tmp_path).read()[0][-1]["details"]
+    assert details["queue_delay_ms"] is None and details["call_latency_ms"] == 1000
+    assert details["role"] == "planner" and details["persona"] == "persona"
+    from appsec_review.observability.telemetry import aggregate_run_metrics
+    summary = aggregate_run_metrics(tmp_path)
+    assert summary["model_invocations"][0]["queue_delay_ms"] is None
+    assert summary["model_invocations"][0]["call_latency_ms"] == 1000
+    assert summary["model_invocations"][0]["role"] == "planner"
+
+
 @pytest.mark.parametrize("value", [None, -1, True, 1.25, "5"])
 def test_invalid_or_missing_usage_is_unknown(value):
     engine = Execution(timeout_seconds=20, max_calls=1)

@@ -1694,7 +1694,11 @@ def _aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
                     "terminal_status", "error_class", "served_provider", "served_model", "execution_mode")},
                 "provider": details.get("provider"), "model": details.get("model"),
                 "duration_ms": details.get("duration_ms"), "retry_count": details.get("retry_count"),
+                "queue_delay_ms": details.get("queue_delay_ms"), "call_latency_ms": details.get("call_latency_ms"),
+                "queue_scope": details.get("queue_scope"), "latency_scope": details.get("latency_scope"),
+                "retry_reason": details.get("retry_reason"), "failure_category": details.get("failure_category"),
                 "input_tokens": details.get("input_tokens"), "output_tokens": details.get("output_tokens"),
+                "reasoning_tokens": details.get("reasoning_tokens"),
                 "cache_tokens": details.get("cache_tokens"), "cost": details.get("cost"),
                 "cost_unavailable_reason": None if details.get("cost") is not None else "no_trusted_rate_source",
                 "usage_unavailable_reason": details.get("usage_unavailable_reason") or ("provider_usage_unavailable" if any(

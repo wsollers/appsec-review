@@ -8,6 +8,11 @@ last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Review metrics
 
+For scheduled five-minute textual status/model summaries, use the bounded one-shot
+[run monitor](run-monitor.md) and its repository-agent kickoff prompt. It reuses the incremental
+pipeline cursor and reports identity, graph/attempt partitions, per-model usage/timing and reliable
+deltas without recomputing receipt-backed run metrics at every poll. It never changes recording mode.
+
 Run `appsec-review metrics --run-id <id>` after or during a review. The command deterministically
 rebuilds `runs/<run-id>/data/telemetry/summary.json` and prints the same document. It does not scan
 the target repository. All review-scope values resolve through receipt paths and SHA-256 identities

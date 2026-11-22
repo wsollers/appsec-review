@@ -107,6 +107,24 @@ def _node_name(job: Job, suffix: str, namespace: str = "") -> str:
     return f"{namespace}__{base}" if namespace else base
 
 
+def _monitor_job_selection(job_def, step_keys, jobs: tuple[Job, ...],
+                           dependencies: Mapping[str, tuple[str, ...]], namespace: str):
+    """Observe the submitted Dagster subset, without changing dispatch or dependency grants."""
+    nodes = {node.name for node in job_def.graph.node_defs}
+    if step_keys is not None:
+        nodes &= set(step_keys)
+    selected, partial = set(), []
+    for job in jobs:
+        expected = {_node_name(job, suffix, namespace)
+                    for suffix in ("begin", "finalize", *(unit.unit_id for unit in job.units))}
+        if expected & nodes:
+            selected.add(job.job_id)
+            if not expected <= nodes:
+                partial.append(job.job_id)
+    return ({job: tuple(parent for parent in dependencies[job] if parent in selected)
+             for job in sorted(selected)}, tuple(sorted(partial)))
+
+
 # Job-specific step pools, consulted before the shared step-name heuristics below.
 _JOB_STEP_POOLS: Mapping[str, Mapping[str, str]] = {
     "job_inference_security_review": {
@@ -201,6 +219,14 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                 if selected.job_id == "job_build_iteration" and not iteration_request:
                     raise ValueError("internal build iteration requires an immutable request tag")
                 run_id = upstream.get("run_id") or tags.get("appsec/application_run_id")
+                monitor_jobs, partial_jobs = _monitor_job_selection(
+                    context.job_def, context.dagster_run.step_keys_to_execute,
+                    jobs, dependencies_by_job, node_namespace)
+                if run_id:
+                    from appsec_review.observability.monitor_inputs import record_graph_selection
+                    from appsec_review.storage.runs import RunStore
+                    record_graph_selection(config, RunStore(config.runtime.runs_dir).resolve(str(run_id)),
+                                           monitor_jobs, dagster_run_id=context.run_id, partial_jobs=partial_jobs)
                 upstream_handoffs = None
                 tagged = launch_upstream_handoffs(config.runtime.runs_dir, tags,
                                                   in_graph=len(jobs) > 1 or bool(upstream_values))
@@ -220,6 +246,10 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                                    "node": context.op.name,
                                    **({"iteration_request": iteration_request} if iteration_request else {})},
                     **({"force": True} if forced else {}))
+                if not run_id:
+                    from appsec_review.observability.monitor_inputs import record_graph_selection
+                    record_graph_selection(config, config.runtime.runs_dir / str(claim["run_id"]),
+                                           monitor_jobs, dagster_run_id=context.run_id, partial_jobs=partial_jobs)
                 created_at = getattr(context.dagster_run, "create_timestamp", None)
                 if isinstance(created_at, (int, float)):
                     queue_delay_ms = max(0, int((datetime.now(timezone.utc).timestamp() - created_at) * 1000))
