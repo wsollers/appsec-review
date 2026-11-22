@@ -977,6 +977,9 @@ The [handler](../../src/appsec_review/jobs/job_review_package_assembly/job.py) c
 6. Reverify exact directory membership, bytes, package identities, input manifest, counts, menu
    membership and coverage-gap union. Publish all file references; the output validator repeats
    these receipt checks before acceptance.
+   The manifest preserves inherited input gaps even when no package is emitted. Selected
+   partial build facts contribute their gaps, and scoped artifact IDs must also belong to
+   the package's explicit retrieval grant.
 
 ## Dataflow
 

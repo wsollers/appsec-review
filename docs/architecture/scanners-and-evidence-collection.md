@@ -240,12 +240,17 @@ mechanisms remain in their linked canonical homes.
   and performs cross-scanner corroboration (`appsec-review/corroborated-sast-evidence/1`) across
   Semgrep, Opengrep, Bandit, Gosec, Brakeman, Clippy, DevSkim, Cppcheck, Clang-Tidy, and CodeQL
   *before* per-adapter truncation caps are applied.
-- **Indexed OSV matching & FFI/symbol SCA reachability**: `osv_version_matching = "index"` enables
-  offline advisory matching against pre-built ecosystem snapshots, and `job_dependency_intelligence`
-  combines OSV/Grype CVEs with Alternate CPG call paths, Tree-sitter imports, and binary symbol/FFI
-  tables (`ctypes`, `cgo`, JNI, P/Invoke, Rust `extern "C"`, Ruby `Fiddle`, PHP `FFI`) to publish
-  `appsec-review/sca-reachability/1` (`reachable_from_entrypoint`, `imported_not_called`,
-  `present_not_imported`, `native_ffi_loaded`, `unknown_dynamic`).
+- **Indexed OSV matching & FFI/symbol SCA context**: `osv_version_matching = "index"` enables
+  offline advisory matching against verified ecosystem snapshots. `job_dependency_intelligence`
+  combines indexed matches, scanner advisories and native CPE matches with bounded,
+  hash-verified first-party source reads. Python AST bindings support conservative symbol-use
+  matches; other import/FFI patterns remain package-use hints with unsupported-symbol-binding
+  gaps. This path does not consume Alternate CPG call paths or binary symbol tables.
+  `appsec-review/sca-reachability/1` uses `symbol_reachable`, `package_imported`,
+  `transitive_only` and `unknown`; the vocabulary also reserves `unreachable_in_target`, but
+  this bounded classifier does not emit it from absence. Every result retains
+  `static_reachability_only`: static use is neither whole-program runtime reachability nor
+  proof of unreachability.
 
 ## Dataflow
 

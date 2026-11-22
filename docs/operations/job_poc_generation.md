@@ -11,10 +11,16 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 
 ## Purpose
 
-Generate bounded PoC and negative-control functions for explicitly admitted judge-qualified review
-candidates, then validate policy and compile them against an accepted native build workspace.
+Generate bounded PoC and negative-control functions for explicitly admitted review candidates,
+then validate policy and, when enabled, compile them against an accepted native build workspace.
 Nothing is linked into an executable or run. `compile_verified` means compile checks passed,
 not exploit reproduction; compile failure neither refutes the finding nor changes its state.
+
+The default accepted verdicts are `red_correct` and `not_convened`. The latter means no judge
+was selected, not a failed, unlaunched or incomplete selected judge. Existing candidate-state,
+technical-severity and resolving-basis checks still apply. `build.compile_check` defaults to
+false: AST policy validation remains, but project compile replay does not run and the retained
+outcome is `artifact_generated` with the disabled-check reason.
 
 The actual `validate.policy` path first runs the bounded static harness preflight and retains its
 `appsec-review/poc-compile-check/2` record in validation output and packaged `compile.json`.
@@ -545,6 +551,7 @@ The [handler](../../src/appsec_review/jobs/job_poc_generation/job.py) uses the t
 
 1. In `compile.build_check`, retain earlier terminal outcomes; prepare fresh scratch for admitted
    source only.
+   If compile checking is disabled, publish that limitation without invoking compile replay.
 2. Run syntax, plain-object and sanitizer-object checks using the safe accepted compile context,
    and check undefined symbols. Never link the functions or run generated code.
 3. Retain actual command/result diagnostics and object/symbol identities. Tool/workspace
@@ -608,7 +615,7 @@ See [canonical outcomes](../architecture/job-interchange.md#the-control-layer-be
 | `insufficient_evidence` | Unusable basis, missing package/sink, unresolved identities or unusable writer answer. |
 | `not_applicable` | Configured verdict/build/language boundary or writer decline; retained candidate outcome, not automatically a summary gap. |
 | `unsafe_to_attempt`, `policy_denied` | Allowed decline or deterministic policy refusal. |
-| `artifact_generated` | Source exists but validators/build checks were unavailable; inspect retained reason and row gaps. |
+| `artifact_generated` | Source exists but validators/build checks were unavailable or compile checking was disabled; inspect retained reason and row gaps. |
 | `compile_failed` | Generated functions failed parse/compile/symbol checks; not a refutation of the original claim. |
 | Brief/retrieval and unchecked-trigger limitations | Inspect retained brief/validation/compile records even when compilation succeeds. |
 

@@ -456,6 +456,9 @@ Generated task and applicability bindings remain [T-147](../TODO.md) and [T-157]
 6. Disabled/unavailable inference, exceeded input limits and exhausted retries retain gaps.
    Explicit model abstention leaves the repository unresolved; missing/unsupported repositories
    are recorded even when the inference call itself succeeded.
+   Repository resolution shares a per-unit `inference_failure_limit` (default 8) and memoizes
+   identical candidate requests, including their failures. Exhaustion stops further model calls
+   with `model_failure_bound`; it does not drop unresolved dependencies.
 
 ### `repositories`
 
@@ -498,6 +501,14 @@ Generated task and applicability bindings remain [T-147](../TODO.md) and [T-157]
 4. In `publication.publish_context`, deduplicate reasons and index dependency packages, native
    evidence and Scorecard review signals. Link Scorecard context with explicit context-only
    semantics; retain per-dependency coverage and SBOM identities.
+   This task also writes `sca-reachability.json` (`appsec-review/sca-reachability/1`), joining
+   indexed OSV version decisions, scanner advisories and native advisory matches to bounded
+   authenticated source-use evidence. Its inventory `review_signal` records retain package
+   coordinates, dependency-instance IDs, resolving call sites and gaps. Import/symbol/FFI
+   classifications are static context, not runtime reachability or exploitability proofs.
+   Declared constraints and uncorroborated versions cannot become installed versions; ambiguous
+   package-instance bindings remain qualified. The document, matcher, settings and verified
+   feed identity all participate in the inventory fingerprint.
 5. Publish a verified dependency-intelligence inventory manifest. It contains this context shard
    and, when the lookup executed, the `native-advisory` observations shard; it is not represented
    as a flattened copy of every upstream index.
@@ -523,9 +534,13 @@ flowchart LR
   resolve --> repos["repositories.deduplicate"]
   repos --> score["scorecards.fetch: cache or bounded HTTPS"]
   investigate --> sbom["publication.publish_sbom: SPDX + provenance + metrics"]
+  resolve --> advisory["publication.native_advisory_lookup"]
+  feed["verified cve-bin-tool / NVD snapshot"] --> advisory
   inputs --> sbom
   score --> context["publication.publish_context: inventory shard"]
   sbom --> context
+  advisory --> context
+  context --> sca["sca-reachability.json + inventory review signals"]
   context --> publish["acceptance.publish_handoff"]
   investigate -. "unread / conflicting / unsupported / bounded" .-> gaps["scoped legacy reason records"]
   score -. "service / cache / parse failure" .-> gaps
@@ -547,6 +562,9 @@ wraps them as `producer_reported_gap`, normally non-retryable; this does not mak
 - Coverage missing: `bounds`, `repository_bound`, `unmapped_path`, `ambiguous_root`, unread metadata,
   `identity_conflict`, `version_conflict` and `repository_conflict`. Preserve unknown or
   conflicting claims rather than manufacturing a unique package.
+- Advisory/source-use coverage: `sca_reachability_gap` retains missing feed, undecidable version,
+  unsupported source-use and bounded/ambiguous binding reasons. Absence of retained call sites
+  is not a closed-world proof of nonreachability.
 - Tooling/read/model failures: `read_failed`, `decode_failed`, `model_unavailable`, `model_failure`,
   rejected native proposals, `sbom_conversion_failed`, `sbom_validation_failed`.
 - Scorecard failures: `scorecard_not_found`, `scorecard_rate_limit`, `scorecard_request_failure`,

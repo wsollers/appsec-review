@@ -413,9 +413,12 @@ hash and function address as its payload (`binary_anchor`). A `binary_import` or
 or a function Ghidra did not decompile, becomes the gap "binary-derived evidence must cite binary
 hash, function address and pseudo-C line".
 
-**Existing artifact lanes** (BLint, Syft and Grype when enabled/applicable) can inspect accepted
-artifact bytes and retain their SHA-256. The cve-bin-tool scanner adapter remains deferred
-([T-102](../TODO.md)); an available database builder is not an implemented scan lane.
+**Existing artifact lanes** (BLint, Syft, Grype and cve-bin-tool when enabled/applicable) can
+inspect accepted artifact bytes and retain their SHA-256. The `cve_bin_tool` adapter now runs
+offline against a verified database snapshot and records version-string advisory matches as
+leads, not confirmed vulnerabilities. It neither executes the binary nor makes the separate
+binary-only intake design below implemented. See
+[artifact security analysis](../operations/job_artifact_security_analysis.md).
 
 ### Reviewing a binary with no source tree (designed, not implemented)
 

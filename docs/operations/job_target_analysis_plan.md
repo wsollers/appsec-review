@@ -246,6 +246,9 @@ the [topology architecture](../architecture/build-topology-and-iterations.md) ow
    build units and compile databases under configured item/byte/prefix bounds.
 4. Publish `catalog-summary.json` and a truncation reason if the summary was bounded. The
    summary is model context, not a replacement for full accepted descriptor authority.
+   Counts and serialized byte totals describe the final bounded summary. Trim illustrative
+   context before descriptor documents; never drop required build-unit identities to fit.
+   An item/byte budget too small for those identities fails rather than inventing a complete summary.
 
 ### `analysis_decisions`
 
@@ -262,11 +265,15 @@ the [topology architecture](../architecture/build-topology-and-iterations.md) ow
    oversized singleton gets a bounded-feedback gap, not a larger allowance.
 5. Assemble hash-pinned guidance and closed allowlists. Run `bounded_feedback` with one shared
    per-scope call/deadline/byte budget for initial responses, repairs and evidence rounds.
-   `need_evidence` may request only allowed inventory paths and exact raw hashes; verify bytes,
-   withhold sensitive content and reject nonprogressing or unsupported requests.
+   `need_evidence` may request only allowed inventory paths and exact raw hashes: selected
+   unit roots plus their exact accepted descriptors, including a descriptor outside its unit
+   root. Descriptors trimmed from the summary can be offered again; unrelated siblings cannot.
+   Verify bytes, withhold sensitive content and reject nonprogressing or unsupported requests.
 6. Validate `final` recipes or explicit abstentions against accepted units and image/command
    policy. Merge accepted recipes, record contradictions and omissions, and recompile the
    whole graph; a model hint cannot become scheduling or compiler authority.
+   Nested response types are checked before descriptor normalization; malformed shapes consume
+   bounded repair opportunities rather than escaping as incidental Python type errors.
 7. Cache only a complete validated final without abstentions. Recognized response/provider/
    timeout failures consume the finite budget and yield named exhaustion; unexpected
    application/integrity errors propagate.

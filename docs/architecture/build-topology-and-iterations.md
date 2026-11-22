@@ -387,6 +387,13 @@ containers or accepting an uncertain success.
 
 ## IMPLEMENTED: separate bounded build invocations
 
+Build completion and checkpoint eligibility are separate. `build_outcome=built` can coexist
+with a `COMPLETED_WITH_GAPS` receipt, but the controller commits, recovers or reuses a generation
+only with a clean `SUCCEEDED` receipt, no rejected artifacts and confirmed cleanup. A completed
+but gapped build rolls back and leaves the controller blocked without inventing a build-failure
+diagnosis. Retained products and immutable completion/request bindings are reverified during
+reconstruction; selecting a recipe does not authorize reuse of an uncertain generation.
+
 The registered generic job is `job_build_iteration` (Dagster name `build_iteration`, step/task
 `execute.node`). `job_language_build` starts `iterations.dispatch` before family load/publication.
 Its controller evaluates dependency-ready nodes serially, each through a distinct actual

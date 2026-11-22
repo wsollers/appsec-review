@@ -16,6 +16,13 @@ sources, with a bounded language-neutral syntax projection where implemented. Pa
 checking, name/import resolution, call-target resolution or vulnerability analysis. A parseable
 tree and a complete AST shard do not imply a complete semantic projection.
 
+The normalizer also synthesizes bounded, syntax-derived per-function CFGs and guard polarity
+from admitted CST nodes and unchanged source bytes. `tree_sitter_cfg`
+(`appsec-review/tree-sitter-cfg/1`) retains node/edge artifacts and a manifest; the analysis shard
+exposes function summaries, CFG nodes and guards. Unsupported lowering, truncation and unknown
+control flow remain explicit, independently of successful parsing. See
+[CFG semantics and limits](../architecture/tree-sitter-ast.md).
+
 <!-- generated:begin job=job_tree_sitter_ast -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract
@@ -289,6 +296,9 @@ flowchart LR
   plan --> parse["parse.dynamic_scopes: locked parser"]
   parse --> ast["JSONL nodes + analysis shards"]
   ast --> projection["bounded syntax projection coverage"]
+  ast --> cfg["tree_sitter_cfg: bounded per-function CFG / guards"]
+  cfg --> publish
+  cfg --> graph["job_code_graph_index: Alternate CPG context"]
   projection --> publish["acceptance.publish_handoff"]
   plan -. "disabled / grammar absent / exclusions" .-> gaps["scope dispositions"]
   parse -. "failed / diagnostics / limits / omitted files" .-> gaps

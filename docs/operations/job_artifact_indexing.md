@@ -189,9 +189,14 @@ member manifests; it does not unpack archives or invoke a scanner. Generated too
 
 1. Load accepted language-build publication and its bound verified manifest. Require this target
    snapshot; validate receipt schema and unique build-unit identities.
-2. For unsuccessful receipts, retain reasons but require no published artifacts. For successful
-   receipts verify the workspace manifest, every artifact's canonical workspace path, bytes,
-   size and manifest membership, including retained shared-object references.
+2. Distinguish build completion from receipt completeness. A typed `build_outcome=built`
+   with `SUCCEEDED` or `COMPLETED_WITH_GAPS` may contribute verified products; older receipts
+   without that field retain the legacy `SUCCEEDED` test. Failed/not-run receipts retain
+   reasons but must publish no artifacts. Verify the workspace manifest, every admitted
+   artifact's canonical workspace path, bytes, size and membership, including shared objects.
+   A partial native receipt additionally needs exactly one proven, dispatch-bound enforcement
+   record: every admitted native product's path/hash/role must occur in its closure manifest
+   without a rejection. Rejected products cannot be republished as admitted artifacts.
 3. Validate Node-specific build-unit, exact-mapping, origin and package-integrity metadata. Reject
    duplicate canonical artifacts or inconsistent receipt identities; these are integrity failures.
 4. Optionally read accepted target-artifact intake from the catalog. Require target-intake origin,
@@ -271,7 +276,8 @@ does not imply approval by the current walk.
 ## Acceptance
 
 1. **A. Inputs:** Match language-build and optional catalog handoff pins, workspace manifests and
-   shared-object references; ensure unsuccessful receipts contributed no artifact bytes.
+   shared-object references; ensure failed/not-run and enforcement-rejected products contributed
+   no artifact bytes. For built-but-partial native receipts, verify each product's closure binding.
 2. **B. Independent comparison:** Count receipt artifacts by build unit/family and target inventory
    entries independently; compare canonical identities, hashes and sizes. Count package-member
    rows and `CONTAINS` edges, then check a producing/link edge against its exact invocation

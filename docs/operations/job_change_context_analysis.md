@@ -230,9 +230,10 @@ and [operations](change-context-analysis.md).
 
 ### `load`
 
-1. Require accepted catalog and source-history handoffs in the handlers, verify their artifacts
-   and full accepted result, and require the catalog snapshot to match the claim. Some declared
-   inputs are optional; that declaration does not make these handler prerequisites optional.
+1. Require the accepted catalog and matching snapshot. Source history is required when enabled;
+   when disabled and unsupplied, retain `source_history_unavailable` and the explicit no-history
+   path instead of reading a floating publication or manufacturing history. Verify every supplied
+   history artifact and its accepted result.
 2. Split history into its existing source lanes. Reuse accepted normalized changes, message
    classifications and GitHub facts; recompute lifetime ownership from all **walked** raw
    commits, not just the recent window. Name truncated/shallow lifetime coverage.
@@ -255,6 +256,8 @@ and [operations](change-context-analysis.md).
    an independently moved checkout was revalidated solely from an old history handoff.
 3. For classified non-bulk fixes deleting lines, bound candidate fix/path checks. Diff against
    the first parent, retain bounded old-line hunks, and blame those parent ranges.
+   Keep at most 200 hunks per check, recording candidate/checked/omitted hunk counts and
+   `fix_on_fix_hunk_bound_reached`; a bounded prefix is not complete fix-on-fix coverage.
 4. Count repeated repairs only when prior lines resolve to a known earlier fix within the
    configured interval; preserve outside-window/unclassified lines and execution failures.
 
@@ -317,10 +320,10 @@ accounting, not a blanket retry flag for all missing inputs. See
 | `sources.load_export` | For review/deployment/organization: disabled, unpinned, outside repository, inside target, missing, oversized, hash-mismatched or invalid export. These make the source unavailable. |
 | External normalization/schedule | `deployment_export_source_ambiguous`, `deployment_events_rejected`, `organization_members_rejected`, `time_zone_not_configured`, `time_zone_database_unavailable`, `test_association_disabled`; invalid source schemas retain their export-invalid reasons. |
 | `attribute.line_attribution` | `line_attribution_bound_reached`, `function_spans_unavailable:tree_sitter_not_accepted`, `function_mapping_unreliable`, `line_attribution_execution_failed`. |
-| `attribute.fix_on_fix` | `fix_on_fix_disabled`, `fix_on_fix_bound_reached`, `fix_on_fix_execution_failed`; unclassified prior lines remain a count, not confirmed repeated repairs. |
+| `attribute.fix_on_fix` | `fix_on_fix_disabled`, `fix_on_fix_bound_reached`, `fix_on_fix_hunk_bound_reached`, `fix_on_fix_execution_failed`; unclassified prior lines remain a count, not confirmed repeated repairs. |
 | `analyze.change_signals` | `deployment_commit_not_in_history`, `review_records_missing_for_changes`; per-record unavailable fields retain their own explanation. |
 
-Missing accepted history/catalog, wrong snapshots, changed artifacts and malformed shared
+Missing required enabled history/catalog, wrong snapshots, changed artifacts and malformed shared
 authority can raise rather than publish. Source-local load errors are contained only where the
 multi-source handler explicitly does so. Disabled exports and absent time zones are understood
 limitations, not automatically authorized expected gaps in a walk.

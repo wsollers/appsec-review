@@ -55,7 +55,7 @@ reader boundaries; this contract is not an operating-system filesystem sandbox.
 
 ## Current dispatch and projections
 
-All 47 registered factories attach the contract declared in their `datasets.py` module. Forty-five
+All 48 registered factories attach the contract declared in their `datasets.py` module. Forty-six
 are review-graph jobs (including disabled jobs); `job_build_iteration` is an internal transaction,
 and `job_third_party_data_sync` is external maintenance. `Job.consumes` and module `CONSUMES` are
 compatibility projections, not independent input declarations. Registry/config parity and exact
@@ -127,6 +127,12 @@ explicitly `null` because these boundaries do not observe model reasoning.
 The indexing input summary and coverage matrices now emit `/2` schemas; producer-consumer
 availability is no longer serialized as evidence that consumption was complete.
 
+The shared catalog reader observes `catalog_documents` before reading the catalog and each
+child document; the accepted-plan loader similarly observes `analysis_plan_documents`.
+The catalog's target-artifact projection validates original intake identities and exposes
+target-relative names for scanner applicability, without reading the binary payload or
+converting metadata access into a protected-payload grant.
+
 This is bounded reader instrumentation, not a Python or filesystem sandbox. Direct arbitrary
 filesystem reads and model citation interpretation are not inferred from these receipts. The
 future shared artifact/build reader work can instrument additional private artifact readers
@@ -180,6 +186,14 @@ re-reads the environment publication an accepted plan is bound to (`EXPECTED_CUR
 because it composes its shards onto that producer's pinned retrieval manifest. A job that does not
 use what a loader can read asks for less instead: `job_artifact_indexing` and
 `job_ci_configuration_analysis` call `load_target_catalog(..., intake_target_root=False)`.
+
+Current-target `upstream_handoffs` and admitted `optional_prior_handoffs` are separate lineages.
+An optional-prior environment pin is validated against the typed contract and retained under
+`optional_priors` in input admission, including its original target snapshot, coverage and
+attempt. Its reads explicitly select the prior lineage; it cannot satisfy a current-target
+requirement or replace an explicitly supplied current environment. A producer appearing in
+both maps is rejected. Downstream plan readers preserve the plan-bound prior identity rather
+than discovering a newer environment publication.
 `tests/test_plan_environment_consumers.py` and `tests/test_binary_evidence_indexing.py` run these
 paths through the real runner.
 

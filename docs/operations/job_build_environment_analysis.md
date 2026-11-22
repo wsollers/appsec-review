@@ -150,8 +150,9 @@ modes; [input contracts](../architecture/job-input-contracts.md) govern actual a
    It resolves typed, supplied pins through `runtime.consume.accepted_upstream`, retaining
    the handoff read receipt, and validates catalog/child hashes, custody, schemas and source
    agreement. Handoff, catalog and partition ceilings remain 32 MiB; other child documents
-   remain 16 MiB. This replaces private planner coupling, not previously missing admission
-   enforcement, and does not add dataset-level read receipts for these document reads.
+   remain 16 MiB. Each catalog/child read now observes the declared `catalog_documents`
+   output before reading its bytes, in addition to the accepted-handoff receipt. This is
+   bounded reader instrumentation, not a grant to read target artifact payloads.
 3. Traverse only bounded literal source references to accepted script paths: shell `source`/`.`
    are case-sensitive; batch `call`/`@call` are case-insensitive. Unsupported cross-dialect
    commands produce statement gaps, not source edges. Enforce

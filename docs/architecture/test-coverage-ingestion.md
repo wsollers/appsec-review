@@ -18,11 +18,13 @@ that uncovered code is vulnerable.
 
 ## Accepted inputs and trust boundary
 
-The job verifies the accepted handoffs for `job_target_catalog`, `job_language_build`, and
-`job_artifact_indexing`. Candidate coverage files come only from artifact identities enumerated in
+The job requires `job_target_catalog` and verifies `job_language_build` and `job_artifact_indexing`
+when those producers are enabled. Disabled producers retain named unavailable-input gaps;
+without artifact indexing the pinned attempt or catalog manifest supplies verified manifest
+lineage. Candidate coverage files come only from artifact identities enumerated in
 accepted language-build receipts. Before parsing, each candidate must remain a regular,
 non-symlink, run-owned file with the accepted SHA-256. The accepted artifact-index manifest is
-verified in full and becomes the upstream manifest of the coverage shards.
+verified when supplied and becomes the upstream manifest of the coverage shards.
 
 Coverage data, producer paths, XML, JSON, and build metadata are untrusted data. The parsers do
 not resolve external entities and reject DTD/entity declarations. Artifact bytes, parser rows,

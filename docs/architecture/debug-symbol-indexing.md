@@ -119,7 +119,8 @@ The recipe catalog supplies approval and runtime policy, not host-observed
 image IDs. Run-aware identity probing uses the same execution plan as decision
 and export validation, including for a job not yet attempted during repair.
 Neither current host pins nor Docker tag resolution can replace frozen inputs.
-The reader identity contract is `/3`. Supplied reader sources, launcher and manifest are
+The reader identity contract is `appsec-review/offline-debug-symbol-readers/4`, including bounded
+interval lookup and repaired native record associations. Supplied reader sources, launcher and manifest are
 not hashed as customer evidence. Operators bump `job_debug_symbol_indexing`
 (or its `platform` fallback) when changing those supplied components; an
 undeclared release explicitly disables reuse. Private launcher staging checks

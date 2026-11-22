@@ -553,10 +553,10 @@ The [handler](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py) 
 ### `characterization`
 
 1. In `characterization.load_inputs`, require explicit run-owned fixture inputs only in
-   qualification mode. Assessment rejects that fixture and verifies accepted manifest/target
-   identity across the job's declared upstream contract (including optional binary-evidence,
-   CI-configuration, change-context, debug-symbol, profile-data and test-coverage producers so
-   every embedded manifest shard has an admitted producer declaration, [T-162](../TODO.md)).
+   qualification mode. Assessment rejects that fixture and requires the attempt's explicit
+   admitted manifest path/hash. Its `SOURCE_SELECTION` confines reads to the declared source
+   view: carrying an unrelated shard in the manifest does not grant payload access. Selected
+   artifact/schema/custody verification and actual read receipts remain mandatory.
 2. Select bounded accepted components, source subjects and evidence. Record discovery, ownership,
    language, byte, subject and excerpt omissions without converting missing evidence into N/A.
 3. In `characterization.classify_components`, derive roles from accepted metadata and eligible
@@ -596,6 +596,9 @@ The [handler](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py) 
    `validation.cell_02`, `validation.cell_03` and `validation.cell_04`.
 2. Commission only the bounded admitted batch prefix. Every unlaunched batch still returns
    accounted unresolved rows with the explicit batch-cap reason.
+   Subjectless batches do not consume the ready-batch budget or launch assessors/reviewers.
+   Their `not_dispatched` outcomes are coverage dispositions, not worker failures; invocation
+   guidance fingerprints include only actual dispatches or reused role-specific calls.
 3. In assessment mode run the control assessor over supported obligations with bounded in-process
    evidence retrieval. Validate citations, subject scope and closed proposals. Missing evidence,
    failed worker or assumed prerequisites cannot yield a satisfied control.
@@ -629,6 +632,10 @@ The [handler](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py) 
    catalog/selected/dispatched/assessed/reviewed/unresolved coverage counts and model telemetry.
    Model investigations retain their protected receipts separately. Preserve the source-scope
    and runtime/manual limitations, even if all launched workers returned answers.
+   `owasp_control_gaps` retains the bounded control-gap projection separately. Typed
+   `coverage_disposition` is partial for unresolved applicability/coverage, `cannot_verify`,
+   declared gaps or failed cells. The configured `parser_versions` must exactly equal the
+   implemented rule versions; a stale declaration fails before assessment.
 
 ## Dataflow
 
@@ -659,9 +666,10 @@ and [bounded retrieval](../architecture/python-and-retrieval.md#query-boundary).
 
 ## Gaps
 
-This workbench emits domain strings in row results, evidence, limitations and the result artifact,
-not custom producer-gap codes. It does not assign retryability. Some unit returns expose only
-status/counts, so do not equate handler `gap_count` with the canonical outcome count: inspect both
+This workbench retains domain strings in row results, evidence, limitations and the result artifact.
+At the job boundary `_control_gaps` emits scoped `producer-gap/1` records with
+`producer_reported_gap` and default nonretryable metadata; nonretryable is not advisory.
+Do not equate handler `gap_count` with the canonical outcome count: inspect both
 the [verified outcomes](../architecture/job-interchange.md#the-control-layer-beneath-the-envelope)
 and bound workbench result.
 

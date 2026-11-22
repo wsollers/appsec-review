@@ -206,10 +206,14 @@ binding omissions in the generated inventory remain [T-147](../TODO.md).
 
 ### `load`
 
-1. Read the accepted catalog publication, language-build receipts and artifact-index publication
+1. Require the accepted catalog publication; read language-build receipts and artifact-index publication
+   when those producers are enabled and supplied
    through the [input contract](../architecture/job-input-contracts.md#admission-and-read-receipts).
    Verify bound artifacts, schema and snapshot agreement; an integrity error stops the job.
-2. Retain the three handoff hashes, catalog fingerprint and artifact-index manifest. Do not discover
+2. Retain the supplied handoff hashes and catalog fingerprint. Disabled build/artifact producers
+   leave `language_build_unavailable` or `artifact_indexing_unavailable` gaps. Without artifact
+   indexing, verify the pinned attempt manifest or catalog manifest instead. Without builds,
+   retain empty profile input and the load gap, not a clean no-profile result. Do not discover
    extra profiles by walking a target or workspace.
 
 ### `normalize`
@@ -295,7 +299,7 @@ workload or sample population recorded.
 
 ## Acceptance
 
-1. **A. Inputs:** Compare the three consumed handoff hashes and every report path/hash/origin with
+1. **A. Inputs:** Compare every supplied handoff hash and report path/hash/origin with
    admitted build receipts; confirm no unlisted profile was ingested.
 2. **B. Independent comparison:** In a separately inspected retained report, sum named sample
    counts or Callgrind event costs and compare symbol/event rows, rank tie-breaks and population.

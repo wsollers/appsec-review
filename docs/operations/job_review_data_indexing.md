@@ -1207,13 +1207,18 @@ See the [handler](../../src/appsec_review/jobs/job_review_data_indexing/job.py),
 1. Dispatch the configured units `precompute.build_provenance`, `precompute.artifact_inventory`,
    `precompute.dependency_advisories`, `precompute.scanner_correlation`, `precompute.ci_trust`,
    `precompute.history_context`, `precompute.control_evidence`, `precompute.reference_intelligence`,
-   `precompute.symbol_links` and `precompute.document_context`.
+   `precompute.symbol_links`, `precompute.document_context` and `precompute.threat_boundaries`.
 2. For each product, select its declared shards, link families, feed pins and optional OWASP
    manifest; bind the rule version and fact limit. Preserve unavailable/partial source status.
 3. Add source-matched scanner menu accounting, history metric vectors or safe build/capture facts
    only in their respective product handlers. Bind their extra inputs and bounds to reuse.
 4. Build or reverify the immutable derived shard and receipt. Publish facts with provenance,
    counts and coverage; do not rerun raw tools or parse arbitrary unbound scanner output.
+   `threat_boundaries` projects accepted generated DFD/threat-model records and catalogued
+   target DFD/STRIDE documents into bounded context, retaining source/citation identities and
+   omitted-detail counts. It is neither runtime exposure proof nor adjudicated findings.
+   Build-provenance and history composition enforce the final fact bound after supplemental
+   facts are merged, removing relations to omitted facts and retaining composition gaps.
 
 ### `fts`
 
@@ -1266,6 +1271,7 @@ flowchart LR
   input --> links["links.cross_domain"]
   links --> linkdata["cross_domain_links"]
   linkdata --> pre["precompute"]
+  threat["admitted generated DFD / threat model + target documents"] --> pre
   pre --> products["precomputed_products"]
   pre --> receipts["derived_checkpoints"]
   products --> fts["fts.image_validation"]
@@ -1284,7 +1290,7 @@ flowchart LR
   audit -. "audit violations" .-> reject["reject publication"]
 ```
 
-The `precompute` node is the ten exact units listed above, not a new task. Retrieval uses
+The `precompute` node is the eleven exact units listed above, not a new task. Retrieval uses
 [bounded query products](../architecture/python-and-retrieval.md#query-boundary); authority comes
 from [input admission and read receipts](../architecture/job-input-contracts.md#admission-and-read-receipts).
 FTS execution follows [host/image pins](image-pin-verification.md#the-gate) and
@@ -1310,6 +1316,7 @@ back to the named product/link/audit/FTS receipt rather than treating strings as
 | OWASP `assessment_unavailable`, `validator_gap` | Qualification-only, empty or nonresolving control evidence cannot become assessed target proof. |
 | Symbol no-linked-syntax/ambiguous/unavailable-link reasons and unresolved overload/template/indirect-dispatch limitation | Symbol context is not a resolved call graph. |
 | No accepted OpenAPI declaration/DFD boundary; document relation/fact bounds | Target-document context is incomplete and is never behavioral proof. |
+| `threat_boundaries`: unavailable documents, unresolved admitted citations or bounded details | Preserve generated-versus-target-document origin and missing context; boundaries are not deployed trust guarantees. |
 | FTS disabled, no published shard, export skipped, capability probe unready, unavailable/invalid/unreadable report | Inspect the FTS receipt. Skipped export includes sensitive key/value text, nonlogical paths, conflicting identity and text/record/stream bounds. |
 | FTS record-count/input-hash mismatch or probe term returning different identities | Image cross-check did not verify; `required` mode fails. |
 | `unreferenced_index_files`, `attempt_provenance_unavailable`, `upstream_not_run` | Actual inventory warning codes; audit violations instead fail the unit. |

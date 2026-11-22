@@ -248,10 +248,15 @@ Generated task/tool bindings remain [T-147](../TODO.md); the following follows e
    not recurse into nested archives; the depth setting does not establish nested coverage.
    Native/JVM header facts do not substitute for scanner rules; Wasm parsing does not supply a
    feature-policy verdict.
-5. Otherwise invoke the pinned SpotBugs, blint, Syft, Grype or OSV adapter. Resolve the executed
+5. Otherwise invoke the pinned SpotBugs, blint, Syft, Grype, OSV or cve-bin-tool adapter. Resolve the executed
    tool identity before fingerprinting and reject identity disagreement afterward. Preserve
    timeout, exit, precondition and parser failures; OSV's documented unsupported-input result is
    a skip, not a clean vulnerability match.
+   The default-enabled `tools.enable_cve_bin_tool` lane verifies the immutable derived database,
+   exact tool release and source NVD snapshot. It mounts the database read-only and uses
+   `--offline --update never`, disables network data sources except the retained NVD rows, and
+   disables version/validation checks. Exit 1 means CVEs matched, not execution failure.
+   Version-string matches are advisory leads, never proof that a vulnerable path executes.
 6. Bound stdout/stderr, diagnostic tails and exact parser input independently. Retain native output,
    execution receipt (`artifact_scanner_io`) and supported native report references, publishing
    per-scan observation documents under `artifact_security_results`
@@ -313,7 +318,7 @@ as `producer_reported_gap` with default non-retryable metadata; non-retryable do
   JVM security rules beyond header inspection, Wasm policy requiring a validator, unsupported
   capability/format combinations and package vulnerability matching requiring scanner/data.
   Declared unsupported scanner inputs remain separate skip decisions.
-- Coverage missing: disabled Grype; archive member/count/byte/expansion/path/depth restrictions,
+- Coverage missing: disabled Grype or cve-bin-tool; archive member/count/byte/expansion/path/depth restrictions,
   malformed or truncated archive/header/Wasm input; diagnostic/parser/report/finding bounds;
   no exact parser input or verified execution receipt; missing blint analysis; Grype dev-only
   installer packages, incomplete installer-record scans and Syft anchors not reported.
@@ -332,7 +337,7 @@ list. Broader produced-artifact Grype optimization and acceptance obligations ar
 1. **A. Inputs:** Match build/index/catalog handoff pins and artifact hashes, origins and canonical
    identities. Reconcile selected/skipped scope dispositions and installer-record anchor mappings.
 2. **B. Independent comparison:** Count verified artifacts and scanner launches independently.
-   Compare retained native SpotBugs/blint/Grype/OSV results with summary and finding-record counts
+   Compare retained native SpotBugs/blint/Grype/OSV/cve-bin-tool results with summary and finding-record counts
    and selectors; compare Syft name/version pairs with verified package anchors. Independently
    check archive member counts and one artifact-to-observation edge; do not require a source span
    for artifact-native findings.

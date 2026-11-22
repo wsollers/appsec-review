@@ -11,9 +11,9 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 
 ## Purpose
 
-Export all and only the accepted gate's publishable confirmed packages as OpenVEX `affected`
-statements, one per package. A protected companion accounts for backlog and withheld packages,
-evidence, scoring, shipment decisions and coverage. The exporter cannot infer `fixed`,
+The primary document exports all and only the accepted gate's publishable confirmed packages as
+OpenVEX `affected` statements, one per package. A protected companion accounts for backlog and
+withheld packages, evidence, scoring, shipment decisions and coverage. This projection cannot infer `fixed`,
 `not_affected` or runtime exploitation; automatic tool authorship is not vendor attestation.
 
 <!-- generated:begin job=job_openvex_export -->
@@ -234,6 +234,14 @@ An unsupplied dependency handoff produces no companion; a supplied handoff witho
 reachability reference is rejected. Its accepted bytes must match the certified configuration
 and target snapshot; a newer accepted pointer does not replace the admitted handoff.
 
+This companion is separate from the confirmed-finding export. Its CVE decisions distinguish
+`affected`, `not_affected` and `under_investigation`; `not_affected` requires an explicit
+`unreachable_in_target` determination with complete, gap-free target coverage. Missing or
+degraded evidence cannot supply that negative. The current bounded static source-use producer
+retains its static-only coverage limitation, so absence of a call is not such a determination.
+Both companion bytes and its admitted source identity are rechecked at acceptance; its gaps
+remain separate from the primary document's statement count.
+
 ### `export`
 
 1. In `export.assemble`, reprove the loaded inventory and schema copies. Check source/configuration
@@ -262,9 +270,12 @@ flowchart LR
   job["job_openvex_export"] --> load["load.verify_inputs"]
   gate["job_final_publication_gate / publication_gate_decisions"] --> load
   review["job_inference_security_review / scores_and_findings"] --> load
+  dependency["optional admitted sca_reachability"] --> load
   load --> inputs["openvex_verified_inputs"]
   inputs --> assemble["export.assemble"]
   assemble --> documents["openvex_documents"]
+  assemble --> companion["separate dependency CVE document + accounting"]
+  companion --> accept
   assemble -. "no publishable confirmed packages" .-> empty["document = null"]
   documents --> accept["acceptance.publish_handoff"]
   empty --> accept

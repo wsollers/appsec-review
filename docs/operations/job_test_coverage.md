@@ -206,10 +206,13 @@ Source: [handler and path binding](../../src/appsec_review/jobs/job_test_coverag
 ### `load`
 
 1. Read the accepted catalog's repository partition; verify artifact binding, schema, unique paths
-   and SHA-256 values. Load accepted language-build and artifact-index publications and require
-   their snapshots to match this job.
-2. Retain catalog path/hash map, build receipts, three upstream handoff hashes and the artifact
-   manifest. Admission is governed by [job input contracts](../architecture/job-input-contracts.md).
+   and SHA-256 values. Load accepted language-build and artifact-index publications when enabled
+   and supplied, requiring every present snapshot to match this job.
+2. Retain the catalog path/hash map, supplied build receipts and upstream hashes. Disabled
+   producers leave `language_build_unavailable` or `artifact_indexing_unavailable` gaps;
+   without artifact indexing, verify the pinned attempt or catalog manifest instead.
+   Load gaps survive indexing and publication even with no coverage rows. Admission is
+   governed by [job input contracts](../architecture/job-input-contracts.md).
 
 ### `normalize`
 

@@ -17,6 +17,10 @@ review context, not vulnerability findings. Missing exports, incomplete neighbor
 secondary evidence cannot become negative evidence; disagreement removes direct eligibility
 rather than being resolved by majority vote.
 
+The same job also composes an Alternate CPG from admitted syntax/CFG, compiler, CodeQL and
+scanner context. This is a separate `analysis/alternate-cpg` projection, not a claim that the
+retired Joern producer ran or that syntax-derived edges have compiler-level authority.
+
 <!-- generated:begin job=job_code_graph_index -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract
@@ -495,6 +499,18 @@ Source: [handler graph](../../src/appsec_review/jobs/job_code_graph_index/job.py
    `code-graph-summary.json` (with family coverage counts and scope/database/fact/reuse counts),
    and `graph-quality-scorecard.json` (`code_graph_scorecard`, `appsec-review/graph-quality-scorecard/1`,
    [closed schema](../schemas/graph-quality-scorecard.schema.json)) plus `graph-quality-scorecard.txt`.
+3. Build the bounded Alternate CPG over accepted inputs and the newly produced graph shards.
+   Publish node/edge/path JSONL and `alternate-cpg-summary.json` as `alternate_cpg`, and the
+   `analysis/alternate-cpg` shard as `alternate_cpg_index`, both under
+   `appsec-review/alternate-cpg/1`. Preserve resolution tiers, inherited coverage and explicit
+   fallback/omission reasons; source-hash disagreement cannot be reconciled by display name.
+   Summary counters distinguish nodes, semantic edges, syntactic fallback edges, linked entry
+   points and precomputed sink paths from the original graph-family fact count.
+
+`query_cpg_slice` and `query_call_paths` read the admitted Alternate CPG shard through the existing
+authenticated database boundary. They retain producer gaps, deadlines, bounded depth/hops and
+cursor identity. Failure to find a path within a bound does not prove nonreachability; neither a
+slice nor a syntactic fallback supplies an independent semantic security verdict.
 
 ## Dataflow
 
@@ -508,6 +524,12 @@ flowchart LR
   observations["accepted scanner flows + optional priority"] --> correlate
   correlate --> output["family shards + database cards + producer neighborhoods"]
   output --> publish["acceptance.publish_handoff"]
+  output --> alt["bounded Alternate CPG composition"]
+  secondary --> alt
+  syntax["admitted Tree-sitter AST / CFG"] --> alt
+  alt --> altout["alternate_cpg JSONL / summary + alternate_cpg_index"]
+  altout --> publish
+  altout --> query["query_cpg_slice / query_call_paths"]
   normalize -. "unmapped / bounded / unsupported family" .-> gaps["family coverage"]
   cross -. "disagree / secondary-only" .-> gaps
   correlate -. "broken flow / export unavailable" .-> gaps

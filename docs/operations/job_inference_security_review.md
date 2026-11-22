@@ -1551,6 +1551,13 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
 
 ### `packages`
 
+Before lane assembly, `packages.plan_hunt_campaign` builds a bounded attack-surface brief from
+accepted scope, leads, functions and entry points. A tool-free planner assigns missions and
+priorities within the configured area/agent budget. Invalid, empty or unavailable plans fall
+back to deterministic rank with `hunt_plan_unavailable:<code>`. The accepted plan orders hunt
+selection in both lane manifests; `hunt_max_units` still caps packages, and unassigned/not-reached
+areas remain coverage gaps. A mission is routing context, never evidence or a retrieval grant.
+
 1. In `packages.assemble_lead_packages` and `packages.assemble_hunt_packages`, assemble the
    same accepted scope into separate lane manifests and select each lane's packages. Operation
    discovery (`graph_operations`) excludes `entry_point`/`sink_site` facts in non-`first_party`
@@ -1569,20 +1576,29 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
    exclusions, missing strategy/specialist inputs and fallback scope.
 4. Bind package content, dependency shard identities, assembly/admissibility/predicate-policy
    versions and accepted CWE set. Missing/stale CWE reference retains a fallback gap.
+   Lead admission uses the configured reported/assessed severity basis (default `either`,
+   critical/high, plus the KEV exception). Same-site leads can share a bounded cluster;
+   `excluded-leads.json` retains omitted leads and their reasons rather than losing them at
+   admission. Exact accepted CBMC seed context remains indirect bounded-analysis evidence.
 
 ### `lead_review`
 
 1. In `lead_review.teams`, commission packages in canonical order under the run-wide team semaphore,
    lane allocation and job/package budgets.
-2. Run the three red-team lenses, normalize proposals and evidence, and apply package-local
+2. Run the configured red-team lenses, normalize proposals and evidence, and apply package-local
    admission/caps. Re-resolve every cited relation through its capability.
-3. For each admitted claim, run control and reachability refuters plus a blind independent
+3. For each admitted claim, run the configured refuters plus a blind independent
    verifier with only the claim identity and original admissible context.
 4. For policy-selected claims, run judges over anonymized, deterministically ordered red/blue
    positions. Judges record verdicts and relations but do not set claim state.
 5. Account for bounded rounds, follow-up evidence requests, unlaunched work and every terminal
    cell. Seal the lane ledger and retained PoC bases/chain seeds. Handled failures can become
    gaps only while the runtime permits continuation; integrity failures propagate.
+
+Defaults select one round, one analyst, one refuter and one verifier per team, with the verifier
+using its own model profile. A configured later evidence round resolves pending obligations only
+against already admitted package entities, retaining accepted shard/content identities and
+fulfilled/unfulfilled accounting. Delivery of a citation is not satisfaction of its predicate.
 
 ### `hunt_review`
 
@@ -1592,6 +1608,8 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
    blind-verifier and selected-judge sequence.
 3. Record explored, omitted, failed and no-claim work without claiming whole-file coverage.
    Seal the independent lane shard; the two lane units may execute concurrently.
+   Concurrent lane B does not receive lane A's sealed claims; same-defect proposals reconcile
+   at merge rather than forcing sequential review.
 
 ### `merge`
 
@@ -1599,6 +1617,10 @@ See the [job handler](../../src/appsec_review/jobs/job_inference_security_review
 2. Merge normalized claims deterministically, recording duplicate proposal counts, possible
    duplicates, scope entities and verifier-independence records. Do not merge claims merely
    because their prose sounds similar.
+3. Resolve affected entities through accepted source locations. A symbol inside a package's
+   source file remains in scope even if its ID was not listed explicitly. A claim outside its
+   proposing packages can be rehomed to an existing owning package with recorded provenance;
+   unowned claims remain out of scope. This changes neither retrieval grants nor predicates.
 
 ### `adjudicate`
 
@@ -1676,8 +1698,9 @@ flowchart LR
   job["job_inference_security_review"] --> scope["scope.accept_manifest / scope.assemble_scope"]
   indexes["job_review_data_indexing / precomputed_products"] --> scope
   scope --> triage["triage.lead_severity"]
-  triage --> lp["packages.assemble_lead_packages"]
-  triage --> hp["packages.assemble_hunt_packages"]
+  triage --> plan["packages.plan_hunt_campaign: bounded routing or rank fallback"]
+  plan --> lp["packages.assemble_lead_packages"]
+  plan --> hp["packages.assemble_hunt_packages"]
   lp --> lead["lead_review.teams"]
   hp --> hunt["hunt_review.teams"]
   lead --> merge["merge.claims"]

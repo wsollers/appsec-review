@@ -349,6 +349,7 @@ admissibility, job topology and implementation plan.
 | `control_evidence` | Accepted OWASP assessment publication and typed original evidence | scoped control→evidence/disposition links with hash-pinned authority, counterevidence and dissent; indirect for every final predicate | assessment unavailable, qualification-only, unsupported procedure, unresolved evidence or validator gap |
 | `reference_intelligence` | pinned MITRE feed (`reference-intelligence/2`) | CWE identities of accepted observations joined to the pinned catalog with name and abstraction | feed freshness or identity mismatch; CAPEC/ATT&CK relationships not normalized |
 | `document_context` | accepted OpenAPI, Postman, unit-test, STRIDE and DFD records | exact method/route and trust-boundary groups with source identities | unsupported formats, unmatched declarations, bounded truncation; intent never proves enforcement |
+| `threat_boundaries` | admitted generated DFD/threat-model documents and target DFD/STRIDE records | bounded boundary, flow, entry-point and threat context with resolving source/citation identities | missing documents, unresolved citations, unassigned threats and counted detail omissions; not deployment or predicate proof |
 | `contract_enforcement` | future API/IDL contracts, handlers, validators | declaration→handler→enforcement chain | contract unavailable or declaration not enforced |
 | `deployment_exposure` | future topology, CI/build/artifact graph | service→image→binary→source and privilege/exposure | environment not captured or image not bound |
 | `test_intent` | accepted document context and future source-symbol links | richer test assertion and negative-case links | tests are not executed; intent is not enforcement |
@@ -384,7 +385,7 @@ invalidate unrelated accepted sets.
 
 | Stage | Product sets | Prerequisite |
 |---|---|---|
-| 1: broad inventory | `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence`, `symbol_links`, `document_context` | Existing accepted domain shards and pinned feed identities |
+| 1: broad inventory | `build_provenance`, `artifact_inventory`, `dependency_advisories`, `scanner_correlation`, `ci_trust`, `history_context`, `control_evidence`, `reference_intelligence`, `symbol_links`, `document_context`, `threat_boundaries` | Existing accepted domain shards, admitted generated-model documents and pinned feed identities |
 | 2: code graph (`graph` index, not `query_precomputed`) | `call_site`, `sink_site`, `entry_point`, `flow_summary`, `dataflow_path`, `guard_fact`, `range_fact` families per [`code-graph-precomputation.md`](code-graph-precomputation.md) | Accepted CodeQL database per scope, hash-pinned export pack and catalog; clangd/LLVM/Clang AST shards only as C/C++ cross-checks |
 | 3: review context | `hotspot_context`, `redacted_secret_exposure`, `contract_enforcement`, `deployment_exposure`, `test_intent`, `review_package` | Accepted upstream sets and `graph` families; richer contract/deployment/test semantics remain pending even though `document_context` is indexed |
 

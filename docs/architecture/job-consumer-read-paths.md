@@ -3,7 +3,7 @@ title: "Job consumer read-path inventory"
 kind: "architecture"
 subsystem: "runtime interchange"
 status: "current"
-jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection", "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification", "job_inference_security_review", "job_language_build", "job_model_connectivity", "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync", "job_threat_model_generation", "job_tree_sitter_ast"]
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_cbmc_analysis", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection", "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification", "job_inference_security_review", "job_language_build", "job_model_connectivity", "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync", "job_threat_model_generation", "job_tree_sitter_ast"]
 last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Job consumer read-path inventory
@@ -40,6 +40,7 @@ of every private reader, enabled-job combination, race or live tool path.
 | `job_evidence_collection` | Catalog/intake/plan, the plan-bound environment publication, plus selected immutable local feed snapshots. |
 | `job_cpp_compiled_analysis` | Accepted native language build, catalog, plan and scanner seed context. |
 | `job_clang_static_analysis` | Accepted C++ scopes and original catalog/scanner seeds. |
+| `job_cbmc_analysis` | Accepted C/C++ source/compile case material and exact source-SAST, CodeQL and Clang seeds; no arbitrary target checkout or binary execution. |
 | `job_svf_alias_analysis` | Accepted C++ bitcode/scopes and original seed context; disabled selection stays explicit. |
 | `job_cpp_symbol_index` | Accepted C++ scopes and original catalog/scanner seed context. |
 | `job_cpg_analysis` | Accepted C++ scopes/seed context; deprecated/disabled coverage is not clean evidence. |
@@ -53,7 +54,7 @@ of every private reader, enabled-job combination, race or live tool path.
 | `job_security_tagging` | Accepted original producer shards; tags remain routing context, not control proof. |
 | `job_owasp_control_assessment` | Declared original source/build/scanner/tag/graph context and selected reference inputs. |
 | `job_threat_model_generation` | Accepted catalog, artifact, build, graph, syntax and prioritization shards through bounded index queries; no checkout. Default disabled; when admitted, its output can supply bounded review-behavior routing context, not predicate proof. |
-| `job_review_data_indexing` | Accepted original handoffs/shards, exact file ownership, feed pins and bound OWASP publication. |
+| `job_review_data_indexing` | Accepted original handoffs/shards, exact file ownership, feed pins, bound OWASP publication, generated threat context and sanitizer summary; protected payload references do not grant reads. |
 | `job_review_package_assembly` | Accepted inventory/indexing publication plus original source/evidence shards; a manifest does not re-own them. |
 | `job_document_issue_analysis` | Accepted packages and original declared document/source context. |
 | `job_inference_security_review` | Accepted packages/original retrieval scope; run-pinned reference inputs bind to the accepted indexing summary. |
@@ -63,7 +64,7 @@ of every private reader, enabled-job combination, race or live tool path.
 | `job_dossier_publication` | Accepted review/engineering outcomes plus the source-context view for cited excerpts. |
 | `job_final_publication_gate` | Accepted review and enabled completion artifacts; optional language-build envelope is read only when an admitted PoC binds its hash. |
 | `job_final_report_publication` | Certified gate snapshot only; no rediscovery of original source/engineering heads. |
-| `job_openvex_export` | Certified gate and accepted review identities; no arbitrary source-index rescan. |
+| `job_openvex_export` | Certified gate and accepted review identities, plus separately admitted optional dependency reachability for its companion; no arbitrary source-index rescan. |
 
 ## Downstream source-context view
 

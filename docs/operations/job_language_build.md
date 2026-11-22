@@ -340,9 +340,17 @@ flowchart LR
 
 ## Gaps
 
-This job mixes preserved typed records with legacy strings. Legacy values become canonical
-`producer_reported_gap`, `retryable=False`; native enforcement records also use that code and
-default false. Nested failed/blocked receipt status alone does not set canonical retryability.
+`build_outcome` distinguishes `built`, `failed` and `not_run`; `terminal_status` still describes
+the whole receipt. A completed build can therefore retain `COMPLETED_WITH_GAPS` without being
+relabeled a failed build. Product-reading consumers validate bytes and enforcement separately;
+controller checkpoints still require a clean `SUCCEEDED` receipt and confirmed cleanup.
+
+This job mixes preserved typed records with legacy strings. Typed build gaps distinguish
+`provenance_unavailable` (delivery, output-root heuristics and specified capture uncertainty)
+from `producer_reported_gap` or `producer_failed` for incomplete/forbidden build work.
+Legacy values are wrapped as `producer_reported_gap`, normally `retryable=False`.
+Unproven native enforcement keeps products in `rejected_artifacts` even when the build outcome
+is `built`. Nested failed/blocked receipt status alone does not set canonical retryability.
 The framework reads the unit's own status and explicit dispositions, including processing `GAP`
 dispositions, for status-derived retry accounting. Inspect canonical outcomes rather than
 labeling all build gaps either retryable or advisory.

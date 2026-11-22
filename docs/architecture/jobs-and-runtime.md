@@ -107,8 +107,10 @@ input, output, tool, and acceptance contracts.
 
 ## Registered jobs
 
-`runtime/registry.py` registers 47 jobs, exactly matching the 47 `[jobs.<job_id>]` tables in
+`runtime/registry.py` registers 48 jobs, exactly matching the 48 `[jobs.<job_id>]` tables in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
+At the reconciled source, 46 are review-graph jobs and 43 are enabled in the default review
+projection; the internal build transaction and external feed maintenance are outside that graph.
 
 | Job | Purpose | Operations |
 | --- | --- | --- |
@@ -122,7 +124,7 @@ input, output, tool, and acceptance contracts.
 | `job_source_history_analysis` | Git/GitHub history instability signals | [source-history-analysis](../operations/source-history-analysis.md) |
 | `job_ci_configuration_analysis` | CI/CD configuration analysis | [ci-configuration-analysis](../operations/ci-configuration-analysis.md) |
 | `job_target_analysis_plan` | Scanner selection and build recipes | [target-analysis-planning](../operations/target-analysis-planning.md) |
-| `job_tree_sitter_ast` | Concrete syntax trees and AST shards | [tree-sitter-ast](../operations/tree-sitter-ast.md) |
+| `job_tree_sitter_ast` | Concrete syntax trees, AST shards and bounded syntax-derived CFGs with explicit lowering gaps | [tree-sitter-ast](../operations/tree-sitter-ast.md) |
 | `job_change_context_analysis` | Change-context signals | [change-context-analysis](../operations/change-context-analysis.md) |
 | `job_project_build` | Project images, probes, and image repair | [project-build](../operations/project-build.md) |
 | `job_language_build` | Generic language and WebAssembly builds | [language-build](../operations/language-build.md), [wasm-build](../operations/wasm-build.md) |
@@ -134,6 +136,7 @@ input, output, tool, and acceptance contracts.
 | `job_artifact_security_analysis` | Produced-artifact security analysis | [artifact-security-analysis](../operations/artifact-security-analysis.md) |
 | `job_cpp_compiled_analysis` | C/C++ compiled analysis | [cpp-compiled-analysis](../operations/cpp-compiled-analysis.md) |
 | `job_clang_static_analysis` | Clang-Tidy and Clang Static Analyzer over accepted compile scopes | [clang-static-analysis](../operations/clang-static-analysis.md) |
+| `job_cbmc_analysis` | Default-enabled bounded function-entry analysis of exact accepted C/C++ scanner seeds; conditional judgments, not security verdicts | [CBMC bounded analysis](../operations/job_cbmc_analysis.md) |
 | `job_svf_alias_analysis` | Opt-in SVF points-to cross-check producer over linked `-O0` bitcode | [svf-alias-analysis](../operations/svf-alias-analysis.md) |
 | `job_sanitizer_build` | ASan/UBSan rebuild of accepted native units in a separate workspace; catalogues instrumented outputs and proves instrumentation from the ELF, never executes them | [sanitizer-build](../operations/sanitizer-build.md) |
 | `job_cpp_symbol_index` | clangd symbol index | [cpp-index-jobs](../operations/cpp-index-jobs.md) |
@@ -143,7 +146,7 @@ input, output, tool, and acceptance contracts.
 | `job_evidence_collection` | Deterministic static evidence | [static-analysis](../operations/static-analysis.md) |
 | `job_dependency_intelligence` | Declared, SBOM, linker and loader dependency identity with OpenSSF Scorecard context | [dependency-intelligence](../operations/dependency-intelligence.md) |
 | `job_codeql_analysis` | Cross-language CodeQL | [codeql-analysis](../operations/codeql-analysis.md) |
-| `job_code_graph_index` | Normalized, cross-checked `graph` index from CodeQL and C/C++ producers | [code-graph-index](../operations/code-graph-index.md) |
+| `job_code_graph_index` | Normalized, cross-checked `graph` facts plus the provenance-qualified `analysis/alternate-cpg` and interprocedural paths | [code-graph-index](../operations/code-graph-index.md) |
 | `job_owasp_control_assessment` | OWASP control assessment | [owasp-control-assessment](../operations/owasp-control-assessment.md) |
 | `job_review_prioritization` | Function-level review prioritization | [review-prioritization](../operations/review-prioritization.md) |
 | `job_security_tagging` | Basis-qualified security tags | [security-tagging](../operations/security-tagging.md) |
@@ -157,7 +160,7 @@ input, output, tool, and acceptance contracts.
 | `job_remediation_planning` | Confirmed-only inert exact patches, separate regression specifications and accounted manual/insufficient/capped outcomes | [remediation](../operations/remediation.md) |
 | `job_remediation_validation` | Exact scratch applicability, independent semantic assessment, selected static/native syntax checks and cleanup; never runtime verification | [remediation](../operations/remediation.md) |
 | `job_dossier_publication` | Protected per-confirmed-finding and per-PoC-outcome JSON/LaTeX/PDF/receipts before the final gate; real PDF only when rendered | [dossier-publication](../operations/dossier-publication.md) |
-| `job_final_report_publication` | Deterministic, model-free terminal job: `final-report.json` and a byte-reproducible `final-report.md` from the accepted gate (PDF is a later step) | [final-report](../operations/final-report.md) |
+| `job_final_report_publication` | Model-free report artifacts from the accepted gate, including JSON/Markdown and independently recorded PDF/SARIF export outcomes; an unavailable optional export never replaces the primary report | [final-report](../operations/final-report.md) |
 | `job_openvex_export` | Default-enabled conservative OpenVEX statement export from the same immutable accepted gate snapshot; no report fan-in or external publication | [openvex-export](openvex-export.md) |
 
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This

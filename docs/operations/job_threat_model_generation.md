@@ -17,6 +17,11 @@ absent; candidate mitigation state remains `not_examined`. This deterministic sl
 by default. The current inference behavior loader can use an admitted generated model as routing
 context, but must return to original evidence to establish claim predicates.
 
+When supplied, review-data indexing also projects the accepted DFD/threat-model documents into
+the bounded `threat_boundaries` precomputed product alongside target-authored boundary context.
+This downstream projection preserves routing authority and citation/omission identities; it does
+not change this producer's default-disabled policy or establish deployed topology.
+
 <!-- generated:begin job=job_threat_model_generation -->
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py by scripts/generate-docs.py; do not edit -->
 ## Declared job contract
@@ -279,6 +284,8 @@ flowchart LR
   publish --> evidence["generated_model_evidence"]
   publish --> views["generated_model_views"]
   publish --> result["threat_model_documents"]
+  dfd --> pre["job_review_data_indexing / threat_boundaries"]
+  tm --> pre
   load -. "input_unavailable" .-> gaps["producer-gap/1"]
   resolve -. "location_unresolved" .-> gaps
   gaps --> result
