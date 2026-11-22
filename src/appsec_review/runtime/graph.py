@@ -163,11 +163,15 @@ class GraphRunner:
                 dagster_run_id=correlation.get("run_id") if correlation.get("system") == "dagster" else None)
             PipelineLog(run_root).write("RUN_STARTED", run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
-                details={"source_fingerprint": source_fingerprint or "deferred"})
+                details={"source_fingerprint": source_fingerprint or "deferred",
+                         "dagster_run_id": correlation.get("run_id")
+                         if correlation.get("system") == "dagster" else None})
             PipelineLog(run_root).write("GRAPH_STARTED", run_id=run_id, trigger=trigger,
                 orchestrator=dict(orchestration or {}).get("system", "application"),
                 details={"source_fingerprint": source_fingerprint or "deferred",
-                         "graph_reference": graph_reference})
+                         "graph_reference": graph_reference,
+                         "dagster_run_id": correlation.get("run_id")
+                         if correlation.get("system") == "dagster" else None})
             head_ids = {job.job_id for job in self.jobs[:position]}
             decisions: list[ResumeDecision] = list(self._planner(
                 run_root, self.jobs[:position], "none", orchestration=orchestration).plan(

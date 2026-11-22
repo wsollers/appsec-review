@@ -60,12 +60,27 @@ status command, names its observation time and resolves conflicting evidence exp
   an actual `JOB_REUSED` observation. A plan alone is not consumption. Graphs missing from the current
   epoch cannot borrow the older epoch's denominator; current subset graphs exclude historical jobs.
   `epoch_attempts` and `attempts` keep these scopes separate, and epoch changes invalidate deltas.
-- With explicit `--dagster-run-id`, terminal confirmation requires both a valid graph bound to that
+- Whenever an effective Dagster UUID is known—explicitly supplied **or inferred** from current owned
+  run/graph records—terminal confirmation requires both a valid graph bound to that
   UUID and a current terminal event positively naming the same UUID. Missing, invalid or unbound graph
   evidence, an untagged terminal, and another dispatch's terminal cannot trigger a final summary or
   schedule cleanup. Matching graph metadata alone does not make a late old terminal current.
-  Direct GraphRunner runs without a Dagster UUID still use their application-run/current-epoch
-  terminal events. Event-stream coverage and lifecycle/dispatch confirmation are distinct flags.
+  Only a genuinely non-Dagster direct run with a valid current graph can use an untagged application
+  terminal. A claimed UUID in a contradictory snapshot is an unconfirmed context, not permission to
+  fall back to application success. Event-stream coverage and lifecycle/dispatch confirmation differ.
+- Epochs, terminals, and attempt admissions use the same dispatch-ownership rules. Both the flat
+  `dagster_run_id` and the actual `JOB_STARTED` emitter's nested `orchestration.system/run_id` are
+  recognized; conflicting or malformed identities are rejected. `JOB_STARTED`, `JOB_QUEUED` and
+  `JOB_REUSED` must positively match the effective dispatch before contributing current progress.
+  Task/job progress that omits a UUID may inherit only an exact, already admitted current
+  `(job_id, attempt_id)` owner; explicitly foreign events never inherit. Run terminals cannot inherit
+  attempt ownership. Reuse of an old attempt is current only when the reuse observation names the
+  current owner. Foreign and ambiguous records remain historical/diagnostic, not current admissions.
+- A fresh Dagster allocation emits `RUN_STARTED`, then `JOB_STARTED`, then the graph snapshot.
+  The first matching snapshot enriches that existing owned epoch instead of resetting it. A genuinely
+  new UUID/start creates a new epoch; repeated or late foreign metadata cannot reopen an older one.
+  Checkpoints retain only the nested system/run identity, never workflow prose. Old checkpoints that
+  lost admission correlation remain explicitly unconfirmed rather than guessing from the graph.
 - Direct GraphRunner writes the existing `JOB_REUSED` observation when it actually consumes its
   accepted reuse decision, retaining attempt, disposition and handoff identity without reexecuting
   work or changing admission/reuse policy. Historical `RESUME_PLANNED` records retain only bounded

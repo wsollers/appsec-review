@@ -19,7 +19,10 @@ DAGSTER = "11111111-2222-4333-8444-555555555555"
 
 
 def emit(root, kind, job="-", attempt="-", **details):
-    return PipelineLog(root).write(kind, run_id=root.name, job_id=job, attempt_id=attempt, details=details)
+    details.setdefault("dagster_run_id", DAGSTER)
+    return PipelineLog(root).write(kind, run_id=root.name, job_id=job, attempt_id=attempt,
+                                    orchestrator="dagster" if details["dagster_run_id"] else "application",
+                                    details=details)
 
 
 def timestamps(root, seconds):
@@ -32,7 +35,7 @@ def timestamps(root, seconds):
     return records
 
 
-def configured(root, jobs=("job_a", "job_b", "job_c"), *, graph=True):
+def configured(root, jobs=("job_a", "job_b", "job_c"), *, graph=True, dagster_run_id=DAGSTER):
     root.mkdir(exist_ok=True)
     config = {"jobs": {job: {"settings": {"enabled": True, "model": "fixture-model", "provider": "fixture"}}
                        for job in jobs}}
@@ -54,11 +57,11 @@ def configured(root, jobs=("job_a", "job_b", "job_c"), *, graph=True):
     atomic_json(root / "data/recovery/current.json", {
         "schema": "appsec-review/implementation-binding/1", "release_sha256": release["sha256"],
         "release": {"path": "data/configuration/release.json", "sha256": hashlib.sha256(release_payload).hexdigest()}})
-    emit(root, "RUN_STARTED")
-    details = {}
+    emit(root, "RUN_STARTED", dagster_run_id=dagster_run_id)
+    details = {"dagster_run_id": dagster_run_id}
     if graph:
         details["graph_reference"] = freeze_run_graph(root, {job: [] for job in jobs},
-                                                     config_sha256=sha, dagster_run_id=DAGSTER,
+                                                     config_sha256=sha, dagster_run_id=dagster_run_id,
                                                      profile="fixture-profile", source_sha256=release["sha256"])
     emit(root, "GRAPH_STARTED", **details)
     return sha
@@ -330,10 +333,10 @@ def test_submitted_dagster_subset_does_not_claim_the_full_compiled_graph(tmp_pat
     selected, partial = _monitor_job_selection(subset, None, jobs, dependencies, "")
     assert selected == {"job_a": ()} and partial == ("job_a",)
     assert _monitor_job_selection(definition, ["a__work__only"], jobs, dependencies, "") == (selected, partial)
-    configured(tmp_path / "partial", jobs=("job_a", "job_b"))
+    configured(tmp_path / "partial", jobs=("job_a", "job_b"), graph=False)
     root = tmp_path / "partial"
     config_sha = json.loads((root / "data/configuration/manifest.json").read_bytes())["resolved_sha256"]
-    ref = freeze_run_graph(root, selected, config_sha256=config_sha, partial_jobs=partial)
+    ref = freeze_run_graph(root, selected, config_sha256=config_sha, partial_jobs=partial, dagster_run_id=DAGSTER)
     emit(root, "RUN_GRAPH_SNAPSHOT", graph_reference=ref)
     report = poll_run(root)
     assert report["state"]["jobs"]["total"] is None

@@ -45,7 +45,7 @@ def test_explicit_dispatch_terminal_requires_positive_graph_binding(tmp_path, gr
 
 @pytest.mark.parametrize("graph_state", ["missing", "unbound"])
 def test_default_monitor_does_not_adopt_unbound_dispatch_terminal(tmp_path, graph_state):
-    configured(tmp_path, graph=False)
+    configured(tmp_path, graph=False, dagster_run_id=None)
     if graph_state == "unbound":
         select(tmp_path, ("job_a", "job_b", "job_c"))
     emit(tmp_path, "RUN_COMPLETED", completion_status="SUCCEEDED", dagster_run_id=DAGSTER)
@@ -59,7 +59,7 @@ def test_matching_new_dispatch_does_not_inherit_late_old_terminal(tmp_path):
     configured(tmp_path)
     emit(tmp_path, "RUN_COMPLETED", completion_status="SUCCEEDED", dagster_run_id=DAGSTER)
     select(tmp_path, ("job_a", "job_b", "job_c"), dispatch=OTHER)
-    emit(tmp_path, "JOB_STARTED", "job_a", "attempt-2")
+    emit(tmp_path, "JOB_STARTED", "job_a", "attempt-2", dagster_run_id=OTHER)
     emit(tmp_path, "RUN_COMPLETED", completion_status="SUCCEEDED", dagster_run_id=DAGSTER)
     waiting = poll_run(tmp_path, dagster_run_id=OTHER)
     assert not waiting["state"]["terminal_confirmed"]
@@ -114,10 +114,10 @@ def test_current_subset_or_missing_graph_never_uses_old_denominator(tmp_path, se
     for job in ("job_a", "job_b"):
         emit(tmp_path, "JOB_SUCCEEDED", job, "attempt-1")
     emit(tmp_path, "RUN_COMPLETED", completion_status="SUCCEEDED")
-    emit(tmp_path, "RUN_STARTED")
+    emit(tmp_path, "RUN_STARTED", dagster_run_id=None)
     if selection != "missing":
         select(tmp_path, ("job_a",), partial=("job_a",) if selection == "partial" else ())
-    emit(tmp_path, "JOB_STARTED", "job_a", "attempt-2")
+    emit(tmp_path, "JOB_STARTED", "job_a", "attempt-2", dagster_run_id=None)
     report = poll_run(tmp_path)
     state = report["state"]
     assert not state["terminal_confirmed"]

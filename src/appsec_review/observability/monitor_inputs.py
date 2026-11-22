@@ -9,38 +9,12 @@ from typing import Any, Mapping, Sequence
 from uuid import UUID
 
 from appsec_review.observability.model_metrics import label
+from appsec_review.observability.monitor_scope import event_dispatch, observation_epoch
 from appsec_review.runtime.selection import resolved_job_is_enabled
-from appsec_review.reporting.telemetry.inputs import RUN_TERMINALS
 from appsec_review.storage import canonical_json
 
 GRAPH_SCHEMA = "appsec-review/run-graph/1"
 MAX_JSON_BYTES = 8 * 1024 * 1024
-
-
-def observation_epoch(events: Sequence[Mapping[str, Any]]) -> tuple[int, int]:
-    """Current execution boundary and the earliest graph selection that can belong to it."""
-    epoch = graph_floor = last_sequence = selection = 0
-    dispatch = graph_identity = None
-    terminal = False
-    for event in events:
-        kind, details, sequence = event["event_type"], event["details"], event["sequence"]
-        if kind == "RUN_GRAPH_SNAPSHOT":
-            identity = details.get("graph_reference", {}).get("sha256")
-            candidate_dispatch = details.get("dagster_run_id")
-            if (not epoch or terminal or identity != graph_identity
-                    or candidate_dispatch != dispatch):
-                epoch = graph_floor = sequence
-                terminal = False
-            selection, graph_identity, dispatch = sequence, identity, candidate_dispatch
-        elif kind == "RUN_STARTED":
-            # Dagster may admit inputs between selection and its first RUN_STARTED.
-            graph_floor = selection if selection and (selection == epoch or selection == last_sequence) else sequence
-            epoch, terminal = sequence, False
-        elif kind in RUN_TERMINALS:
-            terminal = (not dispatch or details.get("dagster_run_id") == dispatch
-                        or details.get("dagster_run_id") is None and event.get("orchestrator") != "dagster")
-        last_sequence = sequence
-    return epoch, graph_floor
 
 
 def read_json(root: Path, relative: str, *, limit: int = MAX_JSON_BYTES,
@@ -186,17 +160,21 @@ def frozen_inputs(root: Path, events: Sequence[Mapping[str, Any]], *, max_rows: 
         enabled, models = [], set()
     graph = None
     graph_sha = None
-    _, graph_floor = observation_epoch(events)
-    latest_graph = next((event for event in reversed(events) if event["sequence"] >= graph_floor
-                         and (event["event_type"] == "RUN_GRAPH_SNAPSHOT"
-                              or event["event_type"] == "GRAPH_STARTED"
-                              and event["details"].get("graph_reference"))), None)
+    referenced_dispatch = None
+    epoch = observation_epoch(events)
+    latest_graph = epoch.graph_event
+    gaps.extend(epoch.gaps)
     try:
         ref = latest_graph["details"]["graph_reference"] if latest_graph else None
         if not isinstance(ref, dict) or config_sha is None:
             raise ValueError("no frozen actual graph")
         graph, graph_sha = _reference(root, ref)
         validate_graph(graph, run_id=root.name, config_sha256=config_sha)
+        referenced_dispatch = graph["dagster_run_id"]
+        if (not epoch.owner_known or graph["dagster_run_id"] != epoch.dispatch
+                or event_dispatch(latest_graph).value != graph["dagster_run_id"]
+                or set(epoch.gaps) - {"late_foreign_dispatch_boundary_ignored"}):
+            raise ValueError("graph dispatch ownership is unconfirmed")
         if not set(graph["jobs"]) <= set(enabled):
             raise ValueError("run graph disagrees with enabled configuration")
         if graph["partial_jobs"]:
@@ -230,4 +208,5 @@ def frozen_inputs(root: Path, events: Sequence[Mapping[str, Any]], *, max_rows: 
         "omitted_configured_models": max(0, len(models) - max_rows),
         "configured_enabled_jobs": len(enabled) if config_sha else None,
         "graph": graph, "graph_sha256": graph_sha, "gaps": gaps,
+        "observed_dispatch_id": epoch.dispatch if epoch.owner_known and epoch.dispatch else referenced_dispatch,
     }

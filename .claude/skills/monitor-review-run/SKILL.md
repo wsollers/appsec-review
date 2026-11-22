@@ -44,8 +44,10 @@ guidance, not runtime worker guidance and not a model tool.
 > telemetry and expected/unexpected gaps), then clear **this monitor's** session schedule using
 > `save_session_automation(clear=true)`. If terminal evidence conflicts with the exact Dagster
 > dispatch, keep status unconfirmed and ask the owner to reconcile; do not stop the schedule silently.
-> For an explicit Dagster UUID, require a valid graph bound to that UUID and a current terminal event
+> For an explicit or inferred Dagster UUID, require a valid graph bound to that UUID and a current terminal event
 > naming it; missing, invalid, unbound or unrelated evidence never authorizes schedule cleanup.
+> Current admissions/reuse must name that same owner; only later progress can inherit an already
+> admitted attempt's owner. A delayed first snapshot is metadata for the existing owned epoch, not a restart.
 > Monitoring is read-only except the bounded run-owned monitor checkpoint and snapshot.
 > Never stop/restart/retry/resume a run, execute target code or models, rebuild/reload services,
 > change frozen sources/profiles, relax policies, or claim review/security quality without separate

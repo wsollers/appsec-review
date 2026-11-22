@@ -11,7 +11,8 @@ from typing import Any, Mapping, Sequence
 from uuid import UUID
 
 from appsec_review.observability.model_metrics import aggregate_model_calls, label, USAGE_FIELDS
-from appsec_review.observability.monitor_inputs import frozen_inputs, observation_epoch, read_json
+from appsec_review.observability.monitor_inputs import frozen_inputs, read_json
+from appsec_review.observability.monitor_scope import event_dispatch, observation_epoch, owns_event
 from appsec_review.observability.operator import OperatorFollower
 from appsec_review.reporting.telemetry.inputs import event_timestamp, JOB_TERMINALS, RUN_TERMINALS, STATUS_ALIASES
 from appsec_review.storage import atomic_json
@@ -51,6 +52,11 @@ class MonitorFollower(OperatorFollower):
             # Invalid measurements must remain unavailable, not copied provider payloads.
             from appsec_review.observability.model_metrics import number
             projected.update({name: number(details[name]) for name in measurements & details.keys()})
+            orchestration = details.get("orchestration")
+            if isinstance(orchestration, Mapping):
+                projected["orchestration"] = {
+                    name: label(orchestration[name]) if orchestration[name] is not None else None
+                    for name in ("system", "run_id") if name in orchestration}
             ref = details.get("graph_reference")
             if isinstance(ref, Mapping):
                 path, sha = ref.get("path"), ref.get("sha256")
@@ -253,15 +259,15 @@ def _lifecycle(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | N
 
 
 def _state(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
-           *, now: datetime, complete: bool, max_rows: int, dispatch: str | None = None,
-           require_dispatch: bool = False) -> dict[str, Any]:
-    epoch, _ = observation_epoch(events)
+           *, now: datetime, complete: bool, max_rows: int, dispatch: str | None = None) -> dict[str, Any]:
+    epoch = observation_epoch(events).sequence
     historical = _lifecycle(events, None, now=now, complete=complete, max_rows=max_rows)
     prior: dict[tuple[str, str], set[str]] = {}
     prior_attempts = set()
     admitted = set()
     current = []
     ignored = Counter()
+    ambiguous_reuse = False
     for event in events:
         key = (event["job_id"], event["attempt_id"])
         kind, details = event["event_type"], event["details"]
@@ -271,14 +277,21 @@ def _state(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
                 status = details.get("completion_status") or JOB_TERMINALS[kind]
                 prior.setdefault(key, set()).add(STATUS_ALIASES.get(status, status))
             continue
-        dispatch_terminal = details.get("dagster_run_id") is not None or event.get("orchestrator") == "dagster"
-        if (kind in RUN_TERMINALS and (
-                dispatch is None and dispatch_terminal
-                or dispatch and details.get("dagster_run_id") != dispatch and (require_dispatch or dispatch_terminal))):
+        if kind in RUN_TERMINALS and not owns_event(event, dispatch):
             ignored["terminal_dispatch_identity_unconfirmed"] += 1
             continue
+        if kind in {"RUN_STARTED", "GRAPH_STARTED", "RUN_GRAPH_SNAPSHOT"} and not owns_event(event, dispatch):
+            ignored["boundary_dispatch_identity_unconfirmed"] += 1
+            continue
         if kind in {"JOB_STARTED", "JOB_QUEUED", "JOB_REUSED"}:
+            if not owns_event(event, dispatch):
+                ignored["admission_dispatch_identity_unconfirmed"] += 1
+                ambiguous_reuse |= kind == "JOB_REUSED" and event_dispatch(event).kind != "dagster"
+                continue
             admitted.add(key)
+        elif key[0] != "-" and not owns_event(event, dispatch, admitted_attempt=key in admitted):
+            ignored["progress_dispatch_identity_unconfirmed"] += 1
+            continue
         if key[0] != "-" and key in prior_attempts and key not in admitted:
             ignored["prior_epoch_job_event_without_current_admission"] += 1
             continue
@@ -290,11 +303,19 @@ def _state(events: Sequence[Mapping[str, Any]], graph: Mapping[str, Any] | None,
         state["status"] = "ACTIVE_UNCONFIRMED"
     state["run_epoch_sequence"] = epoch
     state["progress_scope"] = "current_epoch"
+    state["ownership_semantics"] = "positive_dispatch_and_admitted_attempt/1"
     state["epoch_attempts"] = state["attempts"]
+    if ambiguous_reuse:
+        state["epoch_attempts"].update(reused=None, reused_tasks=None, reuse_accounting_complete=False)
+        state["epoch_attempts"]["reuse_gaps"].append("reuse_dispatch_identity_unconfirmed")
     state["attempts"] = {**historical["attempts"], "scope": "application_run_all_epochs"}
     state["gaps"].update(ignored)
     if ignored:
         state["jobs"]["accounting_complete"] = False
+    if graph is None:
+        state["terminal_confirmed"] = False
+        if state["status"] in _FINISHED:
+            state["status"] = "UNKNOWN"
     return state
 
 
@@ -313,6 +334,8 @@ def snapshot_delta(current: Mapping[str, Any], previous: Mapping[str, Any] | Non
     elif any(current.get(key) is None for key in ("configuration_sha256", "source_sha256", "graph_sha256")):
         reason = "snapshot_identity_unavailable"
     elif current["state"]["progress_scope"] != previous["state"].get("progress_scope"):
+        reason = "progress_semantics_changed"
+    elif current["state"]["ownership_semantics"] != previous["state"].get("ownership_semantics"):
         reason = "progress_semantics_changed"
     elif (current["coverage"]["reset_reason"]
           or current["coverage"]["generation"] != previous.get("coverage", {}).get("generation")
@@ -398,14 +421,13 @@ def poll_run(run_root: Path, *, dagster_run_id: str | None = None, save: bool = 
     identities = frozen_inputs(run_root, events, max_rows=max_rows)
     graph = identities.pop("graph")
     graph_dagster = graph.get("dagster_run_id") if graph else None
-    require_dispatch = dagster_run_id is not None
+    dagster_run_id = dagster_run_id or graph_dagster or identities["observed_dispatch_id"]
     if dagster_run_id and dagster_run_id != graph_dagster:
         gaps.append("dagster_graph_identity_mismatch" if graph_dagster else "dagster_graph_identity_unconfirmed")
         graph, complete = None, False
-    dagster_run_id = dagster_run_id or graph_dagster
     last_event = events[-1]["timestamp"] if events else None
     state = _state(events, graph, now=now, complete=complete, max_rows=max_rows,
-                   dispatch=dagster_run_id, require_dispatch=require_dispatch)
+                   dispatch=dagster_run_id)
     if follower.counts["RESUME_PLANNED"] != sum(event["event_type"] == "RESUME_PLANNED" for event in events):
         state["attempts"].update(reused=None, reused_tasks=None, reuse_accounting_complete=False)
         state["attempts"]["reuse_gaps"].append("resume_observation_coverage_incomplete")
