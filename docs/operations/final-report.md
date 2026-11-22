@@ -417,6 +417,8 @@ It contains, in plain language:
 - attack-chain membership, compile-only outcomes, remediation proposals and remediation validation, each with
   its status and its items. Chain composed severity remains separately attributed; domain transitions
   are not source-resolved boundaries, and component roles do not establish call order.
+  Each chain card retains its own accepted status (`confirmed` or `qualified_supported`), never
+  reconstructed from aggregate counts.
   A `none_available` section states its reason and that this is a
   limit of the review, never evidence that the target is clean;
 - the verification backlog and withheld packages, listed as unconfirmed or withheld, never as findings;

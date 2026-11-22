@@ -242,7 +242,8 @@ def _attachment_blocks(report: Mapping[str, Any]) -> list[Any]:
     for card in cards:
         blocks.append(Box(BoxKind.CLAIM, "Chain " + clean(card["chain_id"]),
                           meta=f"composed severity {clean(card['composed_severity'])}", items=(
-            _fields((("Composed severity", card["composed_severity"]),
+            _fields((("Accepted chain status", card["status"]),
+                     ("Composed severity", card["composed_severity"]),
                      ("Recorded chain gaps", card["gap_count"]),
                      ("Reported domain transition (not a source-resolved boundary)",
                       card.get("trust_boundary_crossed") or "unavailable"))),

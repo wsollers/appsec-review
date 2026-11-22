@@ -8,12 +8,13 @@ import pytest
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound, read_bound_json
 from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_SCHEMA
 from appsec_review.jobs.job_final_publication_gate import classify as gate_classify
+from appsec_review.jobs.job_final_publication_gate.attachments import capability
 from appsec_review.jobs.job_final_report_publication import build_job
-from appsec_review.jobs.job_final_report_publication.pdf import bind_dossiers
+from appsec_review.jobs.job_final_report_publication.pdf import bind_dossiers, render_executive_latex, template_dir
 from appsec_review.jobs.job_final_report_publication.render import render_markdown
 from appsec_review.jobs.job_final_report_publication.report import build_report
 from appsec_review.reporting.executive_report import executive_document, render_executive_html
-from appsec_review.reporting.latex import render_latex
+from appsec_review.reporting.latex import escape_latex, render_latex
 from appsec_review.reporting.model import Box, Fields
 from appsec_review.review.models import IntegrityError
 from appsec_review.storage import atomic_bytes, atomic_json
@@ -21,6 +22,51 @@ from tests.unit.job_final_report_publication.test_job_units import (
     EXCERPT, ROOT, _setup_run, run_units,
 )
 from tests.unit.review_decision_audit_wiring.helpers import verified_document
+
+
+@pytest.mark.parametrize("format", ["html", "latex"])
+def test_each_chain_keeps_its_accepted_status_when_aggregate_counts_are_unchanged(format):
+    verified = verified_document()
+    members = [row["claim_id"] for row in verified["packages"]]
+    chains = [
+        {"chain_id": "chain-" + marker * 64, "status": status, "component_claim_ids": members,
+         "artifact": {"path": f"data/chain-{marker}.json", "sha256": marker * 64},
+         "gap_count": 0, "disposition": "SUCCEEDED"}
+        for marker, status in (("a", "confirmed"), ("b", "qualified_supported"))
+    ]
+    manifest = {"path": "data/chains.json", "sha256": "c" * 64}
+    verified["capabilities"]["attack_chains"] = capability(True, summary=manifest, count=2)
+    verified["bindings"].extend([manifest, *(row["artifact"] for row in chains)])
+    reports, rendered = [], []
+    for swapped in (False, True):
+        accepted = deepcopy(chains)
+        if swapped:
+            accepted[0]["status"], accepted[1]["status"] = accepted[1]["status"], accepted[0]["status"]
+        verified["attachments"]["attack_chains"] = accepted
+        gate = gate_classify.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, verified, gate_classify.classify(verified))
+        report = build_report(
+            gate, gate_handoff={"path": "data/gate-handoff.json", "sha256": "d" * 64},
+            gate_document={"path": "data/gate.json", "sha256": "e" * 64},
+            chain_manifest_items=[{**row, "composed_severity": "high"} for row in accepted],
+        )
+        original = deepcopy(report)
+        text = (render_executive_html(report) if format == "html" else
+                render_executive_latex(report, (), template_dir(ROOT)).decode())
+        for row in accepted:
+            if format == "html":
+                card = text.split("Chain " + row["chain_id"], 1)[1].split("</section>", 1)[0]
+                expected = f"<dt>Accepted chain status</dt><dd>{row['status']}</dd>"
+            else:
+                title = r"\technicalsubheading{" + escape_latex("Chain " + row["chain_id"]) + "}"
+                card = text.split(title, 1)[1].split(r"\technicalsubheading", 1)[0]
+                expected = r"\technicalfield{Accepted chain status}{" + escape_latex(row["status"]) + "}"
+            assert expected in card
+        assert report == original
+        reports.append(report)
+        rendered.append(text)
+    assert reports[0]["attack_chains"]["status_counts"] == reports[1]["attack_chains"]["status_counts"]
+    assert reports[0]["attack_chains"]["reason"] == reports[1]["attack_chains"]["reason"]
+    assert rendered[0] != rendered[1]
 
 
 @pytest.mark.parametrize("severity", ["critical", "low"])
