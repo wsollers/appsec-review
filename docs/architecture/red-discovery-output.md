@@ -23,13 +23,18 @@ exploitability rating, PoC eligibility, or final attack-chain identity.
 A red cell does not write this document. It answers in `red-compact/1`
 ([`red-compact.schema.json`](../schemas/inference-security-review/red-compact.schema.json)): claims with label
 citations, `no_claim` and `blocked` leads, and an optional bounded `poc_basis` per claim. The application expands that
-answer into `red-discovery-result/1` (`review/compact.py`, `expand_red`) before any validator runs, so every `v1`
+answer into `red-discovery-result/1` (`review/compact.py`, `expand_red`) after compact-shape validation, so every `v1`
 document in the ledger comes from an expansion and the admission rules below, normalization, R3, R5 and R6 are
 unchanged. See [review protocol v2](review-protocol-v2.md) section 6 for the shape and the expansion table. The
 expansion fills the schema, package echo, role and round, local ids, `source_lead_ids`, the evidence references
 (`supports` for `support`, `qualifies` for `counter`; a locator of kind `unresolved`, because the application
 re-resolves the identity), and the lead accounting: a lead no claim develops and the answer does not list under
 `no_claim` or `blocked` becomes `blocked` with a named `missing` gap.
+
+Before compact validation, bounded recovery normalizes unambiguous containers and can remove
+malformed optional investigation fields with recorded feedback. It does not invent required
+claim fields, support, stances or dispositions. Original compact answers and rejected output
+remain in protected receipts; expansion, reference closure and final admission still run.
 
 The optional investigation fields share the bounded
 [`compact-investigation.schema.json`](../schemas/inference-security-review/compact-investigation.schema.json)
@@ -123,8 +128,10 @@ resolved limits, so changing either invalidates red cell reuse.
    on every observed (`accepted_tool_path` or `source_mapped_analysis`) hop, no hypothesized hop in
    a `reported` path, which must connect its source to its sink, and at least one gap in a
    `partial` result. A chain seed has at least two steps.
-4. Normalize proposal identity from affected entities, weakness, security predicate, and
-   preconditions (`review/claims.py`, design R7). Worker prose and local IDs do not define the
+4. Normalize `claim/3` identity from affected entities, weakness and security predicate
+   (`review/claims.py`, design R7). Accepted site identities fold to their enclosing symbol where
+   resolvable; preconditions are retained and unioned across duplicates, not hashed into identity.
+   Worker prose and local IDs do not define the
    canonical `claim_id`. Exact duplicates merge; possible semantic duplicates remain separate
    nominations. A precondition outside `preconditions/1` rejects that proposal at the triage gate
    with an `evidence_gap`; the rest of the result is kept.
@@ -152,7 +159,10 @@ The red output is an input to [inference security review](inference-security-rev
 blind verifier pools receive normalized claims and original cited evidence under separate bounded
 capabilities. Attack-chain composition and refutation now occur after adjudication/scoring and
 before completeness and ledger sealing, under bounded `attack_chains` units. Five continuity
-dimensions must resolve to commissioned native facts; an empty default producer allowlist cannot
-turn source narrative into a deployed attack chain. See the
+dimensions must satisfy their evidence policy. The configured `same_native_executable` derivation
+can establish identity and privilege continuity from accepted compile/link facts; trust-boundary,
+deployment-artifact and temporal continuity remain unresolved without their own evidence.
+An empty `continuity_producers` allowlist does not disable that separate derivation, and source
+narrative cannot establish a deployed attack chain. See the
 [completion contract](evidence-completion-and-remediation.md) and
 [inference operations](../operations/inference-security-review.md).

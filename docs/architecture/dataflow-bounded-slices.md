@@ -171,7 +171,7 @@ recorded file hash.
 
 ## Package, view and manifest
 
-**Assembly** (`review/packages.py`, `assemble-review-packages/16`) reads the slice inputs through
+**Assembly** (`review/packages.py`, `assemble-review-packages/17`) reads the slice inputs through
 `SliceSources`. `GraphContext.neighborhood` takes the lead's observation identity and picks the bound:
 
 - **`dataflow_path`:** `flows` are the lead's correlated paths, sorted by identity, at most
@@ -196,13 +196,19 @@ Slice gaps become package gaps with producer `dataflow_slice`. Their state is:
 | not-applicable, unavailable and unresolved gaps | `unavailable` |
 | all others | `partial` |
 
-Under `max_package_bytes`, the slice's lowest-precision lines are trimmed before neighborhood rows,
-and the trimmed lines are counted in `omitted.lines`.
+Under `max_package_bytes`, lower-priority context (tags and precomputed signals first) is trimmed
+before the neighborhood. Corroboration/callee/caller rows precede non-anchor slice lines, then
+flows, ranges, guards, entries and sinks. The anchor floor protects relevant sinks, their
+guards/ranges, entries and chain references until other material is exhausted; breaching it
+adds an explicit gap. Trimmed slice lines are counted in `omitted.lines`.
 
-**View** (`review/package_view.py`, `package-view/5`): under the `dataflow_path` bound, the `S` source
+**View** (`review/package_view.py`, `package-view/7`): under the `dataflow_path` bound, the `S` source
 section shows one `slice` row per slice function. Each row contains only the slice's lines, with
 `...| n line(s) elided` markers between runs and per-line `reasons`. The lead's line is always shown,
 and secret redaction applies as before.
+Clustered lead packages merge their members' neighborhoods and correlated paths. The view
+includes member lines inside retained slice extents and up to four additional source windows
+for members outside the anchor span; unavailable or omitted source is a named local gap.
 
 A slice function whose file hash differs from the accepted source falls back to the whole-extent
 rendering, with a gap. A slice function in another file is shown only when its function identity
@@ -223,14 +229,14 @@ package id is still the hash of the body, so the reference is part of the packag
 the cell reuse `basis`: a partition whose leads and unit context are unchanged keeps its basis.
 `split()` measures the partition body alone, so a menu of N leads yields
 ceil(N / `hunt_menu_partition_size`) packages unless a single partition's own leads exceed
-`max_package_bytes`. Lead-lane bodies are unchanged (`unit_context: null`): their context is per
-lead.
+`max_package_bytes`. Lead-lane bodies keep `unit_context: null`: their context is local to the
+defect-site package, which can contain several leads.
 
 Consumers never read a hunt body raw. `packages.resolve_package_document(path)` loads the body, reads
 the referenced document at its pinned hash and size, validates it, and merges it back
 (`merge_unit_context`: the unit's `context`, `scope.source_ids`, and the sorted union of entity ids),
 so routing, the capability grant (`job.py` lane records take `Package.resolved()` entity ids), the
-coverage adapter and the evidence report see the schema v6 identities. The view (`package-view/5`)
+coverage adapter and the evidence report see the resolved identities. The view (`package-view/7`)
 shows the reference and its counts under `unit_context` and writes the entries to the
 hash-referenced `unit_context.jsonl` (listed under `files`, reachable with `expand`) instead of
 rendering them as `T` and `O` rows; the label table still knows every identity the resolved package

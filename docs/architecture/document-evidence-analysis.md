@@ -57,9 +57,11 @@ and GraphQL schema root fields. JSON/YAML specifications are selected by `openap
 `asyncapi` in the filename; `.proto`, `.graphql`, `.graphqls` and `.gql` are recognized by suffix.
 YAML composition rejects aliases, anchors, duplicate keys and custom tags, with depth/node bounds.
 References are never fetched. Unresolved references and unsupported or malformed declarations
-remain coverage gaps. HTTP operations join the existing route-context product; asynchronous,
-gRPC and GraphQL declarations are searchable source-located records, not HTTP route candidates or
-proof that an implementation exists. No additional job or MCP endpoint is introduced.
+remain coverage gaps. HTTP operations join the existing route-context product. gRPC declarations
+also form route-key context using `RPC /<package>.<service>/<method>`, not HTTP semantics;
+GraphQL root-field keys and asynchronous declarations remain searchable catalog records rather
+than HTTP routes. None proves that an implementation exists. No additional job is introduced;
+the late drift projection is read through `query_doc_drift`.
 The additional AsyncAPI/gRPC/GraphQL coverage areas are published when those inputs are present;
 a target need not contain all three formats for its existing document dataset to remain indexed.
 
@@ -80,7 +82,8 @@ must update declared component releases when deploying changed producer software
 other binary conversion remains deferred; this path does not invoke converters, OCR or target code.
 
 `job_review_data_indexing.precompute.document_context` reads only the accepted `documents` shard.
-It groups OpenAPI operations, Postman requests, and unit-test requests by exact method and route;
+It groups OpenAPI operations, Postman requests, unit-test requests and slash-prefixed gRPC
+declarations by exact method and route;
 DFD boundaries and STRIDE threats are grouped by exact boundary ID. It publishes one
 `precomputed_fact` per bounded route or boundary subject, with the accepted source identities,
 line location, relation links, authority and gap status. It does not execute tests or infer that a

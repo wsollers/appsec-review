@@ -23,8 +23,13 @@ tracks reconciliation and acceptance gaps.
 The chain, remediation and dossier producers, central configuration/registration/pre-gate graph
 and completion metrics now exist. The shared reader accepts review `/3`; chain/base completeness
 isolation, immutable PoC `/2`, five-capability gate `/2` and gate-only reporting are delivered.
-The [current report `/3`](../operations/final-report.md#domain-coverage-and-unknown-measurements-t-5088)
-preserves unknown domain metrics in radar `/2`; historical report `/2` retains its original contract.
+The [current report `/4`](../operations/final-report.md#domain-coverage-and-unknown-measurements-t-5088)
+preserves unknown domain metrics in radar `/2`; historical reports `/2` and `/3` retain their original contracts.
+PoC `build.compile_check` is false in the checked-in recipe: source/AST validation still runs,
+but validated candidates without project-command replay remain `artifact_generated`.
+An explicitly unconvened judge is eligible under the configured `not_convened` policy;
+a failed selected judge is not. These current qualifications do not rewrite the original
+compile-only design or its historical test evidence below.
 The owner-verified [seeded PDF sample](../operations/dossier-publication.md#verified-seeded-sample)
 is retained. The [bounded acceptance ledger](../reviews/evidence-completion-documentation-inventory.md#acceptance-ledger)
 records historical owner source `039b24e4`: two native checks passed, including all seven lanes

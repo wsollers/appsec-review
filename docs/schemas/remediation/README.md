@@ -17,6 +17,12 @@ repository_root=...)` exposes `load.verify_inputs`, `assess.propose`, and
 verifier and admits exactly the confirmed `remediation_intake` partition. Supported findings,
 including supported findings with compile-checked PoCs, never enter planning.
 
+Before applying `max_candidates`, planning orders the confirmed population by accepted technical
+severity, chain-priority context and explicit reachability, with stable finding/claim tie breaks.
+`priority-ranking.json` (`remediation-priority-ranking/2`) records selected and capped items.
+An unrated accepted policy value stays unknown; independent score-provider dimensions are not
+combined into a scalar, and a chain-priority boost does not change finding severity.
+
 `job_remediation_validation.build_job(infer=..., executor_factory=..., builds_factory=...,
 repository_root=...)` exposes `load.verify_inputs`, `assess.validate`, and
 `acceptance.publish_handoff`. The executor factory receives `(UnitContext, BuildProfile)`;
@@ -66,8 +72,10 @@ and cannot overwrite bytes reachable from an earlier accepted handoff.
 The parsers are `config.remediation.RemediationPlanningSettings.from_mapping` and
 `RemediationValidationSettings.from_mapping`. The central config loader, registry, launch graph,
 profile/model checks, guidance registry and input matrix must register these jobs together.
-The new role fragments are `remediation_writer` and `remediation_reviewer`; no runtime skill is
-loaded. The role-to-job wrapper calls the shared job-selected `/4` assembler, registry and fragment
+The role fragments are `remediation_writer` and `remediation_reviewer`, with the registered
+`stateful-invariant-analysis` procedure. Planning additionally appends and hash-pins
+`evidence-and-graph-querying`; validation retains its final-only reviewer contract. These
+procedures grant no additional tools. The role-to-job wrapper calls the shared job-selected `/4` assembler, registry and fragment
 validation, requires the registered bounded responsibility, and checks its closed role-to-job
 allowlist against the actual job context. `remediation_writer` belongs only to planning;
 `remediation_reviewer` belongs only to validation. Tool mentions and conflicting policy are
@@ -102,7 +110,7 @@ provider = "claude-cli"
 model = "claude-haiku-5-5"
 reasoning = "high"
 max_input_tokens = 64000
-max_output_tokens = 16000
+max_output_tokens = 32000
 max_turns = 6
 max_queries = 4
 timeout_seconds = 600

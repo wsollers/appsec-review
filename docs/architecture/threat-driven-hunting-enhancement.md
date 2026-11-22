@@ -24,6 +24,13 @@ landed T-146 contract, documented in its
 must be reconciled when implementing each slice. This document proposes additive
 records and measurement semantics, not an incompatible fork of that contract.
 
+Current-boundary note: T-153's claim-evidence reconciliation is now wired into team rounds,
+ledger closure and protected audit continuations. The separately implemented bounded
+`hunt_planner` orders existing hunt units; neither change implements this proposal's
+operation/question coverage ledger, fair-allocation evaluation or incremental campaign runtime.
+See [protocol v3](review-protocol-v3.md) and the
+[T-153 record](triage-verifier-enhancement.md#t-153-implementation-record).
+
 ## Outcome, non-goals and tradeoffs
 
 The desired user-visible answer is:

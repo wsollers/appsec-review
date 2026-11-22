@@ -19,9 +19,11 @@ adds protected complete-only feedback cache and exact additive evidence; raw mod
 not the planning output. These declarations are not new public retrieval endpoints, authenticated
 package identities, shipped artifacts or native target proof. The counts/history below retain
 their named source baselines; this candidate does not claim a new accepted run or dossier result.
-The current static registry and TOML inventory is exactly 47 jobs, including build-environment
-analysis, build iteration and the default-disabled generated threat model; the completion-era
-44-job count below is historical.
+At source `826b6a29a55a756e59b4a7209227f8f6a4051c5f`, the static registry and TOML inventory
+contains 48 registered/configured jobs and 43 enabled review-graph jobs, including CBMC.
+The registry also includes internal build iteration and maintenance reference synchronization, and
+the default-disabled generated threat model. The completion-era counts below are historical,
+not current dataset/tool inventories.
 
 Status: source-verified inventory, initially at contract commit
 `5f5548da3d039f73c7d6858d2b28a4593a264efe`, reconciled through integration `b702eb7`
@@ -34,7 +36,7 @@ and reconciliation with main `799ea3c2` for debug symbols and native SBOM eviden
 standalone OpenVEX integration over completed main `c47e3fea`. Operative OpenVEX default-policy
 rows are reconciled at `74d93127`, containing landed main `83e67b23`; historical evidence below
 retains its original source attribution.
-The current combined inventory contains **47 registered/configured
+The inventory at that earlier checkpoint contained **47 registered/configured
 jobs, 191 dataset kinds, 31 public retrieval tools, 19 logical SQLite indexes and 16 allowed
 query sets (10 produced, 6 pending)**. This is a catalog of implemented input surfaces,
 **not** evidence that a particular run produced them. Chain, remediation and dossier producers,

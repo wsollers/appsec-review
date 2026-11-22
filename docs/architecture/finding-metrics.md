@@ -68,6 +68,10 @@ Every family is sliced by the dimensions of §4.4, including the game threat mod
 
 ## 3. System overview
 
+This diagram is the design-level integration map. The crash adapters and scorecard are offline
+operator modules; the proposed crash-ingestion job and crash-originated review lead family
+remain unimplemented T-075 work, not registered jobs or current review inputs.
+
 ```mermaid
 flowchart LR
   subgraph run["One review run (runs/<run-id>)"]

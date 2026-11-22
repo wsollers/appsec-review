@@ -43,14 +43,15 @@ Several producers help decide where to look without deciding what is vulnerable:
   generated boundary/threat identities into direct evidence. Older narratives saying this model
   has no consumer no longer describe this source.
 - Upstream package assembly produces scanner-lead, hunt-menu and document-hunt routing material.
-  The separate document-issue job maps bounded route subjects but publishes only private,
-  unadjudicated candidates. The inference job builds its own lead/hunt package manifests; a
-  scheduling edge after document analysis is not proof that its candidates became findings.
+  The document-issue job retains its private, unadjudicated ledger and additionally publishes
+  bounded `document_navigation` facts. Inference attaches those provisional drift/mapping facts
+  to matching source-unit context; it does not consume document hunts as findings.
 - OWASP assessment investigates supported, named source-subject obligations after gating ASVS
   (`target:web-api`, or `target:network-service` for the transport-agnostic chapters) and MASVS
   (`target:mobile`) on accepted `target:*` and facet tags
   (`component-classification/2`, `applicability-rules/4`, `target-class-ledger/1`); when neither
-  class applies, it finishes `SUCCEEDED` with zero worker batches and zero `control_evidence` rows.
+  class applies, it dispatches no worker batches and produces no `control_evidence` rows.
+  It finishes `SUCCEEDED` only if no input, classification or other coverage gaps remain.
   Its deterministic citation checks and fresh independent reviewer can support scoped analyst
   assessments. Catalog completeness, routing tags and a satisfied subject do not establish
   whole-component control coverage or compliance. Qualification-mode results are not target
@@ -67,7 +68,7 @@ fallback unit. Deep hunt unit assembly restricts candidate units to `first_party
 units with exposure/trust facet weights (`review-unit-rank/5`), writes unit-wide context,
 `unit-facets/2` and `hunt-facet-obligations/1` once per hunted unit under
 `unit-context/<sha256>.json` (`package-unit-context/2`), and references that shared document by
-SHA-256 from each hunt partition (`appsec-review/review-package/7`, `package-view/5`;
+SHA-256 from each hunt partition (`appsec-review/review-package/7`, `package-view/7`;
 [bounded slices](dataflow-bounded-slices.md)). Lead scoping excludes observations on
 non-`first_party` files or configured `lead_filters.stylistic` rules (`outside_review_scope` with
 explicit `exclusion` provenance, `source_dispositions` and `counts.dispositions` in the package
@@ -135,27 +136,31 @@ instead of continuing through an ordinary failure branch; cancellation is not su
 ### Independent decisions have different owners
 
 The [review team handler](../../src/appsec_review/jobs/job_inference_security_review/teams.py)
-implements two lanes. Lead teams use red analyst lenses; hunt teams use selected strategy/persona
-pairs. Normalized admitted claims receive control and reachability refutation, then a fresh blind
-verifier context. Selected judges see anonymized red/blue positions. Their verdicts and cited
+implements two parallel lanes. The checked-in recipe uses one red cell, one verifier and one
+round; a positive `blue_per_team` (currently `1`) enables both control and reachability refutation
+tasks. `0` disables those refuters. Hunt teams use the configured prefix of selected
+strategy/persona pairs. Selected judges see anonymized red/blue positions. Their verdicts and cited
 relations are retained, but judges do not set claim state.
 
 [Deterministic adjudication](../../src/appsec_review/review/adjudication.py) counts only
 predicate-qualified evidence, handles contradiction and scope, and distinguishes partial support
 from confirmation with required evidence and independent verification. Blind context, distinct
 model identity, resolving evidence and correctness are different properties. Model agreement is
-not a vote that supplies a missing predicate. For bounded follow-up requests ([T-153](../TODO.md)
-Increment 1), [`evidence_obligations.py`](../../src/appsec_review/review/evidence_obligations.py)
+not a vote that supplies a missing predicate. For bounded follow-up requests ([T-153](../TODO.md)),
+[`evidence_obligations.py`](../../src/appsec_review/review/evidence_obligations.py)
 and [`evidence-obligation.schema.json`](../schemas/evidence-obligation.schema.json) define
 `evidence-obligation/1` and `lane-evidence-obligations/1` with `evob-<sha256>` identities, shared
-`bind_claim_subject` derivation in `warrants.py`, and scoped warranted reconciliation; wiring into
-live package follow-up rounds remains open under T-153.
+`bind_claim_subject` derivation in `warrants.py`, and scoped warranted reconciliation. Team rounds,
+terminal ledger closure, exact accounting and protected audit continuations now consume those
+obligations. Delivery of a retrieved row is not semantic satisfaction; only admitted warranted
+evidence can close the exact obligation. The default one-round recipe performs no second pass.
 
 The [post-lane stages](../../src/appsec_review/jobs/job_inference_security_review/stages.py)
 then score supported/confirmed claims from evidence-bound factors. Missing factors remain
 unrated or bounded; advisory reference scores are not target-specific proof. Shipment policy is
 separate from adjudication. Judge/basis/technical-severity selection for PoC candidates is separate
-again, and may include a supported claim without confirming it.
+again, and may include a supported claim without confirming it. An explicitly unconvened judge
+can yield `not_convened`; a selected failed or missing judge verdict cannot use that route.
 
 Attack-chain composition and challenges run before sealing the review ledger. Chain-cell
 accounting is checked independently and excluded from base-review completeness calculation.
@@ -164,8 +169,10 @@ packages as remediation intake. `EMPTY` and `DEGRADED` are never clean-target ou
 
 ### Engineering artifacts preserve the assurance boundary
 
-PoC generation validates source/AST policy and performs syntax/object/symbol checks using the
-accepted build workspace. It never links or executes generated functions. Remediation planning
+PoC generation validates source/AST policy against the accepted build workspace. Project-command
+syntax/object/symbol replay is optional (`build.compile_check = false` in the checked-in recipe);
+validated but uncompiled candidates remain `artifact_generated`. It never links or executes
+generated functions. Remediation planning
 is confirmed-only and publishes inert exact patches plus safe regression specifications;
 validation uses isolated scratch copies, independent semantic assessment and a commissioned
 before/after syntax adapter. Neither `compile_verified` nor `build_checked` means runtime proof
@@ -244,7 +251,7 @@ These are pointers into the [single TODO registry](../TODO.md), not a second bac
 | T-026, T-108 | Separately authorized dynamic evidence and the missing deployment-inventory producer. |
 | T-074, T-076, T-077 | Live fix re-check wiring, complete actionability fields and lead-stage attribution. |
 | T-149 | Scoped dependency-decision consumption beyond current inventory/context. |
-| T-151, T-153 | Operation coverage obligations, paired warrant-policy evaluation and verified evidence-request resolution. |
+| T-151, T-153 | Operation coverage obligations and separately authorized efficacy evaluation of implemented evidence-obligation reconciliation. |
 | T-154, T-155, T-156 | Labelled stage-loss audit, fair bounded hunt allocation and execution-bound investigation/omission receipts. |
 | T-165, T-166, T-167 | Catalog-fact disposition derivation and `smoke-cpp` live measurement (`T-165`, `T-167`), plus index-backed first-party reachability (`used` / `not_used` / `unknown`) for vendored CVEs and findings (`T-166`). |
 | T-5000, T-5008 | Live `smoke-cpp` size and routing verification for shared per-unit hunt contexts and facet collation. |
@@ -276,12 +283,15 @@ Image-backed engineering follows [host pins](../operations/image-pin-verificatio
   `appsec-review/review-prioritization-signals/1`, incorporating Alternate CPG reachability,
   proportional repository-churn hotspots, CI/artifact lead promotion, 9-language danger signals,
   and a Hunt-lane boost for high-risk attack surfaces with zero SAST hits.
-- **Round 2 evidence fulfillment & frontier prompt contracts (`T-173`, `T-174`)**: When Round 1
-  investigators emit bounded `requests_evidence` queries, the orchestrator executes them against
-  `RetrievalCore` and supplies the resolved slices, guard dominators, or index records into Round 2
-  verification before adjudication. Thinking-capable models enforce an explicit output-token floor
-  above reasoning budgets. Multi-step attack-chain composition (`max_steps = 6`) admits chains
-  across trust boundaries, including `medium + medium -> high/critical` escalations.
+- **Bounded follow-up delivery (`T-173`, `T-174`)**: If configured rounds permit another pass,
+  canonical open obligations select at most four requests (also bounded by `red_output`).
+  Fulfillment calls `find` for the package's existing entity grant, prioritizes anchors and
+  matching records, and supplies at most three pinned citations per request to the next red
+  cells. It does not execute worker-supplied queries or fetch arbitrary new slices. Independent
+  verification and warranted reconciliation still decide whether the evidence satisfies a
+  predicate. `thinking_min_output_tokens` is a configured output-cap floor, not a measured
+  reasoning-token reservation. Chains allow up to six links; escalation requires the certified
+  component/continuity evidence, not merely two medium ratings.
 - **Nonexecuting PoC checks & bounded remediation verification (`T-174`, `T-175`)**:
   `job_poc_generation` records bounded lexical/policy checks across nine supported languages
   (`appsec-review/poc-compile-check/2`), with Python AST parsing where applicable.
@@ -298,22 +308,24 @@ Image-backed engineering follows [host pins](../operations/image-pin-verificatio
 flowchart TD
   evidence["Accepted original source, Alternate CPG/CFG, SAST & SCA shards"] --> indexing["job_review_data_indexing: RetrievalCore"]
   routing["job_review_prioritization: SAST-silence hunt boost / job_security_tagging"] --> indexing
-  owasp["job_owasp_control_assessment: verified control gaps"] --> indexing
+  owasp["job_owasp_control_assessment: scoped assessments, verified gap candidates"] --> indexing
   model["job_threat_model_generation: DFD trust boundaries"] --> indexing
   indexing --> upstream["job_review_package_assembly: priority-preserving context"]
-  upstream --> private["job_document_issue_analysis: private candidates"]
+  upstream --> private["job_document_issue_analysis: private candidates + provisional navigation"]
   upstream --> packages["job_inference_security_review: Lane A & Lane B packages"]
+  private -->|"late source-scoped navigation, not findings"| packages
+  cbmc["job_cbmc_analysis: conditional exact-seed results"] --> packages
   registry["Registry + typed config + evidence-and-graph-querying skill"] --> bundle["Verified immutable guidance bundle"]
-  bundle --> cells["Round 1 & Round 2 lead/hunt cells"]
+  bundle --> cells["Parallel lead/hunt cells; one round by default"]
   packages --> cells
-  cells -->|requests_evidence| retrieve["Application-mediated RetrievalCore fulfillment"]
+  cells -->|"open obligations; only if another round is admitted"| retrieve["Package-granted entity lookup and pinned citation delivery"]
   indexing --> retrieve
-  retrieve -->|resolved slices, guards & shards| cells
+  retrieve -->|"bounded citations; not semantic satisfaction"| cells
   cells --> ledger["Normalized claims, relations, receipts and gaps"]
   ledger --> decide["Deterministic adjudication & calibrated scoring"]
-  decide --> chains["Multi-step attack chains (up to 6 hops; medium+medium escalation)"]
+  decide --> chains["Attack chains: up to 6 links, evidence-qualified continuity and severity"]
   chains --> published["Sealed review handoff"]
-  published --> poc["job_poc_generation: appsec-review/poc-compile-check/2 (lexical / Python AST; native compile evidence separate; execution blocked)"]
+  published --> poc["job_poc_generation: policy/AST validation; optional native compile replay; never execution"]
   published --> rem["job_remediation_planning / job_remediation_validation: risk-first + 9-lang static verify"]
   published --> reporting["Gate-certified reporting"]
   poc --> reporting

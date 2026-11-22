@@ -21,7 +21,17 @@ The [OpenVEX design](../../architecture/openvex-export.md) and
 For upstream publication contracts, the
 [evidence-completion architecture](../../architecture/evidence-completion-and-remediation.md)
 is authoritative: accepted review `/3`, one gate `/2` after completion producers, and a
-gate-only report `/2`. Export is an independent post-gate peer, not a report input.
+gate-only reporting (currently `/4`, with historical validators retained). Export is an
+independent post-gate peer, not a report input.
+
+The primary records below remain affected-only. The optional dependency companion uses
+[`openvex-dependencies.schema.json`](openvex-dependencies.schema.json), with
+`appsec-review/openvex-dependencies/1` accounting for `openvex-dependencies.json` and
+`openvex-dependencies-result.json`. Its source pins name the admitted dependency handoff,
+`sca_reachability` artifact and gate. Production projects supported static symbol-use rows
+with call sites as `affected`, unknown coverage as `under_investigation`, and never
+`not_affected`; missing PURLs are named omissions. These counts and protected files remain
+separate from primary finding eligibility and `ExportBundle`.
 
 The official OpenVEX v0.2.0 schema is retained byte-for-byte under `upstream/`, at commit
 `61b5f885d0f481f48683c93345e49ef1a6e9fdff`. Its SHA-256 is
@@ -202,8 +212,9 @@ final-report/final-report.schema.json
 
 The third resource is necessary because gate `/2` common definitions reference the
 report `/2` PoC attachment item schema. It does not introduce a report data dependency.
-`SCHEMA_SHA256` pins all seven schema files; with upstream license and lock this is
-**nine run-owned pinned snapshots**. `VALIDATION_PROFILE_SHA256` incorporates
+`SCHEMA_SHA256` now pins eight schema files, including the dependency-accounting schema;
+with upstream license and lock this is **ten run-owned pinned snapshots**.
+`VALIDATION_PROFILE_SHA256` incorporates
 those pins and the versioned profile. The final-report resources are the original,
 deliberately changed source bytes, not normalized copies; the OpenVEX upstream schema,
 license and lock are unchanged. Load schemas into an explicit offline

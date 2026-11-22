@@ -11,7 +11,7 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ## As built today
 
 This view includes T-150's protected decision-audit readers and the bounded dossier/report repairs
-in T-5086–T-5088. The gate remains `/2`; report `/3` and radar `/2` distinguish unknown metrics
+in T-5086–T-5088. The gate remains `/2`; current report `/4` and radar `/2` distinguish unknown metrics
 from measured zero. Finding decisions are unchanged; traceability is not a new finding state or
 quality label.
 
@@ -91,6 +91,12 @@ through bounded retrieval, attaches matching engineering/chain context and recor
 Bounded JSON and escaped LaTeX survive ordinary PDF-render failure; a successful PDF requires
 real output bytes and a hash-bound rendering receipt. Pin, template or input-integrity failure is
 not a successful degraded rendering.
+
+Rendering receipt `/2` additionally binds protected `dossier.md` and `dossier.html` through
+`additional_formats`. Publication reassembles them from the same dossier JSON; the gate and
+executive report verify the exact receipt and format hashes. The public dossier file map is
+unchanged. Legacy receipt `/1` certifies neither new format: readers do not discover sidecars by
+filename or treat an unbound link as certified output.
 
 PoC source, source-derived engineering diagnostics, model receipts and dossier content remain
 protected. The public final report contains certified references and summaries, not generated
@@ -201,6 +207,16 @@ as presentation gaps and can select matching attempt files rather than an accept
 Treat diagnostic renderings of model recordings as private, not as the sanitized public report.
 That tolerant diagnostic view is not the final gate's fail-closed certification or the
 [accepted protected audit](triage-verifier-enhancement.md#product-routes).
+
+`reporting/cell_outcomes.py` separately summarizes cell-attempt receipts, lane terminal records,
+planner attempts and model-call timings; attempts without sealed lane attribution remain
+`unattributed`. Its attempt counts and token subtotals are diagnostics, not accepted finding
+counts or independently measured quality.
+`reporting/smoke_score.py` checks published run records and supports explicitly supplied
+operator answer keys; `smoke_scorecard.py` renders or compares that keyed measurement.
+Neither is a producer of review evidence or proof that a run was blind. Keyed funnel/axis
+measurements are separate from the executive report's twelve-domain radar and never feed
+labels back to review workers.
 
 The gate opts into full audit/source verification but exports only sanitized availability,
 partial-population limitations and certified bindings. Disabled and legacy-unrecorded audits

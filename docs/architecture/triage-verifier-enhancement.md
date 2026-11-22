@@ -10,7 +10,8 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 
 ## Status, scope and non-goals
 
-**T-150 is implemented; later policy slices remain proposals.** The original design was written against code
+**T-150, opt-in T-152 warrants and T-153 reconciliation are implemented; later evaluation
+and hunt-allocation slices remain proposals.** The original design was written against code
 `5926171238607e27a948bc7d40ce190a853b3d0c`; the
 [source-backed review](../reviews/2026-11-13-triage-verifier-review.md) records the
 shared-working-tree limitation and evidence. Frontmatter status means this is the
@@ -37,8 +38,9 @@ Improve the usefulness of review decisions without widening model authority:
 
 - Preserve one canonical claim ledger, R5 state authority, R6 blind verification,
   confirmed-only remediation and the one final publication gate.
-- Preserve current role counts, judge selection and judge-dependent compile-only PoC
-  eligibility. No automatic runtime evidence generation, follow-up job dispatch,
+- This design does not change role counts or judge/PoC selection. Later protocol changes permit
+  explicitly `not_convened` PoC candidates; a missing verdict from a selected judge is not equivalent.
+  No automatic runtime evidence generation, follow-up job dispatch,
   provider changes, deployment changes or live reviews.
 - Treat no-claim as different from reasoned dismissal; unknown/null as different from
   zero; model confidence as different from a correctness label.
@@ -127,12 +129,14 @@ not produce a second copy of those receipts or infer delivery from package membe
 T-129 released the [canonical taxonomy](../intelligence-buckets.json) after the initial review.
 The runtime-neutral checkpoint added no audit datasets. The six declared output kinds belong to **review_products**, retaining their protected
 disposition, operational authority and sanitized-metadata-only inventory route. Offline
-measurements remain **metrics**. Future warrant/obligation products are still proposals,
-not produced datasets. Bucket membership never grants a worker or MCP capability.
+measurements remain **metrics**. Warrants and evidence obligations now have the protected
+lane/audit routes below; their declaration is not evidence of production in a particular run.
+Bucket membership never grants a worker or MCP capability.
 
 ### Product routes
 
-The table distinguishes declared T-150 interfaces from future T-152/T-153 proposals.
+The table distinguishes declared T-150 interfaces, opt-in T-152 warrants and implemented T-153
+obligation reconciliation from remaining evaluation proposals.
 A declaration is not evidence that a run produced, consumed or accepted the product;
 delivery state remains in T-150 and its implementation verification record.
 
@@ -141,7 +145,7 @@ delivery state remains in T-150 and its implementation verification record.
 | Decision audit / review_products | Declared review_decisions JSONL, review_decision_audit manifest and review_audit_metadata descriptor under attempt/artifacts/decision-audit | Bounded accepted-artifact reader and fixed operator query templates; no globally granted evidence shard | Operator and final gate; lead-adapter completion remains T-077; explain admitted/unadmitted/proposal-only/claim outcomes and omissions | Derived decision record, never new source evidence |
 | Verification coverage / review_products | Declared review_verification_coverage rows referenced by the audit manifest | Protected accepted-artifact route by claim/cell/evidence identity | Operator and authorized application readers; separate blindness, diversity and support completeness | Observed verification metadata, not new proof or a vote |
 | Predicate warrants / review_products (opt-in T-152) | Opt-in lane `warrants.json` (`appsec-review/lane-predicate-warrants/1`) of `predicate-warrant/1` records when `warrant_policy.enabled = true` | Protected `FutureReferences.warrants` + `continuations/warrants/` in `decision-audit`; no worker query grant | Adjudicator, scorer (`GuardAbsentExtractor`) and protected audit readers | Only application-validated commissioned facts can support R5; default-off (`enabled = false`) until paired evaluation approval |
-| Evidence obligations and resolutions / proposed review_products placement | Proposed T-153 evidence_obligations artifact, bound to existing request/claim IDs | Protected route; in-package application supplies only admitted requests to later rounds | Existing red/blue follow-up capability; operator locates the next missing fact | Question/resolution metadata; never an instruction to run a new tool |
+| Evidence obligations and resolutions / review_products | Lane `evidence-obligations.json`, bound to existing request/claim IDs and projected into protected `request_resolutions` audit continuations | In-package application forwards canonical open requests only when another round is admitted | Existing team/ledger/accounting consumers; operator locates unresolved obligations | Delivery is not satisfaction; closure requires exact scoped warranted evidence, never automatic tool or specialist commissioning |
 | Decision basis in developer briefs / review_products | Declared review_decision_bases; existing dossier/gate bind exact accepted finding/claim references | Protected dossier detail plus sanitized bindings; no new public raw-evidence endpoint | Developer and authorized application readers; preserve counterevidence and limits | Immutable accepted decision plus original citations; not a new claim state |
 | Reference continuations / review_products | Declared review_audit_continuations JSONL, bound by field and manifest | Validated with the complete bundle before consumption | Authorized readers retain complete provenance beyond inline bounds | References retain original authority; continuation storage adds none |
 | Outcome attribution / metrics | Offline finding adapters emit a versioned operator metric document with source-product hashes | Existing offline snapshot/history/scorecard paths; no worker input | Operator and independent evaluator; measure loss, confusion and cost | Derived measurements and externally admitted labels, never evidence for adjudication |

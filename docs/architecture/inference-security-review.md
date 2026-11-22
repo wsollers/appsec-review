@@ -40,10 +40,11 @@ design below: cross-package/cross-lane seeds and unresolved specialist referrals
 See [current execution boundaries](../operations/inference-security-review.md#routing-follow-up-rounds-and-coverage).
 Role-selected, pinned procedures and evidence-preserving compact investigation fields are described
 in [guidance procedures](guidance-procedures.md) and [red discovery output](red-discovery-output.md).
-The separate `job_document_issue_analysis` publishes a private, hash-pinned candidate ledger;
-its document hunts are not yet consumed by the inference review job.
+The separate `job_document_issue_analysis` retains its private candidate ledger and publishes
+late provisional navigation facts into inference's source-scoped package context. Its document
+hunts are not themselves inference packages or findings.
 
-Current source reconciliation through `d622f50750ae0c1583d6dac5a0acb0643ea18bcc` is summarized
+Current source reconciliation through `826b6a29a55a756e59b4a7209227f8f6a4051c5f` is summarized
 in [review inference and guidance](review-inference-and-guidance.md) and the
 [authored job page](../operations/job_inference_security_review.md). T-150 now publishes and
 verifies protected decision-audit sidecars through explicit operator/gate/dossier readers, without
@@ -67,10 +68,12 @@ The job follows these non-negotiable rules:
    dump, an evidence dump, an arbitrary target path, or an arbitrary query surface.
 3. Target guidance, retrieved text, tool output, generated evidence, and model output are untrusted
    data. They cannot alter governing rules, configuration, role, persona, tools, or claim limits.
-4. The job and all workers are technically unable to read `appsec-multi-vuln-guide`, evaluator
-   labels, expected findings, or any other ground truth. Those roots are absent from readable-input
-   capabilities and container mounts; a startup validator rejects a manifest or tool scope that
-   names them.
+4. Evaluator labels and expected findings must remain outside review-worker inputs. The implemented
+   catalog boundary uses configured path exclusions and accepted identity grants; it has no general
+   answer-key filename detector or automatic guarantee for arbitrary ground truth inside a target.
+   The checked-in global pattern is `.gitignore`, not an answer-key exclusion. A blind-review claim
+   requires checking the actual frozen exclusions, admitted manifests and worker inputs. Excluded
+   files still contribute to the raw target fingerprint; hashing them is not a worker evidence grant.
 5. Red proposes; blue attempts falsification; a blind verifier independently investigates; a
    deterministic adjudicator applies evidence-qualified policy. Agreement among models is not
    evidence and is never a vote.
@@ -133,7 +136,7 @@ contracts and the implemented slice's limits are:
 | `job_dossier_publication` | accepted findings/projection/source manifest, available PoC and remediation attachments, chain manifest; closed protected projection | raw prompts/transcripts/secrets, unaccepted source, the final gate |
 | `job_final_publication_gate` | accepted claim-ledger manifest, exact claim accounting, finding-package manifest, score-package manifest, attack-chain manifest, sanitized PoC status manifest, completeness and coverage gaps | unaccepted shards or model transcripts |
 | `job_final_report_publication` | publishable finding packages, separate score dimensions, confirmed/qualified chain packages, PoC outcome summaries, limitations/gaps | reusable exploit code, sensitive queries, secrets, raw prompts, private scratch artifacts |
-| retrieval finding index publisher (inside final publication) | sanitized final finding packages and their resolving citations | proposed/duplicate/out-of-scope claims unless the operator requests an internal audit view |
+| retrieval finding index publisher (deferred) | no current final-report dispatch; the report publishes artifact-only output | no implied retrieval grant from a report reference |
 
 No remediation or report job may reinterpret a claim state or a `ship-block-policy/1` status. It
 projects the accepted state and provenance from this job. Central `indexing/input_matrix.py`
@@ -141,46 +144,44 @@ now names actual remediation/dossier producers and the pre-gate consumer graph. 
 `datasets.py::PLANNED_CONSUMERS` metadata still records the original four reservations; its
 `planned` status is not a current build-status claim and full metadata reconciliation is pending.
 Gate `/2` now replaces unconditional absence text with verified five-capability accounting;
-report `/2` consumes only that certified snapshot. See
+current report `/4` consumes only that certified snapshot (older `/2` and `/3` validators remain).
+See
 [remediation operations](../operations/remediation.md), [dossier operations](../operations/dossier-publication.md)
 and [final publication](../operations/final-report.md).
 
 ## Dagster graph
 
-Each box below is a visible step; bracketed boxes dynamically map over claims, shards, roles, or
-chains. The two publication steps are deliberately serialized.
+This is the current acyclic unit graph in `job_inference_security_review/job.py`. Teams execute
+bounded cells inside their lane units; there is no Dagster dynamic claim mapping, global round
+loop or PoC execution unit. The two publication units are serialized.
 
 ```mermaid
 flowchart TD
   A[accept immutable run/index manifest] --> B[assemble review scope and evidence map]
-  B --> C1[lane A: assemble finding-lead packages]
-  B --> C2[lane B: rank review units, assemble hunt packages]
+  B --> T[triage.lead_severity]
+  T --> HP[packages.plan_hunt_campaign: bounded tool-free plan or rank fallback]
+  HP --> C1[lane A: assemble finding-lead packages]
+  HP --> C2[lane B: assemble selected hunt packages]
   C1 --> D1{{lane A review teams\nconfigured red lenses, then optional 2 blue + 1 blind verifier per claim}}
   C2 --> D2{{lane B review teams\nconfigured hunt panel, triage, then optional 2 blue + 1 blind verifier per claim}}
   D1 --> E[merge claims across lanes deterministically]
   D2 --> E
   E --> H[evidence-qualified adjudication]
-  H --> I{{independent scoring\nfan-out: adjudicated claim}}
-  H --> J[High/Critical PoC eligibility and typed policy gate]
-  J --> K{{benign PoC plan pool\nfan-out: eligible claim}}
-  K --> L{{isolated PoC execution\nfan-out only when authorized}}
-  L --> M{{independent PoC verification\nfan-out: attempt}}
-  H --> N[compose candidate attack chains]
-  N --> O{{independent chain refutation\nfan-out: candidate chain}}
-  I --> P[completeness audit]
-  M --> P
-  O --> P
-  P -->|bounded evidence deltas| Q{another round?}
-  Q -->|yes: variant hunts and deltas| C2
-  Q -->|no| R[serialize final ledger and package manifests]
+  H --> I[scoring.score_claims: deterministic evidence-derived factors]
+  I --> N[attack_chains.compose_candidates]
+  N --> O[attack_chains.refute_edges]
+  O --> W[attack_chains.verify_weakest_links]
+  W --> P[completeness.audit]
+  P --> R[publication.publish_claim_ledger]
   R --> S[publish accepted handoff]
+  S --> PC[Separate job_poc_generation: policy/AST checks, optional compile replay; never execution]
 ```
 
 Lanes A and B run fully in parallel and share one pool of review teams (see
 [Two-lane intake and review teams](#two-lane-intake-and-review-teams)). Dagster owns stage
-dependencies, pool limits, unit retries, and selected re-execution of visible units. The bracketed
-fan-out boxes are, in slice 1, single visible units whose handlers run an
-application-owned bounded cell executor, and the round loop is an in-application controller (see
+dependencies, pool limits, unit retries, and selected re-execution of visible units. The team
+boxes are single visible units whose handlers run an application-owned bounded cell executor.
+Configured follow-ups occur within each package, not through a graph cycle (see
 [R1](#r1-execution-model)); the current `ExecutionPlan` has no dynamic mapping or cycles. Application
 code owns immutable configuration, cell fingerprints, typed validation, deterministic merge,
 ledger transitions, evidence resolution, safety policy, receipts, and accepted publication.
@@ -228,7 +229,7 @@ flowchart LR
   V --> CL
   CL --> PUB
   RC -. no arbitrary FS/shell/SQL/regex .-> M
-  PUB -. no evaluator/ground-truth roots .-> AM
+  AM -. "configured exclusions and grants; no automatic answer-key detection" .-> RC
 ```
 
 Workers receive capability tokens scoped to one run, one accepted manifest, one package, one role,
@@ -261,7 +262,7 @@ still lists it, so an operator can tell "reported medium, assessed high, admitte
 assessed medium, excluded". Messages are omitted so a secret lead's literal never leaves the redacted
 projections.
 
-- A **finding package** groups one normalized upstream lead with its source/artifact identities,
+- A **finding-lead package** groups one defect site's normalized upstream leads with their source/artifact identities,
   original evidence, known supporting and contradicting relations, proof obligations, coverage,
   and allowed retrieval scope.
 - A **hunt package** groups an evidence-map slice by component/trust boundary and includes bounded
@@ -281,8 +282,8 @@ history/complexity metrics, safe build-command and environment facts, graph/evid
 retrieval scope and gaps. The package assembler audits that every lead admitted to lane A, from
 any family and including suppressed or deduplicated leads, appears in exactly one finding-lead package (leads of one defect site share a package;
 `packages.lead_cluster_lines`, `cluster_leads`).
-Every hunt unit above the cutoff lists each of its leads exactly once in its menus. Leads in
-units below the cutoff are accounted for by that unit's `below_hunt_cutoff` gap. Reported scanner severity is a nomination signal, never
+Every selected hunt unit lists each of its leads exactly once in its menus. Unselected units
+retain the rank cutoff or campaign-plan omission reason. Reported scanner severity is a nomination signal, never
 adjudicated technical severity. Exact command lines, environment values and secrets remain
 protected artifacts; workers receive classified, redacted facts only.
 
@@ -314,8 +315,8 @@ Blue and verifier pools fan out concurrently after normalization:
 
 - `blue_team_refuter` receives the normalized claim, original evidence, open obligations, and
   bounded retrieval scope. It actively seeks counterexamples, guards, reachability breaks,
-  configuration exclusions, and integrity problems. It may support, contradict, qualify, or leave
-  unresolved; it is not required to reject.
+  configuration exclusions, and integrity problems. Its compact stance may contradict, qualify
+  or remain unresolved; it cannot author support and is not required to reject.
 - `independent_verifier` initially receives the normalized claim and original evidence only. It does
   not receive red/blue narratives, dispositions, identities, scores, or confidence. This blind
   phase returns an independently gathered evidence set and proposed disposition. Only after its
@@ -356,7 +357,6 @@ stateDiagram-v2
   [*] --> proposed
   proposed --> duplicate
   proposed --> out_of_scope
-  proposed --> coverage_gap
   proposed --> contradicted
   proposed --> insufficient_evidence
   proposed --> supported
@@ -903,8 +903,8 @@ A claim re-admitted in a later round gets new blue cells whose fingerprints diff
 round delta, and the round-bearing capability hash, so they would ask the model the identical
 question again. The run-scoped **blue result memo** (`review/result_cache.py`, after RepoAudit's
 agent memory M(function, value)) avoids that. Its key is a round-free hash
-(`review-memo-key/1`) of the run id, `claim_id` (affected entities, CWE, security predicate and
-preconditions, which is the (function, value) pair), and every other request-shaping cell input:
+(`review-memo-key/1`) of the run id, `claim_id` (`claim/3`: normalized affected entities, CWE and
+security predicate), and every other request-shaping cell input:
 lane, role, task, persona, stack profile, strategy, task input (including claim prose), manifest,
 package, reuse basis, readable evidence set, guidance bundle, provider, model, reasoning, budgets,
 output schema, validator and executor versions, and the capability's round-free semantic body.
@@ -1370,6 +1370,10 @@ workers = 1
 > [`review-judge-and-poc.md`](review-judge-and-poc.md) and operated in
 > [`../operations/poc-generation.md`](../operations/poc-generation.md). The sections below describe the wider design (an
 > isolated executor, attempts and results); none of that is built.
+
+The current producer retains the nonexecution boundary but makes project-command compilation
+optional: `build.compile_check = false` still performs source/AST policy validation and publishes
+validated text as `artifact_generated`, not `compile_verified`.
 
 Only adjudicated findings that satisfy a configured High/Critical eligibility predicate enter this
 lane. A PoC means a non-malicious, bounded demonstration that the claimed condition can be
@@ -2210,8 +2214,13 @@ A verifier result is independent only when all of these hold:
 - for every required predicate, at least one supporting relation came from its own retrieval
   receipts. It may re-resolve the same entity red cited.
 
-A distinct provider is not required, because only `claude-cli` is configured today; provider
-distinctness becomes required once a second provider is configured. Distinct model profile is not
+Reused verification also requires a valid persisted request check bound to the original cell,
+attempt and complete forbidden-marker set, including other actor IDs. Missing or malformed
+checks yield `verifier_request_check_unavailable`, never a marker-free success.
+
+A distinct provider is recorded but is required only when the caller explicitly selects
+`require_distinct_provider`; configuring another provider does not activate that policy.
+Distinct model profile is not
 part of independence either: R6 and the R5 confirmation row are unchanged by it. Decision 2 adds a
 separate, recorded condition. For every claim the team records
 `independence.verifier_model_distinct`, which is true when the verifier cell's model profile
@@ -2230,7 +2239,8 @@ resolve to the same model.
 - Affected entities are accepted logical identities. A site identity (`source_span`, `call_site`,
   `sink_site`, `ast_node`, `ir_entity`, `tool_observation`) is normalized to its enclosing `symbol`
   when the accepted indices resolve one (a graph fact's `enclosing_function`, else the tightest
-  indexed symbol range on its path containing its line); otherwise it stays as cited. A
+  indexed symbol range on its path containing its line, or the nearest preceding definition
+  when that path has declaration lines but no extents); otherwise it stays as cited. A
   `source_file` cited beside a resolved symbol is dropped, since it names where the symbol was read
   rather than a second affected construct. Cells that cite one defect through different entity
   kinds therefore propose one claim.
@@ -2251,8 +2261,9 @@ resolve to the same model.
   unaccepted CWE does: the claim survives, but its identity lost precision. It is never silently
   mapped to another member. Worker results cannot reach that branch, because their schema closes
   the field; a worker that invents a predicate fails cell validation as a `schema_error`. Claim
-  identity (`claim/2`) hashes the member value together with the vocabulary version, so the change
-  from free tokens altered every claim id once, and a later vocabulary version alters them again.
+  identity (`claim/3`) hashes the member value together with the vocabulary version. The earlier
+  `/2` change from free tokens altered claim IDs; `/3` additionally folds site identities and
+  removes preconditions from the identity. A later vocabulary version alters IDs again.
   The roll-up below (`SECURITY_PREDICATE_CWE_ROLLUP`, `SECURITY_PREDICATE_CERT_ROLLUP`) documents
   which member a weakness normally implies. It never rewrites a worker's predicate. CWE-20 is
   deliberately unmapped, because it names no consequence.

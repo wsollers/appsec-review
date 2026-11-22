@@ -12,9 +12,13 @@ Previously recorded page-specific revision: `fadb6c2e9f8e23a99a59bf3c26cab82db70
 frontmatter watermark follows the repository-wide docs-sync record, not this individual revision.
 
 Status: design, decided with the user on 2026-11-16 from the evidence of application runs `2026-11-15-0005`
-and `2026-11-15-0006`; not implemented. Where this document and
-[review protocol v2](review-protocol-v2.md) disagree, v2 describes the code as it runs today and this
-document describes where it goes. Each migration step below is a TODO entry; nothing here authorises a
+and `2026-11-15-0006`; **partially implemented**. Defect-site clustering, `claim/3`,
+configurable refuters, the bounded campaign planner and one-round defaults have landed.
+The separate hunting producer, incremental campaign runtime and replacement of the two lanes
+remain proposals. The checked-in recipe still enables the blue pair and all-claim judge selection;
+their removal/escalation-only use below is a design decision, not the current default.
+[Review inference and guidance](review-inference-and-guidance.md) describes current dispatch.
+Each migration step below is a TODO entry; nothing here authorises a
 review run, a model call or a job-boundary change outside the
 [add-a-job-contract](../../.claude/skills/add-a-job-contract/SKILL.md) checklist.
 

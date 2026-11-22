@@ -18,7 +18,8 @@ It does not change the claim ledger, the closed predicate vocabulary (R4), the a
 stay as specified in [inference security review](inference-security-review.md) and
 [red discovery output](red-discovery-output.md). The compact answers below are **expanded by the
 application** into the existing `red-discovery-result/1`, `blue-result` and `verifier-result`
-documents before any validator runs, so downstream behavior is unchanged.
+documents before final-result admission. Compact-shape validation and bounded, recorded recovery
+precede expansion; the closed evidence/adjudication contracts remain authoritative.
 
 ## 1. Why: what the first live runs showed
 
@@ -71,9 +72,9 @@ a wrong one fatal.
 
 The package keeps its hash-pinned identity and reuse basis. Its model-facing view is organized into
 labelled sections. Ids are shortened here. Every built view is validated against
-[review-package-view.schema.json](../schemas/review-package-view.schema.json) (`package-view/5`).
+[review-package-view.schema.json](../schemas/review-package-view.schema.json) (`package-view/7`).
 The illustrative JSON below retains the original protocol sketch, not the current stored
-package envelope. Current assembly is `review-package/7` with `assemble-review-packages/16`
+package envelope. Current assembly is `review-package/7` with `assemble-review-packages/17`
 (hunt packages reference their unit context document, T-5000); bounded operation and
 generated-model context remain routing data, as described in the
 [package contract](review-package-contract.md).
@@ -156,7 +157,9 @@ is keyed by **location and function scope**, as described below. See
 - the tag assignments and corroborating observations at the same location;
 - **what is needed to reason about reaching the sink from an input**: the `entry_point` facts of the function and of
   the flows that touch its sinks, and a precomputed upward **call chain** from the lead's function to the nearest
-  function holding an entry point (existing `call_site` edges, at most `max_call_depth` levels), whose hops are
+  function holding an attacker-driven entry point (existing `call_site` edges, at most `max_call_depth`
+  levels; program-opened file/internal/database streams do not stop the search when a stronger entry
+  is available, but remain fallback context), whose hops are
   labelled `F1..` in order. When no entry point is reachable within the bound the package carries a material gap, and
   a cell sees it as an `X` label: reachability is unknown, never excluded;
 - **the declarations of the types used at the sink**, as a stated rule: the field names, types and array sizes of

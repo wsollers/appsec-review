@@ -154,8 +154,9 @@ Technical reference points:
 `pipeline/skills/evidence-and-graph-querying/SKILL.md` (`evidence-and-graph-querying` in
 `pipeline/guidance/registry.json`) provides deterministic decision trees for invoking bounded
 `RetrievalCore` graph, slice, guard-dominator, corroborated-cluster, SCA-reachability,
-threat-boundary, OWASP-gap, and API-drift queries across `job_inference_security_review`,
-`job_poc_generation`, `job_remediation_planning`, and `job_threat_model_generation`. See
+threat-boundary, OWASP-gap, and API-drift queries. Its allowlist names
+`job_inference_security_review`, `job_poc_generation`, `job_remediation_planning`, and
+`job_threat_model_generation`; allowlisting alone does not establish dispatch or a tool grant. See
 [Hosted querying and indexing skills](querying-and-indexing-skills.md).
 
 Eligible inference cells append this registered procedure once after role/task/persona and
@@ -163,6 +164,8 @@ accepted binary-evidence selection. All existing selected procedures and their s
 preserved; attachment reseals the procedure section and bundle without changing the capability
 receipt. A control-gap hunter can therefore receive generative investigation, effective-control
 verification, stateful-invariant analysis, binary evidence and querying together.
+Remediation planning also appends the procedure through its shared `/4` composer; its source
+reader and the final-only remediation reviewer do not become general review-cell clients.
 
 The representative two- and three-procedure test counts above are not universal assembly caps.
 Admission follows trusted job/role/task/persona wiring, accepted binary capability and the

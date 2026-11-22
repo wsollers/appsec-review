@@ -83,6 +83,12 @@ integer publication counters likewise remain known subtotals; its `usage_totals`
 receipt counts describe the historical receipt, not a new dispatch; `reused`/`reuse_source`,
 the run budget and physical model-call events distinguish that reuse from new spend.
 
+When a parsed reply exceeds its output-token cap, `Execution` raises `ModelTokenCapExceeded`
+with the parsed result while preserving failed-call accounting. The review-cell adapter may keep
+an otherwise valid **final** answer, with a `model_token_cap` budget gap and all ordinary
+expansion/citation checks. An over-cap retrieval turn cannot continue. This exception does not
+erase the overrun, increase a budget or turn every failed execution into a usable result.
+
 ## Run budget admission and settlement
 
 The inference-review job opens `JobBudget.for_run(run_root, limits)`, not a fresh counter file

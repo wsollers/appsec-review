@@ -8,8 +8,8 @@ last reconciled: "7dce146454df1a220fe6e1772207503aa655ef43"
 ---
 # Review package and finding-lead contract
 
-Status: implementation contract. Inference review packages are schema version 6
-(`appsec-review/review-package/7`, assembly rule `assemble-review-packages/16`); the catalog-derived
+Status: implementation contract. Inference review packages are schema version 7
+(`appsec-review/review-package/7`, assembly rule `assemble-review-packages/17`); the catalog-derived
 document packages below stay at version 3. Accepted-manifest scope assembly, lane A
 finding-lead packages for every lead family, lane B review-unit ranking and hunt packages,
 membership audits and the package manifest are implemented in `src/appsec_review/review/`
@@ -27,8 +27,9 @@ This contract specializes [inference security review](inference-security-review.
 machine-checkable shape is [review-packages.schema.json](../schemas/review-packages.schema.json).
 The earlier broad `review-input-package.schema.json` draft was removed when this implemented schema
 became authoritative. Both package kinds here are pre-adjudication inputs: the effective lead
-severity (reported when known, otherwise the audited triage assessment) controls ordering and
-admission, never the adjudicated finding severity.
+severity (reported when known, otherwise the audited triage assessment) controls ordering.
+Admission separately weighs reported and assessed severity under `lanes.lead_admission_basis`
+(`either` in the checked-in recipe); neither determines adjudicated finding severity.
 
 The same versioned schema also accepts the separate catalog-derived package producer
 `job_review_package_assembly`. Its `document_hunt` variant contains one accepted
@@ -36,8 +37,9 @@ The same versioned schema also accepts the separate catalog-derived package prod
 That producer also emits its earlier `finding_lead` and `hunt` shapes. The two producers have
 distinct content-addressed manifests (`review-package-manifest/2` for catalog packages and `/1`
 for inference packages), independent membership checks, and separate consumers. The document
-packages are consumed by `job_document_issue_analysis`, which publishes private candidates only;
-the inference job does not yet consume those document hunts. A declared route, test assertion, or
+packages are consumed by `job_document_issue_analysis`, which retains private candidates and
+publishes a bounded provisional `document_navigation` projection for inference's own source-scoped
+packages. Inference does not consume those document hunts directly. A declared route, test assertion, or
 exact route registration is not proof of control enforcement.
 
 For this separate catalog-derived producer (`src/appsec_review/review_packages.py`), the
@@ -89,6 +91,13 @@ wiring, `review/units.py` also emits `test_coverage`, `profile_hotspot`, `depend
 `job_dependency_intelligence` producers registered in `review/scope.py`. They are named once in
 `review/units.py::SIGNAL_CONTEXT_ROLES`, and `review-packages.schema.json` enumerates them for
 `inference_context.role`; `tests/review/test_packages.py` keeps the two in step.
+
+The `bounded_analysis` role carries conditional CBMC `review_signal` context, not another scanner
+lead. `review/bounded_analysis.py` joins a result only to its exact accepted seed observation,
+path, file hash and line span. The view retains assumptions, property/trace bounds and
+`counterexample_candidate`, `bounded_pass`, `inconclusive` or `not_attempted` judgments.
+Missing exact-seed results are gaps, never a safe verdict; this context cannot itself confirm a
+finding or satisfy an unrestricted runtime claim.
 
 ### Artifact-local evidence and coverage
 
@@ -234,8 +243,10 @@ by *location and function scope*, to `max_call_depth`, as follows:
   `range_fact`, `guard_fact` and `dataflow_path` facts of those sinks, and the `entry_point` facts of the function or
   of those flows;
 - `callers`, `callees`: `call_site` facts to `max_call_depth` levels, matched like caller context;
-- `chain`: the shortest call-site chain upward from the lead's function to the nearest function that holds an
-  `entry_point` fact (`reached`, ordered `hops`, the `entries` reached). When no entry point lies within
+- `chain`: a bounded breadth-first call-site walk to an attacker-driven `entry_point`;
+  program-opened file/internal/database stream entries remain fallback context rather than
+  stopping a search that can reach a stronger entry (`reached`, ordered `hops`, the `entries` reached).
+  When no entry point lies within
   `max_call_depth` levels the package carries an `unavailable` `code_graph_neighborhood` gap: reachability is
   unknown, never excluded;
 - `corroboration`: other observations on the same line (strongest first, at most 16);
@@ -270,7 +281,7 @@ required keys, validated at load:
 | `max_slice_lines` | slice lines per package | 1–2000 |
 | `max_slice_lines_per_function` | slice lines per function | 1–`max_slice_lines` |
 
-**The model-facing view (`package-view/5`, `review/package_view.py`).** A cell is shown a view built at cell time
+**The model-facing view (`package-view/7`, `review/package_view.py`).** A cell is shown a view built at cell time
 from the stored package, never stored as an identity and never part of a reuse basis (the basis stays the hash of the
 stored package). Labels are assigned in a fixed order so one package always yields the same labels: `L` lead, `S`
 source, `K` sink, `R` range, `G` guard, `F` call site (chain hops first, then callers, then callees), `P` flow, `E`

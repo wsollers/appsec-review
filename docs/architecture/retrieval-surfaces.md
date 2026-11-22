@@ -100,6 +100,17 @@ and identifier occurrences from the `analysis` index. It uses exact source-file 
 graph-scope grants, so failed builds/databases do not block source navigation. Its AST results
 remain syntax-only and cannot substitute for semantic paths or resolved call targets.
 
+`query_cfg_function` and `query_guard_dominators` separately page the accepted syntax CFG;
+partial/unmodeled control flow withholds positive dominance conclusions. `query_cpg_slice`
+and `query_call_paths` query `analysis/alternate-cpg`, not the CodeQL `graph` shard. Their
+provenance tiers, depth limits, omitted frontiers and unresolved dispatch remain qualifications.
+The added context queries distinguish routing-only `query_threat_boundaries`, scoped assessed
+`query_owasp_gaps`, provisional `query_doc_drift`, `query_engineering_signals`, static
+`query_sca_reachability` and build-only `query_sanitizer_readiness`.
+Availability in `RetrievalCore` or the public tool catalog does not imply the external scoped
+MCP adapter's narrower role catalog grants it, or that a specialized PoC/remediation worker can
+call it. See [the hosted query boundaries](querying-and-indexing-skills.md).
+
 ## Where to go next
 
 - Tool definitions: `docs/schemas/retrieval-mcp-tools.json`.

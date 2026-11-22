@@ -17,7 +17,12 @@ bounded by `sizeof` or `std::min`), `cpp-narrow-size-product` (a three-factor pr
 fewer) and `cpp-allocation-size-from-narrow-product` (an allocation sized by such a local). Fixtures are in
 `tests/fixtures/semgrep/cpp-memory-safety/`. See `docs/operations/cpp-memory-safety-detection.md`.
 
-`rules.lock.json` records the exact SHA-256 of both files and their provenance. Updating a rule
+`banned-functions.yml` is generated from the central banned-function table. Its `high` and
+`warning` tiers both report `WARNING` (medium); `review` reports `INFO`. A tier describes the
+function contract, not proven attacker influence. Lead triage retains assessed severity
+separately, and admission can weigh either reported or assessed severity.
+
+`rules.lock.json` records the exact SHA-256 of all three files and their provenance. Updating a rule
 requires updating that lock; its identity invalidates only Semgrep and downstream evidence and
 prioritization publication. Validate a change with the pinned engine before locking it, for
 example `semgrep scan --metrics off --config rules/semgrep/review-signals.yml <copy-of-target>`

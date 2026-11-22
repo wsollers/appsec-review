@@ -29,6 +29,11 @@ reviewed-source-snapshot products, and the existing accepted-handoff lifecycle. 
 new approval intake, per-finding consent workflow, generic runtime identity hook, or mutable
 post-run configuration. This document does not authorize public disclosure.
 
+At source `826b6a29a55a756e59b4a7209227f8f6a4051c5f`, the primary finding projection remains
+affected-only. The same job additionally supports the optional admitted dependency companion
+described below. Current final reporting is `/4`, still gate-only; the dated source and
+validation records in this document retain their original versions.
+
 ## 1. Goal and non-goals
 
 The deterministic, model-free `job_openvex_export` runs downstream of the accepted final
@@ -48,6 +53,25 @@ V1 does not add remediation generation/planning/validation, SBOM generation, sig
 infrastructure, automatic uploading/publication, release ranges, exploit execution, chain
 composition, external vulnerability-ID inference, or `not_affected`, `fixed`, and
 `under_investigation` workflows. Export success is not a clean verdict or shipping approval.
+
+### Optional dependency companion
+
+`dependencies.py` reads only admitted `job_dependency_intelligence/sca_reachability` bytes,
+bound to the gate's frozen configuration and target snapshot and charged to the same input
+budget. `openvex-dependencies.json` and `openvex-dependencies-result.json`
+(`appsec-review/openvex-dependencies/1`) are separate protected publications; they do not
+change the primary finding statement count or its eligibility.
+
+An exact PURL and a `symbol_reachable` row with call sites can yield `affected`; other admitted
+reachability remains `under_investigation`. Missing coordinates are explicitly omitted with
+provenance gaps. The production adapter forces incomplete executable-path coverage and never
+emits dependency `not_affected`. The lower pure classifier's complete-coverage negative branch
+is not a commissioned producer capability. Static symbol use is not proof of exploitation.
+
+Acceptance recomputes the companion and rechecks bytes, source pins and counts. Historical
+companion readers verify the original admitted inputs and published schema, not a newer
+dependency pointer or a regenerated modern projection. Legacy primary-only handoffs remain
+readable; absent or unreadable companion metrics are unknown, not measured zero.
 
 ## 2. Current source evidence
 

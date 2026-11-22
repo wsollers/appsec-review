@@ -177,3 +177,8 @@ conformance of a target. A `SUPPORTED` rule with no findings means the pack saw 
 violation in the unpreprocessed files it parsed; conformance additionally requires the delegated
 analyses, the excluded preprocessing and cross-function cases, exception documentation in the
 source, and human review of the rules no tool decides.
+
+The ENV33-C command-processor and shell-command variants now report `WARNING`, not `ERROR`.
+A matching call, including one with constant arguments, is review context rather than proof of
+command injection. Deterministic lead triage can separately assess weakness impact; scanner
+severity, assessed admission priority and adjudicated finding severity remain distinct.
