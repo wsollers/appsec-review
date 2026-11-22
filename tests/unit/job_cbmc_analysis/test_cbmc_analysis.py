@@ -62,11 +62,12 @@ def fixture(tmp_path):
 
 
 class FakeExecutor:
-    def __init__(self, run, responses=None, *, timed_out=False, wrong_image=False):
+    def __init__(self, run, responses=None, *, timed_out=False, wrong_image=False, discovery_response=None):
         self.run = run
         self.responses = list(responses or [(0, outcome())])
         self.timed_out = timed_out
         self.wrong_image = wrong_image
+        self.discovery_response = discovery_response or (0, functions())
         self.requests = []
 
     def execute(self, request):
@@ -77,13 +78,13 @@ class FakeExecutor:
             (request.scratch_root / "unit.goto").write_bytes(b"fixture goto")
             code, data = 0, []
         elif command == "/usr/bin/goto-instrument":
-            code, data = 0, functions()
+            code, data = self.discovery_response
         else:
             code, data = self.responses.pop(0)
         stdout, stderr, receipt = [request.scratch_root / name for name in ("stdout.bin", "stderr.bin", "execution.json")]
-        stdout.write_text(json.dumps(data))
+        stdout.write_bytes(data if isinstance(data, bytes) else json.dumps(data).encode())
         stderr.write_text("")
-        receipt.write_text("{}")
+        receipt.write_text(json.dumps({"argv": list(request.argv), "exit_code": code}))
         rel = lambda path: path.relative_to(self.run).as_posix()
         return ExecutionResult("appsec-review/container-execution/1", "tool-cbmc", "fixture", "wrong" if self.wrong_image else IMAGE,
                                IMAGE, "argv", (), {}, "start", "end", code, self.timed_out, False, False, False,
@@ -464,3 +465,271 @@ def test_real_executor_keeps_isolation_and_reuses_goto_read_only(tmp_path, monke
     assert any("dst=/inputs/unit.goto,readonly" in mount for mount in mounts)
     assert [mount for mount in mounts if not mount.endswith(",readonly")] == [
         mount for mount in mounts if "dst=/scratch" in mount]
+
+
+def runtime_fixture(tmp_path, *, responses=None, planning_gap=False, no_work=False, discovery_response=None):
+    """Publish inert upstream evidence through the real runner; fake only the CBMC container."""
+    from appsec_review.config import load_config
+    from appsec_review.jobs.job_cbmc_analysis.job import build_job
+    from appsec_review.jobs.job_cpp_compiled_analysis.datasets import DATASETS as CPP_DATASETS
+    from appsec_review.jobs.job_evidence_collection.datasets import DATASETS as SAST_DATASETS
+    from appsec_review.retrieval import (
+        EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, SourceLocation, write_manifest,
+    )
+    from appsec_review.runtime import Job, JobRunner, Unit
+    from appsec_review.storage import atomic_json
+    from tests.capture_fakes import build_capture_toml
+    from tests.host_pins_support import write_host_pins
+    from tests.release_support import write_release
+
+    scope, _, _ = fixture(tmp_path)
+    write_release(tmp_path, ("job_cpp_compiled_analysis", "job_evidence_collection", "job_cbmc_analysis"))
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text(
+        '[runtime]\nruns_dir = "runs"\ndata_dir = "data"\n'
+        + build_capture_toml()
+        + '\n[review_policy.releases]\nplatform = "fixture-1"\nvalidation = "fixture-1"\n'
+        '[jobs.job_cpp_compiled_analysis]\nname = "fixture_cpp"\n'
+        '[jobs.job_cpp_compiled_analysis.settings]\nlane = "cpp"\n'
+        '[jobs.job_cpp_compiled_analysis.steps.prepare]\n'
+        '[jobs.job_evidence_collection]\nname = "fixture_sast"\n'
+        '[jobs.job_cbmc_analysis]\nname = "cbmc_analysis"\n'
+        f'[jobs.job_cbmc_analysis.settings]\nenabled = true\ntag = "{settings().tag}"\n'
+        '[jobs.job_cbmc_analysis.steps.load.tasks.accepted_inputs]\n'
+        '[jobs.job_cbmc_analysis.steps.analyze.tasks.bounded_checks]\n'
+        '[jobs.job_cbmc_analysis.steps.acceptance.tasks.publish_handoff]\n')
+    pins = write_host_pins(tmp_path / "host-pins.toml", images={settings().tag: IMAGE})
+    config = load_config(config_path, host_pins=pins)
+    runner = JobRunner(config)
+
+    def cpp_catalog(unit):
+        root = unit.job.run_root
+        case = root / "data/cpp/projects/case"
+        source = case / "source/main.c"
+        source.parent.mkdir(parents=True)
+        source.write_bytes((scope.case_root / "source/main.c").read_bytes())
+        commands = [{"target_path": "native/main.c", "directory": "/scratch/source",
+                     "arguments": ["clang", "-c", "/scratch/source/main.c", "-o", "old.o"]}]
+        database = case / "build/compile_commands.json"
+        atomic_json(database, commands)
+        catalog = {"terminal_status": "SUCCEEDED", "compile_commands": commands,
+                   "compile_database": run_artifact(root, database),
+                   "mapping": {"project_id": "native", "root": "native", "case_snapshot": "f" * 64,
+                               "files": [dict(scope.files[0])]}}
+        projects = {} if no_work else {"case": catalog}
+        if planning_gap:
+            projects["unavailable"] = {"terminal_status": "FAILED", "gaps": ["fixture build unavailable"]}
+        return {"projects": projects, "artifacts": [run_artifact(root, source), run_artifact(root, database)]}
+
+    def cpp_publish(unit):
+        root = unit.job.run_root
+        summary = unit.unit_root / "summary.json"
+        atomic_json(summary, {"schema": "appsec-review/cpp-compiled-analysis/2"})
+        manifest = root / "data/indices/manifests/cpp.json"
+        write_manifest(manifest, run_id=unit.job.run_id, target_snapshot="f" * 64,
+                       target_root=scope.case_root, indexes=[])
+        return {"artifact": run_artifact(root, summary), "index_manifest": run_artifact(root, manifest)}
+
+    cpp = Job("job_cpp_compiled_analysis", "fixture_cpp", lambda _: {},
+              units=(Unit("catalog.projects", cpp_catalog),
+                     Unit("acceptance.publish_handoff", cpp_publish, ("catalog.projects",))),
+              datasets=tuple(d for d in CPP_DATASETS if d.output_kind in {
+                  "cpp_plan_and_summary", "cpp_case_material"}))
+    accepted_cpp = runner.run(cpp, target_root=scope.case_root, source_fingerprint="f" * 64)
+    run_id = accepted_cpp["status"]["run_id"]
+
+    def sast_publish(unit):
+        root = unit.job.run_root
+        shard = root / "data/indices/observations/seeds.sqlite"
+        builder = IndexBuilder(shard, name="observations", fingerprint="a" * 64,
+                               target_snapshot="f" * 64, shard_id="seeds")
+        if not no_work:
+            location = SourceLocation("f" * 64, "native/main.c", scope.files[0]["sha256"],
+                                      0, 20, 2, 2, 1, 1, producer_location={},
+                                      mapping_method="fixture", confidence=1.0)
+            builder.add_entity(EntityRecord(
+                LogicalIdentity.parse(SEED["observation_ids"][0]), "seed", "pointer", "pointer finding",
+                {"tool_id": "tool-cppcheck", "category": "source_sast", "native_rule_id": "nullPointer",
+                 "native_severity": "high"}, location))
+        digest = builder.build()
+        index = IndexIdentity("observations", "appsec-review/retrieval-index/2", digest, "a" * 64,
+                              shard.relative_to(root).as_posix(),
+                              {"job": "job_evidence_collection"}, (), "seeds")
+        manifest = root / "data/indices/manifests/sast.json"
+        write_manifest(manifest, run_id=run_id, target_snapshot="f" * 64,
+                       target_root=scope.case_root, indexes=[index])
+        return {"index_manifest": run_artifact(root, manifest)}
+
+    sast = Job("job_evidence_collection", "fixture_sast", lambda _: {},
+               units=(Unit("evidence_publication.publish", sast_publish),),
+               datasets=tuple(d for d in SAST_DATASETS if d.output_kind == "static_tool_observations"))
+    accepted_sast = runner.run(sast, run_id=run_id, target_root=scope.case_root, source_fingerprint="f" * 64)
+    run_root = config.runtime.runs_dir / run_id
+    executor = FakeExecutor(run_root, responses, discovery_response=discovery_response)
+    job = build_job(executor_factory=lambda *_: executor)
+    upstream = {"job_cpp_compiled_analysis": accepted_cpp["handoff_sha256"],
+                "job_evidence_collection": accepted_sast["handoff_sha256"]}
+    claim = runner.begin_attempt(job, run_id=run_id, upstream_handoffs=upstream)
+    return SimpleNamespace(runner=runner, job=job, claim=claim, executor=executor,
+                           root=run_root, upstream=upstream, config=config)
+
+
+def run_units(harness):
+    for unit in harness.job.units:
+        harness.runner.execute_or_reuse_unit(harness.job, harness.claim, unit.unit_id)
+
+
+@pytest.mark.parametrize("planning_gap,execution_gap", [(True, False), (False, True), (True, True)],
+                         ids=["selection-only", "execution-only", "both"])
+def test_runtime_accepts_canonical_planning_and_execution_gaps(tmp_path, planning_gap, execution_gap):
+    harness = runtime_fixture(tmp_path, planning_gap=planning_gap, no_work=not execution_gap,
+                              responses=[(124, [])])
+    run_units(harness)
+    accepted = harness.runner.finalize_attempt(harness.job, harness.claim)
+    assert accepted["handoff"]["status"] == "ACCEPTED"
+    assert accepted["handoff"]["completion_status"] == "COMPLETED_WITH_GAPS"
+    outputs = accepted["result"]["outputs"]
+    planning = outputs["load.accepted_inputs"]["gaps"]
+    executed = outputs["analyze.bounded_checks"]["gaps"]
+    published = outputs["acceptance.publish_handoff"]["gaps"]
+    assert len(planning) == int(planning_gap)
+    assert len(executed) == int(planning_gap) + int(execution_gap)
+    assert all(gap in executed for gap in planning) and executed == published
+    assert all(gap["unit_id"] is None for gap in published)
+    outcomes = json.loads((Path(accepted["attempt_root"]) / "outcomes.json").read_bytes())
+    assert {gap["gap_id"] for gap in outcomes["gaps"]} == {gap["gap_id"] for gap in published}
+
+
+@pytest.mark.parametrize("failure", ["timeout", "malformed"], ids=["timeout", "malformed"])
+def test_failed_unwind_retry_preserves_round_provenance(tmp_path, failure):
+    from appsec_review.indexing.store import ShardSet
+    from appsec_review.provenance import verify_native_reference
+    from appsec_review.retrieval.index import load_verified_manifest
+
+    retry = (124, []) if failure == "timeout" else (0, b'[{"result":')
+    harness = runtime_fixture(tmp_path, responses=[
+        (10, outcome("FAILURE", name="f.unwind.0", trace=True)), retry])
+    run_units(harness)
+    analysis_path = harness.root / harness.claim["attempt_path"] / "artifacts/cbmc/analysis.json"
+    analysis = json.loads(analysis_path.read_bytes())
+    result = analysis["results"][0]
+    assert result["unwind_limits_attempted"] == [8, 32]
+    assert result["judgment"] == "inconclusive" and result["candidate_count"] == 0
+    assert result["rounds"][0]["status"] == "validated"
+    assert result["rounds"][1]["status"] == "failed"
+    assert result["native_execution"] == result["executions"][-2]["receipt"]
+    assert result["rounds"][0]["execution"] == result["native_execution"]
+    assert result["rounds"][1]["execution"] == result["executions"][-1]["receipt"]
+    assert result["rounds"][1]["output"] == result["executions"][-1]["stdout"]
+    assert result["rounds"][1]["gaps"]
+    assert "unwinding_incomplete" in result["gaps"]
+    accepted = harness.runner.finalize_attempt(harness.job, harness.claim)
+    output = accepted["result"]["outputs"]["acceptance.publish_handoff"]
+    manifest, _ = load_verified_manifest(harness.root, harness.root / output["index_manifest"]["path"],
+                                         output["index_manifest"]["sha256"])
+    shards = [s for s in manifest["indexes"] if s["shard_id"].startswith("cbmc-results-")]
+    store = ShardSet(harness.root, shards)
+    [row] = store.entities(shards, kinds=("review_signal",))
+    [native] = row["payload"]["common"]["evidence_refs"]
+    assert native["execution_reference"] == result["native_execution"]
+    assert verify_native_reference(harness.root, native, resolve=True) == outcome(
+        "FAILURE", name="f.unwind.0", trace=True)
+
+
+RAW_PATHS = (
+    "00001/unit.goto", "00001/stdout.bin", "00001/stderr.bin", "00001/execution.json",
+    "00002/stdout.bin", "00002/stderr.bin", "00002/execution.json",
+    "00003/stdout.bin", "00003/stderr.bin", "00003/execution.json", "source",
+)
+
+
+@pytest.mark.parametrize("raw_path", RAW_PATHS, ids=[
+    "goto", "compiler-stdout", "compiler-stderr", "compiler-receipt",
+    "discovery-json", "discovery-stderr", "discovery-receipt",
+    "native-json", "cbmc-stderr", "cbmc-receipt", "source-copy",
+])
+@pytest.mark.parametrize("damage", ["delete", "change"], ids=["delete", "change"])
+@pytest.mark.parametrize("phase", ["acceptance", "reuse"], ids=["acceptance", "reuse"])
+def test_runtime_rejects_damaged_raw_closure(tmp_path, raw_path, damage, phase):
+    from appsec_review.runtime.resume import ResumePlanner
+
+    harness = runtime_fixture(tmp_path)
+    run_units(harness)
+    accepted = None
+    if phase == "reuse":
+        accepted = harness.runner.finalize_attempt(harness.job, harness.claim)
+        reasons, _ = ResumePlanner(harness.config, harness.root, [harness.job], "none")._accepted(
+            harness.job, harness.upstream)
+        assert not reasons
+    analysis_path = harness.root / harness.claim["attempt_path"] / "artifacts/cbmc/analysis.json"
+    analysis_bytes = analysis_path.read_bytes()
+    analysis = json.loads(analysis_bytes)
+    raw = (harness.root / analysis["source_artifacts"][0]["path"] if raw_path == "source" else
+           analysis_path.parent / "executions" / raw_path)
+    original = raw.read_bytes()
+    changed = bytes(byte ^ 1 for byte in original) if original else b"changed"
+    if damage == "delete":
+        raw.unlink()
+    else:
+        raw.chmod(0o644)
+        raw.write_bytes(changed)
+    if phase == "acceptance":
+        with pytest.raises(ValueError):
+            harness.runner.finalize_attempt(harness.job, harness.claim)
+        assert not (harness.root / "data/jobs/job_cbmc_analysis/latest.json").exists()
+    else:
+        before = (harness.root / "data/jobs/job_cbmc_analysis/latest.json").read_bytes()
+        reasons, _ = ResumePlanner(harness.config, harness.root, [harness.job], "none")._accepted(
+            harness.job, harness.upstream)
+        assert reasons and any("artifact" in reason or "integrity" in reason for reason in reasons)
+        assert (harness.root / "data/jobs/job_cbmc_analysis/latest.json").read_bytes() == before
+        assert (Path(accepted["attempt_root"]) / "handoff.json").is_file()
+    assert analysis_path.read_bytes() == analysis_bytes
+    assert raw.read_bytes() == changed if damage == "change" else not raw.exists()
+    assert len(harness.executor.requests) == 3
+
+
+@pytest.mark.parametrize("completed_calls", [2, 3], ids=["before-first-bound", "before-retry"])
+def test_unlaunched_bound_is_distinct_from_failed_round(tmp_path, completed_calls):
+    scope, row, unit = fixture(tmp_path)
+    executor = FakeExecutor(unit.job.run_root, [(10, outcome("FAILURE", name="f.unwind.0", trace=True))])
+    engine = Analysis(unit, settings(), executor_factory=lambda *_: executor,
+                      clock=lambda: 301 if len(executor.requests) >= completed_calls else 0)
+    [result] = engine.translation_unit(scope, row, [SEED], scope.case_root)
+    assert len(executor.requests) == completed_calls
+    assert result["judgment"] == "inconclusive" and result["candidate_count"] == 0
+    unlaunched = result["rounds"][-1]
+    assert unlaunched["status"] == "not_attempted" and unlaunched["gaps"] == ["BudgetExhausted"]
+    assert "execution" not in unlaunched and "output" not in unlaunched
+    if completed_calls == 3:
+        assert result["unwind_limits_attempted"] == [8] and unlaunched["unwind"] == 32
+        assert result["native_execution"] == result["rounds"][0]["execution"]
+        assert result["native_output"] == result["rounds"][0]["output"]
+        assert result["gaps"] == ["unwinding_incomplete", "BudgetExhausted"]
+    else:
+        assert result["unwind_limits_attempted"] == [] and unlaunched["unwind"] == 8
+        assert result["property_count"] == 0
+        assert "native_output" not in result and "native_execution" not in result
+
+
+def test_discovery_failure_retains_goto_and_execution_artifacts(tmp_path):
+    from appsec_review.runtime.resume import ResumePlanner
+
+    harness = runtime_fixture(tmp_path, discovery_response=(124, []))
+    run_units(harness)
+    accepted = harness.runner.finalize_attempt(harness.job, harness.claim)
+    assert accepted["handoff"]["completion_status"] == "COMPLETED_WITH_GAPS"
+    analysis_ref = accepted["result"]["outputs"]["analyze.bounded_checks"]["artifact"]
+    analysis = json.loads((harness.root / analysis_ref["path"]).read_bytes())
+    assert len(analysis["executions"]) == 2 and analysis["results"][0]["property_count"] == 0
+    artifacts = {ref["path"]: ref for ref in accepted["handoff"]["artifacts"]}
+    goto = analysis["executions"][0]["goto"]
+    assert artifacts[goto["path"]] == goto
+    for execution in analysis["executions"]:
+        for kind in ("stdout", "stderr", "receipt"):
+            assert artifacts[execution[kind]["path"]] == execution[kind]
+    (harness.root / goto["path"]).unlink()
+    reasons, _ = ResumePlanner(harness.config, harness.root, [harness.job], "none")._accepted(
+        harness.job, harness.upstream)
+    assert reasons and any("artifact" in reason or "integrity" in reason for reason in reasons)
+    assert len(harness.executor.requests) == 2

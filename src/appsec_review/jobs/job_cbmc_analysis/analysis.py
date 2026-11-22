@@ -162,7 +162,8 @@ class Analysis:
             raise ValueError("CBMC execution did not use the admitted image ID")
         receipt = run_artifact(self.unit.job.run_root, self.unit.job.run_root / result.receipt_path)
         output = run_artifact(self.unit.job.run_root, self.unit.job.run_root / result.stdout_path)
-        self.calls.append({"receipt": receipt, "stdout": output, "argv": list(invocation),
+        stderr = run_artifact(self.unit.job.run_root, self.unit.job.run_root / result.stderr_path)
+        self.calls.append({"receipt": receipt, "stdout": output, "stderr": stderr, "argv": list(invocation),
                            "image_id": result.image_id, "timeout_seconds": timeout})
         if (result.timed_out or result.oom_killed or result.file_size_limit_reached
                 or result.stdout_truncated or result.stderr_truncated):
@@ -195,13 +196,14 @@ class Analysis:
             binary = scratch / "unit.goto"
             if result.exit_code != 0:
                 raise ExecutionIncomplete(f"GOTO compilation failed with exit {result.exit_code}")
-            compiler_output += (self.unit.job.run_root / result.stderr_path).read_bytes()
+            compiler_output += verify_run_artifact(self.unit.job.run_root, self.calls[-1]["stderr"]).read_bytes()
             if re.search(rb"(?i)\bwarning\b|ignor(?:e|ing).{0,30}option|unsupported.{0,30}option", compiler_output):
                 raise ExecutionIncomplete("GOTO compiler reported a warning or ignored an option")
             if (not binary.is_file() or binary.is_symlink()
                     or not 1 <= binary.stat().st_size <= self.settings.max_goto_bytes):
                 raise ExecutionIncomplete("compiler omitted or exceeded the bounded GOTO artifact")
             goto = run_artifact(self.unit.job.run_root, binary)
+            self.calls[-1]["goto"] = goto
             result, data, _, _ = self.execute(target, (
                 "/usr/bin/goto-instrument", "--show-goto-functions", "--json-ui", "/inputs/unit.goto"), goto=goto)
             if result.exit_code != 0:
@@ -231,6 +233,7 @@ class Analysis:
             rounds = []
             for bound in self.settings.unwind_limits:
                 call_start = len(self.calls)
+                round_ = {"unwind": bound, "status": "not_attempted", "gaps": []}
                 try:
                     result, data, _, output = self.execute(
                         target, ("/usr/bin/cbmc", "/inputs/unit.goto", "--function", entry["function"],
@@ -241,17 +244,26 @@ class Analysis:
                                       max_trace_steps=self.settings.max_trace_steps,
                                       max_trace_value_chars=self.settings.max_trace_value_chars)
                     map_native_locations(parsed, scope, target)
-                    rounds.append({"unwind": bound, "output": output, "judgment": parsed["judgment"]})
-                    record.update(parsed, native_output=output, reason="conditional function-entry analysis")
+                    round_.update(status="validated", judgment=parsed["judgment"], gaps=list(parsed["gaps"]))
+                    record.update(parsed, native_output=output, native_execution=self.calls[-1]["receipt"],
+                                  reason="conditional function-entry analysis")
                     if not parsed["retry_unwind"]:
                         break
                 except (OutputRejected, ExecutionIncomplete, BudgetExhausted, ImageUnavailableError,
                         SignatureVerificationError, OSError) as exc:
-                    record.update(judgment="inconclusive", reason=str(exc)[:500], gaps=[type(exc).__name__])
+                    gaps = [type(exc).__name__]
+                    round_.update(status="failed" if len(self.calls) > call_start else "not_attempted",
+                                  reason=str(exc)[:500], gaps=gaps)
+                    record.update(judgment="inconclusive", candidate_count=0, reason=str(exc)[:500],
+                                  gaps=[*record["gaps"], *gaps])
                     break
                 finally:
-                    record["executions"].extend(self.calls[call_start:])
-            record["unwind_limits_attempted"] = [round_["unwind"] for round_ in rounds]
+                    calls = self.calls[call_start:]
+                    record["executions"].extend(calls)
+                    if calls:
+                        round_.update(output=calls[-1]["stdout"], execution=calls[-1]["receipt"])
+                    rounds.append(round_)
+            record["unwind_limits_attempted"] = [round_["unwind"] for round_ in rounds if "execution" in round_]
             record["rounds"] = rounds
             record.pop("retry_unwind", None)
             properties = sorted(record["properties"], key=lambda prop: (

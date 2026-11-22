@@ -22,6 +22,7 @@ from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.retrieval.observations import classify
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.runtime.consume import accepted_upstream
+from appsec_review.runtime.handoff import collect_artifacts
 from appsec_review.runtime.inputs import observe_output
 from appsec_review.storage import atomic_json, canonical_json, file_sha256, run_artifact, verify_run_artifact
 from appsec_review.storage.shared import current as current_owner
@@ -42,7 +43,7 @@ def _snapshot(context: Any) -> str:
 
 
 def _gap(reason: str, *, scope: str | None = None, code: GapCode = GapCode.PRODUCER_REPORTED_GAP):
-    return producer_gap(code, reason, scope_id=scope, unit_id="analyze.bounded_checks")
+    return producer_gap(code, reason, scope_id=scope)
 
 
 def _write(unit: UnitContext, path: Path, document: Mapping[str, Any]) -> dict[str, Any]:
@@ -166,6 +167,7 @@ def analyze(unit: UnitContext, document: Mapping[str, Any], settings: CbmcSettin
     by_id = {scope.scope_id: scope for scope in scopes}
     engine = Analysis(unit, settings, executor_factory=executor_factory)
     staged: dict[str, Path] = {}
+    source_artifacts = []
     refused: dict[str, str] = {}
     results = []
     for item in document["work"]:
@@ -181,6 +183,8 @@ def analyze(unit: UnitContext, document: Mapping[str, Any], settings: CbmcSettin
             try:
                 stage_source(scope, target, settings)
                 staged[scope.scope_id] = target
+                source_artifacts.extend(run_artifact(unit.job.run_root, target / source["scratch_path"])
+                                        for source in scope.files)
             except CompileRejected as exc:
                 refused[scope.scope_id] = str(exc)
         if scope.scope_id in refused:
@@ -194,7 +198,7 @@ def analyze(unit: UnitContext, document: Mapping[str, Any], settings: CbmcSettin
             gaps.append(_gap("; ".join(result["gaps"]) + ": " + result["reason"], scope=result["scope_id"]))
     return {"schema": "appsec-review/cbmc-analysis/1", "target_snapshot": document["target_snapshot"],
             "settings": asdict(settings), "results": results, "gaps": gaps,
-            "omitted": document["omitted"], "executions": engine.calls,
+            "omitted": document["omitted"], "executions": engine.calls, "source_artifacts": source_artifacts,
             "counts": dict(sorted(Counter(result["judgment"] for result in results).items()))}
 
 
@@ -217,6 +221,7 @@ def _location(snapshot: str, seed: Mapping[str, Any], scopes: Mapping[str, Any],
 def publish(unit: UnitContext, document: Mapping[str, Any], plan_ref: Mapping[str, Any],
             analysis_ref: Mapping[str, Any]) -> dict[str, Any]:
     snapshot = _snapshot(unit.job)
+    artifacts = collect_artifacts(unit.job.run_root, document, plan_ref, analysis_ref)
     settings = CbmcSettings.from_mapping(unit.job.config.settings)
     _, scopes, _, _ = _inputs(unit.job)
     by_id = {scope.scope_id: scope for scope in scopes}
@@ -247,7 +252,7 @@ def publish(unit: UnitContext, document: Mapping[str, Any], plan_ref: Mapping[st
                     retained = retain_native_output(
                         unit.job.run_root, verify_run_artifact(unit.job.run_root, native),
                         parser_identity=IMPLEMENTATION, complete=True, native_result_count=result["property_count"],
-                        execution_reference=result["executions"][-1]["receipt"],
+                        execution_reference=result["native_execution"],
                         events=unit.job.events, unit_id=unit.unit_id)
                     refs = (select_native(retained.as_dict(), json_selector()).as_dict(),)
                 payload["common"] = common_metadata(payload, evidence_refs=refs, payload_schema=IMPLEMENTATION,
@@ -290,7 +295,7 @@ def publish(unit: UnitContext, document: Mapping[str, Any], plan_ref: Mapping[st
                "image_id": document["settings"]["image_id"], "gaps": document["gaps"],
                "terminal_status": status}
     reference = _write(unit, unit.unit_root / "summary.json", summary)
-    return {"schema": SUMMARY_SCHEMA, "artifact": reference,
+    return {"schema": SUMMARY_SCHEMA, "artifact": reference, "artifacts": artifacts,
             "index_manifest": run_artifact(unit.job.run_root, manifest),
             "item_count": len(document["results"]), "gaps": document["gaps"], "terminal_status": status}
 
@@ -308,9 +313,9 @@ def _validate(context: Any, result: Mapping[str, Any] | None) -> None:
                             "image_id", "gaps", "terminal_status"}
                 or summary["schema"] != SUMMARY_SCHEMA or summary["target_snapshot"] != _snapshot(context)):
             raise ValueError("invalid CBMC summary contract")
-        for name in ("plan", "analysis"):
-            verify_run_artifact(context.run_root, summary[name])
+        plan = json.loads(verify_run_artifact(context.run_root, summary["plan"]).read_text())
         analysis = json.loads(verify_run_artifact(context.run_root, summary["analysis"]).read_text())
+        collect_artifacts(context.run_root, plan, analysis)
         expected = dict(sorted(Counter(item["judgment"] for item in analysis["results"]).items()))
         if (summary["image_id"] != settings.image_id or summary["counts"] != expected
                 or output["item_count"] != len(analysis["results"])
@@ -322,7 +327,8 @@ def build_job(*, executor_factory=None) -> Job:
     def load(unit: UnitContext):
         document = plan(unit.job, CbmcSettings.from_mapping(unit.job.config.settings))
         reference = _write(unit, unit.unit_root / "plan.json", document)
-        return {"artifact": reference, "gaps": document["gaps"], "terminal_status":
+        return {"artifact": reference, "artifacts": collect_artifacts(unit.job.run_root, document),
+                "gaps": document["gaps"], "terminal_status":
                 ProducerStatus.COMPLETED_WITH_GAPS if document["gaps"] else ProducerStatus.SUCCEEDED}
 
     def run(unit: UnitContext):
@@ -332,7 +338,8 @@ def build_job(*, executor_factory=None) -> Job:
         unit.job.events.write("CBMC_ANALYSIS_COMPLETED", unit_id=unit.unit_id,
                               counts=document["counts"], execution_count=len(document["executions"]),
                               gap_count=len(document["gaps"]))
-        return {"artifact": reference, "gaps": document["gaps"], "terminal_status":
+        return {"artifact": reference, "artifacts": collect_artifacts(unit.job.run_root, document),
+                "gaps": document["gaps"], "terminal_status":
                 ProducerStatus.COMPLETED_WITH_GAPS if document["gaps"] else ProducerStatus.SUCCEEDED}
 
     def accept(unit: UnitContext):
