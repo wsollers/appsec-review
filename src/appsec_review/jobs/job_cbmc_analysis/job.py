@@ -25,7 +25,6 @@ from appsec_review.runtime.consume import accepted_upstream
 from appsec_review.runtime.handoff import collect_artifacts
 from appsec_review.runtime.inputs import observe_output
 from appsec_review.storage import atomic_json, canonical_json, file_sha256, run_artifact, verify_run_artifact
-from appsec_review.storage.shared import current as current_owner
 from .analysis import Analysis, stage_source
 from .datasets import CONTRACT, DATASETS, JOB_ID, SUMMARY_SCHEMA
 from .protocol import CompileRejected, IMPLEMENTATION
@@ -248,7 +247,7 @@ def publish(unit: UnitContext, document: Mapping[str, Any], plan_ref: Mapping[st
                                analysis=analysis_ref, result_ordinal=ordinal)
                 native = result.get("native_output")
                 refs = ()
-                if native is not None and current_owner() is not None:
+                if native is not None:
                     retained = retain_native_output(
                         unit.job.run_root, verify_run_artifact(unit.job.run_root, native),
                         parser_identity=IMPLEMENTATION, complete=True, native_result_count=result["property_count"],

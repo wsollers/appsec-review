@@ -271,34 +271,34 @@ def admitted_fixture(tmp_path, monkeypatch, *, wrong_seed_hash=False):
     return module, scope, row, unit
 
 
-def test_real_selection_analysis_and_index_publication_are_consumable(tmp_path, monkeypatch):
+def test_real_selection_analysis_and_index_publication_are_consumable(tmp_path):
     from appsec_review.indexing.store import ShardSet
     from appsec_review.retrieval import EntityKind
     from appsec_review.retrieval.index import load_verified_manifest
     from appsec_review.review.bounded_analysis import BoundedAnalysisContext
     from appsec_review.review.evidence import classify
     from appsec_review.review.models import Admissibility, Predicate
-    from appsec_review.storage import run_artifact, atomic_json
-    module, scope, _, unit = admitted_fixture(tmp_path, monkeypatch)
-    selected = module.plan(unit.job, settings())
+    from appsec_review.provenance import verify_native_reference
+    harness = runtime_fixture(tmp_path, responses=[(10, outcome("FAILURE", trace=True))])
+    run_units(harness)
+    accepted = harness.runner.finalize_attempt(harness.job, harness.claim)
+    outputs = accepted["result"]["outputs"]
+    selected = json.loads((harness.root / outputs["load.accepted_inputs"]["artifact"]["path"]).read_bytes())
     assert len(selected["work"]) == 1
-    executor = FakeExecutor(unit.job.run_root, [(10, outcome("FAILURE", trace=True))])
-    analyzed = module.analyze(unit, selected, settings(), lambda *_: executor)
+    analyzed = json.loads((harness.root / outputs["analyze.bounded_checks"]["artifact"]["path"]).read_bytes())
     assert analyzed["counts"] == {"counterexample_candidate": 1}
-    plan_path, result_path = unit.job.attempt_root / "plan.json", unit.job.attempt_root / "artifacts/cbmc/analysis.json"
-    atomic_json(plan_path, selected)
-    atomic_json(result_path, analyzed)
-    published = module.publish(unit, analyzed, run_artifact(unit.job.run_root, plan_path),
-                               run_artifact(unit.job.run_root, result_path))
-    manifest, _ = load_verified_manifest(unit.job.run_root, unit.job.run_root / published["index_manifest"]["path"],
+    published = outputs["acceptance.publish_handoff"]
+    manifest, _ = load_verified_manifest(harness.root, harness.root / published["index_manifest"]["path"],
                                          published["index_manifest"]["sha256"])
     cbmc = [shard for shard in manifest["indexes"] if shard["producer"].get("job") == "job_cbmc_analysis"]
-    store = ShardSet(unit.job.run_root, manifest["indexes"])
+    store = ShardSet(harness.root, manifest["indexes"])
     records = list(store.entities(cbmc, kinds=("review_signal",)))
     assert len(records) == 1 and records[0]["payload"]["judgment"] == "counterexample_candidate"
     assert records[0]["payload"]["seed_observation_ids"] == SEED["observation_ids"]
+    [native] = records[0]["payload"]["common"]["evidence_refs"]
+    assert verify_native_reference(harness.root, native, resolve=True) == outcome("FAILURE", trace=True)
     assert all(classify(EntityKind.REVIEW_SIGNAL, p, tuple(Predicate)) is Admissibility.INDIRECT for p in Predicate)
-    review_scope = SimpleNamespace(run_root=unit.job.run_root, store=store,
+    review_scope = SimpleNamespace(run_root=harness.root, store=store,
                                   select=lambda predicate: tuple(s for s in manifest["indexes"] if predicate(s)),
                                   shard_sha256=lambda shard: shard["sha256"])
     context = BoundedAnalysisContext(review_scope)
@@ -311,6 +311,26 @@ def test_real_selection_analysis_and_index_publication_are_consumable(tmp_path, 
     assert unrelated == [] and missing[0].state == "unavailable"
     assert published["terminal_status"] == "SUCCEEDED"
     assert any(row["status"] == "partial" for row in store.coverage(cbmc))
+
+
+def test_native_result_publication_requires_active_shared_owner(tmp_path, monkeypatch):
+    from appsec_review.storage import atomic_json
+    from appsec_review.storage.shared import current
+
+    module, _, _, unit = admitted_fixture(tmp_path, monkeypatch)
+    assert current() is None
+    selected = module.plan(unit.job, settings())
+    analyzed = module.analyze(unit, selected, settings(),
+                              lambda *_: FakeExecutor(unit.job.run_root, [(0, outcome())]))
+    plan_path = unit.job.attempt_root / "plan.json"
+    result_path = unit.job.attempt_root / "artifacts/cbmc/analysis.json"
+    atomic_json(plan_path, selected)
+    atomic_json(result_path, analyzed)
+    with pytest.raises(ValueError, match="native provenance requires a run-owned publication attempt"):
+        module.publish(unit, analyzed, run_artifact(unit.job.run_root, plan_path),
+                       run_artifact(unit.job.run_root, result_path))
+    assert not (unit.unit_root / "summary.json").exists()
+    assert not (unit.job.run_root / "data/indices/manifests/cbmc-attempt_0001.json").exists()
 
 
 def test_foreign_seed_bytes_and_changed_manifest_are_rejected(tmp_path, monkeypatch):
