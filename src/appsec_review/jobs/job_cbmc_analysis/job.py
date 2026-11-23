@@ -23,7 +23,7 @@ from appsec_review.retrieval.observations import classify
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.runtime.consume import accepted_upstream
 from appsec_review.runtime.handoff import collect_artifacts
-from appsec_review.runtime.inputs import observe_output
+from appsec_review.runtime.inputs import input_shard_owner, observe_output
 from appsec_review.storage import atomic_json, canonical_json, file_sha256, run_artifact, verify_run_artifact
 from .analysis import Analysis, stage_source
 from .datasets import CONTRACT, DATASETS, JOB_ID, SUMMARY_SCHEMA
@@ -32,6 +32,8 @@ from .protocol import CompileRejected, IMPLEMENTATION
 TOPOLOGY = {"load": ("accepted_inputs",), "analyze": ("bounded_checks",),
             "acceptance": ("publish_handoff",)}
 SEED_PRODUCERS = {"job_evidence_collection", "job_codeql_analysis", "job_clang_static_analysis"}
+SEED_DATASETS = {(item.producer, item.output_kind) for item in CONTRACT.inputs
+                 if item.producer in SEED_PRODUCERS and item.output_kind != "handoff"}
 
 
 def _snapshot(context: Any) -> str:
@@ -90,8 +92,14 @@ def _inputs(context: Any):
         raise ValueError("CBMC accepted C/C++ input belongs to a different target")
     admitted = {name for name in sorted(SEED_PRODUCERS)
                 if accepted_upstream(context.run_root, name, required=False) is not None}
-    shards = [item for item in manifest["indexes"] if item["name"] == "observations"
-              and item.get("producer", {}).get("job") in admitted]
+    shards = []
+    for item in manifest["indexes"]:
+        producer = item.get("producer", {}).get("job")
+        if item["name"] != "observations" or producer not in admitted:
+            continue
+        owner = input_shard_owner(context.run_root, item)
+        if (producer, owner.output_kind) in SEED_DATASETS:
+            shards.append(item)
     source_hashes: dict[str, set[str]] = {}
     for scope in scopes:
         observe_output(context.run_root, "job_cpp_compiled_analysis", "cpp_case_material", scope.compile_database)

@@ -232,6 +232,10 @@ def test_function_budget_records_omitted_entry(tmp_path):
 
 def admitted_fixture(tmp_path, monkeypatch, *, wrong_seed_hash=False):
     from appsec_review.jobs.job_cbmc_analysis import job as module
+    from appsec_review.jobs.job_evidence_collection.datasets import DATASETS as SAST_DATASETS
+    from appsec_review.indexing import store as store_module
+    from appsec_review.runtime.datasets import dataset_contract
+    from appsec_review.storage import atomic_json
     from appsec_review.retrieval import EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, SourceLocation, write_manifest
     scope, row, unit = fixture(tmp_path)
     job = unit.job
@@ -266,8 +270,17 @@ def admitted_fixture(tmp_path, monkeypatch, *, wrong_seed_hash=False):
     summary_ref = run_artifact(job.run_root, summary_path)
     supplied = SimpleNamespace(handoff={
         "outputs": {"acceptance.publish_handoff": {"artifact": summary_ref}}, "artifacts": [summary_ref]})
+    contract = dataset_contract("job_evidence_collection", sorted({item.step for item in SAST_DATASETS}),
+                                SAST_DATASETS)
+    producer_attempt = job.run_root / "data/jobs/job_evidence_collection/attempts/attempt_0001"
+    atomic_json(producer_attempt / "claim.json", {"dataset_contract": contract})
+    evidence = SimpleNamespace(handoff={
+        "job_id": "job_evidence_collection", "dataset_contract_sha256": contract["sha256"],
+        "resolving_paths": {"attempt": producer_attempt.relative_to(job.run_root).as_posix()}})
     monkeypatch.setattr(module, "accepted_cpp_scopes", lambda _: (accepted, [scope], {}))
     monkeypatch.setattr(module, "accepted_upstream", lambda *_args, **_kwargs: supplied)
+    monkeypatch.setattr(store_module, "accepted_handoff",
+                        lambda _root, producer: evidence if producer == "job_evidence_collection" else None)
     return module, scope, row, unit
 
 
@@ -487,12 +500,14 @@ def test_real_executor_keeps_isolation_and_reuses_goto_read_only(tmp_path, monke
         mount for mount in mounts if "dst=/scratch" in mount]
 
 
-def runtime_fixture(tmp_path, *, responses=None, planning_gap=False, no_work=False, discovery_response=None):
+def runtime_fixture(tmp_path, *, responses=None, planning_gap=False, no_work=False, discovery_response=None,
+                    clang_findings=None):
     """Publish inert upstream evidence through the real runner; fake only the CBMC container."""
     from appsec_review.config import load_config
     from appsec_review.jobs.job_cbmc_analysis.job import build_job
     from appsec_review.jobs.job_cpp_compiled_analysis.datasets import DATASETS as CPP_DATASETS
     from appsec_review.jobs.job_evidence_collection.datasets import DATASETS as SAST_DATASETS
+    from appsec_review.jobs.job_clang_static_analysis.datasets import DATASETS as CLANG_DATASETS
     from appsec_review.retrieval import (
         EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, SourceLocation, write_manifest,
     )
@@ -503,7 +518,8 @@ def runtime_fixture(tmp_path, *, responses=None, planning_gap=False, no_work=Fal
     from tests.release_support import write_release
 
     scope, _, _ = fixture(tmp_path)
-    write_release(tmp_path, ("job_cpp_compiled_analysis", "job_evidence_collection", "job_cbmc_analysis"))
+    write_release(tmp_path, ("job_cpp_compiled_analysis", "job_evidence_collection", "job_cbmc_analysis",
+                            "job_clang_static_analysis"))
     config_path = tmp_path / "appsec-review.toml"
     config_path.write_text(
         '[runtime]\nruns_dir = "runs"\ndata_dir = "data"\n'
@@ -513,6 +529,9 @@ def runtime_fixture(tmp_path, *, responses=None, planning_gap=False, no_work=Fal
         '[jobs.job_cpp_compiled_analysis.settings]\nlane = "cpp"\n'
         '[jobs.job_cpp_compiled_analysis.steps.prepare]\n'
         '[jobs.job_evidence_collection]\nname = "fixture_sast"\n'
+        '[jobs.job_clang_static_analysis]\nname = "fixture_clang"\n'
+        '[jobs.job_clang_static_analysis.steps.analyze]\n'
+        '[jobs.job_clang_static_analysis.steps.acceptance]\n'
         '[jobs.job_cbmc_analysis]\nname = "cbmc_analysis"\n'
         f'[jobs.job_cbmc_analysis.settings]\nenabled = true\ntag = "{settings().tag}"\n'
         '[jobs.job_cbmc_analysis.steps.load.tasks.accepted_inputs]\n'
@@ -563,7 +582,7 @@ def runtime_fixture(tmp_path, *, responses=None, planning_gap=False, no_work=Fal
         shard = root / "data/indices/observations/seeds.sqlite"
         builder = IndexBuilder(shard, name="observations", fingerprint="a" * 64,
                                target_snapshot="f" * 64, shard_id="seeds")
-        if not no_work:
+        if not no_work and clang_findings is None:
             location = SourceLocation("f" * 64, "native/main.c", scope.files[0]["sha256"],
                                       0, 20, 2, 2, 1, 1, producer_location={},
                                       mapping_method="fixture", confidence=1.0)
@@ -589,6 +608,41 @@ def runtime_fixture(tmp_path, *, responses=None, planning_gap=False, no_work=Fal
     job = build_job(executor_factory=lambda *_: executor)
     upstream = {"job_cpp_compiled_analysis": accepted_cpp["handoff_sha256"],
                 "job_evidence_collection": accepted_sast["handoff_sha256"]}
+    if clang_findings is not None:
+        def clang_publish(unit):
+            indexes = []
+            for label in ("findings", "coverage"):
+                shard_id = "clang-static-" + ("coverage-" if label == "coverage" else "") + "fixture"
+                path = unit.job.run_root / "data/indices/observations" / (shard_id + ".sqlite")
+                builder = IndexBuilder(path, name="observations", fingerprint="b" * 64,
+                                       target_snapshot="f" * 64, shard_id=shard_id)
+                if label == "findings" and clang_findings:
+                    location = SourceLocation("f" * 64, "native/main.c", scope.files[0]["sha256"],
+                                              0, 20, 2, 2, 1, 1, producer_location={},
+                                              mapping_method="fixture", confidence=1.0)
+                    builder.add_entity(EntityRecord(
+                        LogicalIdentity.parse(SEED["observation_ids"][0]), "clang-seed", "pointer",
+                        "Clang pointer finding", {"tool_id": "tool-clang-static-analysis",
+                        "category": "source_sast", "native_rule_id": "core.NullDereference",
+                        "native_severity": "high"}, location))
+                if label == "coverage":
+                    builder.add_coverage("clang", "complete", "fixture coverage")
+                digest = builder.build()
+                indexes.append(IndexIdentity("observations", "appsec-review/retrieval-index/2",
+                                             digest, "b" * 64, path.relative_to(unit.job.run_root).as_posix(),
+                                             {"job": "job_clang_static_analysis"}, (), shard_id))
+            manifest = unit.job.run_root / "data/indices/manifests/clang.json"
+            write_manifest(manifest, run_id=run_id, target_snapshot="f" * 64,
+                           target_root=scope.case_root, indexes=indexes)
+            return {"index_manifest": run_artifact(unit.job.run_root, manifest)}
+
+        clang = Job("job_clang_static_analysis", "fixture_clang", lambda _: {},
+                    units=(Unit("acceptance.publish_handoff", clang_publish),),
+                    datasets=tuple(d for d in CLANG_DATASETS if d.output_kind in {
+                        "clang_static_observations", "clang_static_scope_coverage"}))
+        published_clang = runner.run(clang, run_id=run_id, target_root=scope.case_root,
+                                     source_fingerprint="f" * 64)
+        upstream["job_clang_static_analysis"] = published_clang["handoff_sha256"]
     claim = runner.begin_attempt(job, run_id=run_id, upstream_handoffs=upstream)
     return SimpleNamespace(runner=runner, job=job, claim=claim, executor=executor,
                            root=run_root, upstream=upstream, config=config)
@@ -597,6 +651,26 @@ def runtime_fixture(tmp_path, *, responses=None, planning_gap=False, no_work=Fal
 def run_units(harness):
     for unit in harness.job.units:
         harness.runner.execute_or_reuse_unit(harness.job, harness.claim, unit.unit_id)
+
+
+@pytest.mark.parametrize("findings", [True, False], ids=["findings-and-coverage", "empty-findings-and-coverage"])
+def test_clang_seed_selection_excludes_coverage_under_real_contract(tmp_path, findings):
+    from appsec_review.runtime.inputs import read_input_observations
+
+    harness = runtime_fixture(tmp_path, clang_findings=findings)
+    run_units(harness)
+    accepted = harness.runner.finalize_attempt(harness.job, harness.claim)
+    assert accepted["handoff"]["status"] == "ACCEPTED"
+    plan_ref = accepted["result"]["outputs"]["load.accepted_inputs"]["artifact"]
+    selected = json.loads((harness.root / plan_ref["path"]).read_bytes())
+    assert len(selected["work"]) == int(findings)
+    if findings:
+        assert selected["work"][0]["seeds"][0]["observation_ids"] == SEED["observation_ids"]
+    reads = read_input_observations(harness.root, accepted["handoff"])
+    assert reads is not None
+    clang_reads = [row for row in reads["reads"] if row["producer"] == "job_clang_static_analysis"]
+    assert {row["output_kind"] for row in clang_reads} == {"handoff", "clang_static_observations"}
+    assert all(row["cited"] is None for row in clang_reads)
 
 
 @pytest.mark.parametrize("planning_gap,execution_gap", [(True, False), (False, True), (True, True)],

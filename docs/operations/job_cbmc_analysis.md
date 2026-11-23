@@ -56,6 +56,11 @@ Disabling a producer or selecting no eligible seeds never establishes safety.
 
 1. Read admitted C/C++ case material and eligible scanner datasets through the typed input
    contract. Verify snapshot, source/compile identities and source-mapped seed locations.
+   Resolve each candidate shard's exact owner from the pinned producer dataset contract before
+   opening it for seeds. The shared `observations` index name is not permission to consume
+   coverage datasets: Clang's findings are admitted, but `clang_static_scope_coverage` is not.
+   Keep schema, authority and byte verification in the runtime read guard; filtering does not
+   replace those checks or widen CBMC's declared inputs.
 2. Select deterministic bounded scope/translation-unit/function work. Keep missing inputs,
    unsupported selections and budget omissions explicit; no whole-program fallback is inferred.
 3. Publish `plan.json` with its verified nested references and canonical job-level gaps.
