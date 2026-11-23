@@ -528,6 +528,23 @@ def test_parent_reexecution_preflight_refusal_does_not_record_or_submit(box: San
     assert not any('"action": "launch"' in " ".join(call) for call in box.docker_calls())
 
 
+def test_parent_reexecution_rejects_invalid_retained_step_accounting(box: Sandbox) -> None:
+    import hashlib
+    from reexecute_run import canonical
+    box.dagster.runs()
+    (box.repo / "runs" / APP_ID).mkdir()
+    plan = _parent_preview()
+    plan["retained_step_count"] = -1
+    plan["sha256"] = hashlib.sha256(canonical({key: value for key, value in plan.items() if key != "sha256"})).hexdigest()
+    box.state["exec"] = [
+        {"match": '"action": "preview"', "stdout": json.dumps(plan)}, *box.state.get("exec", [])]
+    box.save()
+    result = box.run("review-start", "--run-id", APP_ID, "--parent-run-id", UUID_ONE,
+                     "--restart-from-job", "job_security_tagging")
+    assert result.returncode == 3 and "no valid bounded plan" in result.stderr
+    assert review_run.read_submission(box.repo) is None
+
+
 @pytest.mark.parametrize("arguments", [
     ("--run-id", APP_ID, "--parent-run-id", UUID_ONE),
     ("--run-id", APP_ID, "--restart-from-job", "job_security_tagging"),

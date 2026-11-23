@@ -898,6 +898,8 @@ def _review_start(args: argparse.Namespace) -> int:
                 or reexecution.get("sha256") != hashlib.sha256(reexecute_run.canonical(
                     {key: value for key, value in reexecution.items() if key != "sha256"})).hexdigest()
                 or not isinstance(reexecution.get("retained_handoffs"), dict)
+                or type(reexecution.get("retained_step_count")) is not int
+                or reexecution["retained_step_count"] < 1
                 or not reexecution.get("step_keys") or not reexecution.get("retained_outputs")):
             raise OpsError("parent re-execution returned no valid bounded plan", REFUSED)
         identity["parent_reexecution"] = {

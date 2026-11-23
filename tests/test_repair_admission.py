@@ -213,6 +213,26 @@ def test_successful_portable_unit_is_admitted_into_fresh_attempt(tmp_path):
     assert json.loads((old / "status.json").read_bytes())["status"] == "FAILED"
 
 
+@pytest.mark.parametrize("case", ["never-started", "changed-implementation"])
+def test_repair_does_not_probe_inputs_when_no_checkpoint_can_be_reused(tmp_path, case):
+    config, jobs, _calls = fixture(tmp_path, ("job_source", "job_candidate"))
+    runner = JobRunner(config)
+    outcome = runner.run(jobs[0])
+    root = runner.runs.resolve(outcome["status"]["run_id"])
+    candidate = jobs[1]
+    if case == "changed-implementation":
+        def fail(_unit):
+            raise RuntimeError("fixture failure")
+        with pytest.raises(RuntimeError, match="partial failure"):
+            runner.run(replace(candidate, units=(Unit("work.only", fail),)), run_id=root.name)
+        (tmp_path / "release-src/job_candidate/job.py").write_text("VERSION = 2\n")
+        write_release(tmp_path, tuple(job.job_id for job in jobs))
+    candidate = replace(candidate, run_input_identity=lambda *_args: pytest.fail("unnecessary input probe"))
+    plan = plan_repair(config, root, (candidate,), "none")
+    assert plan["admissible"], plan["refusals"]
+    assert plan["unit_decisions"]["job_candidate"]["work.only"]["action"] == "RUN"
+
+
 def _artifact_checkpoint(tmp_path, *, interrupted=False):
     from appsec_review.runtime.datasets import artifact_only
     from appsec_review.storage.shared import immutable_bytes, verify_reference

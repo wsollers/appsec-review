@@ -101,6 +101,9 @@ If the deployed source changed, the parent preview prepares source-repair admiss
 is included in the preview and rederived under the existing admission locks before submission.
 This retains source verification without repeating whole-run producer validation on the restart
 path. Any scoped admission refusal stops the launch.
+Checkpoint input probes are skipped when no predecessor exists, its computation identity changed,
+or its completed status makes failed-attempt checkpoint reuse impossible; these cases already
+require `RUN`. Eligible checkpoints still receive the full input and artifact checks.
 
 The exact selected steps and retained-output hashes are saved under
 `data/recovery/reexecutions/<sha256>.json` and bound into the durable submission identity.

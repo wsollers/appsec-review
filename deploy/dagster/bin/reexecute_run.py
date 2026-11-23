@@ -229,7 +229,7 @@ def execute_request(request: dict) -> dict:
         subset = location.get_execution_plan(
             remote_job, parent.run_config, step_keys_to_execute=selected, known_state=known, instance=instance)
         pins = retained_handoff_pins(instance, outputs, root)
-        source_repair, jobs, dependencies, target = scoped_source_repair(config, root, selected, release, binding)
+        source_repair, jobs, source_dependencies, target = scoped_source_repair(config, root, selected, release, binding)
         plan = {
             "schema": SCHEMA, "application_run_id": root.name, "parent_run_id": parent.run_id,
             "root_run_id": parent.root_run_id or parent.run_id, "from_job": request["from_job"],
@@ -248,7 +248,7 @@ def execute_request(request: dict) -> dict:
             raise ValueError("parent re-execution plan changed; inspect it again before submission")
         if source_repair is not None:
             from appsec_review.runtime.repair import admit_repair
-            admit_repair(config, root, jobs, source_repair, target_root=target, dependencies=dependencies)
+            admit_repair(config, root, jobs, source_repair, target_root=target, dependencies=source_dependencies)
         tags = {**remote_job.tags, **request["tags"],
                 PARENT_RUN_ID_TAG: plan["parent_run_id"], ROOT_RUN_ID_TAG: plan["root_run_id"]}
         run = instance.create_run(
