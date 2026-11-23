@@ -82,12 +82,25 @@ including earlier parents when a chain exists; no fake outputs or rewritten acce
 are supplied. Original application handoffs retain their source provenance and are still
 validated as inputs by the new consumer's typed admission/read boundaries.
 
+The `parent-reexecution/2` plan also pins the original parent contexts' committed application
+handoffs. A newer accepted attempt does not silently replace that snapshot. Only a native
+parent-linked dispatch with the exact recorded step selection may admit these older pins;
+ordinary standalone input selection still rejects stale handoffs. Their original publications,
+artifacts, input schemas and authority are verified, and current `latest.json` pointers are
+never changed to make the old snapshot look current.
+
 Before submission the operator verifies the same application run, frozen configuration and
 profile/compiler selection, admitted deployed release, stopped workers, unchanged execution
 graph/I/O types, and hash-bound retained parent outputs. It refuses missing outputs, failed
 steps outside the selected boundary, unsupported mapped/custom I/O, or any plan change; it never
 falls back to a whole-graph launch. First-error envelopes still require their existing successor
 procedure. Image, resource-budget and model-login launch guards continue to run.
+
+If the deployed source changed, the parent preview prepares source-repair admission for the
+**selected application jobs only**, not all retained upstream producers. The exact scoped plan
+is included in the preview and rederived under the existing admission locks before submission.
+This retains source verification without repeating whole-run producer validation on the restart
+path. Any scoped admission refusal stops the launch.
 
 The exact selected steps and retained-output hashes are saved under
 `data/recovery/reexecutions/<sha256>.json` and bound into the durable submission identity.
@@ -104,8 +117,8 @@ second submission.
 
 Choose an upstream producer as the boundary if its **computed evidence** needs repair; do not
 retain known-bad evidence merely to save time. Retaining accepted results as inputs is not a
-claim that their original producers ran under the newly deployed implementation. Source changes
-still require the normal deployment/repair admission before this selection can launch.
+claim that their original producers ran under the newly deployed implementation. Source changes still require normal deployment and the selected jobs' inspected repair
+admission before this selection can launch.
 
 ## Release and deployment identity
 

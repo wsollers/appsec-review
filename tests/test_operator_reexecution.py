@@ -1,11 +1,13 @@
 from types import SimpleNamespace
 import hashlib
+import io
+import pickle
 
 import pytest
 
 from tests import operator_support  # noqa: F401
 from dagster._core.execution.plan.outputs import StepOutputHandle
-from reexecute_run import retained_outputs, selected_steps
+from reexecute_run import ParentContextReader, retained_outputs, selected_steps
 
 
 def graph():
@@ -82,3 +84,41 @@ def test_unavailable_parent_output_is_not_replaced_with_fabricated_inputs(tmp_pa
             path.symlink_to(target)
     with pytest.raises(ValueError, match="parent.*output"):
         retained_outputs(instance, snapshot, {"security_tagging__begin"}, known)
+
+
+def test_parent_context_reader_accepts_data_but_never_loads_python_objects():
+    value = {"run_id": "fixture", "completed_handoffs": {"job_source": "a" * 64}}
+    assert ParentContextReader(io.BytesIO(pickle.dumps(value))).load() == value
+    with pytest.raises(ValueError, match="primitive data"):
+        ParentContextReader(io.BytesIO(pickle.dumps(SimpleNamespace(value=1)))).load()
+
+
+def test_changed_source_admission_is_scoped_to_selected_jobs_not_retained_producers(tmp_path, monkeypatch):
+    from appsec_review.runtime import GraphRunner
+    from appsec_review.runtime.release import load_release
+    from appsec_review.runtime.repair import current_binding
+    from tests.release_support import write_release
+    from tests.test_repair_admission import fixture
+    from reexecute_run import scoped_source_repair
+
+    config, jobs, _calls = fixture(tmp_path, ("job_source", "job_security_tagging", "job_report"))
+    dependencies = {"job_source": (), "job_security_tagging": ("job_source",),
+                    "job_report": ("job_security_tagging",)}
+    outcome = GraphRunner(config, jobs, dependencies=dependencies).run(
+        target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / outcome["run_id"]
+    binding = current_binding(root)
+    (tmp_path / "release-src/job_security_tagging/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, tuple(dependencies))
+    by_id = {job.job_id: job for job in jobs}
+    monkeypatch.setattr("appsec_review.runtime.registry.builtin_registry", lambda: SimpleNamespace(
+        job_ids=lambda: tuple(by_id), build=by_id.__getitem__))
+    monkeypatch.setattr("appsec_review.orchestration.topology.wave1_dependencies", lambda _ids: dependencies)
+    monkeypatch.setattr("appsec_review.runtime.launch.configured_target", lambda *_args: tmp_path)
+    monkeypatch.setattr("appsec_review.jobs.cataloging.source_fingerprint", lambda _target: "none")
+    plan, selected, _deps, _target = scoped_source_repair(
+        config, root, ["security_tagging__begin", "report__begin"], load_release(tmp_path), binding)
+    assert plan["admissible"], plan["refusals"]
+    assert [job.job_id for job in selected] == ["job_security_tagging", "job_report"]
+    assert {row["job_id"] for row in plan["decisions"]} == {"job_security_tagging", "job_report"}
+    assert "job_source" not in plan["attempt_snapshots"]

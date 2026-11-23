@@ -474,14 +474,15 @@ def test_review_start_passes_the_application_run_tag_to_resume_a_run(box: Sandbo
 
 def _parent_preview():
     import hashlib
-    from reexecute_run import canonical
+    from reexecute_run import SCHEMA, canonical
     value = {
-        "schema": "appsec-review/parent-reexecution/1", "application_run_id": APP_ID,
+        "schema": SCHEMA, "application_run_id": APP_ID,
         "parent_run_id": UUID_ONE, "from_job": "job_security_tagging",
         "step_keys": ["security_tagging__begin", "security_tagging__finalize"],
         "retained_outputs": [{"step_key": "catalog__finalize", "output_name": "result",
                               "sha256": "e" * 64, "size_bytes": 12, "run_id": UUID_ONE}],
         "retained_step_count": 30,
+        "retained_handoffs": {"job_catalog": "e" * 64}, "source_repair": None,
     }
     return {**value, "sha256": hashlib.sha256(canonical(value)).hexdigest()}
 

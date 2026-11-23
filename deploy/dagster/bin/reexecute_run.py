@@ -2,13 +2,15 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 from pathlib import Path
+import pickle
 import re
 import sys
 
 
-SCHEMA = "appsec-review/parent-reexecution/1"
+from appsec_review.runtime.inputs import PARENT_REEXECUTION_SCHEMA as SCHEMA
 
 
 def selected_steps(dependencies: dict[str, set[str]], job_id: str) -> list[str]:
@@ -72,7 +74,72 @@ def retained_outputs(instance, snapshot, selected: set[str], known_state) -> lis
 
 
 def canonical(value) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    from appsec_review.storage import canonical_json
+    return canonical_json(value)
+
+
+class ParentContextReader(pickle.Unpickler):
+    def find_class(self, module, name):
+        raise ValueError("retained parent context must contain primitive data, not Python objects")
+
+
+def retained_handoff_pins(instance, outputs: list[dict], run_root: Path) -> dict[str, str]:
+    from appsec_review.retrieval.core import _accepted_handoff
+    from appsec_review.runtime.repair import verify_publication
+
+    pins = {}
+    for output in outputs:
+        path = Path(instance.storage_directory()) / output["run_id"] / output["step_key"] / output["output_name"]
+        with path.open("rb") as stream:
+            payload = stream.read(1024 * 1024 + 1)
+        if len(payload) > 1024 * 1024 or hashlib.sha256(payload).hexdigest() != output["sha256"]:
+            raise ValueError("retained parent context changed or exceeds its metadata bound")
+        value = ParentContextReader(io.BytesIO(payload)).load()
+        if not isinstance(value, dict) or value.get("run_id") != run_root.name:
+            raise ValueError("retained parent context belongs to another application run")
+        supplied = value.get("completed_handoffs", value.get("handoffs", {}))
+        if not isinstance(supplied, dict):
+            raise ValueError("retained parent handoffs are not a mapping")
+        for producer, digest in supplied.items():
+            if (not isinstance(producer, str) or not re.fullmatch(r"job_[a-z0-9_]+", producer)
+                    or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)):
+                raise ValueError("retained parent handoff identity is invalid")
+            if producer in pins and pins[producer] != digest:
+                raise ValueError(f"retained parent contexts disagree about {producer}")
+            pins[producer] = digest
+    for producer, digest in sorted(pins.items()):
+        handoff, _ = _accepted_handoff(run_root, producer, digest)
+        verify_publication(run_root, handoff, digest)
+    return dict(sorted(pins.items()))
+
+
+def scoped_source_repair(config, root, selected, release, binding):
+    from appsec_review.jobs.cataloging import source_fingerprint
+    from appsec_review.orchestration.topology import wave1_dependencies
+    from appsec_review.runtime.dependencies import graph_dependencies
+    from appsec_review.runtime.launch import configured_target
+    from appsec_review.runtime.registry import builtin_registry
+    from appsec_review.runtime.repair import deployment_identity, plan_repair
+
+    if binding["release_sha256"] == release["sha256"] and binding["deployment"] == deployment_identity(config.runtime.repository_root):
+        return None, (), None, None
+    registry = builtin_registry()
+    order = wave1_dependencies(set(registry.job_ids()))
+    if order is None:
+        raise ValueError("registered wave1 topology is unavailable")
+    jobs = tuple(registry.build(job_id) for job_id in order
+                 if job_id.removeprefix("job_") + "__begin" in selected)
+    if not jobs:
+        raise ValueError("parent re-execution selects no registered application jobs")
+    dependencies = graph_dependencies(jobs)
+    target = configured_target(config.runtime.repository_root, config.target_acquisition.targets_dir)
+    if target is None:
+        raise ValueError("parent re-execution requires the original target")
+    plan = plan_repair(config, root, jobs, source_fingerprint(target),
+                       target_root=target, dependencies=dependencies)
+    if not plan["admissible"] or plan["refusals"]:
+        raise ValueError("selected-job source repair refused: " + "; ".join(plan["refusals"]))
+    return plan, jobs, dependencies, target
 
 
 def container_command(container_id: str, request: dict) -> list[str]:
@@ -103,8 +170,8 @@ def execute_request(request: dict) -> dict:
         raise ValueError("re-execution must retain the frozen configuration")
     release = load_release(config.runtime.repository_root)
     binding = current_binding(root)
-    if release is None or binding is None or binding["release_sha256"] != release["sha256"]:
-        raise ValueError("changed deployed source requires repair admission before re-execution")
+    if release is None or binding is None:
+        raise ValueError("parent re-execution requires measured current and original source bindings")
     reasons = stopped_reasons(config, root)
     if reasons:
         raise ValueError("re-execution requires verified stopped workers: " + "; ".join(reasons))
@@ -161,6 +228,8 @@ def execute_request(request: dict) -> dict:
         known = known.update_for_step_selection(selected)
         subset = location.get_execution_plan(
             remote_job, parent.run_config, step_keys_to_execute=selected, known_state=known, instance=instance)
+        pins = retained_handoff_pins(instance, outputs, root)
+        source_repair, jobs, dependencies, target = scoped_source_repair(config, root, selected, release, binding)
         plan = {
             "schema": SCHEMA, "application_run_id": root.name, "parent_run_id": parent.run_id,
             "root_run_id": parent.root_run_id or parent.run_id, "from_job": request["from_job"],
@@ -168,6 +237,7 @@ def execute_request(request: dict) -> dict:
             "binding_sha256": hashlib.sha256(canonical(binding)).hexdigest(),
             "graph_sha256": hashlib.sha256(canonical(shape)).hexdigest(),
             "step_keys": selected, "retained_outputs": outputs,
+            "retained_handoffs": pins, "source_repair": source_repair,
             "retained_step_count": len(dependencies) - len(selected),
             "verified_dispatches": sorted(verified_dispatches),
         }
@@ -176,6 +246,9 @@ def execute_request(request: dict) -> dict:
             return plan
         if request["plan"] != plan:
             raise ValueError("parent re-execution plan changed; inspect it again before submission")
+        if source_repair is not None:
+            from appsec_review.runtime.repair import admit_repair
+            admit_repair(config, root, jobs, source_repair, target_root=target, dependencies=dependencies)
         tags = {**remote_job.tags, **request["tags"],
                 PARENT_RUN_ID_TAG: plan["parent_run_id"], ROOT_RUN_ID_TAG: plan["root_run_id"]}
         run = instance.create_run(

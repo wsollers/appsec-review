@@ -239,11 +239,22 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                         set(upstream["handoffs"]))
                 inputs = launch_inputs(selected, target=configured_target(config.runtime.repository_root, config.target_acquisition.targets_dir),
                                        upstream_handoffs=upstream_handoffs)
+                parent_selection = {}
+                if "appsec/parent_reexecution_plan" in tags:
+                    from appsec_review.runtime.release import digest
+                    if not context.dagster_run.parent_run_id or context.dagster_run.step_keys_to_execute is None:
+                        raise ValueError("parent input selection requires native Dagster re-execution")
+                    parent_selection = {
+                        "parent_run_id": context.dagster_run.parent_run_id,
+                        "parent_reexecution_plan": tags["appsec/parent_reexecution_plan"],
+                        "reexecution_steps_sha256": digest(sorted(context.dagster_run.step_keys_to_execute)),
+                    }
                 claim = launch_begin(
                     runner_factory(config), selected, inputs, run_id=run_id, trigger=_trigger_for_run(tags),
                     orchestration={"system": "dagster", "run_id": context.run_id,
                                     "workflow": context.dagster_run.job_name,
                                    "node": context.op.name,
+                                   **parent_selection,
                                    **({"iteration_request": iteration_request} if iteration_request else {})},
                     **({"force": True} if forced else {}))
                 if not run_id:

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from functools import wraps
 import json
 from pathlib import Path
+import re
 from threading import RLock
 from typing import Any, Callable, Iterator, Mapping, ParamSpec, TypeVar
 
@@ -24,6 +25,7 @@ from appsec_review.storage.shared import safe_path, verify_handoff
 INPUT_ADMISSION_SCHEMA = "appsec-review/input-admission/1"
 INPUT_READS_SCHEMA = "appsec-review/input-reads/1"
 EXTERNAL_SELECTION_SCHEMA = "appsec-review/external-input-selection/1"
+PARENT_REEXECUTION_SCHEMA = "appsec-review/parent-reexecution/2"
 
 
 def external_selection(rows: list[dict[str, Any]]) -> str:
@@ -64,8 +66,46 @@ def read_external_selection(document: object, contract: JobContract | None) -> d
     return document
 
 
+def retained_parent_inputs(job: Any, root: Path, orchestration: Mapping[str, Any] | None) -> dict[str, str]:
+    correlation = orchestration or {}
+    identity = correlation.get("parent_reexecution_plan")
+    if identity is None:
+        return {}
+    from appsec_review.runtime.release import digest, read_document
+    if (correlation.get("system") != "dagster" or correlation.get("workflow") != "wave1_review"
+            or not isinstance(identity, str) or not re.fullmatch(r"[0-9a-f]{64}", identity)):
+        raise ValueError("invalid parent re-execution input selection")
+    plan = read_document(safe_path(root, f"data/recovery/reexecutions/{identity}.json"))
+    if (plan.get("schema") != PARENT_REEXECUTION_SCHEMA or plan.get("sha256") != identity
+            or digest({key: value for key, value in plan.items() if key != "sha256"}) != identity
+            or plan.get("application_run_id") != root.name
+            or plan.get("parent_run_id") != correlation.get("parent_run_id")
+            or digest(plan.get("step_keys")) != correlation.get("reexecution_steps_sha256")
+            or job.job_id.removeprefix("job_") + "__begin" not in plan.get("step_keys", [])):
+        raise ValueError("parent re-execution inputs are not bound to this dispatch and job")
+    from appsec_review.runtime.repair import current_binding
+    binding = current_binding(root)
+    if binding is None or binding["release_sha256"] != plan.get("release_sha256"):
+        raise ValueError("parent re-execution source is not the admitted implementation")
+    repair = plan.get("source_repair")
+    if repair is not None:
+        if (not isinstance(repair, dict) or not binding.get("repair")
+                or binding["repair"]["path"] != f"data/recovery/repairs/{repair.get('plan_sha256')}.json"):
+            raise ValueError("parent re-execution source repair was not admitted")
+    elif digest(binding) != plan.get("binding_sha256"):
+        raise ValueError("parent re-execution implementation binding changed")
+    pins = plan.get("retained_handoffs")
+    if not isinstance(pins, dict) or any(
+            not isinstance(producer, str) or not re.fullmatch(r"job_[a-z0-9_]+", producer)
+            or not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+            for producer, value in pins.items()):
+        raise ValueError("invalid retained parent handoff pins")
+    return pins
+
+
 def selected_handoffs(job: Any, root: Path, supplied: Mapping[str, str] | None, *,
-                      enabled: set[str] | None = None) -> dict[str, str]:
+                      enabled: set[str] | None = None,
+                      retained: Mapping[str, str] | None = None) -> dict[str, str]:
     """An untagged single-job launch selects only its declared currently accepted inputs."""
     if job.contract is None:
         return dict(supplied or {})
@@ -76,7 +116,12 @@ def selected_handoffs(job: Any, root: Path, supplied: Mapping[str, str] | None, 
         for producer, digest in supplied.items():
             pointer = safe_path(root, f"data/jobs/{producer}/latest.json")
             if not pointer.is_file() or json.loads(pointer.read_bytes()).get("handoff_sha256") != digest:
-                raise ValueError(f"supplied handoff is stale or unavailable: {producer}")
+                if (retained or {}).get(producer) != digest:
+                    raise ValueError(f"supplied handoff is stale or unavailable: {producer}")
+                from appsec_review.retrieval.core import _accepted_handoff
+                from appsec_review.runtime.repair import verify_publication
+                original, _ = _accepted_handoff(root, producer, digest)
+                verify_publication(root, original, digest)
         from appsec_review.retrieval.core import _accepted_handoff
         result = dict(supplied)
         pending = list(result.items())
@@ -128,6 +173,7 @@ def resolve_job_inputs(
 ) -> tuple[dict[str, str], dict[str, str], Mapping[str, Any] | None, dict[str, str]]:
     """Resolve current-target ``upstream_handoffs`` separately from admitted ``optional_prior_handoffs``."""
     from appsec_review.retrieval.core import _accepted_handoff
+    retained = retained_parent_inputs(job, run_root, orchestration)
     if job.job_id == "job_target_analysis_plan":
         from appsec_review.jobs.job_build_environment_analysis.job import (
             JOB_ID as ENV_JOB_ID,
@@ -143,10 +189,10 @@ def resolve_job_inputs(
             pre_contract = environment_contract(config, correlation, upstream_handoffs)
             if pre_contract["mode"] == "OPTIONAL_PRIOR":
                 without_prior = {key: value for key, value in upstream_handoffs.items() if key != ENV_JOB_ID}
-                selected = selected_handoffs(job, run_root, without_prior, enabled=enabled)
+                selected = selected_handoffs(job, run_root, without_prior, enabled=enabled, retained=retained)
                 candidate = {**selected, ENV_JOB_ID: str(pre_contract["reference"])}
             else:
-                candidate = selected_handoffs(job, run_root, upstream_handoffs, enabled=enabled)
+                candidate = selected_handoffs(job, run_root, upstream_handoffs, enabled=enabled, retained=retained)
         else:
             candidate = selected_handoffs(job, run_root, None, enabled=enabled)
         contract, required_upstream = planning_environment_inputs(
@@ -154,7 +200,7 @@ def resolve_job_inputs(
         optional_prior = optional_prior_environment_handoffs(contract)
         return required_upstream, optional_prior, contract, candidate
 
-    selected = selected_handoffs(job, run_root, upstream_handoffs, enabled=enabled)
+    selected = selected_handoffs(job, run_root, upstream_handoffs, enabled=enabled, retained=retained)
     required_upstream = dict(selected)
     optional_prior: dict[str, str] = {}
     if "job_target_analysis_plan" in required_upstream and "job_build_environment_analysis" in job.consumes:

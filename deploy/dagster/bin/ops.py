@@ -897,6 +897,7 @@ def _review_start(args: argparse.Namespace) -> int:
                 or reexecution.get("from_job") != restart_from_job
                 or reexecution.get("sha256") != hashlib.sha256(reexecute_run.canonical(
                     {key: value for key, value in reexecution.items() if key != "sha256"})).hexdigest()
+                or not isinstance(reexecution.get("retained_handoffs"), dict)
                 or not reexecution.get("step_keys") or not reexecution.get("retained_outputs")):
             raise OpsError("parent re-execution returned no valid bounded plan", REFUSED)
         identity["parent_reexecution"] = {
@@ -917,6 +918,8 @@ def _review_start(args: argparse.Namespace) -> int:
     tags[PROFILE_TAG] = profile
     tags[OVERLAY_TAG] = overlay or NO_OVERLAY
     tags[COMPILER_TARGET_TAG] = compiler_target
+    if reexecution is not None:
+        tags["appsec/parent_reexecution_plan"] = reexecution["sha256"]
     if safety_policy is not None:
         tags["appsec/safety_identity"] = execution_safety.identity(safety_policy)
         tags["dagster/max_retries"] = "0"
@@ -941,6 +944,9 @@ def _review_start(args: argparse.Namespace) -> int:
         say(f"steps:     {len(reexecution['step_keys'])} selected; "
             f"{reexecution['retained_step_count']} retained from the parent")
         say(f"re-execution plan: {reexecution['sha256']}")
+        if reexecution.get("source_repair") is not None:
+            repair = reexecution["source_repair"]
+            say(f"source repair: {repair['plan_sha256']} ({len(repair['decisions'])} selected jobs)")
         say(f"+ docker exec {code.id} python <guarded-parent-reexecution> {dagster_run_id}")
     else:
         say("+ docker " + shlex.join(command))

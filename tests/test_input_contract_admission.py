@@ -107,6 +107,66 @@ def test_checkpoint_reuse_retains_original_hash_bound_input_read_receipts(tmp_pa
     assert observations["citation_observation"] == "not_observed"
 
 
+def _parent_input_fixture(tmp_path):
+    from appsec_review.runtime.inputs import PARENT_REEXECUTION_SCHEMA
+    from appsec_review.runtime.release import digest
+    from appsec_review.runtime.repair import current_binding
+    from appsec_review.storage import canonical_json
+    from appsec_review.storage.shared import immutable_bytes
+
+    runner, producer, consumer, target = setup(tmp_path)
+    first = run(runner, producer, target)
+    root = runner.runs.resolve(first["status"]["run_id"])
+    current = run(runner, producer, target, root.name)
+    binding = current_binding(root)
+    body = {
+        "schema": PARENT_REEXECUTION_SCHEMA, "application_run_id": root.name,
+        "parent_run_id": "original-parent", "step_keys": ["reader__begin"],
+        "retained_handoffs": {producer.job_id: first["handoff_sha256"]},
+        "release_sha256": binding["release_sha256"], "binding_sha256": digest(binding),
+        "source_repair": None,
+    }
+    plan = {**body, "sha256": digest(body)}
+    ref = immutable_bytes(root, f"data/recovery/reexecutions/{plan['sha256']}.json", canonical_json(plan))
+    orchestration = {
+        "system": "dagster", "run_id": "new-dispatch", "workflow": "wave1_review",
+        "parent_run_id": plan["parent_run_id"], "parent_reexecution_plan": plan["sha256"],
+        "reexecution_steps_sha256": digest(plan["step_keys"]),
+    }
+    return runner, producer, consumer, target, root, first, current, ref, orchestration
+
+
+def test_parent_reexecution_retains_original_pins_without_rewriting_newer_publications(tmp_path):
+    runner, producer, consumer, target, root, first, current, _ref, correlation = _parent_input_fixture(tmp_path)
+    outcome = run(runner, consumer, target, root.name, orchestration=correlation,
+                  upstream_handoffs={producer.job_id: first["handoff_sha256"]})
+    assert outcome["handoff"]["upstream_handoff_sha256"][producer.job_id] == first["handoff_sha256"]
+    assert accepted_handoff(root, producer.job_id).sha256 == current["handoff_sha256"]
+    observations = read_input_observations(root, outcome["handoff"])
+    assert observations["reads"][0]["handoff_sha256"] == first["handoff_sha256"]
+
+
+@pytest.mark.parametrize("damage", ["no-proof", "wrong-parent", "wrong-selection", "tampered-proof", "unpublished"])
+def test_parent_input_selection_requires_exact_dispatch_proof_and_committed_evidence(tmp_path, damage):
+    runner, producer, consumer, target, root, first, _current, ref, correlation = _parent_input_fixture(tmp_path)
+    if damage == "no-proof":
+        correlation.pop("parent_reexecution_plan")
+    elif damage == "wrong-parent":
+        correlation["parent_run_id"] = "different-parent"
+    elif damage == "wrong-selection":
+        correlation["reexecution_steps_sha256"] = "0" * 64
+    elif damage == "tampered-proof":
+        path = root / ref["path"]
+        value = json.loads(path.read_text())
+        value["retained_handoffs"] = {}
+        path.write_text(json.dumps(value))
+    else:
+        (Path(first["attempt_root"]) / "published.json").unlink()
+    with pytest.raises((ValueError, OSError)):
+        run(runner, consumer, target, root.name, orchestration=correlation,
+            upstream_handoffs={producer.job_id: first["handoff_sha256"]})
+
+
 @pytest.mark.parametrize("availability,missing,accept", [
     (Availability.REQUIRED, MissingPolicy.REJECT, False),
     (Availability.OPTIONAL, MissingPolicy.GAP, True),
