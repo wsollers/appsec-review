@@ -472,6 +472,74 @@ def test_review_start_passes_the_application_run_tag_to_resume_a_run(box: Sandbo
     assert box.run("review-start", "--run-id", "latest").returncode == 2
 
 
+def _parent_preview():
+    import hashlib
+    from reexecute_run import canonical
+    value = {
+        "schema": "appsec-review/parent-reexecution/1", "application_run_id": APP_ID,
+        "parent_run_id": UUID_ONE, "from_job": "job_security_tagging",
+        "step_keys": ["security_tagging__begin", "security_tagging__finalize"],
+        "retained_outputs": [{"step_key": "catalog__finalize", "output_name": "result",
+                              "sha256": "e" * 64, "size_bytes": 12, "run_id": UUID_ONE}],
+        "retained_step_count": 30,
+    }
+    return {**value, "sha256": hashlib.sha256(canonical(value)).hexdigest()}
+
+
+def test_review_start_parent_reexecution_never_launches_the_full_graph(box: Sandbox) -> None:
+    box.dagster.runs()
+    (box.repo / "runs" / APP_ID).mkdir()
+    box.state["exec"] = [
+        {"match": '"action": "preview"', "stdout": json.dumps(_parent_preview())},
+        {"match": '"action": "launch"', "stdout": "{}"},
+        *box.state.get("exec", []),
+    ]
+    box.save()
+    result = box.run("review-start", "--run-id", APP_ID, "--parent-run-id", UUID_ONE,
+                     "--restart-from-job", "job_security_tagging")
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = [call for call in box.docker_calls() if call[:4] == ["exec", CODE_ID, "python", "-c"]]
+    requests = [json.loads(call[-1]) for call in calls if '"action":' in call[-1]]
+    assert [request["action"] for request in requests] == ["preview", "launch"]
+    assert requests[-1]["plan"] == _parent_preview()
+    assert not any("launch" in call for call in box.docker_calls())
+    intent = review_run.read_submission(box.repo)
+    assert intent["state"] == "SUBMITTED"
+    assert intent["identity"]["parent_reexecution"]["plan_sha256"] == _parent_preview()["sha256"]
+    assert requests[-1]["dagster_run_id"] == intent["dagster_run_id"]
+    assert requests[-1]["tags"]["appsec/submission_identity"] == intent["identity_sha256"]
+    assert "2 selected; 30 retained" in result.stdout
+
+
+def test_parent_reexecution_preflight_refusal_does_not_record_or_submit(box: Sandbox) -> None:
+    box.dagster.runs()
+    (box.repo / "runs" / APP_ID).mkdir()
+    box.state["exec"] = [
+        {"match": '"action": "preview"', "rc": 1, "stderr": "retained parent output is unavailable"},
+        *box.state.get("exec", []),
+    ]
+    box.save()
+    result = box.run("review-start", "--run-id", APP_ID, "--parent-run-id", UUID_ONE,
+                     "--restart-from-job", "job_security_tagging")
+    assert result.returncode == 3
+    assert "retained parent output is unavailable" in result.stderr
+    assert review_run.read_submission(box.repo) is None
+    assert not any('"action": "launch"' in " ".join(call) for call in box.docker_calls())
+
+
+@pytest.mark.parametrize("arguments", [
+    ("--run-id", APP_ID, "--parent-run-id", UUID_ONE),
+    ("--run-id", APP_ID, "--restart-from-job", "job_security_tagging"),
+    ("--parent-run-id", UUID_ONE, "--restart-from-job", "job_security_tagging"),
+], ids=["missing-boundary", "missing-parent", "missing-application"])
+def test_parent_reexecution_requires_an_explicit_complete_selection(box: Sandbox, arguments) -> None:
+    result = box.run("review-start", *arguments)
+    assert result.returncode == 2
+    assert "require each other and --run-id" in result.stderr
+    assert box.docker_calls() == []
+    assert review_run.read_submission(box.repo) is None
+
+
 def test_review_start_refuses_when_a_run_is_active_unless_forced(box: Sandbox) -> None:
     box.dagster.runs(run(UUID_ONE, "STARTED", app=APP_ID))
     refused = box.run("review-start", "--id-wait", "1")

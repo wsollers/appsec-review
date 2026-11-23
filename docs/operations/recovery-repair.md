@@ -57,6 +57,56 @@ manifests remain immutable: installing a change to the identity/checkpoint machi
 require a conservative baseline rerun; it does not retroactively certify old computations under
 new rules.
 
+## Targeted parent re-execution
+
+Resuming an application run ID and resuming at a failed job are different operations.
+`review-start --run-id RUN` submits the entire graph and lets the application planner decide
+reuse. To retain the successful Dagster execution before a failure, explicitly select its
+terminal parent dispatch and the earliest job that needs recomputation:
+
+```sh
+scripts/review-start.sh --run-id RUN --parent-run-id FAILED_DAGSTER_UUID \
+  --restart-from-job job_security_tagging --dry-run
+scripts/review-start.sh --run-id RUN --parent-run-id FAILED_DAGSTER_UUID \
+  --restart-from-job job_security_tagging
+```
+
+Run these Linux commands over the configured WSL SSH connection from Windows; the native
+PowerShell wrapper does not expose the parent-selection flags.
+
+The operator selects **every step of the named job**, including its begin/claim, and all
+dependent steps. Rerunning the begin step is necessary after an input-contract repair: the old
+claim does not acquire new permissions. Successful upstream steps are not scheduled. Native
+Dagster re-execution loads their original persisted outputs through its parent execution state,
+including earlier parents when a chain exists; no fake outputs or rewritten accepted pointers
+are supplied. Original application handoffs retain their source provenance and are still
+validated as inputs by the new consumer's typed admission/read boundaries.
+
+Before submission the operator verifies the same application run, frozen configuration and
+profile/compiler selection, admitted deployed release, stopped workers, unchanged execution
+graph/I/O types, and hash-bound retained parent outputs. It refuses missing outputs, failed
+steps outside the selected boundary, unsupported mapped/custom I/O, or any plan change; it never
+falls back to a whole-graph launch. First-error envelopes still require their existing successor
+procedure. Image, resource-budget and model-login launch guards continue to run.
+
+The exact selected steps and retained-output hashes are saved under
+`data/recovery/reexecutions/<sha256>.json` and bound into the durable submission identity.
+The native run records `parent_run_id`, `root_run_id` and `step_keys_to_execute`, so the UI and
+monitor can distinguish a partial continuation from a new full dispatch.
+
+Keep hot-restart latency separate from implementing/testing a fix or deploying changed sources.
+With the repaired release already admitted and the services healthy, this path checks the
+execution graph and its retained boundary outputs, not every producer's artifact tree. It does
+not rebuild images or run the whole application repair planner. Measure command entry to the new
+dispatch's observed `STARTED` state; the operational target is under one minute. A slow or
+uncertain launch must report its phase and exact submission ID, never trigger an automatic
+second submission.
+
+Choose an upstream producer as the boundary if its **computed evidence** needs repair; do not
+retain known-bad evidence merely to save time. Retaining accepted results as inputs is not a
+claim that their original producers ran under the newly deployed implementation. Source changes
+still require the normal deployment/repair admission before this selection can launch.
+
 ## Release and deployment identity
 
 `release-dependencies.json` declares job packages, shared application code and package resources,

@@ -177,6 +177,21 @@ authoritative model inventory. The Copilot catalog guard refuses any non-Copilot
 the Claude profiles inherited by `copilot-dev`/`copilot-prod`. Both new comparison profiles bind
 all slots through Copilot; see the profile guide for their exact budgets and same-model warning.
 
+### Restart at a failed job
+
+The Linux launcher accepts `--parent-run-id DAGSTER_UUID --restart-from-job JOB` together with
+`--run-id APPLICATION_RUN`. This uses native parent re-execution, selecting the entire named job
+and dependent steps while retaining successful upstream outputs. Plain `--run-id` is still a
+whole-graph submission, not a restart cursor.
+
+Preview with `--dry-run` first and inspect the selected/retained step counts. Use the terminal
+parent that actually produced the required outputs, not a guessed latest run or an unrelated
+canceled rerun. Missing outputs, changed graph/I/O, changed frozen selection or uncertain workers
+refuse the operation without a whole-graph fallback. The selection, parent output hashes and
+executor source digest participate in the existing durable submission identity. See
+[targeted parent re-execution](recovery-repair.md#targeted-parent-re-execution) for the checks and
+the distinction between retaining input evidence and rerunning its producer.
+
 ### Per-run profile and overlay
 
 `review-start --profile X --overlay F` (`-Profile X -Overlay F`) applies to that run only; the stack

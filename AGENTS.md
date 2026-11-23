@@ -37,6 +37,10 @@ agents that inspect or change the repository. It is not a prompt for review work
   everything is not proof that everything needed rerunning. Do not substitute a fresh run or
   bypass provenance, input, artifact, signing, or stopped-worker checks to hide a reuse defect.
   A code repair alone does not authorize a live restart.
+- A request to restart at a failed job requires a verified execution boundary, not just the same
+  application run ID. Follow "Targeted parent re-execution" in the recovery runbook when the
+  successful parent outputs remain valid. Plain `review-start --run-id` schedules the whole
+  graph; do not use it as a fallback for a requested targeted restart.
 - Keep recovery scoped to observed breakage and prerequisites that actually block the next
   review. Do not turn a repair into general infrastructure redesign or speculative security
   hardening. Required compiler tracing, including strace/ptrace capture, is tooling functionality

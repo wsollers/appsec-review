@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass, field
 from datetime import datetime
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -825,6 +826,12 @@ def cmd_review_start(args: argparse.Namespace) -> int:
 
 
 def _review_start(args: argparse.Namespace) -> int:
+    parent_run_id = getattr(args, "parent_run_id", None)
+    restart_from_job = getattr(args, "restart_from_job", None)
+    if bool(parent_run_id) != bool(restart_from_job) or (parent_run_id and not args.run_id):
+        raise OpsError("--parent-run-id and --restart-from-job require each other and --run-id", USAGE)
+    if parent_run_id and not DAGSTER_RUN_ID.fullmatch(parent_run_id):
+        raise OpsError("--parent-run-id must be a Dagster UUID", USAGE)
     project = deployment_project()
     containers = stack_containers(project)
     say(f"review-start: project {project}" + (" (dry run)" if args.dry_run else ""))
@@ -870,6 +877,33 @@ def _review_start(args: argparse.Namespace) -> int:
         recording=code.settings.get(RECORDING_VARIABLE, ""), image_id=code.image_id,
         project=project, url=args.url, application_run_id=args.run_id,
         compiler_target=compiler_target)
+    reexecution = None
+    if parent_run_id:
+        import reexecute_run
+
+        request = {
+            "action": "preview", "application_run_id": args.run_id,
+            "parent_run_id": parent_run_id, "from_job": restart_from_job,
+            "tags": {PROFILE_TAG: profile, OVERLAY_TAG: overlay or NO_OVERLAY,
+                     COMPILER_TARGET_TAG: compiler_target},
+        }
+        preview = docker(*reexecute_run.container_command(code.id, request), timeout=180)
+        if preview.returncode != 0:
+            raise OpsError("parent re-execution refused: " + redact(preview.stderr or preview.stdout, 1400), REFUSED)
+        reexecution = json.loads(preview.stdout)
+        if (reexecution.get("schema") != reexecute_run.SCHEMA
+                or reexecution.get("parent_run_id") != parent_run_id
+                or reexecution.get("application_run_id") != args.run_id
+                or reexecution.get("from_job") != restart_from_job
+                or reexecution.get("sha256") != hashlib.sha256(reexecute_run.canonical(
+                    {key: value for key, value in reexecution.items() if key != "sha256"})).hexdigest()
+                or not reexecution.get("step_keys") or not reexecution.get("retained_outputs")):
+            raise OpsError("parent re-execution returned no valid bounded plan", REFUSED)
+        identity["parent_reexecution"] = {
+            "parent_run_id": parent_run_id, "from_job": restart_from_job,
+            "plan_sha256": reexecution["sha256"],
+            "executor_sha256": hashlib.sha256(Path(reexecute_run.__file__).read_bytes()).hexdigest(),
+        }
     safety_policy = None
     if getattr(args, "stop_on_first_error", False):
         if args.run_id:
@@ -892,6 +926,9 @@ def _review_start(args: argparse.Namespace) -> int:
     if safety_policy is not None:
         command += ["--config-json", json.dumps(
             {"execution": {"config": {"safety": safety_policy}}}, sort_keys=True)]
+    if reexecution is not None:
+        command = reexecute_run.container_command(code.id, {
+            **request, "action": "launch", "plan": reexecution, "dagster_run_id": dagster_run_id, "tags": tags})
     say(f"profile:   {profile} ({profile_source})")
     if profile in PROD_PROFILES or profile in COPILOT_DEV_PROFILES:
         say(profile_notice(profile))
@@ -899,7 +936,14 @@ def _review_start(args: argparse.Namespace) -> int:
     say(f"overlay:   {overlay or '(none)'} ({overlay_source})")
     say(f"compiler:  {compiler_target}")
     say(f"recording: {code.settings.get(RECORDING_VARIABLE) or 'off'}")
-    say("+ docker " + shlex.join(command))
+    if reexecution is not None:
+        say(f"parent:    {parent_run_id}; restart from {restart_from_job}")
+        say(f"steps:     {len(reexecution['step_keys'])} selected; "
+            f"{reexecution['retained_step_count']} retained from the parent")
+        say(f"re-execution plan: {reexecution['sha256']}")
+        say(f"+ docker exec {code.id} python <guarded-parent-reexecution> {dagster_run_id}")
+    else:
+        say("+ docker " + shlex.join(command))
     probe = not getattr(args, "no_probe", False)
     if args.dry_run:
         if probe:
@@ -911,6 +955,12 @@ def _review_start(args: argparse.Namespace) -> int:
         require_model_login(containers, profile)
     else:
         say("model login: not probed (--no-probe)")
+    if reexecution is not None:
+        from appsec_review.storage import canonical_json
+        from appsec_review.storage.shared import immutable_bytes
+        immutable_bytes(ROOT / "runs" / args.run_id,
+                        f"data/recovery/reexecutions/{reexecution['sha256']}.json",
+                        canonical_json(reexecution))
     record = review_run.begin_submission(ROOT, identity, dagster_run_id)
     say(f"submission intent:  {review_run.submission_directory(ROOT) / 'active.json'}")
     try:
@@ -1418,6 +1468,8 @@ def build_parser() -> argparse.ArgumentParser:
         "refused, even with --force, because the shared lease ledger would clamp both to the smaller budget.")
     add_review_options(review)
     review.add_argument("--run-id", help="resume this existing application run (adds the appsec/application_run_id tag)")
+    review.add_argument("--parent-run-id", help="terminal Dagster parent whose successful outputs are retained")
+    review.add_argument("--restart-from-job", help="re-execute this entire job and its descendants, not the whole graph")
     review.add_argument("--stop-on-first-error", action="store_true",
                         help="freeze the run-scoped no-retry safety policy; requires the matching deployed code")
     review.add_argument("--no-probe", action="store_true",
