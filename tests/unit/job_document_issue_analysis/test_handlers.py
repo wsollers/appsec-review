@@ -51,39 +51,51 @@ from tests.handoff_fixture import write_fixture_handoff
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-@pytest.mark.parametrize("status,granted", [("partial", True), ("complete", True), ("partial", False)])
-def test_package_coverage_requires_declared_alternate_cpg_input(tmp_path, status, granted):
+@pytest.mark.parametrize("producer,output_kind,index,shard_id", [
+    ("job_code_graph_index", "alternate_cpg_index", "analysis", "alternate-cpg"),
+    ("job_cbmc_analysis", "cbmc_results", "observations", "cbmc-results-fixture"),
+    ("job_cbmc_analysis", "cbmc_coverage", "observations", "cbmc-coverage-fixture"),
+])
+@pytest.mark.parametrize("status,mode", [
+    ("partial", "allowed"), ("complete", "allowed"),
+    ("partial", "undeclared"), ("partial", "unsupplied"),
+])
+def test_package_coverage_requires_declared_manifest_inputs(tmp_path, producer, output_kind,
+                                                          index, shard_id, status, mode):
     from appsec_review.indexing.products_base import AcceptedShards
+    from appsec_review.jobs.job_cbmc_analysis.datasets import DATASETS as cbmc_datasets
     from appsec_review.jobs.job_code_graph_index.datasets import DATASETS as graph_datasets
     from appsec_review.review_packages import _coverage_gaps
     from appsec_review.runtime.inputs import input_read_scope
 
     root = tmp_path / "run"
     root.mkdir()
-    path = root / "alternate.sqlite"
+    path = root / "coverage.sqlite"
     with sqlite3.connect(path) as database:
         database.execute("CREATE TABLE coverage(area TEXT, status TEXT, gap TEXT)")
         database.execute("INSERT INTO coverage VALUES (?,?,?)",
-                         ("alternate-cpg", status, "fixture gap" if status == "partial" else None))
+                         (shard_id, status, "fixture gap" if status == "partial" else None))
     snapshot = "target-sha256:" + "9" * 64
-    identity = {"name": "analysis", "shard_id": "alternate-cpg", "relative_path": path.name,
-                "sha256": file_sha256(path), "producer": {"job": "job_code_graph_index"}}
-    contract = CONTRACT if granted else replace(
-        CONTRACT, inputs=tuple(item for item in CONTRACT.inputs if item.output_kind != "alternate_cpg_index"))
+    identity = {"name": index, "shard_id": shard_id, "relative_path": path.name,
+                "sha256": file_sha256(path), "producer": {"job": producer}}
+    contract = CONTRACT if mode != "undeclared" else replace(
+        CONTRACT, inputs=tuple(item for item in CONTRACT.inputs if item.output_kind != output_kind))
+    supplied = {producer: "c" * 64} if producer in contract.consumes and mode != "unsupplied" else {}
     context = SimpleNamespace(run_root=root, config=SimpleNamespace(job_id=JOB_ID), contract=contract,
-                              upstream_handoffs={"job_code_graph_index": "c" * 64})
-    handoff = {"job_id": "job_code_graph_index", "attempt_id": "attempt_0001",
+                              upstream_handoffs=supplied)
+    handoff = {"job_id": producer, "attempt_id": "attempt_0001",
                "target_snapshot": snapshot,
                "artifacts": [{"path": path.name, "sha256": identity["sha256"],
                               "size_bytes": path.stat().st_size}]}
     view = AcceptedShards(root, [identity], snapshot)
     def read_coverage():
         with input_read_scope(context) as reads:
-            reads.producers["job_code_graph_index"] = (handoff, graph_datasets)
+            reads.producers[producer] = (
+                handoff, graph_datasets if producer == "job_code_graph_index" else cbmc_datasets)
             return _coverage_gaps(view), reads.document()["reads"]
 
-    if not granted:
-        with pytest.raises(ValueError, match="undeclared consumption.*alternate_cpg_index"):
+    if mode != "allowed":
+        with pytest.raises(ValueError, match=f"undeclared.*{producer}"):
             read_coverage()
         return
     gaps, observed = read_coverage()
@@ -91,9 +103,10 @@ def test_package_coverage_requires_declared_alternate_cpg_input(tmp_path, status
     if gaps:
         assert gaps[0]["state"] == "partial" and gaps[0]["reason"] == "fixture gap"
     assert len(observed) == 1
-    assert observed[0]["producer"] == "job_code_graph_index"
-    assert observed[0]["output_kind"] == "alternate_cpg_index"
-    assert observed[0]["schema"] == "appsec-review/alternate-cpg/1"
+    assert observed[0]["producer"] == producer
+    assert observed[0]["output_kind"] == output_kind
+    assert observed[0]["schema"] == (
+        "appsec-review/alternate-cpg/1" if index == "analysis" else "appsec-review/retrieval-index/2")
     assert observed[0]["read"] is True and observed[0]["cited"] is None
 
 
