@@ -82,6 +82,14 @@ including earlier parents when a chain exists; no fake outputs or rewritten acce
 are supplied. Original application handoffs retain their source provenance and are still
 validated as inputs by the new consumer's typed admission/read boundaries.
 
+Reading a named immutable index from a declared, pinned upstream publication is an **input
+import**, not reuse of the consumer's computation. Its verified original receipt is retained as
+`shared-input` provenance through execution and publication, even if the producer's current code
+identity differs. The consumer's implementation/configuration/deployment must still match, and
+the source must resolve through a committed supplied publication. Unprovided objects and the
+consumer's own incompatible computation caches remain refused; nothing is relabeled as legacy
+or as newly computed work. Verification-only imports do not assert semantic reads or citations.
+
 The `parent-reexecution/2` plan also pins the original parent contexts' committed application
 handoffs. A newer accepted attempt does not silently replace that snapshot. Only a native
 parent-linked dispatch with the exact recorded step selection may admit these older pins;

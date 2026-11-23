@@ -477,6 +477,38 @@ def check_input_reads() -> None:
         reads.check()
 
 
+def supplied_named_receipts(
+        root: Path, namespace: str, fingerprint: str, *,
+        claim: Mapping[str, Any], cache: dict[tuple[str, str], Mapping[str, Any]],
+) -> Iterator[tuple[Mapping[str, Any], str, Mapping[str, Any]]]:
+    """Verification-only provenance candidates; this does not record a semantic input read."""
+    from appsec_review.retrieval.core import _accepted_handoff
+    reads = _READS.get()
+    if reads is not None and Path(root).resolve() != reads.context.run_root.resolve():
+        raise ValueError("named input metadata belongs to a foreign run")
+    contract = claim.get("dataset_contract", {}).get("job_contract", {})
+    declared = {item["producer"] for item in contract.get("inputs", ())
+                if item["output_kind"] == "handoff" and item["channel"] == "handoff"}
+    for producer, digest in sorted(claim.get("upstream_handoffs", {}).items()):
+        if producer not in declared:
+            continue
+        key = producer, digest
+        if key not in cache:
+            if reads is not None and reads.context.config.job_id == claim["job_id"]:
+                reads.requirement(producer, "handoff", InputChannel.HANDOFF)
+                cache[key] = reads.producer(producer)[0]
+            else:
+                cache[key] = _accepted_handoff(root, producer, digest)[0]
+        handoff = cache[key]
+        if file_sha256(safe_path(root, handoff["resolving_paths"]["attempt"] + "/handoff.json")) != digest:
+            raise ValueError("supplied named input publication changed")
+        prefix = handoff["resolving_paths"]["attempt"] + "/shared/"
+        exact = prefix + namespace + "/" + fingerprint + ".json"
+        for ref in handoff["artifacts"]:
+            if ref["path"] == exact or ref["path"].startswith(prefix + "shared-input/"):
+                yield handoff, digest, ref
+
+
 @_read_boundary
 def input_shard_owner(root: Path, shard: Mapping[str, Any]) -> DatasetDeclaration:
     """Resolve source-view ownership against the same pinned producer used by observed reads."""

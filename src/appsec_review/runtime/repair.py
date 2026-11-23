@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 from pathlib import Path
@@ -35,6 +35,9 @@ class ComputationAdmission:
     deployment: Mapping[str, Any]
     job_id: str
     schema_identity: str
+    _importers: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
+    _input_handoffs: dict[tuple[str, str], tuple[Mapping[str, Any], Path]] = field(
+        default_factory=dict, repr=False, compare=False)
 
     @classmethod
     def for_repair(cls, root: Path, claim: Mapping[str, Any]) -> ComputationAdmission | None:
@@ -51,8 +54,12 @@ class ComputationAdmission:
         from appsec_review.runtime.release import identities_from_release, validate_claim_release
         from appsec_review.storage.shared import verify_receipt
         value = receipt
+        origin_ref = None
         while value.get("producer_receipt") is not None:
-            value = verify_receipt(root, value["producer_receipt"])
+            origin_ref = value["producer_receipt"]
+            value = verify_receipt(root, origin_ref)
+        if origin_ref is not None and self._published_input(root, receipt, origin_ref, value):
+            return
         if value.get("layout") == "public-feed" or value.get("mode") != "computed":
             return
         producer = read_document(verify_reference(root, value["actor"]["claim"]))
@@ -69,6 +76,60 @@ class ComputationAdmission:
             raise IncompatibleComputation(
                 f"cached computation from {producer_id}/{producer['attempt_id']} has incompatible "
                 "implementation, configuration or deployment")
+
+    def _published_input(self, root: Path, receipt: Mapping[str, Any],
+                         origin_ref: Mapping[str, Any], origin: Mapping[str, Any]) -> bool:
+        if receipt.get("namespace") != "shared-input" or receipt["actor"]["job_id"] != self.job_id:
+            return False
+        from appsec_review.runtime.release import identities_from_release, validate_claim_release
+        from appsec_review.retrieval.core import _accepted_handoff
+        from appsec_review.storage.shared import verify_receipt
+        ref = receipt["actor"]["claim"]
+        path = verify_reference(root, ref)
+        key = ref["path"], ref["sha256"]
+        consumer = self._importers.get(key)
+        if consumer is None:
+            consumer = read_document(path)
+            if validate_claim_release(root, consumer) is None:
+                raise IncompatibleComputation("input import has no measured consumer implementation")
+            expected = identities_from_release(self.release, self.job_id, self.schema_identity, self.declarations)
+            if (consumer["component_identities"] != expected
+                    or consumer["resolved_config_sha256"] != self.configuration_sha256
+                    or consumer["deployment_identity"] != self.deployment):
+                raise IncompatibleComputation("input import belongs to an incompatible consumer")
+            self._importers[key] = consumer
+        contract = consumer.get("dataset_contract", {}).get("job_contract", {})
+        declared = {item["producer"] for item in contract.get("inputs", ())
+                    if item["output_kind"] == "handoff" and item["channel"] == "handoff"}
+        supplied = consumer.get("upstream_handoffs", {})
+        first = origin["actor"]["job_id"]
+        for producer in sorted(set(supplied) & declared, key=lambda item: (item != first, item)):
+            digest = supplied[producer]
+            key = producer, digest
+            if key not in self._input_handoffs:
+                self._input_handoffs[key] = _accepted_handoff(root, producer, digest)
+            handoff, path = self._input_handoffs[key]
+            if file_sha256(path) != digest or handoff["resolved_config_sha256"] != self.configuration_sha256:
+                raise IncompatibleComputation("supplied input publication changed")
+            verify_publication(root, handoff, digest)
+            if any(all(item.get(name) == origin_ref.get(name) for name in ("path", "sha256", "size_bytes"))
+                   for item in handoff["artifacts"]):
+                return True
+            prefix = handoff["resolving_paths"]["attempt"] + "/shared/shared-input/"
+            for item in handoff["artifacts"]:
+                if not item["path"].startswith(prefix):
+                    continue
+                metadata = read_document(verify_reference(root, item))
+                if metadata.get("object") != receipt["object"]:
+                    continue
+                candidate = item
+                value = verify_receipt(root, candidate)
+                while value.get("producer_receipt") is not None:
+                    candidate = value["producer_receipt"]
+                    value = verify_receipt(root, candidate)
+                if candidate == origin_ref:
+                    return True
+        return False
 
 
 def deployment_identity(repository_root: Path) -> dict[str, Any]:

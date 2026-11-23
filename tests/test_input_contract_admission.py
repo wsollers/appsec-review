@@ -167,6 +167,66 @@ def test_parent_input_selection_requires_exact_dispatch_proof_and_committed_evid
             upstream_handoffs={producer.job_id: first["handoff_sha256"]})
 
 
+@pytest.mark.parametrize("supplied", [True, False], ids=["published-input", "not-supplied"])
+def test_named_input_after_source_repair_retains_its_producer_provenance(tmp_path, supplied):
+    from appsec_review.runtime.datasets import artifact_only
+    from appsec_review.runtime.repair import admit_repair, plan_repair
+    from appsec_review.storage.shared import (
+        RECEIPT_SCHEMA, SharedArtifacts, consume_named, verify_receipt,
+    )
+
+    runner, producer, consumer, target = setup(tmp_path)
+    unit_id = producer.units[0].unit_id
+
+    def publish(unit):
+        path = unit.job.run_root / "data/indices/retained.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"value": 1}\n')
+        return {"artifact": SharedArtifacts.for_job(unit.job).named(
+            "index-shard", path, computed=True, computation={"request": "fixture"})}
+
+    declaration = artifact_only(
+        "retained_index", unit_id.split(".")[0], "inventory", RECEIPT_SCHEMA, "Named fixture data",
+        artifacts=("data/jobs/job_fixture/attempts/*/shared/index-shard/*.json",), reason="unit fixture")
+    producer = replace(producer, datasets=(declaration,), units=(Unit(unit_id, publish),))
+    first = run(runner, producer, target)
+    root = runner.runs.resolve(first["status"]["run_id"])
+    original = first["result"]["outputs"][unit_id]["artifact"]
+    obj = verify_receipt(root, original)["object"]
+
+    def verify_input(unit):
+        consume_named(root, root / obj["path"], namespace="index-shard", expected_sha256=obj["sha256"])
+        return {"verified": True}
+
+    def verify_at_publication(context, _result):
+        consume_named(root, root / obj["path"], namespace="index-shard", expected_sha256=obj["sha256"],
+                      shared=SharedArtifacts.for_job(context))
+
+    consumer = replace(
+        consumer, consumes=(), units=(Unit("work.read", verify_input),),
+        output_validators=(verify_at_publication,),
+        contract=JobContract(inputs=accepted_inputs(producer.job_id, producer.datasets) if supplied else ()))
+    (tmp_path / "release-src/shared.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (producer.job_id, consumer.job_id))
+    plan = plan_repair(runner.config, root, (consumer,), SNAPSHOT, target_root=target)
+    assert plan["admissible"], plan["refusals"]
+    admit_repair(runner.config, root, (consumer,), plan, target_root=target)
+    if not supplied:
+        with pytest.raises(RuntimeError, match="partial failure"):
+            run(runner, consumer, target, root.name)
+        return
+    outcome = run(runner, consumer, target, root.name)
+    receipts = list((Path(outcome["attempt_root"]) / "shared/shared-input").glob("*.json"))
+    assert len(receipts) == 1
+    from appsec_review.storage.shared import reference
+    receipt = verify_receipt(root, reference(root, receipts[0]))
+    assert receipt["mode"] == "reused" and receipt["legacy"] is None
+    assert receipt["producer_receipt"] == original
+    assert receipt["object"] == obj
+    assert len(list((root / "data/jobs/job_fixture/attempts").glob("attempt_*"))) == 1
+    assert read_input_observations(root, outcome["handoff"])["reads"] == []
+
+
 @pytest.mark.parametrize("availability,missing,accept", [
     (Availability.REQUIRED, MissingPolicy.REJECT, False),
     (Availability.OPTIONAL, MissingPolicy.GAP, True),

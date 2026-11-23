@@ -507,6 +507,8 @@ class SharedArtifacts:
     actor: Mapping[str, Any]
     _named_refs: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
     _control_refs: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
+    _input_handoffs: dict[tuple[str, str], Mapping[str, Any]] = field(
+        default_factory=dict, repr=False, compare=False)
 
     @classmethod
     def for_job(cls, context: JobContext) -> SharedArtifacts:
@@ -733,6 +735,23 @@ class SharedArtifacts:
                             computation=value["computation"], dependencies=tuple(value["dependencies"]),
                             mode="reused", producer=source, legacy=value["legacy"])[1]
 
+    def consume_named_input(self, namespace: str, obj: Mapping[str, Any]) -> bool:
+        from appsec_review.runtime.inputs import supplied_named_receipts
+        from appsec_review.runtime.repair import verify_publication
+        fingerprint = hashlib.sha256(canonical_json(
+            {"namespace": namespace, "path": obj["path"], "sha256": obj["sha256"]})).hexdigest()
+        for handoff, digest, ref in supplied_named_receipts(
+                self.run_root, namespace, fingerprint, claim=self._claim(), cache=self._input_handoffs):
+            value = _read(self.run_root, ref)
+            if value.get("schema") != RECEIPT_SCHEMA:
+                raise ValueError("supplied named input provenance is not a shared receipt")
+            if value.get("object") != obj:
+                continue
+            verify_publication(self.run_root, handoff, digest)
+            self.consume_receipt(ref)
+            return True
+        return False
+
 
 def verify_request(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
     _metadata_reference(root, ref, r"data/shared/requests/[a-zA-Z0-9_-]+/[0-9a-f]{64}/[0-9a-f]{64}\.json")
@@ -919,4 +938,6 @@ def consume_named(root: Path, path: Path, *, namespace: str,
     if owner is not None:
         if owner.run_root != root:
             raise ValueError("immutable consumption belongs to another run")
+        if owner.consume_named_input(namespace, obj):
+            return
         owner.named(namespace, path, computed=False, expected_sha256=obj["sha256"])
