@@ -298,7 +298,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
                         "application_run_id": claim["run_id"], "application_attempt_id": claim["attempt_id"],
                         "job_id": selected_job.job_id, "unit_id": selected_unit.unit_id,
                         "producer": output.get("tool_id", "-"),
-                        "disposition": output.get("terminal_status", "SUCCEEDED"),
+                        "disposition": str(output.get("terminal_status", "SUCCEEDED")),
                         "checkpoint_reused": bool(output.get("checkpoint_reused", False)),
                         "index_reused": bool(output.get("index_reused", False)),
                         "shard": MetadataValue.json(output.get("index_identity", {})),

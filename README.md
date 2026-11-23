@@ -361,6 +361,18 @@ appsec-review schedules
 
 From here on, run every command in this README from the WSL shell using the Linux (bash) form.
 
+On `WSOLLERS1`, connect from Windows PowerShell with the verified alias **`ssh wsl-ubuntu`**
+(`ssh -p 2222 wsollers@127.0.0.1` is equivalent). The existing Linux checkout is
+`~/projects/appsec-review`. Check connectivity and checkout identity without changing files:
+
+```powershell
+ssh wsl-ubuntu "cd ~/projects/appsec-review && git rev-parse --short HEAD"
+```
+
+Use the configured alias rather than guessing one from the Windows hostname. See the
+[WSL SSH setup and verification guide](docs/operations/ssh.md) for other hosts; connecting does
+not authorize editing a checkout frozen for an active review.
+
 ## Setup on native Windows
 
 Install Git for Windows, Python 3.12 from <https://www.python.org/downloads/windows/> (tick *Add

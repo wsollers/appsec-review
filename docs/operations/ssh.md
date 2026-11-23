@@ -24,7 +24,22 @@ the check fails, the session stops and asks the user to run the steps below; it 
 to `wsl -e bash -c` for the walk and does not install or change anything itself.
 
 Host facts that differ per machine (user name, distro name, port, key path, folder) are the
-user's; nothing here is committed with real values.
+user's. The setup examples below use placeholders; the following connection was supplied by
+the operator and verified on `WSOLLERS1`.
+
+## Existing WSOLLERS1 connection
+
+From Windows PowerShell, use **`ssh wsl-ubuntu`**, resolving to
+`ssh://wsollers@127.0.0.1:2222`. The equivalent explicit command is
+`ssh -p 2222 wsollers@127.0.0.1`. The Linux checkout is `~/projects/appsec-review`.
+
+```powershell
+ssh wsl-ubuntu "cd ~/projects/appsec-review && git rev-parse --short HEAD"
+```
+
+This alias is configured, not derived from the Windows hostname: `wsl-wsollers1` is not the
+configured connection. On other hosts, obtain the intended alias from the operator rather than
+assuming either name. A successful connection does not release an active review's source freeze.
 
 ## 1. SSH server in the distro (once)
 
@@ -73,10 +88,11 @@ Host wsl-<hostname>
 
 ## 4. Verify before a session relies on it
 
-This is the check the testing protocol runs first. It must print the checkout's `HEAD`:
+This is the check the testing protocol runs first. It must print the checkout's `HEAD`.
+Substitute the configured alias (`wsl-ubuntu` on `WSOLLERS1`), not a guessed hostname:
 
 ```powershell
-ssh wsl-<hostname> "cd ~/projects/appsec-review && git rev-parse --short HEAD"
+ssh <configured-alias> "cd ~/projects/appsec-review && git rev-parse --short HEAD"
 ```
 
 Failure modes, in the order to look:
@@ -85,7 +101,7 @@ Failure modes, in the order to look:
 | --- | --- | --- |
 | `Connection refused` | the distro is down (WSL stops after idle) or `ssh` is not active | `wsl -d <distro> -e true` wakes it; then `wsl -d <distro> -e systemctl is-active ssh` |
 | `Permission denied (publickey)` | the public key is not in `~/.ssh/authorized_keys`, or permissions are wider than 700/600 | repeat step 3 |
-| `Could not resolve hostname wsl-<hostname>` | no `Host` entry in `~/.ssh/config` | repeat the `Add-Content` block in step 3 |
+| `Could not resolve hostname <configured-alias>` | wrong alias or no `Host` entry in `~/.ssh/config` | confirm the operator's alias first; use step 3 only if setup is needed |
 | prompts for a passphrase | the key has one | generate a key without one for the app, or add the key to an agent |
 
 The Dagster stack keeps the distro up while it runs; a host with no stack running needs the wake

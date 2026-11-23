@@ -14,6 +14,7 @@ dagster = pytest.importorskip("dagster")
 from appsec_review.orchestration.dagster import build_definitions
 from appsec_review.orchestration.dagster.adapter import _metadata_for_outcome
 from appsec_review.orchestration.dagster.error_state import record_error_state
+from appsec_review.interchange import ProducerStatus
 from appsec_review.runtime import Job, Unit, UnitExecutor
 from appsec_review.runtime.registry import JobRegistry
 from appsec_review.runtime.datasets import artifact_only
@@ -314,6 +315,55 @@ def test_error_state_records_terminal_run_and_last_five_events(tmp_path: Path) -
     assert "step=step_1" in lines[1] and "step=step_5" in lines[-1]
     assert "root cause 1 more detail" in lines[1]
     assert all("\n" not in line for line in lines)
+
+
+@pytest.mark.parametrize(("status", "expected"), [
+    pytest.param(ProducerStatus.SUCCEEDED, "SUCCEEDED", id="enum-success"),
+    pytest.param(ProducerStatus.COMPLETED_WITH_GAPS, "COMPLETED_WITH_GAPS", id="enum-gaps"),
+    pytest.param(ProducerStatus.BLOCKED, "BLOCKED", id="enum-blocked"),
+    pytest.param("SKIPPED_NA", "SKIPPED_NA", id="stored-string"),
+    pytest.param(None, "SUCCEEDED", id="no-disposition"),
+])
+def test_unit_output_metadata_serializes_producer_status(tmp_path: Path, status, expected) -> None:
+    from dagster import DagsterEvent, DagsterRun
+    from dagster._core.events.log import EventLogEntry
+    from dagster._core.execution.plan.outputs import StepOutputData, StepOutputHandle
+    from dagster._serdes import deserialize_value, serialize_value
+
+    output = {} if status is None else {"terminal_status": status}
+    runner = SimpleNamespace(execute_or_reuse_unit=lambda job, claim, unit_id: output)
+    job = build_definitions(
+        _config(tmp_path), registry=_registry(), runner_factory=lambda config: runner
+    ).get_job_def("fixture")
+    operation = job.graph.node_named("standalone__fixture__work__execute").definition
+    metadata = {}
+    run = DagsterRun(job_name=job.name)
+    context = SimpleNamespace(
+        dagster_run=run, op=operation, add_output_metadata=metadata.update,
+    )
+    operation.compute_fn.decorated_fn(
+        context, {"run_id": "test-run", "attempt_id": "attempt_0001"}
+    )
+    event = EventLogEntry(
+        error_info=None, level=10, user_message="", run_id=run.run_id, timestamp=0.0,
+        step_key=operation.name,
+        dagster_event=DagsterEvent(
+            event_type_value="STEP_OUTPUT", job_name=job.name, step_key=operation.name,
+            event_specific_data=StepOutputData(
+                step_output_handle=StepOutputHandle(operation.name, "result"),
+                metadata=dagster.Output(None, metadata=metadata).metadata,
+            ),
+        ),
+    )
+
+    restored = deserialize_value(serialize_value(event), EventLogEntry)
+    disposition = restored.dagster_event.step_output_data.metadata["disposition"].text
+    assert type(disposition) is str
+    assert disposition == expected
+    if status is not None:
+        assert output["terminal_status"] is status
+    else:
+        assert output == {}
 
 
 def test_metadata_maps_units_snapshots_counts_gaps_and_receipts(tmp_path: Path) -> None:
