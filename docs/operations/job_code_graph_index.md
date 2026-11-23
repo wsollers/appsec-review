@@ -93,6 +93,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_tree_sitter_ast` | `handoff` | `appsec-review/job-handoff/2` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_ast` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_coverage` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
+| `job_tree_sitter_ast` | `tree_sitter_acceptance` | `appsec-review/tree-sitter-ast/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_node_shards` | `appsec-review/tree-sitter-normalizer/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `tree_sitter_cfg` | `appsec-review/tree-sitter-cfg/1` | handoff | optional | gap |
 | `job_tree_sitter_ast` | `generated_source_backing` | `appsec-review/generated-source-backing/1` | handoff | optional | gap |
@@ -382,25 +383,30 @@ flowchart LR
   producer48 --> input48 --> job
   input48 -. schema .-> input_schema48
   producer49["job_tree_sitter_ast"]
-  input49["tree_sitter_node_shards"]
-  input_schema49["appsec-review/tree-sitter-normalizer/1"]
+  input49["tree_sitter_acceptance"]
+  input_schema49["appsec-review/tree-sitter-ast/1"]
   producer49 --> input49 --> job
   input49 -. schema .-> input_schema49
   producer50["job_tree_sitter_ast"]
-  input50["tree_sitter_cfg"]
-  input_schema50["appsec-review/tree-sitter-cfg/1"]
+  input50["tree_sitter_node_shards"]
+  input_schema50["appsec-review/tree-sitter-normalizer/1"]
   producer50 --> input50 --> job
   input50 -. schema .-> input_schema50
   producer51["job_tree_sitter_ast"]
-  input51["generated_source_backing"]
-  input_schema51["appsec-review/generated-source-backing/1"]
+  input51["tree_sitter_cfg"]
+  input_schema51["appsec-review/tree-sitter-cfg/1"]
   producer51 --> input51 --> job
   input51 -. schema .-> input_schema51
   producer52["job_tree_sitter_ast"]
-  input52["tree_sitter_tool_io"]
-  input_schema52["appsec-review/container-execution/1"]
+  input52["generated_source_backing"]
+  input_schema52["appsec-review/generated-source-backing/1"]
   producer52 --> input52 --> job
   input52 -. schema .-> input_schema52
+  producer53["job_tree_sitter_ast"]
+  input53["tree_sitter_tool_io"]
+  input_schema53["appsec-review/container-execution/1"]
+  producer53 --> input53 --> job
+  input53 -. schema .-> input_schema53
   output0["alternate_cpg"]
   output_schema0["appsec-review/alternate-cpg/1"]
   job --> output0
