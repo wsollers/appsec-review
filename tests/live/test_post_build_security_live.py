@@ -10,7 +10,7 @@ import pytest
 
 pytest.importorskip("dagster")
 
-from appsec_review.orchestration.dagster import build_definitions
+from appsec_review.orchestration.dagster.adapter import build_definitions
 
 pytestmark = pytest.mark.live
 

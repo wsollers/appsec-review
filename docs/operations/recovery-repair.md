@@ -12,6 +12,51 @@ Recovery is **fail -> inspect bounded evidence -> reproduce in a focused unit te
 measure the release -> inspect admission -> explicitly restart**. Inspection does not run tests, captured
 commands, workers, Docker builds, or models.
 
+## Minimal rerun workflow
+
+Prefer recovery of the existing application run when its frozen inputs remain compatible.
+Inspect the exact plan before admission: report `REUSE`, `REVALIDATE`, `RUN` and `INVALIDATE`
+job counts, unit-checkpoint decisions and their reasons separately from top-level refusals.
+Zero refusals means the plan is safe to admit, not that its recomputation is minimal. If a small
+repair re-identifies unrelated jobs, diagnose the dependency boundary rather than choosing a new
+run or forcing the whole graph. New runs still require the operator's explicit decision.
+
+There are three separate reuse decisions:
+
+| Layer | Compatibility required | What is retained |
+| --- | --- | --- |
+| Accepted job | Same computation/validation dependencies, target, configuration, input contract, valid publication and artifacts | The original accepted attempt |
+| Unchanged descendant (`REVALIDATE`) | Its own compatibility checks pass; every pinned upstream is identical or has equal `content_sha256` when dispatched | The original attempt plus a revalidation receipt |
+| Successful unit in a failed or interrupted job | Exact checkpoint inputs, job implementation and deployment, verified result/artifacts, and admitted dependencies | The original computation's result and read provenance in a fresh attempt |
+
+The [handoff header/body partition](../architecture/job-interchange.md#evidence-header-evidence-body-and-the-content-identity)
+already excludes provenance from evidence equivalence. It does not waive computation admission.
+Dagster graph assembly and deployment-only asset verification are kept out of the shared
+computation import closure, so an adapter-only metadata edit changes the signed deployment release
+without changing unrelated job identities. Actual imported computation code, validators,
+configuration, target or evidence changes still invalidate the affected work. Handlers and
+validators that share a module remain conservatively coupled; this is not function-level reuse.
+
+Unit checkpoints accept structured `{path, sha256, size_bytes}` artifact references and verify
+the retained bytes, size and run-local nonsymlink path before reuse. They do not transplant files
+or rewrite old paths. Unbound paths, workspace/process/budget state, mutable index handles and
+retry-required results remain nonportable. A `RUNNING` application attempt can supply a completed
+checkpoint only when its distinct Dagster dispatch has a verified terminal, stopped-worker
+receipt; the plan/admission also retains the existing live-worker and lease checks. Its original
+claim and status are not rewritten to manufacture a failure.
+
+A reused task's status records `reused_checkpoint`, which points to the original hash-bound
+checkpoint and its status/result receipts. Input observation aggregation follows that chain
+(bounded to 64 attempts), preserving the original computation's reads without pretending that
+the handler executed or that a model cited those inputs in the new attempt.
+
+Only exact eligible decisions reviewed in the admitted repair plan are reused. Missing, changed
+or symlinked artifacts, uncertain workers, changed inputs/implementation, and a dependency that
+must run cause refusal or recomputation, never successful-looking fallback evidence. Old release
+manifests remain immutable: installing a change to the identity/checkpoint machinery itself may
+require a conservative baseline rerun; it does not retroactively certify old computations under
+new rules.
+
 ## Release and deployment identity
 
 `release-dependencies.json` declares job packages, shared application code and package resources,

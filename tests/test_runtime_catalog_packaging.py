@@ -124,7 +124,7 @@ def test_shared_runtime_build_checks_packaged_catalog(tmp_path: Path) -> None:
     # (runtime.release --verify-assets -> verify_deployment_assets), and the test stage, the one
     # stage that copies sources, runs the same check at build time after copying containers/.
     assert "COPY containers" not in runtime
-    from appsec_review.runtime.release import verify_deployment_assets
+    from appsec_review.runtime.release_cli import verify_deployment_assets
     import inspect
     assert "container_runtime.catalog" in inspect.getsource(verify_deployment_assets)
     test_stage = dockerfile.split(" AS test\n", 1)[1]

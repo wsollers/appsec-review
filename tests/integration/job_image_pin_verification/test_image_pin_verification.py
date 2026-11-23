@@ -353,7 +353,7 @@ def _upstream(graph, node: str) -> set[str]:
 
 def test_every_composite_graph_runs_the_gate_after_the_model_gate_and_before_intake() -> None:
     pytest.importorskip("dagster")
-    from appsec_review.orchestration.dagster import build_definitions
+    from appsec_review.orchestration.dagster.adapter import build_definitions
 
     definitions = build_definitions(ROOT / "appsec-review.toml")
     assert definitions.get_job_def("image_pin_verification").name == "image_pin_verification"
@@ -370,7 +370,7 @@ def test_every_composite_graph_runs_the_gate_after_the_model_gate_and_before_int
 
 def test_a_disabled_gate_is_transparent_to_every_composite_graph(tmp_path: Path) -> None:
     pytest.importorskip("dagster")
-    from appsec_review.orchestration.dagster import build_definitions
+    from appsec_review.orchestration.dagster.adapter import build_definitions
 
     config_path = tmp_path / "appsec-review.toml"
     config_path.write_text(_settings_source(enabled="false"), encoding="utf-8")

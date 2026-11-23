@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -147,6 +148,42 @@ def test_a_shared_module_importing_job_packages_does_not_chain_every_job(tmp_pat
 
 
 REPOSITORY = Path(__file__).resolve().parents[3]
+
+
+def test_real_job_closure_excludes_dagster_output_metadata(tmp_path: Path) -> None:
+    tree(tmp_path)
+    shutil.copytree(REPOSITORY / "src/appsec_review", tmp_path / "src/appsec_review",
+                    dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+    jobs = ("job_target_catalog",)
+    before = build_release(tmp_path, MANIFEST, jobs)
+    bump(tmp_path, "src/appsec_review/orchestration/dagster/adapter.py")
+    after = build_release(tmp_path, MANIFEST, jobs)
+    assert after["sha256"] != before["sha256"]
+    assert after["jobs"] == before["jobs"]
+
+
+def test_command_entrypoint_imports_do_not_become_computation_dependencies(tmp_path: Path) -> None:
+    tree(tmp_path, job="from appsec_review.storage import atomic_json\n")
+    write(tmp_path, {
+        "src/appsec_review/storage/files.py": (
+            "def atomic_json(path, value):\n    return path\n"
+            "if __name__ == '__main__':\n    import appsec_review.operator\n"
+        ),
+    })
+    before = identities(tmp_path)
+    bump(tmp_path, "src/appsec_review/operator.py")
+    assert identities(tmp_path) == before
+
+
+@pytest.mark.parametrize("source", [
+    "def load(__name__):\n    if __name__ == '__main__':\n        import appsec_review.operator\n",
+    "__name__ = '__main__'\nif __name__ == '__main__':\n    import appsec_review.operator\n",
+], ids=["function-argument", "reassigned-name"])
+def test_runtime_name_conditions_are_not_treated_as_command_entrypoints(tmp_path: Path, source: str) -> None:
+    tree(tmp_path, job=source)
+    before = identities(tmp_path)
+    bump(tmp_path, "src/appsec_review/operator.py")
+    assert identities(tmp_path)["job_alpha"] != before["job_alpha"]
 
 
 def test_no_shipped_module_defeats_the_walk_with_a_computed_dynamic_import() -> None:

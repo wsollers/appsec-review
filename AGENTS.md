@@ -29,6 +29,14 @@ agents that inspect or change the repository. It is not a prompt for review work
   add a quick focused regression test, run the affected unit tests, integrate the fix, and repeat
   the requested review cycle until the run completes. Minimize the fix-test-restart interval;
   a long review does not justify a long repair loop.
+- Before planning a retry, resume, or replacement run, read
+  [`docs/operations/recovery-repair.md`](docs/operations/recovery-repair.md), especially
+  "Minimal rerun workflow". Prefer the smallest admitted same-run recovery: preserve compatible
+  accepted jobs and successful checkpoints, and revalidate unchanged descendants by evidence
+  content. Inspect and report the actual job/unit decisions; an admissible plan that reruns
+  everything is not proof that everything needed rerunning. Do not substitute a fresh run or
+  bypass provenance, input, artifact, signing, or stopped-worker checks to hide a reuse defect.
+  A code repair alone does not authorize a live restart.
 - Keep recovery scoped to observed breakage and prerequisites that actually block the next
   review. Do not turn a repair into general infrastructure redesign or speculative security
   hardening. Required compiler tracing, including strace/ptrace capture, is tooling functionality

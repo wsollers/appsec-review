@@ -48,7 +48,7 @@ def test_engineering_signal_jobs_precede_review_data_indexing() -> None:
 
 def test_engineering_signal_dagster_dependencies_match_current_orchestration() -> None:
     pytest.importorskip("dagster")
-    from appsec_review.orchestration.dagster import build_definitions
+    from appsec_review.orchestration.dagster.adapter import build_definitions
 
     graph = build_definitions(Path(__file__).parents[1] / "appsec-review.toml").get_job_def(
         "wave1_review").graph

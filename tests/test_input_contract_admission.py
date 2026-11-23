@@ -75,6 +75,38 @@ def test_supplied_but_unread_is_not_consumed(tmp_path):
     assert read_input_observations(root, output["handoff"])["reads"] == []
 
 
+def test_checkpoint_reuse_retains_original_hash_bound_input_read_receipts(tmp_path):
+    from appsec_review.runtime.repair import admit_repair, plan_repair
+
+    runner, producer, consumer, target = setup(tmp_path)
+    first = run(runner, producer, target)
+    root = runner.runs.resolve(first["status"]["run_id"])
+
+    def fail(unit):
+        raise RuntimeError("external boundary failed")
+
+    broken = replace(consumer, units=(
+        *consumer.units, Unit("work.stop", fail, ("work.read",))))
+    with pytest.raises(RuntimeError, match="partial failure"):
+        run(runner, broken, target, root.name)
+    fixed = replace(broken, units=(
+        *consumer.units, Unit("work.stop", lambda unit: {"done": True}, ("work.read",))))
+    dependencies = {producer.job_id: (), consumer.job_id: (producer.job_id,)}
+    plan = plan_repair(runner.config, root, (producer, fixed), SNAPSHOT,
+                       target_root=target, dependencies=dependencies)
+    assert plan["unit_decisions"][consumer.job_id]["work.read"]["action"] == "REUSE"
+    admit_repair(runner.config, root, (producer, fixed), plan,
+                 target_root=target, dependencies=dependencies)
+    outcome = run(runner, fixed, target, root.name)
+    status = json.loads((Path(outcome["attempt_root"]) / "steps/work/tasks/read/status.json").read_bytes())
+    assert status["input_consumption"]["reads"] == []
+    assert status["reused_checkpoint"]
+    observations = read_input_observations(root, outcome["handoff"])
+    assert observations["reads"][0]["handoff_sha256"] == first["handoff_sha256"]
+    assert observations["reads"][0]["read"] is True
+    assert observations["citation_observation"] == "not_observed"
+
+
 @pytest.mark.parametrize("availability,missing,accept", [
     (Availability.REQUIRED, MissingPolicy.REJECT, False),
     (Availability.OPTIONAL, MissingPolicy.GAP, True),

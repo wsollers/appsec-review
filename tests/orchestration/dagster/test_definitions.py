@@ -11,7 +11,7 @@ import pytest
 
 dagster = pytest.importorskip("dagster")
 
-from appsec_review.orchestration.dagster import build_definitions
+from appsec_review.orchestration.dagster.adapter import build_definitions
 from appsec_review.orchestration.dagster.adapter import _metadata_for_outcome
 from appsec_review.orchestration.dagster.error_state import record_error_state
 from appsec_review.interchange import ProducerStatus

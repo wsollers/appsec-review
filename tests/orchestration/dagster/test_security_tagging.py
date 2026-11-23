@@ -4,7 +4,7 @@ from pathlib import Path
 
 from appsec_review.config import load_config
 from appsec_review.jobs.job_security_tagging.job import TOPOLOGY
-from appsec_review.orchestration.dagster import build_definitions
+from appsec_review.orchestration.dagster.adapter import build_definitions
 from appsec_review.orchestration.topology import describe_wave1
 from appsec_review.runtime.registry import builtin_registry
 

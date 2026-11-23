@@ -377,7 +377,7 @@ def test_dataset_declarations_pass_the_inventory_audit_including_unavailable_sha
 
 def test_dagster_ops_and_wave_dependencies_match_the_configured_topology() -> None:
     pytest.importorskip("dagster")
-    from appsec_review.orchestration.dagster import build_definitions
+    from appsec_review.orchestration.dagster.adapter import build_definitions
 
     path = ROOT / "appsec-review.toml"
     graph = build_definitions(path).get_job_def("wave1_review").graph

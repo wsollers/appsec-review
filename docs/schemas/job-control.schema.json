@@ -123,6 +123,7 @@
         "completed_at": {"$ref": "#/$defs/timestamp"},
         "duration_ms": {"type": "integer", "minimum": 0},
         "input_consumption": {"$ref": "#/$defs/inputConsumption"},
+        "reused_checkpoint": {"$ref": "#/$defs/artifactReference"},
         "dependencies": {"type": "array", "items": {"$ref": "#/$defs/unitId"}},
         "blocked_by": {"type": "array", "items": {"$ref": "#/$defs/unitId"}},
         "dagster_run_id": {"type": ["string", "null"]},

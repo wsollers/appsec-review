@@ -7,8 +7,8 @@ the source tree is read-only and the manifest lives on the deployment's own stor
 """
 from __future__ import annotations
 
-import argparse
 import ast
+from collections.abc import Iterator
 import fnmatch
 from glob import has_magic
 import hashlib
@@ -18,7 +18,7 @@ from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Mapping, Sequence
 
-from appsec_review.storage import atomic_bytes, canonical_json, file_sha256
+from appsec_review.storage import canonical_json, file_sha256
 
 DEPENDENCIES_SCHEMA = "appsec-review/release-dependencies/1"
 RELEASE_SCHEMA = "appsec-review/implementation-release/1"
@@ -161,6 +161,30 @@ def module_name(path: str) -> str | None:
     return ".".join(parts)
 
 
+def _import_nodes(tree: ast.AST) -> Iterator[ast.AST]:
+    entrypoints = {
+        node for node in (tree.body if isinstance(tree, ast.Module) else ())
+        if (isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
+                and isinstance(node.test.left, ast.Name) and node.test.left.id == "__name__"
+                and len(node.test.ops) == 1 and isinstance(node.test.ops[0], ast.Eq)
+                and len(node.test.comparators) == 1
+                and isinstance(node.test.comparators[0], ast.Constant)
+                and node.test.comparators[0].value == "__main__")
+    }
+    if entrypoints and any(
+            isinstance(node, ast.Name) and node.id == "__name__" and isinstance(node.ctx, (ast.Store, ast.Del))
+            for node in ast.walk(tree)):
+        entrypoints = set()
+    pending = [tree]
+    while pending:
+        node = pending.pop()
+        if node in entrypoints:
+            pending.extend(node.orelse)
+            continue
+        yield node
+        pending.extend(ast.iter_child_nodes(node))
+
+
 def module_imports(name: str, source: bytes) -> tuple[dict[str, bool], bool]:
     """The ``appsec_review`` names a module imports, and whether it also imports dynamically.
 
@@ -168,13 +192,14 @@ def module_imports(name: str, source: bytes) -> tuple[dict[str, bool], bool]:
     ``from a.b import c`` name modules, while ``a.b.c`` may be a submodule or an attribute of
     ``a.b``. Relative imports resolve against the module's own package. A call to
     ``importlib.import_module`` or ``__import__`` cannot be followed statically and is reported so
-    the caller keeps the whole shared closure for that job.
+    the     caller keeps the whole shared closure for that job. Command-only ``__main__`` branches
+    do not execute when importing a computation dependency.
     """
     tree = ast.parse(source, filename=name)
     own = module_name(name)
     imported: dict[str, bool] = {}
     dynamic = False
-    for node in ast.walk(tree):
+    for node in _import_nodes(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 imported[alias.name] = True
@@ -325,51 +350,7 @@ def build_release(root: Path, manifest: Mapping[str, Any], job_ids: Sequence[str
     return validate_release({**value, "sha256": digest(value)})
 
 
-def main(argv: Sequence[str] | None = None, *, execvp=os.execvp) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=Path.cwd())
-    parser.add_argument("--manifest", type=Path, default=None,
-                        help="dependency manifest; defaults to release-dependencies.json under --root")
-    parser.add_argument("--output", type=Path, default=None,
-                        help=f"manifest to write; defaults to ${MANIFEST_ENV} or {MANIFEST_NAME} under --root")
-    parser.add_argument("--verify-assets", action="store_true",
-                        help="also verify the mounted runtime assets and catalogs (the former image-build checks)")
-    parser.add_argument("--exec", dest="then", nargs=argparse.REMAINDER, default=None,
-                        help="after writing the manifest, replace this process with the given command")
-    args = parser.parse_args(argv)
-    root = args.root.resolve()
-    manifest = args.manifest if args.manifest is not None else root / "release-dependencies.json"
-    output = args.output if args.output is not None else manifest_path(root)
-    if args.then is not None and not args.then:
-        parser.error("--exec requires a command")
-    if args.verify_assets:
-        verify_deployment_assets()
-    from appsec_review.runtime.registry import builtin_registry
-    release = build_release(root, read_document(manifest), builtin_registry().job_ids())
-    output.parent.mkdir(parents=True, exist_ok=True)
-    atomic_bytes(output, canonical_json(release))
-    print(release["sha256"], flush=True)
-    if args.then is not None:
-        execvp(args.then[0], list(args.then))
-    return 0
-
-
-def verify_deployment_assets() -> None:
-    """The checks the image build used to run while it still contained the sources.
-
-    A tooling-only image cannot run them at build time, so the launch step runs them against the
-    mounted checkout before the code server starts; a missing asset or a broken catalog refuses
-    the launch instead of surfacing as a failed job later.
-    """
-    from appsec_review.application_paths import application_root, verify_runtime_assets
-    verify_runtime_assets()
-    from appsec_review.container_runtime.catalog import load_catalog as load_container_catalog
-    load_container_catalog(application_root("containers/catalog.toml"))
-    from appsec_review.graph.catalog import load_catalog as load_graph_catalog
-    load_graph_catalog()
-    from appsec_review.orchestration.dagster.definitions import defs
-    defs.get_job_def("wave1_review")
-
-
 if __name__ == "__main__":
+    from appsec_review.runtime.release_cli import main
+
     raise SystemExit(main())

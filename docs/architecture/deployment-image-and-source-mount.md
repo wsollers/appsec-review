@@ -74,6 +74,14 @@ change independently:
   tooling, the CLI, acceptance helpers, 95 modules) no longer re-identify every job, and a change
   to one job package re-identifies only that job and the jobs that import it.
 
+The release CLI's deployment-only graph/asset checks live in `runtime/release_cli.py`;
+`python -m appsec_review.runtime.release` remains the launch command. The import walker excludes
+the body of an explicit `if __name__ == "__main__"` branch, which does not execute when a job
+imports the module. Those source files remain measured in the overall release and signed package.
+The Dagster package initializer does not eagerly import graph assembly: callers import
+`build_definitions` from `appsec_review.orchestration.dagster.adapter`. Native launch validation
+can therefore be imported without making every computation depend on Dagster output metadata.
+
 Signed-module enforcement over the mount:
 
 - **Enforced (default).** `lifecycle.py start`/`reload` sign the checkout's `src/appsec_review` into

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from appsec_review.runtime import release
+from appsec_review.runtime import release_cli as release
 from appsec_review.runtime.release import MANIFEST_ENV, MANIFEST_NAME, load_release, manifest_path
 from tests.release_support import write_release
 

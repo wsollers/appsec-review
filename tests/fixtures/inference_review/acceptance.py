@@ -113,7 +113,7 @@ def build_registry():
 
 def define_job():
     """Reconstructable entry point: configuration path and scenario come from the environment."""
-    from appsec_review.orchestration.dagster import build_definitions
+    from appsec_review.orchestration.dagster.adapter import build_definitions
 
     return build_definitions(os.environ["APPSEC_C7_CONFIG"], registry=build_registry()).get_job_def(
         "inference_security_review")

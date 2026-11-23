@@ -711,6 +711,8 @@ class JobRunner:
                        "result_sha256": file_sha256(result_path),
                        "producer": result.get("tool_id"), "disposition": result.get("terminal_status"),
                        "shard_identity": result.get("index_identity")}
+            if reuse.get("action") == "REUSE":
+                receipt["reused_checkpoint"] = reuse["checkpoint"]
             if input_consumption is not None:
                 receipt["input_consumption"] = input_consumption
             atomic_json(status_path, receipt)

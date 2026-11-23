@@ -188,6 +188,13 @@ timestamps; the unit results themselves are the body's `unit_outputs`) and `shar
 receipts, whose objects are referenced from `outputs`). Artifacts outside the attempt root (the frozen configuration, the
 input manifest) are run-level and belong to the header.
 
+Successful unit reuse is a separate admission path, not an equivalence exception. Reused task
+receipts retain a `reused_checkpoint` artifact reference to the original committed status/result
+and claim. Input-read aggregation follows those hash-bound receipts rather than inventing fresh
+reads for a handler that did not execute. See the
+[minimal rerun workflow](../operations/recovery-repair.md#minimal-rerun-workflow) for the
+compatibility, stopped-worker and artifact checks.
+
 Rules: nothing hashes a file including its own header; a file-level hash (`handoff_sha256` in
 `latest.json`, `upstream_handoff_sha256` pins, `verify_handoff`) stays a whole-file hash and is
 used for binding and admission, never for equivalence. **A field moving between header and body is

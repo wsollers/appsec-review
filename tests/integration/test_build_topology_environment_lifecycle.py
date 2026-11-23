@@ -155,7 +155,7 @@ def test_expected_producer_bug_blocks_planner_instead_of_becoming_absence(tmp_pa
 @pytest.mark.parametrize("workflow", ["wave1_review", "project_build_review"])
 @pytest.mark.parametrize("enabled", [False, True])
 def test_actual_workflow_edges_keep_expected_environment_a_required_dependency(tmp_path, workflow, enabled):
-    from appsec_review.orchestration.dagster import build_definitions
+    from appsec_review.orchestration.dagster.adapter import build_definitions
 
     text = (ROOT / "appsec-review.toml").read_text(encoding="utf-8")
     original = "[jobs.job_build_environment_analysis.settings]\nenabled = true"

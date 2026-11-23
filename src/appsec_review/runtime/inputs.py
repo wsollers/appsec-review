@@ -563,23 +563,45 @@ def decode_consumed_handoff(value: Any, **expected: Any) -> dict[str, Any]:
 
 
 def read_input_observations(root: Path, handoff: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Hash-bound unit receipts attest reader access; old attempts stay unknown."""
+    """Retain actual read receipts, including the original computation behind a checkpoint."""
     from appsec_review.storage.shared import verify_reference
+    from appsec_review.runtime.checkpoints import SCHEMA as CHECKPOINT_SCHEMA
     prefix = handoff["resolving_paths"]["attempt"] + "/steps/"
     records = []
     observed = False
     for ref in handoff["artifacts"]:
         if not ref["path"].startswith(prefix) or not ref["path"].endswith("/status.json"):
             continue
-        document = json.loads(verify_reference(root, ref).read_bytes()).get("input_consumption")
-        if document is None:
-            continue
-        if (set(document) != {"schema", "reads", "citation_observation"}
-                or document["schema"] != INPUT_READS_SCHEMA or not isinstance(document["reads"], list)
-                or document["citation_observation"] != "not_observed"):
-            raise ValueError("invalid input read observation receipt")
-        observed = True
-        records.extend(document["reads"])
+        seen = set()
+        while ref is not None:
+            identity = (ref["path"], ref["sha256"])
+            if identity in seen or len(seen) >= 64:
+                raise ValueError("checkpoint read provenance is cyclic or exceeds 64 attempts")
+            seen.add(identity)
+            status = json.loads(verify_reference(root, ref).read_bytes())
+            document = status.get("input_consumption")
+            if document is not None:
+                if (set(document) != {"schema", "reads", "citation_observation"}
+                        or document["schema"] != INPUT_READS_SCHEMA or not isinstance(document["reads"], list)
+                        or document["citation_observation"] != "not_observed"):
+                    raise ValueError("invalid input read observation receipt")
+                observed = True
+                records.extend(document["reads"])
+            reused = status.get("reused_checkpoint")
+            if reused is None:
+                break
+            checkpoint = json.loads(verify_reference(root, reused).read_bytes())
+            if (checkpoint.get("schema") != CHECKPOINT_SCHEMA
+                    or checkpoint["unit_id"] != status["unit_id"]
+                    or status.get("status") != "SUCCEEDED"
+                    or checkpoint["result"]["sha256"] != status.get("result_sha256")):
+                raise ValueError("checkpoint read provenance differs from the reused result")
+            original = json.loads(verify_reference(root, checkpoint["status"]).read_bytes())
+            if (original.get("status") != "SUCCEEDED"
+                    or original.get("unit_id") != checkpoint["unit_id"]
+                    or original.get("result_sha256") != checkpoint["result"]["sha256"]):
+                raise ValueError("checkpoint read provenance has no committed successful original unit")
+            ref = checkpoint["status"]
     return {"schema": INPUT_READS_SCHEMA, "reads": records,
             "citation_observation": "not_observed"} if observed else None
 

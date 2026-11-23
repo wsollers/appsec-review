@@ -1105,7 +1105,7 @@ def cmd_review_stop_id(args: argparse.Namespace) -> int:
 # authority: every step is the existing check, run in the documented order, and the first refusal ends
 # the sequence with that step's own reason. Nothing is retried, skipped or forced past a refusal.
 CONTAINER_RUNS = "/opt/app/runs"
-REPAIR_PLAN_SCHEMA = "appsec-review/repair-plan/1"
+from appsec_review.runtime.repair import PLAN_SCHEMA as REPAIR_PLAN_SCHEMA
 DISPATCH_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 PLAN_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 

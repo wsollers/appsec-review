@@ -259,7 +259,7 @@ def test_native_codeql_uses_private_bind_scratch_without_root_volume_helpers(
 
 def test_dagster_codeql_topology_has_one_ready_coordinator():
     from pathlib import Path
-    from appsec_review.orchestration.dagster import build_definitions
+    from appsec_review.orchestration.dagster.adapter import build_definitions
     graph = build_definitions(Path(__file__).parents[1] / "appsec-review.toml").get_job_def("wave1_review").graph
     nodes = {node.name for node in graph.node_defs if node.name.startswith("codeql_analysis__")}
     assert nodes == {

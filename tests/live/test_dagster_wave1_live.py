@@ -16,7 +16,8 @@ import pytest
 dagster = pytest.importorskip("dagster")
 
 from appsec_review.container_runtime.catalog import load_catalog
-from appsec_review.orchestration.dagster import adapter, build_definitions
+from appsec_review.orchestration.dagster import adapter
+from appsec_review.orchestration.dagster.adapter import build_definitions
 
 ROOT = Path(__file__).resolve().parents[2]
 

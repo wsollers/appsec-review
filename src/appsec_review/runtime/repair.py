@@ -234,11 +234,9 @@ def stopped_reasons(config: AppConfig, run_root: Path, *, current_dispatch: str 
             if not stopped.exists():
                 reasons.append("Dagster dispatch stop requires verify-repair-stop, not just a failed step")
             else:
-                receipt = read_document(stopped)
-                if (receipt.get("schema") != "appsec-review/verified-dispatch-stop/1"
-                        or receipt.get("run_id") != run_root.name or receipt.get("dispatch_id") != dispatch_id
-                        or receipt.get("worker_status") not in {"SUCCESS", "NOT_FOUND"}
-                        or receipt.get("terminal") is not True):
+                try:
+                    read_verified_dispatch_stop(run_root, dispatch_id)
+                except (OSError, ValueError):
                     reasons.append("Dagster dispatch stop receipt is invalid")
     for path in sorted((run_root / "data/jobs").glob("*/attempts/*/status.json")):
         if not (path.parent / "claim.json").exists() and read_document(path).get("status") == "RUNNING":
@@ -247,6 +245,18 @@ def stopped_reasons(config: AppConfig, run_root: Path, *, current_dispatch: str 
 
 
 CODE_SERVER_INFO_TAG = ".dagster/grpc_info"  # DefaultRunLauncher's address of the code server that ran the dispatch
+
+
+def read_verified_dispatch_stop(run_root: Path, dispatch_id: str) -> dict[str, Any]:
+    if not isinstance(dispatch_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", dispatch_id):
+        raise ValueError("Dagster dispatch identity is unavailable")
+    receipt = read_document(safe_path(run_root, f"data/recovery/dispatches/{dispatch_id}.json"))
+    if (receipt.get("schema") != "appsec-review/verified-dispatch-stop/1"
+            or receipt.get("run_id") != run_root.name or receipt.get("dispatch_id") != dispatch_id
+            or receipt.get("worker_status") not in {"SUCCESS", "NOT_FOUND"}
+            or receipt.get("terminal") is not True):
+        raise ValueError("Dagster dispatch stop receipt is invalid")
+    return receipt
 
 
 def code_server_worker_status(run: Any, *, client_factory=None) -> str:

@@ -945,7 +945,8 @@ STEP_MARKS = (("verify-stops", "verify-stops"), ("plan-repair", "plan-repair"), 
 
 
 def recover_plan(**changes) -> dict:
-    return {"schema": "appsec-review/repair-plan/1", "run_id": RECOVER_ID, "plan_sha256": PLAN_SHA,
+    from appsec_review.runtime.repair import PLAN_SCHEMA
+    return {"schema": PLAN_SCHEMA, "run_id": RECOVER_ID, "plan_sha256": PLAN_SHA,
             "release_sha256": "9" * 64, "admissible": True, "refusals": [], "decisions": [
                 {"job_id": "job_model_connectivity", "action": "RUN", "reasons": ["live gate always executes"],
                  "handoff_sha256": None},
@@ -1124,7 +1125,8 @@ def test_review_recover_stops_when_a_worker_stop_is_not_verified(box: Sandbox, r
     ({"rc": 1, "stderr": "ValueError: unsupported implementation binding"},
      "plan-repair refused (exit 1): ValueError: unsupported implementation binding"),
     ({"stdout": json.dumps(recover_plan(run_id="2026-11-11-0009"))}, "plan-repair refused (exit 0)"),
-], ids=["plan-refusals", "plan-error", "another-runs-plan"])
+    ({"stdout": json.dumps(recover_plan(schema="appsec-review/repair-plan/1"))}, "plan-repair refused (exit 0)"),
+], ids=["plan-refusals", "plan-error", "another-runs-plan", "old-plan-schema"])
 def test_review_recover_stops_at_a_plan_that_cannot_be_admitted(box: Sandbox, rule: dict, reason: str) -> None:
     recoverable(box)
     exec_rule(box, "plan-repair", **rule)

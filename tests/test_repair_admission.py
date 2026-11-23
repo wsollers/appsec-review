@@ -128,6 +128,13 @@ def _published_planning_context(tmp_path, orchestration):
     return config, root, target, source, jobs, output, ids
 
 
+@pytest.fixture
+def planning_unit_io(monkeypatch):
+    # These units verify admission and immutable bytes, not physical disk-flush durability.
+    monkeypatch.setattr("os.fsync", lambda _fd: None)
+
+
+@pytest.mark.usefixtures("planning_unit_io")
 @pytest.mark.parametrize("orchestration", [
     {"workflow": "target_analysis_plan"},
     {"workflow": "wave1_review"},
@@ -151,6 +158,7 @@ def test_repair_preserves_verified_planning_launch_context(tmp_path, orchestrati
     assert not (claim_path.parent.parent / "attempt_0002").exists()
 
 
+@pytest.mark.usefixtures("planning_unit_io")
 @pytest.mark.parametrize("damage", ["claim", "environment"])
 def test_repair_context_does_not_authorize_changed_claim_or_environment(tmp_path, damage):
     config, root, target, source, jobs, output, _ = _published_planning_context(
@@ -203,6 +211,98 @@ def test_successful_portable_unit_is_admitted_into_fresh_attempt(tmp_path):
     assert len(calls) == 1
     assert (old / "claim.json").read_bytes() == old_claim
     assert json.loads((old / "status.json").read_bytes())["status"] == "FAILED"
+
+
+def _artifact_checkpoint(tmp_path, *, interrupted=False):
+    from appsec_review.runtime.datasets import artifact_only
+    from appsec_review.storage.shared import immutable_bytes, verify_reference
+
+    config, (job,), calls = fixture(tmp_path)
+
+    def produce(unit):
+        calls.append(unit.job.attempt_id)
+        ref = immutable_bytes(
+            unit.job.run_root, (unit.unit_root / "evidence.bin").relative_to(unit.job.run_root).as_posix(),
+            b"retained evidence")
+        return {"artifact": ref}
+
+    def fail(unit):
+        raise RuntimeError("external boundary failed")
+
+    def consume(unit):
+        assert verify_reference(unit.job.run_root, unit.output("work.only")["artifact"]).read_bytes() == b"retained evidence"
+        return {"verified": True}
+
+    declaration = artifact_only(
+        "checkpoint_evidence", "work", "inventory", "appsec-review/checkpoint-fixture/1",
+        "Retained fixture evidence.",
+        artifacts=("data/jobs/job_fixture/attempts/*/steps/work/tasks/only/evidence.bin",),
+        reason="offline checkpoint fixture")
+    broken = replace(job, datasets=(declaration,), units=(
+        Unit("work.only", produce), Unit("work.bad", fail, ("work.only",))))
+    runner = JobRunner(config)
+    if interrupted:
+        claim = runner.begin_attempt(
+            broken, orchestration={"system": "dagster", "run_id": "interrupted-dispatch"})
+        runner.execute_or_reuse_unit(broken, claim, "work.only")
+        root = runner.runs.resolve(claim["run_id"])
+    else:
+        with pytest.raises(RuntimeError, match="partial failure"):
+            runner.run(broken)
+        root = next(path for path in config.runtime.runs_dir.iterdir() if path.name != "metadata")
+    fixed = replace(broken, units=(broken.units[0], Unit("work.bad", consume, ("work.only",))))
+    return config, runner, fixed, root, calls
+
+
+@pytest.mark.parametrize("interrupted", [False, True], ids=["failed", "dagster-interrupted"])
+def test_hash_bound_artifact_checkpoint_reuses_stopped_work_without_rewriting_history(tmp_path, interrupted):
+    from appsec_review.runtime.repair import verify_dispatch_stop
+
+    config, runner, job, root, calls = _artifact_checkpoint(tmp_path, interrupted=interrupted)
+    old = root / "data/jobs/job_fixture/attempts/attempt_0001"
+    original = {name: (old / name).read_bytes() for name in ("claim.json", "status.json")}
+    if interrupted:
+        refused = plan_repair(config, root, (job,), "none")
+        assert not refused["admissible"]
+        assert refused["unit_decisions"][job.job_id]["work.only"]["action"] == "RUN"
+        instance = SimpleNamespace(
+            get_run_by_id=lambda _: SimpleNamespace(
+                is_finished=True, tags={"appsec/application_run_id": root.name}),
+            run_launcher=SimpleNamespace(
+                supports_check_run_worker_health=True,
+                check_run_worker_health=lambda _: SimpleNamespace(status=SimpleNamespace(value="NOT_FOUND"))),
+        )
+        verify_dispatch_stop(config, root, "interrupted-dispatch", instance=instance)
+    plan = plan_repair(config, root, (job,), "none")
+    assert plan["admissible"], plan["refusals"]
+    assert plan["unit_decisions"][job.job_id]["work.only"]["action"] == "REUSE"
+    assert plan["unit_decisions"][job.job_id]["work.bad"]["action"] == "RUN"
+    admit_repair(config, root, (job,), plan)
+    outcome = runner.run(job, run_id=root.name)
+    assert calls == ["attempt_0001"]
+    assert outcome["status"]["attempt_id"] == "attempt_0002"
+    assert {name: (old / name).read_bytes() for name in original} == original
+    status = json.loads((Path(outcome["attempt_root"]) / "steps/work/tasks/only/status.json").read_bytes())
+    assert status["reused_checkpoint"] == plan["unit_decisions"][job.job_id]["work.only"]["checkpoint"]
+
+
+@pytest.mark.parametrize("damage", ["missing", "tampered", "symlink"])
+def test_artifact_checkpoint_refuses_unverified_bytes(tmp_path, damage):
+    config, _runner, job, root, _calls = _artifact_checkpoint(tmp_path)
+    artifact = root / "data/jobs/job_fixture/attempts/attempt_0001/steps/work/tasks/only/evidence.bin"
+    if damage == "tampered":
+        artifact.write_bytes(b"changed evidence")
+    else:
+        artifact.unlink()
+        if damage == "symlink":
+            target = tmp_path / "external.bin"
+            target.write_bytes(b"retained evidence")
+            artifact.symlink_to(target)
+    plan = plan_repair(config, root, (job,), "none")
+    decisions = plan["unit_decisions"][job.job_id]
+    assert decisions["work.only"]["action"] == "RUN"
+    assert "checkpoint admission refused:" in decisions["work.only"]["reason"]
+    assert decisions["work.bad"]["action"] == "RUN"
 
 
 @pytest.mark.parametrize("damage", ["missing", "corrupt"])
