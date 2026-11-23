@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -42,7 +42,7 @@ SCHEMA_PATH = Path("docs/schemas/code-graph-index/alternate-cpg.schema.json")
 SNAPSHOT = "a" * 64
 
 
-def _accepted_tree_sitter(root, *, gaps=()):
+def _accepted_tree_sitter(root, *, gaps=(), amend_summary=None, amend_handoff=None):
     ast = _make_two_fn_ast(
         fn_type="function_definition", body_type="block", if_type="if_statement",
         ret_type="return_statement", call_type="call", entry_name="handle", helper_name="parse",
@@ -66,20 +66,37 @@ def _accepted_tree_sitter(root, *, gaps=()):
     atomic_json(attempt / "claim.json", {"dataset_contract": dataset_contract(
         "job_tree_sitter_ast", ("load", "plan", "parse", "acceptance"), TS_DATASETS,
     )})
+    summary = {
+        "schema": "appsec-review/tree-sitter-ast/1", "target_snapshot": SNAPSHOT,
+        "dispositions": [{
+            "scope_id": "python-s1", "index_identity": shard, "cfg_artifacts": refs,
+        }], "gaps": list(gaps),
+    }
+    if amend_summary is not None:
+        amend_summary(summary)
+    summary_path = attempt / "steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json"
+    atomic_json(summary_path, summary)
+    summary_ref = {"path": summary_path.relative_to(root).as_posix(),
+                   "sha256": file_sha256(summary_path), "size_bytes": summary_path.stat().st_size}
     handoff = write_fixture_handoff(root, attempt / "handoff.json", {
         "job_id": "job_tree_sitter_ast", "target_snapshot": SNAPSHOT,
-        "outputs": {"parse.dynamic_scopes": {"dispositions": [{
-            "scope_id": "python-s1", "index_identity": shard, "cfg_artifacts": refs,
-        }], "gaps": list(gaps)}}, "artifacts": [*refs.values(), {
+        "outputs": {"acceptance.publish_handoff": {
+            "artifact": summary_ref, "gaps": list(gaps),
+        }}, "artifacts": [*refs.values(), {
             "path": path.relative_to(root).as_posix(), "sha256": sha,
         }],
     })
+    if amend_handoff is not None:
+        document = json.loads(handoff.read_bytes())
+        amend_handoff(document)
+        atomic_json(handoff, document)
     digest = file_sha256(handoff)
     atomic_json(root / "data/jobs/job_tree_sitter_ast/latest.json", {
         "handoff_path": handoff.relative_to(root).as_posix(), "handoff_sha256": digest,
     })
     context = SimpleNamespace(run_root=root, config=SimpleNamespace(job_id="job_code_graph_index"),
-                              upstream_handoffs={"job_tree_sitter_ast": digest}, contract=CONTRACT)
+                              upstream_handoffs={"job_tree_sitter_ast": digest}, contract=CONTRACT,
+                              summary_reference=summary_ref)
     return context, shard, refs
 
 
@@ -98,8 +115,60 @@ def test_cfg_uses_accepted_scope_and_retains_read_receipts(tmp_path):
             upstream_shards=[shard], graph_shards=[],
         )
         assert cpg["counts"]["alternate_cpg_nodes"] > 0 and cpg["gaps"] == []
-        assert {row["output_kind"] for row in reads.document()["reads"]} >= {"handoff", "tree_sitter_cfg"}
+        assert {row["output_kind"] for row in reads.document()["reads"]} >= {
+            "handoff", "tree_sitter_acceptance", "tree_sitter_cfg",
+        }
     assert gaps == []
+
+
+def test_cfg_reads_summary_published_by_real_tree_sitter_job_runner(tmp_path):
+    from appsec_review.jobs.job_tree_sitter_ast import build_job as build_tree_sitter
+    from tests.unit.job_tree_sitter_ast.test_job_and_dagster import (
+        _configured_runner, _FakeTreeSitterExecutor, _seed_upstream_run,
+    )
+
+    runner = _configured_runner(tmp_path)
+    target = tmp_path / "target"
+    target.mkdir()
+    source = target / "app.js"
+    source.write_text("function check(x) {\n  return x + 1;\n}\n", encoding="utf-8")
+    run_id, root, snapshot, upstream = _seed_upstream_run(runner, target, files=[{
+        "path": "app.js", "sha256": file_sha256(source),
+        "size_bytes": source.stat().st_size, "language": "JavaScript",
+    }])
+    executor = _FakeTreeSitterExecutor()
+    outcome = runner.run(
+        build_tree_sitter(executor_factory=lambda _unit: executor),
+        run_id=run_id, target_root=target, source_fingerprint=snapshot,
+        upstream_handoffs=upstream,
+    )
+    assert outcome["status"]["status"] == "SUCCEEDED"
+    assert executor.calls == 1
+    handoff = outcome["handoff"]
+    assert all("dispositions" not in output for output in handoff["outputs"].values())
+    reference = handoff["outputs"]["acceptance.publish_handoff"]["artifact"]
+    summary = json.loads((root / reference["path"]).read_bytes())
+    shards = [record["index_identity"] for record in summary["dispositions"] if "index_identity" in record]
+    assert len(shards) == 1
+    context = SimpleNamespace(
+        run_root=root, config=SimpleNamespace(job_id="job_code_graph_index"),
+        upstream_handoffs={"job_tree_sitter_ast": outcome["handoff_sha256"]}, contract=CONTRACT,
+    )
+    gaps = []
+    with input_read_scope(context) as reads:
+        files = _extract_tree_sitter_files(root, shards, target_snapshot=snapshot, gaps=gaps)
+    assert len(files) == 1 and files[0]["path"] == "app.js"
+    assert files[0]["functions"] and files[0]["cfg_nodes"] and files[0]["cfg_edges"]
+    assert {f"tree_sitter_cfg_partial: {gap}" for gap in summary["gaps"]} == set(gaps)
+    [receipt] = [row for row in reads.document()["reads"] if row["output_kind"] == "tree_sitter_acceptance"]
+    assert receipt == {
+        "producer": "job_tree_sitter_ast", "output_kind": "tree_sitter_acceptance",
+        "schema": "appsec-review/tree-sitter-ast/1", "channel": "handoff",
+        "authority": "producer_evidence", "read": True, "cited": None,
+        "path": reference["path"], "sha256": reference["sha256"],
+        "handoff_sha256": outcome["handoff_sha256"], "attempt_id": handoff["attempt_id"],
+        "target_snapshot": snapshot,
+    }
 
 
 @pytest.mark.parametrize("defect", ["tampered", "symlink", "different-shard", "unpinned"])
@@ -117,6 +186,125 @@ def test_cfg_rejects_unaccepted_or_changed_artifacts(tmp_path, defect):
     else:
         context.upstream_handoffs = {}
     with pytest.raises((ValueError, IntegrityError)), input_read_scope(context):
+        _extract_tree_sitter_files(tmp_path, [shard], target_snapshot=SNAPSHOT, gaps=[])
+
+
+@pytest.mark.parametrize("defect", ["missing", "changed", "symlink"])
+def test_cfg_rejects_missing_or_changed_summary(tmp_path, defect):
+    context, shard, _ = _accepted_tree_sitter(tmp_path)
+    path = tmp_path / context.summary_reference["path"]
+    if defect == "missing":
+        path.unlink()
+    elif defect == "changed":
+        path.write_text("{}", encoding="utf-8")
+    else:
+        other = path.with_suffix(".other")
+        path.rename(other)
+        path.symlink_to(other)
+    with pytest.raises((ValueError, OSError, IntegrityError)), input_read_scope(context):
+        _extract_tree_sitter_files(tmp_path, [shard], target_snapshot=SNAPSHOT, gaps=[])
+
+
+def test_cfg_requires_declared_acceptance_summary_grant(tmp_path):
+    context, shard, _ = _accepted_tree_sitter(tmp_path)
+    context.contract = replace(CONTRACT, inputs=tuple(
+        item for item in CONTRACT.inputs if item.output_kind != "tree_sitter_acceptance"
+    ))
+    with pytest.raises(ValueError, match="undeclared consumption.*tree_sitter_acceptance"):
+        with input_read_scope(context) as reads:
+            _extract_tree_sitter_files(tmp_path, [shard], target_snapshot=SNAPSHOT, gaps=[])
+    assert not any(row["output_kind"] == "tree_sitter_acceptance" for row in reads.document()["reads"])
+
+
+@pytest.mark.parametrize("defect", ["reference", "unbound", "attempt", "run", "target", "size"])
+def test_cfg_summary_is_bound_to_the_pinned_handoff(tmp_path, defect):
+    def amend(handoff):
+        output = handoff["outputs"]["acceptance.publish_handoff"]
+        if defect == "reference":
+            output.pop("artifact")
+        elif defect == "unbound":
+            handoff["artifacts"] = [item for item in handoff["artifacts"]
+                                    if item["path"] != output["artifact"]["path"]]
+        elif defect == "attempt":
+            reference = output["artifact"]
+            original = tmp_path / reference["path"]
+            reference["path"] = reference["path"].replace("attempt_0001", "attempt_0002")
+            other = tmp_path / reference["path"]
+            other.parent.mkdir(parents=True)
+            other.write_bytes(original.read_bytes())
+            handoff["artifacts"].append(dict(reference))
+        elif defect == "size":
+            output["artifact"]["size_bytes"] += 1
+        else:
+            handoff["run_id" if defect == "run" else "target_snapshot"] = "b" * 64
+
+    context, shard, _ = _accepted_tree_sitter(tmp_path, amend_handoff=amend)
+    expected = ("not an accepted handoff" if defect in {"run", "target"} else
+                "artifact identity mismatch" if defect == "size" else "summary")
+    with pytest.raises((ValueError, IntegrityError), match=expected), input_read_scope(context):
+        _extract_tree_sitter_files(tmp_path, [shard], target_snapshot=SNAPSHOT, gaps=[])
+
+
+def test_cfg_rejects_shards_from_a_different_consumer_target(tmp_path):
+    context, shard, _ = _accepted_tree_sitter(tmp_path)
+    with pytest.raises(IntegrityError, match="producer target snapshot mismatch"), input_read_scope(context):
+        _extract_tree_sitter_files(tmp_path, [shard], target_snapshot="b" * 64, gaps=[])
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("schema", "appsec-review/tree-sitter-ast/unknown"),
+    ("target_snapshot", "b" * 64),
+    ("dispositions", None),
+    ("dispositions", {}),
+    ("dispositions", [None]),
+    ("dispositions", [{"scope_id": "python-s1", "index_identity": []}]),
+    ("dispositions", [{"index_identity": {}}]),
+], ids=["schema", "target", "missing", "mapping", "record", "index", "scope"])
+def test_cfg_rejects_malformed_acceptance_summary(tmp_path, field, value):
+    def amend(summary):
+        if value is None:
+            summary.pop(field)
+        else:
+            summary[field] = value
+
+    context, shard, _ = _accepted_tree_sitter(tmp_path, amend_summary=amend)
+    with pytest.raises(IntegrityError, match="accepted Tree-sitter summary"), input_read_scope(context):
+        _extract_tree_sitter_files(tmp_path, [shard], target_snapshot=SNAPSHOT, gaps=[])
+
+
+def test_cfg_rejects_conflicting_scope_records_in_summary(tmp_path):
+    def amend(summary):
+        summary["dispositions"].append({**summary["dispositions"][0], "scope_id": "other"})
+
+    context, shard, _ = _accepted_tree_sitter(tmp_path, amend_summary=amend)
+    with pytest.raises(IntegrityError, match="conflicting Tree-sitter CFG scope records"), input_read_scope(context):
+        _extract_tree_sitter_files(tmp_path, [shard], target_snapshot=SNAPSHOT, gaps=[])
+
+
+def test_cfg_valid_scope_without_artifacts_keeps_named_gap(tmp_path):
+    context, shard, _ = _accepted_tree_sitter(
+        tmp_path, amend_summary=lambda summary: summary["dispositions"][0].pop("cfg_artifacts"),
+    )
+    with input_read_scope(context):
+        cpg, _ = build_run_alternate_cpg(
+            tmp_path, run_id=tmp_path.name, target_snapshot=SNAPSHOT,
+            upstream_shards=[shard], graph_shards=[],
+        )
+    assert cpg["gaps"] == ["tree_sitter_cfg_unavailable: python-s1 has no accepted CFG artifacts"]
+
+
+def test_cfg_summary_does_not_replace_manifest_binding_checks(tmp_path):
+    def amend(summary):
+        record = summary["dispositions"][0]
+        reference = record["cfg_artifacts"]["manifest"]
+        path = tmp_path / reference["path"]
+        manifest = json.loads(path.read_bytes())
+        manifest["target_snapshot"] = "b" * 64
+        atomic_json(path, manifest)
+        reference.update(sha256=file_sha256(path), size_bytes=path.stat().st_size)
+
+    context, shard, _ = _accepted_tree_sitter(tmp_path, amend_summary=amend)
+    with pytest.raises(IntegrityError, match="CFG scope or artifact binding mismatch"), input_read_scope(context):
         _extract_tree_sitter_files(tmp_path, [shard], target_snapshot=SNAPSHOT, gaps=[])
 
 

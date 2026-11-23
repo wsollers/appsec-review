@@ -2435,11 +2435,30 @@ def _accepted_cfg(
         for output in accepted.handoff["outputs"].values() if isinstance(output, Mapping)
         for gap in output.get("gaps", ())
     )
-    dispositions = [
-        item for output in accepted.handoff["outputs"].values() if isinstance(output, Mapping)
-        for item in output.get("dispositions", ()) if isinstance(item, Mapping)
-        and isinstance(item.get("index_identity"), Mapping)
-    ]
+    # The runner projects unit outputs; dispositions live in the accepted summary artifact.
+    output = accepted.handoff["outputs"].get("acceptance.publish_handoff")
+    reference = output.get("artifact") if isinstance(output, Mapping) else None
+    if not isinstance(reference, Mapping):
+        raise IntegrityError("accepted Tree-sitter summary reference is missing")
+    attempt = accepted.handoff["resolving_paths"]["attempt"]
+    expected_path = f"{attempt}/steps/acceptance/tasks/publish_handoff/accepted-tree-sitter-ast.json"
+    if (accepted.path != f"{attempt}/handoff.json" or reference.get("path") != expected_path
+            or not any(item["path"] == reference["path"] and item["sha256"] == reference.get("sha256")
+                       for item in accepted.handoff["artifacts"])):
+        raise IntegrityError("accepted Tree-sitter summary is not bound to the producer attempt")
+    observe_output(run_root, "job_tree_sitter_ast", "tree_sitter_acceptance", reference)
+    summary = json.loads(_cfg_bytes(run_root, reference))
+    if (not isinstance(summary, Mapping) or summary.get("schema") != "appsec-review/tree-sitter-ast/1"
+            or summary.get("target_snapshot") != target_snapshot):
+        raise IntegrityError("accepted Tree-sitter summary schema or target snapshot mismatch")
+    dispositions = summary.get("dispositions")
+    if (not isinstance(dispositions, list)
+            or any(not isinstance(item, Mapping) or not isinstance(item.get("scope_id"), str)
+                   or not item["scope_id"]
+                   or ("index_identity" in item and not isinstance(item["index_identity"], Mapping))
+                   for item in dispositions)):
+        raise IntegrityError("accepted Tree-sitter summary dispositions are malformed or missing")
+    dispositions = [item for item in dispositions if "index_identity" in item]
     result = []
     selected = [s for s in ts_shards if not str(s.get("shard_id", "")).startswith("tree-sitter-coverage-")]
     if not selected:

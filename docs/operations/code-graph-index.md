@@ -88,7 +88,13 @@ primary graph's admissibility rules (T-5098/T-5099).
   explicit disabled gap. Primary graph work is unaffected.
 - Tree-sitter fallback consumes the actual normalized `syntax`, `grammar_native_type`, `cfg`,
   `cfg_nodes` and `cfg_edges` fields. Distinct CFG node identities remain distinct even when
-  they refer to one AST location.
+  they refer to one AST location. Scope dispositions and CFG artifact references come from the
+  declared `tree_sitter_acceptance` dataset (`appsec-review/tree-sitter-ast/1`), not inline handoff
+  fields: the runner projects those fields out. The consumer verifies the pinned producer's
+  `accepted-tree-sitter-ast.json` reference, attempt path, bytes and target snapshot before reading
+  dispositions, retaining a typed summary read receipt alongside shard and CFG receipts. Missing or
+  malformed acceptance metadata fails; a valid scope without CFG artifacts remains a named
+  `tree_sitter_cfg_unavailable` coverage gap.
 - clangd variable symbols stay non-call symbols. `REFERENCES` stays a reference; only `CALLS`
   contributes invocation reachability, and each available occurrence keeps its producer location.
   Missing occurrences, unresolved overloads and ambiguous enclosing/guard contexts are gaps.
