@@ -4,11 +4,12 @@ from contextlib import contextmanager
 from dataclasses import replace
 import json
 import sqlite3
+from types import SimpleNamespace
 
 import pytest
 
 from appsec_review.jobs.job_security_tagging.job import _publish_shards, _subject_location
-from appsec_review.jobs.job_security_tagging.producers import AcceptedIndexes
+from appsec_review.jobs.job_security_tagging.producers import AcceptedIndexes, collect_coverage_gaps
 from appsec_review.jobs.job_security_tagging.taxonomy import assignment
 from appsec_review.retrieval import EntityKind
 from appsec_review.storage import file_sha256
@@ -107,6 +108,65 @@ def test_open_observes_admitted_shard_and_refuses_tampering(tmp_path, monkeypatc
         value._open({**identity, "sha256": "0" * 64})
     with pytest.raises(ValueError, match="unavailable"):
         value._open({**identity, "relative_path": "../outside"})
+
+
+def _alternate_coverage(tmp_path, status):
+    from appsec_review.jobs.job_code_graph_index.datasets import DATASETS
+    from appsec_review.jobs.job_security_tagging.datasets import CONTRACT
+
+    indexes = reader(tmp_path)
+    indexes.run_root.mkdir()
+    indexes.manifest_sha256 = "b" * 64
+    path = indexes.run_root / "alternate.sqlite"
+    with sqlite3.connect(path) as database:
+        database.execute("CREATE TABLE coverage(area TEXT, status TEXT, gap TEXT)")
+        database.execute("INSERT INTO coverage VALUES (?,?,?)",
+                         ("alternate-cpg", status, "fixture alternate gap" if status != "complete" else None))
+    identity = {**shard("analysis", "alternate-cpg"), "relative_path": path.name, "sha256": file_sha256(path)}
+    indexes.identities = [identity]
+    context = SimpleNamespace(
+        run_root=indexes.run_root, config=SimpleNamespace(job_id="job_security_tagging"),
+        contract=CONTRACT, upstream_handoffs={"job_code_graph_index": "c" * 64})
+    handoff = {"job_id": "job_code_graph_index", "attempt_id": "attempt_0001", "target_snapshot": SNAPSHOT,
+               "artifacts": [{"path": path.name, "sha256": identity["sha256"], "size_bytes": path.stat().st_size}]}
+    return indexes, context, (handoff, DATASETS)
+
+
+@pytest.mark.parametrize("status", ["partial", "complete"])
+def test_alternate_cpg_coverage_uses_the_typed_input_and_records_the_real_read(tmp_path, status):
+    from appsec_review.runtime.inputs import input_read_scope
+
+    indexes, context, producer = _alternate_coverage(tmp_path, status)
+    vocabulary, rules, _ = taxonomy()
+    with input_read_scope(context) as reads:
+        # Only the accepted-producer lookup is canned; ownership, authority and SQLite reads are real.
+        reads.producers["job_code_graph_index"] = producer
+        records, _notes = collect_coverage_gaps(indexes, scope(), vocabulary, rules)
+        observed = reads.document()["reads"]
+    gaps = [record for record in records if record["tag"].startswith("gap:no-ast")]
+    assert len(gaps) == (1 if status == "partial" else 0)
+    if gaps:
+        assert gaps[0]["basis"] == "reported"
+        assert gaps[0]["evidence"][0]["coverage"] == [
+            {"area": "alternate-cpg", "status": "partial", "gap": "fixture alternate gap"}]
+    assert len(observed) == 1
+    assert observed[0]["producer"] == "job_code_graph_index"
+    assert observed[0]["output_kind"] == "alternate_cpg_index"
+    assert observed[0]["schema"] == "appsec-review/alternate-cpg/1"
+    assert observed[0]["read"] is True and observed[0]["cited"] is None
+
+
+def test_alternate_cpg_coverage_does_not_bypass_a_missing_input_grant(tmp_path):
+    from appsec_review.runtime.inputs import input_read_scope
+
+    indexes, context, producer = _alternate_coverage(tmp_path, "partial")
+    context.contract = replace(context.contract, inputs=tuple(
+        item for item in context.contract.inputs if item.output_kind != "alternate_cpg_index"))
+    vocabulary, rules, _ = taxonomy()
+    with pytest.raises(ValueError, match="undeclared consumption.*job_code_graph_index/alternate_cpg_index"):
+        with input_read_scope(context) as reads:
+            reads.producers["job_code_graph_index"] = producer
+            collect_coverage_gaps(indexes, scope(), vocabulary, rules)
 
 
 def test_generated_source_provenance_survives_tag_location_projection():

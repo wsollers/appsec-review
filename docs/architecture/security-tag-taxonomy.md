@@ -547,6 +547,14 @@ directory would look the same as a missing lockfile.
 `gap:no-ast:<lang>`, `gap:no-build:<unit>`, `gap:no-sast:<tool>`, `gap:scope-failed`,
 `gap:crosswalk-unmapped`, `gap:catalog-fixture`.
 
+The coverage collector reads the accepted `job_code_graph_index/alternate_cpg_index`
+(`appsec-review/alternate-cpg/1`) through its typed input contract. This optional, when-declared
+input owns the `analysis/alternate-cpg*` shards: incomplete coverage produces reported
+`gap:no-ast:*` tags, while complete coverage produces no gap tag. These coverage reads do not
+promote Alternate CPG facts into confirmed findings. Missing historical declarations remain
+not applicable; any present shard still requires the admitted producer, matching schema and
+authority, and verified bytes.
+
 Infrastructure and supply-chain gaps:
 
 - `gap:framework-disabled:<framework>`: a scanner framework the bounded adapter does not run. The
