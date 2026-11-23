@@ -520,7 +520,7 @@ def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_f
                 decision = next(item for item in decisions if item.job_id == job.job_id)
                 if not compatible_dataset_change(recorded_contract, expected_contract):
                     reasons.append(f"unsupported dataset compatibility change for {job.job_id}")
-                elif decision.action != "RUN":
+                elif decision.action not in {"RUN", "INVALIDATE"}:
                     # The widened contract belongs to a fresh attempt; nothing may reuse the old one.
                     reasons.append(f"dataset contract of {job.job_id} changed but its accepted attempt would be reused")
         from appsec_review.runtime.checkpoints import select_units

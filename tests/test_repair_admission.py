@@ -1009,9 +1009,52 @@ def test_compatible_dataset_contract_widening_forces_only_the_changed_job(tmp_pa
         plan_repair(config, root, (jobs[0], after, jobs[2]), "none", dependencies=dependencies))
 
 
+@pytest.mark.parametrize("accepted", [False, True], ids=["failed", "accepted"])
+@pytest.mark.parametrize("change", ["added-dataset", "added-input"])
+def test_compatible_widening_admits_an_invalidated_fresh_attempt(tmp_path, accepted, change):
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
+    before = replace(jobs[1], contract=_contract()) if change == "added-input" else jobs[1]
+    runner = JobRunner(config)
+    first = runner.run(jobs[0], target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["status"]["run_id"]
+    upstream = {} if change == "added-input" else {"job_a": first["handoff_sha256"]}
+    if accepted:
+        runner.run(before, run_id=root.name, target_root=tmp_path, source_fingerprint="none",
+                   upstream_handoffs=upstream)
+    else:
+        def fail(context):
+            raise RuntimeError("fixture producer failed")
+        with pytest.raises(RuntimeError, match="partial failure"):
+            runner.run(replace(before, units=(Unit("work.only", fail),)), run_id=root.name,
+                       target_root=tmp_path, source_fingerprint="none", upstream_handoffs=upstream)
+    claim_path = root / "data/jobs/job_b/attempts/attempt_0001/claim.json"
+    old_claim = claim_path.read_bytes()
+    assert (root / "data/jobs/job_b/latest.json").exists() is accepted
+    (tmp_path / "release-src/job_a/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, (job.job_id for job in jobs))
+    after = (replace(before, contract=_contract(inputs=(_input("job_a"),))) if change == "added-input"
+             else replace(before, datasets=(_dataset("job_b"),)))
+
+    plan = plan_repair(config, root, (jobs[0], after), "none", dependencies=dependencies)
+
+    assert [item["action"] for item in plan["decisions"]] == ["RUN", "INVALIDATE"]
+    decision = plan["decisions"][1]
+    assert decision["handoff_sha256"] is None
+    assert ("dataset contract identity changed" if accepted else "no accepted handoff") in decision["reasons"]
+    assert plan["admissible"] is True, plan["refusals"]
+    binding = admit_repair(config, root, (jobs[0], after), plan, dependencies=dependencies)
+    assert binding["repair"]
+    resumed = GraphRunner(config, (jobs[0], after), dependencies=dependencies).run(
+        target_root=tmp_path, source_fingerprint="none", run_id=root.name)
+    assert resumed["jobs"]["job_b"]["handoff"]["attempt_id"] == "attempt_0002"
+    assert claim_path.read_bytes() == old_claim
+
+
+@pytest.mark.parametrize("invalidate", [False, True], ids=["unchanged-ancestor", "rerun-ancestor"])
 @pytest.mark.parametrize("change", ["removed-dataset", "edited-dataset", "removed-input", "changed-flag",
                                     "contract-added"])
-def test_incompatible_dataset_contract_change_refuses_the_plan(tmp_path, change):
+def test_incompatible_dataset_contract_change_refuses_the_plan(tmp_path, change, invalidate):
     config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
     dependencies = {"job_a": (), "job_b": ("job_a",)}
     if change == "removed-dataset":
@@ -1030,7 +1073,10 @@ def test_incompatible_dataset_contract_change_refuses_the_plan(tmp_path, change)
     first = GraphRunner(config, (jobs[0], before), dependencies=dependencies).run(
         target_root=tmp_path, source_fingerprint="none")
     root = config.runtime.runs_dir / first["run_id"]
-    plan = plan_repair(config, root, (jobs[0], after), "none", dependencies=dependencies)
+    plan = plan_repair(config, root, (jobs[0], after), "none", dependencies=dependencies,
+                       force_from="job_a" if invalidate else None)
+    if invalidate and change in {"removed-dataset", "edited-dataset"}:
+        assert plan["decisions"][1]["action"] == "INVALIDATE"
     assert plan["admissible"] is False
     assert "unsupported dataset compatibility change for job_b" in plan["refusals"]
     assert not any("job_a" in refusal for refusal in plan["refusals"])
@@ -1038,9 +1084,10 @@ def test_incompatible_dataset_contract_change_refuses_the_plan(tmp_path, change)
         admit_repair(config, root, (jobs[0], after), plan, dependencies=dependencies)
 
 
-def test_widened_dataset_contract_refuses_a_plan_that_would_reuse_the_old_attempt(tmp_path, monkeypatch):
+@pytest.mark.parametrize("revalidate", [False, True], ids=["reuse", "revalidate"])
+def test_widened_dataset_contract_refuses_a_plan_that_would_reuse_the_old_attempt(tmp_path, monkeypatch, revalidate):
     config, jobs, _ = fixture(tmp_path, ("job_a", "job_b"))
-    dependencies = {"job_a": (), "job_b": ()}
+    dependencies = {"job_a": (), "job_b": ("job_a",)}
     first = GraphRunner(config, jobs, dependencies=dependencies).run(target_root=tmp_path, source_fingerprint="none")
     root = config.runtime.runs_dir / first["run_id"]
     widened = replace(jobs[1], datasets=(_dataset("job_b"),))
@@ -1050,10 +1097,14 @@ def test_widened_dataset_contract_refuses_a_plan_that_would_reuse_the_old_attemp
         reasons, handoff_hash = original(self, job, upstream, *args, **kwargs)
         return [reason for reason in reasons if reason != "dataset contract identity changed"], handoff_hash
     monkeypatch.setattr(ResumePlanner, "_accepted", overlooking)
-    plan = plan_repair(config, root, (jobs[0], widened), "none", dependencies=dependencies)
-    assert [item["action"] for item in plan["decisions"]] == ["REUSE", "REUSE"]
+    plan = plan_repair(config, root, (jobs[0], widened), "none", dependencies=dependencies,
+                       force_from="job_a" if revalidate else None)
+    assert [item["action"] for item in plan["decisions"]] == (
+        ["RUN", "REVALIDATE"] if revalidate else ["REUSE", "REUSE"])
     assert plan["admissible"] is False
     assert "dataset contract of job_b changed but its accepted attempt would be reused" in plan["refusals"]
+    with pytest.raises(ValueError, match="repair refused"):
+        admit_repair(config, root, (jobs[0], widened), plan, dependencies=dependencies)
 
 
 def test_named_cache_cannot_hide_an_incompatible_producer_as_legacy(tmp_path):

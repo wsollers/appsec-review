@@ -142,9 +142,12 @@ shared `content_sha256`, `decided_at`) and the `REVALIDATED` pipeline event reco
 the whole plan (`unsupported dataset compatibility change for <job>`) unless the canonicalized JSON
 comparison (`compatible_dataset_change`) shows the change only
 *adds* datasets or typed input requirements and leaves every other field of the contract
-identical; such a compatible widening forces that job to `RUN` and the plan stays admissible,
-while a plan that would reuse an accepted attempt of the widened job is refused ([T-5015](../TODO.md)
-tracks forcing a widened job to `RUN` while revalidating unchanged descendants). A removed or
+identical. Such a compatible widening requires a fresh attempt: either `RUN` or `INVALIDATE`
+is admissible, including a downstream job whose failed attempt has no accepted handoff.
+`INVALIDATE` is not reuse; it must not trigger an accepted-attempt reuse refusal merely because
+an ancestor will also run. `REUSE` and `REVALIDATE` remain refused for the widened job because
+either could reuse its narrower accepted attempt ([T-5015](../TODO.md) tracks forcing a widened
+job to run while revalidating unchanged descendants). A removed or
 edited dataset, a removed input, a contract schema change or a changed dispatch flag is still an
 incompatible wire-contract change that no source-code repair can approve. `admit-repair` rederives it while
 holding the run and admission locks; stale or simultaneous claims cannot both win. This command
@@ -334,7 +337,7 @@ dependencies. Unit regressions for the rewind are in `tests/test_stepwise_rewind
 `tests/test_stepwise_mount_paths.py`; the closed CI extension is in `tests/test_stepwise_ci_mount_paths.py`.
 
 The original configuration, target fingerprint, review policy and evidence are retained.
-Configuration changes and schema/dataset-contract changes are not compatible source repairs.
+Configuration changes, schema changes and incompatible dataset-contract changes are not compatible source repairs.
 Host image bindings are a hashed configuration layer, not a source repair: changing
 `deploy/dagster/host-pins.toml` requires a fresh authorized run. Its old run-owned copy remains
 immutable. The T-051 cutover preserves `2026-11-10-0002` and starts a fresh c094 run by explicit
