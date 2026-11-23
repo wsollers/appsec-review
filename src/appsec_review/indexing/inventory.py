@@ -114,10 +114,11 @@ def runtime_claims(job_steps: Mapping[str, Sequence[str]], *,
                 "and hashes are published", sensitivity="sensitive", disposition="protected")))
     run_level = (
         ("recovery_records", "execution_receipts", "application/json",
-         "Implementation bindings, release snapshots, worker registration and repair admission records.",
+         "Implementation bindings, release snapshots, worker registration, repair admission and parent re-execution plans.",
          ("data/recovery/current.json", "data/recovery/admission.lock", "data/recovery/successor.json",
           "data/recovery/releases/*.json", "data/recovery/workers/*.json",
-          "data/recovery/dispatches/*.json", "data/recovery/repairs/*.json"),
+          "data/recovery/dispatches/*.json", "data/recovery/repairs/*.json",
+          "data/recovery/reexecutions/*.json"),
          "operational recovery state may include host paths and deployment inputs; ownership does not "
          "establish successful execution or authorize reuse", "sensitive", "protected"),
         ("shared_immutable_artifacts", "execution_receipts", "appsec-review/shared-receipt/1",

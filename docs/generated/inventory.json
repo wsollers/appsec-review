@@ -46297,7 +46297,7 @@
     "src/appsec_review/indexing/document_interfaces.py": "401d68cdc04c4b8884c75dbc7f0d5ad1c90ddf0f8f8a95e6329dc63f98cd1d15",
     "src/appsec_review/indexing/fts_worker.py": "8eea803658e3d7c88a6f552db09b65258a2fe803f8149c4f2da61db370f16e34",
     "src/appsec_review/indexing/input_matrix.py": "2e2e71415697c4fc07aabf1bdbef3e281bf0c8af200934f1572b86307d7780c9",
-    "src/appsec_review/indexing/inventory.py": "04923affa4f3735f681daf2418e933782b8e26076d3873b811218df8fed3b419",
+    "src/appsec_review/indexing/inventory.py": "8e497022354ef0aec28da404ff0e311ae71c51434a61ae314e8b8727506b261e",
     "src/appsec_review/indexing/links.py": "2db02db580df32f0ba2fc6589ce744e3d6d0b828506446bd6c6c4da73d51ab9b",
     "src/appsec_review/indexing/matrix.py": "f5230dc7cef5a6c264cabf7598abd2a5926e0d2326f632bbac9e0a95ea9dad8c",
     "src/appsec_review/indexing/metrics.py": "8dd632ecc21e881305493dd870388a9246ff90b574428119f3a1b93fbbb140ed",

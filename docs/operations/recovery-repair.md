@@ -115,6 +115,8 @@ require `RUN`. Eligible checkpoints still receive the full input and artifact ch
 
 The exact selected steps and retained-output hashes are saved under
 `data/recovery/reexecutions/<sha256>.json` and bound into the durable submission identity.
+The inventory owns these JSON plans as sensitive, protected `runtime/recovery_records`;
+that accounting does not turn a plan into produced evidence or grant recovery admission.
 The native run records `parent_run_id`, `root_run_id` and `step_keys_to_execute`, so the UI and
 monitor can distinguish a partial continuation from a new full dispatch.
 

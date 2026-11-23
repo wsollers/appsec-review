@@ -282,6 +282,8 @@ def test_undeclared_accepted_artifact_still_fails(tmp_path, mode):
     "data/recovery/current.json.bak",
     "data/recovery/releases/nested/unknown.json",
     "data/recovery/workers/record.txt",
+    "data/recovery/reexecutions/plan.json.bak",
+    "data/recovery/reexecutions/nested/plan.json",
     "data/jobs/job_unknown/attempts/attempt_0001/published.json",
     "data/jobs/job_fixture/attempts/attempt_0001/published.json.bak",
     "data/jobs/job_fixture/attempts/attempt_0001/steps/unknown/tasks/only/checkpoint.json",
@@ -296,6 +298,7 @@ def test_runtime_claims_do_not_expand_to_unknown_paths(path):
     "data/recovery/current.json", "data/recovery/admission.lock", "data/recovery/successor.json",
     "data/recovery/releases/release.json", "data/recovery/workers/worker.json",
     "data/recovery/dispatches/dispatch.json", "data/recovery/repairs/repair.json",
+    "data/recovery/reexecutions/074d1b25cdb286728237122db3b255e72db033c19548252b1f96b267a02ef60b.json",
     "data/jobs/job_fixture/attempts/attempt_0001/published.json",
     "data/jobs/job_fixture/attempts/attempt_0001/steps/work/tasks/only/checkpoint.json",
 ))
