@@ -165,6 +165,7 @@ def execute_request(request: dict) -> dict:
     from dagster._core.workspace.context import WorkspaceProcessContext
     from dagster._core.workspace.load_target import WorkspaceFileTarget
     from appsec_review.config import load_config
+    from appsec_review.config.run_selection import RunConfigurations
     from appsec_review.runtime.release import load_release, read_document
     from appsec_review.runtime.repair import code_server_worker_status, current_binding, stopped_reasons
     from appsec_review.storage import RunStore
@@ -173,6 +174,7 @@ def execute_request(request: dict) -> dict:
     if request["action"] not in {"preview", "launch"}:
         raise ValueError("unsupported re-execution action")
     config = load_config(os.environ.get("APPSEC_REVIEW_CONFIG", "appsec-review.toml"))
+    config = RunConfigurations(config).for_tags(request["tags"])
     root = RunStore(config.runtime.runs_dir).resolve(request["application_run_id"])
     if (root / "data/configuration/execution-safety.json").exists():
         raise ValueError("first-error recovery requires the existing successor-run procedure")

@@ -61,6 +61,34 @@ def test_multiple_failed_siblings_do_not_reexecute_their_successful_common_paren
             selected_steps(dependencies, "job_report", additional_jobs=extra)
 
 
+def test_parent_preview_uses_the_run_profile_instead_of_the_code_location_default(tmp_path, monkeypatch):
+    from pathlib import Path
+    from appsec_review.config import load_config
+    from reexecute_run import execute_request
+
+    path = Path(__file__).resolve().parents[1] / "appsec-review.toml"
+    base = load_config(path, profile="copilot-dev", overlay="")
+    expected = load_config(path, profile="copilot-dev-astra-6.2", overlay="")
+    captured = []
+
+    class InspectedConfiguration(Exception):
+        pass
+
+    def inspect(config, root):
+        captured.append(config)
+        assert root == tmp_path
+        raise InspectedConfiguration
+
+    monkeypatch.setattr("appsec_review.config.load_config", lambda *_args: base)
+    monkeypatch.setattr("appsec_review.storage.RunStore.resolve", lambda *_args: tmp_path)
+    monkeypatch.setattr("appsec_review.runtime.configuration.candidate_configuration_changes", inspect)
+    with pytest.raises(InspectedConfiguration):
+        execute_request({"action": "preview", "application_run_id": "fixture",
+                         "tags": {"appsec/profile": expected.profile, "appsec/overlay": "none",
+                                  "appsec/compiler_target": expected.compiler_target.value}})
+    assert captured[0].resolved_sha256 == expected.resolved_sha256 != base.resolved_sha256
+
+
 def retained_fixture(tmp_path):
     handle = StepOutputHandle("catalog__finalize", "result")
     snapshot = SimpleNamespace(steps=[
