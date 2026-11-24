@@ -68,7 +68,7 @@ class ExportUnits:
         self.execute("load.verify_inputs")
         return self.execute("export.assemble")
 
-    def accept(self):
+    def accept(self, *, configuration_sha256=None):
         self.execute("acceptance.publish_handoff")
         artifacts = {}
 
@@ -98,7 +98,8 @@ class ExportUnits:
             },
             "artifacts": list(artifacts.values()),
         })
-        self.reference = ArtifactRef.from_mapping(self.disk.publish(JOB_ID, handoff))
+        self.reference = ArtifactRef.from_mapping(self.disk.publish(
+            JOB_ID, handoff, configuration_sha256=configuration_sha256))
         return json.loads((self.disk.root / self.reference.path).read_bytes())
 
     def view(self, **overrides):
@@ -397,6 +398,31 @@ def test_original_attempt_deadline_applies_across_units_and_never_emits_completi
         units.execute("acceptance.publish_handoff")
     records, _ = PipelineLog(disk.root).read()
     assert not any(row["event_type"] == "OPENVEX_EXPORT_COMPLETED" for row in records)
+
+
+def test_timeout_revision_exports_original_review_and_remains_readable_with_original_settings(tmp_path, monkeypatch):
+    from tests.handoff_fixture import write_fixture_configuration_revision
+
+    original_settings = enabled_settings(timeout_seconds=120)
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, settings=original_settings)
+    units = ExportUnits(disk)
+    effective = replace(original_settings, timeout_seconds=1800)
+    resolved = json.loads((disk.root / disk.config_ref["path"]).read_bytes())
+    resolved["jobs"][JOB_ID]["settings"] = effective.to_mapping()
+    identity = write_fixture_configuration_revision(disk.root, resolved)
+    original = {name: (disk.root / "data/configuration" / name).read_bytes()
+                for name in ("resolved.json", "manifest.json", "appsec-review.toml")}
+    units.context = replace(units.context, resolved_config_sha256=identity, config=replace(
+        units.context.config, settings=effective.to_mapping(), typed_settings=effective))
+    units.assemble()
+    handoff = units.accept(configuration_sha256=identity)
+    assert handoff["resolved_config_sha256"] == identity
+    bundle = read_accepted_export(disk.root, units.reference, original_settings, ROOT)
+    assert bundle.manifest["provenance"]["resolved_config_sha256"] == disk.config_ref["sha256"]
+    assert units.view().state == ExportReportState.AVAILABLE
+    with pytest.raises(ExportError, match="different settings"):
+        read_accepted_export(disk.root, units.reference, replace(original_settings, author="Changed"), ROOT)
+    assert all((disk.root / "data/configuration" / name).read_bytes() == value for name, value in original.items())
 
 
 @pytest.mark.parametrize("timeout,permitted", [(120, False), (1800, True)])

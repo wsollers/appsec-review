@@ -227,7 +227,8 @@ class AcceptedInputDisk:
                 "outputs": outputs, "resolved_config_sha256": self.config_ref["sha256"],
                 "completed_at": "2026-10-28T10:00:00-04:00"}
 
-    def publish(self, job: str, handoff: dict[str, Any]) -> dict[str, str]:
+    def publish(self, job: str, handoff: dict[str, Any], *,
+                configuration_sha256: str | None = None) -> dict[str, str]:
         name = f"data/jobs/{job}/attempts/{handoff.get('attempt_id', 'one')}/handoff.json"
         attempt = self.root / name
         self.put((attempt.parent / "result.json").relative_to(self.root).as_posix(), {
@@ -244,7 +245,8 @@ class AcceptedInputDisk:
             artifacts.append(outputs[raw["path"]].to_json() if raw["path"] in outputs else raw)
         value = {**handoff, "artifacts": artifacts}
         completed_at = value["completed_at"]
-        write_fixture_handoff(self.root, attempt, value, target_snapshot=self.snapshot)
+        write_fixture_handoff(self.root, attempt, value, target_snapshot=self.snapshot,
+                              configuration_sha256=configuration_sha256)
         document = json.loads(attempt.read_bytes())
         document["completed_at"] = completed_at
         reference = self.put(name, document)

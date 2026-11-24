@@ -25,7 +25,7 @@ from .contracts import (
 )
 from . import dependencies
 from .datasets import CONTRACT
-from .inputs import BoundedInputReader, _require, reprove_inputs
+from .inputs import BoundedInputReader, _require, compatible_settings, reprove_inputs
 from .settings import OpenVexExportSettings
 from .validation import schema_registry, schema_validator, validate_export
 
@@ -84,6 +84,21 @@ def upstream_inputs(verified: VerifiedInputs) -> VerifiedInputs:
         ref for ref in verified.input_inventory if "/steps/load/tasks/verify_inputs/schemas/" not in ref.path))
 
 
+def _recorded_settings(reader: BoundedInputReader, accepted: Mapping[str, Any]) -> OpenVexExportSettings:
+    from appsec_review.runtime.configuration import (
+        base_configuration_sha256, configuration_directory, configuration_snapshot,
+    )
+    identity = accepted["resolved_config_sha256"]
+    directory = configuration_directory(reader.root, identity)
+    config = reader.json(ArtifactRef((directory / "resolved.json").relative_to(reader.root).as_posix(), identity))
+    if identity != base_configuration_sha256(reader.root):
+        configuration_snapshot(reader.root, identity)
+    recorded = OpenVexExportSettings.from_mapping(config["jobs"][JOB_ID]["settings"])
+    _require(compatible_settings(recorded, reader.settings), "accepted export uses different settings",
+             Reason.IDENTITY_CONFLICT, phase=ExportPhase.ACCEPT)
+    return recorded
+
+
 def read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVexExportSettings,
                          repository_root: Path) -> ExportBundle:
     """Verify an immutable historical acceptance, without requiring its pointer to be latest."""
@@ -109,6 +124,7 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
     except ValueError as exc:
         raise ExportError("accepted OpenVEX common envelope is invalid", reason=Reason.SCHEMA_INVALID,
                           phase=ExportPhase.ACCEPT) from exc
+    settings = _recorded_settings(reader, accepted)
     if (len(accepted["artifacts"]) > settings.max_bindings
             or sum(item["size_bytes"] for item in accepted["artifacts"]) > settings.max_total_input_bytes):
         raise ExportError("accepted runtime artifact inventory exceeds its bounds", reason=Reason.BOUND_EXCEEDED,
@@ -140,8 +156,10 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
     )
     validate_export(bundle, verified, settings)
     implementation_identity = accepted["implementation_identity"]
+    from appsec_review.runtime.configuration import configurations_compatible
     if (published.get("item_count") != result["statement_count"]
-            or accepted.get("resolved_config_sha256") != verified.provenance.resolved_config_sha256
+            or not configurations_compatible(
+                run_root, accepted["resolved_config_sha256"], verified.provenance.resolved_config_sha256)
             or accepted.get("upstream_handoff_sha256", {}).get("job_final_publication_gate")
             != verified.provenance.gate_handoff.sha256
             or accepted.get("upstream_handoff_sha256", {}).get("job_inference_security_review")
@@ -219,6 +237,7 @@ def _read_accepted_dependency_export(
 ) -> dict[str, Any] | None:
     reader = BoundedInputReader(run_root, settings, phase=ExportPhase.ACCEPT)
     accepted = reader.json(handoff)
+    settings = _recorded_settings(reader, accepted)
     outputs = accepted["outputs"]
     companion = outputs["acceptance.publish_handoff"].get("dependencies")
     if companion is None:
@@ -320,6 +339,7 @@ def load_export(run_root: Path, settings: OpenVexExportSettings, repository_root
         raise ExportError("existing OpenVEX pointer is unsafe", reason=Reason.INPUT_TAMPERED,
                           phase=ExportPhase.ACCEPT)
     reference = ArtifactRef(accepted.path, accepted.sha256)
+    settings = _recorded_settings(reader, accepted.handoff)
     bundle = read_accepted_export(run_root, reference, settings, repository_root)
     provenance = bundle.manifest["provenance"]
     _, configuration_ref = frozen_configuration(run_root)

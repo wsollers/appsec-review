@@ -1,6 +1,7 @@
 """Publish structurally complete synthetic handoffs without weakening production admission."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -46,8 +47,36 @@ def _freeze_configuration(run_root: Path, job_id: str) -> tuple[str, str]:
     return file_sha256(resolved_path), frozen_job_config_sha256(document, job_id)
 
 
+def write_fixture_configuration_revision(run_root: Path, document: Mapping[str, Any]) -> str:
+    """Complete the synthetic baseline before constructing a hash-bound revision."""
+    from appsec_review.config.operational import operational_changes
+    from appsec_review.runtime.configuration import CONFIGURATION_SCHEMA, REVISION_SCHEMA
+
+    base = run_root / "data/configuration"
+    source = base / "appsec-review.toml"
+    if not source.exists():
+        atomic_bytes(source, b"# Synthetic unit configuration\n")
+    manifest_path = base / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes()) if manifest_path.exists() else {}
+    manifest.update(schema=CONFIGURATION_SCHEMA, source_sha256=file_sha256(source),
+                    resolved_sha256=file_sha256(base / "resolved.json"))
+    atomic_json(manifest_path, manifest)
+    payload = canonical_json(document)
+    identity = hashlib.sha256(payload).hexdigest()
+    directory = base / "revisions" / identity
+    atomic_bytes(directory / "resolved.json", payload)
+    atomic_bytes(directory / "appsec-review.toml", source.read_bytes())
+    atomic_json(directory / "manifest.json", {
+        "schema": REVISION_SCHEMA, "resolved_sha256": identity,
+        "source_sha256": file_sha256(source), "base_resolved_sha256": manifest["resolved_sha256"],
+        "operational_changes": operational_changes(json.loads((base / "resolved.json").read_bytes()), document),
+    })
+    return identity
+
+
 def write_fixture_handoff(run_root: Path, path: Path, value: Mapping[str, Any], *,
-                          target_snapshot: str | None = None) -> Path:
+                          target_snapshot: str | None = None,
+                          configuration_sha256: str | None = None) -> Path:
     """Create real, hash-bound accounting bytes for a deliberately synthetic test producer."""
     relative = path.relative_to(run_root).parts
     job_id = value.get("job_id")
@@ -114,7 +143,13 @@ def write_fixture_handoff(run_root: Path, path: Path, value: Mapping[str, Any], 
     prior_claim = json.loads(claim_path.read_text(encoding="utf-8")) if claim_path.is_file() else {}
     contract = prior_claim.get("dataset_contract", dataset_contract(
         job_id, sorted({unit_id.split(".")[0] for unit_id in unit_ids}), ()))
-    resolved_config_sha256, job_config_sha256 = _freeze_configuration(run_root, job_id)
+    if configuration_sha256 is None:
+        resolved_config_sha256, job_config_sha256 = _freeze_configuration(run_root, job_id)
+    else:
+        from appsec_review.runtime.configuration import configuration_snapshot
+        snapshot_config = configuration_snapshot(run_root, configuration_sha256)
+        resolved_config_sha256 = snapshot_config.sha256
+        job_config_sha256 = frozen_job_config_sha256(snapshot_config.document, job_id)
     atomic_json(claim_path, {
         **prior_claim, "run_id": run_root.name, "job_id": job_id, "attempt_id": attempt_id,
         "attempt_path": attempt.relative_to(run_root).as_posix(),

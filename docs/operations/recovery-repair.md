@@ -73,6 +73,8 @@ Original `data/configuration/` files, accepted attempts, limits and coverage gap
 unchanged. New claims record the actual effective configuration hash and manifest reference;
 their publications include both revision and original-base configuration artifacts.
 Managed claim authentication and publication checks resolve each attempt's own snapshot.
+Public-feed use receipts likewise bind the consuming claim's snapshot, while preserving
+the original feed publisher's configuration and immutable publication record.
 
 Jobs needing full resolved settings use `runtime.configuration.context_configuration(context)`,
 not a mutable latest pointer. Admitted changes affect fresh attempts, never an active

@@ -16,12 +16,14 @@ from appsec_review.storage import feed_provenance as feeds, shared
 from tests.test_shared_layout_provenance import context, provenance_scope, receipts
 
 
-def owner(repository, run, number=1, job="job_third_party_data_sync", configured=None):
+def owner(repository, run, number=1, job="job_third_party_data_sync", configured=None, operational_timeout=None):
     root = repository / "runs" / run
     attempt = root / "data/jobs" / job / "attempts" / f"attempt_{number:04d}"
     resolved = {"jobs": {"job_third_party_data_sync": {"steps": {
         step: {"settings": {"feed_root": (configured or {}).get(feed, f"data/feeds/{feed}")}}
         for feed, step in feeds.STEPS.items()}}}}
+    if operational_timeout is not None:
+        resolved["jobs"]["job_openvex_export"] = {"settings": {"timeout_seconds": operational_timeout}}
     config = root / "data/configuration/resolved.json"
     atomic_json(config, resolved)
     claim = {"run_id": run, "job_id": job, "attempt_id": attempt.name,
@@ -46,6 +48,37 @@ def snapshot(repository, feed="mitre", payload=b'{"public":true}\n'):
 def proof(actor, ref):
     receipt = shared.verify_receipt(actor.run_root, ref)
     return json.loads(shared.verify_reference(actor.run_root, receipt["object"]).read_bytes())
+
+
+def test_revised_consumer_keeps_original_feed_provenance_and_uses_its_own_configuration(tmp_path):
+    from copy import deepcopy
+    from tests.handoff_fixture import write_fixture_configuration_revision
+
+    producer = owner(tmp_path, "same-run", operational_timeout=120)
+    with provenance_scope(producer):
+        pointer = snapshot(tmp_path)
+    before = (producer.run_root / "data/configuration/resolved.json").read_bytes()
+    revised = json.loads(before)
+    revised["jobs"]["job_openvex_export"]["settings"]["timeout_seconds"] = 1800
+    identity = write_fixture_configuration_revision(producer.run_root, revised)
+    original_claim = json.loads(shared.verify_reference(producer.run_root, producer.actor["claim"]).read_bytes())
+    original_receipt = receipts(producer, "feed-snapshot")[0]
+    attempt = producer.run_root / "data/jobs/job_final_report_publication/attempts/attempt_0002"
+    claim = {**deepcopy(original_claim), "job_id": "job_final_report_publication", "attempt_id": attempt.name,
+             "attempt_path": attempt.relative_to(producer.run_root).as_posix(), "resolved_config_sha256": identity,
+             "dataset_contract": dataset_contract("job_final_report_publication", ("work",), ())}
+    atomic_json(attempt / "claim.json", claim)
+    consumer = shared.SharedArtifacts.for_job(SimpleNamespace(
+        run_root=producer.run_root, attempt_root=attempt, run_id="same-run", attempt_id=attempt.name,
+        orchestration=claim["orchestration"], config=SimpleNamespace(job_id=claim["job_id"])))
+    with provenance_scope(consumer):
+        verified = verify_current(tmp_path / "data/feeds/mitre", "mitre")
+    selected = proof(consumer, verified["provenance"])
+    assert selected["configuration"]["sha256"] == identity
+    publication = json.loads(shared.verify_reference(tmp_path / "data/feeds/mitre", selected["producer"]).read_bytes())
+    assert publication["configuration_sha256"] == original_claim["resolved_config_sha256"]
+    feeds.verify_feed_receipt(producer.run_root, original_receipt, original_claim)
+    assert (producer.run_root / "data/configuration/resolved.json").read_bytes() == before
 
 
 @pytest.mark.parametrize("feed", sorted(feeds.STEPS.keys() - {"nvd"}))

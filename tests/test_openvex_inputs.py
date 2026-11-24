@@ -647,7 +647,7 @@ def test_deadline_is_checked_at_start_and_after_upstream_verifier(tmp_path, monk
         original = getattr(inputs, name)
 
         def expire(*args, **kwargs):
-            now[0] = 121.0
+            now[0] = disk.settings.timeout_seconds + 1.0
             return original(*args, **kwargs)
 
         monkeypatch.setattr(inputs, name, expire)

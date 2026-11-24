@@ -311,6 +311,14 @@ def _accepted(reader: BoundedInputReader, job: str, *, optional: bool = False) -
     return accepted
 
 
+def compatible_settings(original: OpenVexExportSettings, requested: OpenVexExportSettings) -> bool:
+    from appsec_review.config.operational import configuration_compatible
+    return configuration_compatible(
+        {"jobs": {"job_openvex_export": {"settings": original.to_mapping()}}},
+        {"jobs": {"job_openvex_export": {"settings": requested.to_mapping()}}},
+    )
+
+
 def _configuration(reader: BoundedInputReader, settings: OpenVexExportSettings
                    ) -> tuple[ArtifactRef, ArtifactRef, dict[str, Any], str, str]:
     manifest_ref = reader.pin("data/configuration/manifest.json").reference
@@ -327,7 +335,7 @@ def _configuration(reader: BoundedInputReader, settings: OpenVexExportSettings
         frozen.require_enabled()
         frozen.validate_prerequisites(gate_enabled=jobs[GATE_JOB]["settings"]["enabled"],
                                       review_enabled=REVIEW_JOB in jobs)
-    _require(frozen == settings, "export settings differ from immutable run configuration",
+    _require(compatible_settings(frozen, settings), "export settings differ from immutable run configuration",
              Reason.CONFIGURATION_INVALID)
     with _errors(reader.phase, Reason.CONFIGURATION_INVALID):
         review_settings = parse_inference_review_settings(jobs[REVIEW_JOB]["settings"])

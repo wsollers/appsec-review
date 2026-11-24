@@ -207,6 +207,11 @@ An admitted operational configuration revision can change it for a fresh attempt
 same application run, without changing earlier claims or invalidating accepted upstream
 results. See [recovery admission](recovery-repair.md#operational-configuration-revisions).
 
+The certified review and gate retain their original configuration identity. The export's
+claim and full settings hash instead bind its own effective configuration. Historical
+export readers resolve that accepted attempt's settings, allowing only declared operational
+differences from the caller's settings; an allowance change never relabels the reviewed inputs.
+
 | Input | Default and optional override |
 | --- | --- |
 | `author_kind`, `author` | Default `tool` / `AppSec Review` identifies automation. Explicit `individual`/`organization` values assert that author, but tool names are forbidden when falsely declared as either kind. Naming alone proves neither authority nor supplier endorsement. |

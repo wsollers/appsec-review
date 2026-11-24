@@ -65,6 +65,8 @@ def configuration_directory(run_root: Path, expected_sha256: str | None = None) 
         raise ValueError("invalid requested configuration identity")
     relative = ("data/configuration" if expected == base_sha
                 else f"data/configuration/revisions/{expected}")
+    if expected != base_sha and not safe_path(run_root, relative + "/manifest.json").is_file():
+        raise ValueError("requested configuration revision is unavailable")
     return safe_path(run_root, relative)
 
 

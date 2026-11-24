@@ -32,6 +32,10 @@ def _configured_root(run_root: Path, claim: Mapping[str, Any], feed: str) -> tup
     if feed not in STEPS:
         raise ValueError("unregistered public feed")
     config = reference(run_root, run_root / "data/configuration/resolved.json")
+    if isinstance(claim.get("resolved_config_sha256"), str) and config["sha256"] != claim["resolved_config_sha256"]:
+        from appsec_review.runtime.configuration import configuration_snapshot
+        snapshot = configuration_snapshot(run_root, claim["resolved_config_sha256"])
+        config = reference(run_root, snapshot.directory / "resolved.json")
     if config["sha256"] != claim.get("resolved_config_sha256"):
         raise ValueError("feed provenance configuration differs from the attempt claim")
     document = json.loads(verify_reference(run_root, config).read_bytes())
