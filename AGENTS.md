@@ -29,12 +29,17 @@ agents that inspect or change the repository. It is not a prompt for review work
   add a quick focused regression test, run the affected unit tests, integrate the fix, and repeat
   the requested review cycle until the run completes. Minimize the fix-test-restart interval;
   a long review does not justify a long repair loop.
+- **Job is the atomic recovery boundary.** Keep successful jobs' accepted outputs. Rerun failed
+  jobs as a whole and invalidate affected downstream outputs. Do not salvage individual cells
+  or pools or use heuristic partial recovery.
+- If a job is too coarse, split it into explicit jobs with defined inputs, outputs, and
+  success/failure boundaries. Guarded cell revalidation is not a recovery mechanism.
 - Before planning a retry, resume, or replacement run, read
   [`docs/operations/recovery-repair.md`](docs/operations/recovery-repair.md), especially
   "Minimal rerun workflow". Prefer the smallest admitted same-run recovery: preserve compatible
-  accepted jobs and successful checkpoints, and revalidate unchanged descendants by evidence
-  content. Inspect and report the actual job/unit decisions; an admissible plan that reruns
-  everything is not proof that everything needed rerunning. Do not substitute a fresh run or
+  accepted jobs and apply the job-level recovery boundary above. Inspect and report the actual
+  job decisions; an admissible plan that reruns everything is not proof that everything needed
+  rerunning. Do not substitute a fresh run or
   bypass provenance, input, artifact, signing, or stopped-worker checks to hide a reuse defect.
   A code repair alone does not authorize a live restart.
 - A request to restart at a failed job requires a verified execution boundary, not just the same
