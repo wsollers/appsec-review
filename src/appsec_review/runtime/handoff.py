@@ -439,12 +439,22 @@ def verify_handoff_integrity(root: Path, handoff: Mapping[str, Any], *,
     if ((manifest["path"] if manifest else None) != claim.get("input_manifest_path")
             or (manifest["sha256"] if manifest else None) != claim.get("input_manifest_sha256")):
         raise ValueError("handoff differs from claimed input manifest")
-    config_manifest = json.loads(safe_path(root, "data/configuration/manifest.json").read_bytes())
-    config_ref = reference(root, safe_path(root, "data/configuration/resolved.json"),
+    from appsec_review.runtime.configuration import (
+        base_configuration_sha256, configuration_directory, configuration_snapshot,
+    )
+    directory = configuration_directory(root, handoff["resolved_config_sha256"])
+    if handoff["resolved_config_sha256"] != base_configuration_sha256(root):
+        configuration_snapshot(root, handoff["resolved_config_sha256"])
+    config_manifest = json.loads(safe_path(root, (directory / "manifest.json").relative_to(root).as_posix()).read_bytes())
+    config_ref = reference(root, safe_path(root, (directory / "resolved.json").relative_to(root).as_posix()),
                            expected_sha256=handoff["resolved_config_sha256"])
     if config_manifest.get("resolved_sha256") != config_ref["sha256"]:
         raise ValueError("handoff differs from frozen configuration")
     frozen = _read(root, config_ref)
+    if claim.get("configuration") is not None:
+        expected_manifest = reference(root, directory / "manifest.json")
+        if claim["configuration"] != expected_manifest:
+            raise ValueError("claim configuration snapshot reference changed")
     if frozen_job_config_sha256(frozen, handoff["job_id"]) != handoff["job_config_sha256"]:
         raise ValueError("handoff job configuration differs from frozen configuration")
     if handoff["target_snapshot"] != claim.get("evidence_target_snapshot", handoff["source_fingerprint"]):

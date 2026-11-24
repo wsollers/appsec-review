@@ -13,13 +13,21 @@ import sys
 from appsec_review.runtime.inputs import PARENT_REEXECUTION_SCHEMA as SCHEMA
 
 
-def selected_steps(dependencies: dict[str, set[str]], job_id: str) -> list[str]:
-    if not re.fullmatch(r"job_[a-z][a-z0-9_]*", job_id):
-        raise ValueError("restart boundary must name a registered job")
-    prefix = job_id.removeprefix("job_") + "__"
-    selected = {key for key in dependencies if key.startswith(prefix)}
-    if prefix + "begin" not in selected or prefix + "finalize" not in selected:
-        raise ValueError("restart boundary is absent from the parent execution plan")
+def selected_steps(dependencies: dict[str, set[str]], job_id: str, *,
+                   additional_jobs: list[str] | tuple[str, ...] = ()) -> list[str]:
+    if not isinstance(additional_jobs, (list, tuple)):
+        raise ValueError("additional restart boundaries must be a list of jobs")
+    roots = [job_id, *additional_jobs]
+    if (any(not isinstance(root, str) or not re.fullmatch(r"job_[a-z][a-z0-9_]*", root)
+            for root in roots) or len(set(roots)) != len(roots)):
+        raise ValueError("restart boundary must name a distinct registered job")
+    selected = set()
+    for root in roots:
+        prefix = root.removeprefix("job_") + "__"
+        steps = {key for key in dependencies if key.startswith(prefix)}
+        if prefix + "begin" not in steps or prefix + "finalize" not in steps:
+            raise ValueError("restart boundary is absent from the parent execution plan")
+        selected.update(steps)
     if any(not parents <= dependencies.keys() for parents in dependencies.values()):
         raise ValueError("execution plan contains unknown dependencies")
     while True:
@@ -120,8 +128,11 @@ def scoped_source_repair(config, root, selected, release, binding):
     from appsec_review.runtime.launch import configured_target
     from appsec_review.runtime.registry import builtin_registry
     from appsec_review.runtime.repair import deployment_identity, plan_repair
+    from appsec_review.runtime.configuration import admitted_configuration_sha256
 
-    if binding["release_sha256"] == release["sha256"] and binding["deployment"] == deployment_identity(config.runtime.repository_root):
+    if (binding["release_sha256"] == release["sha256"]
+            and binding["deployment"] == deployment_identity(config.runtime.repository_root)
+            and admitted_configuration_sha256(root, binding) == config.resolved_sha256):
         return None, (), None, None
     registry = builtin_registry()
     order = wave1_dependencies(set(registry.job_ids()))
@@ -165,9 +176,8 @@ def execute_request(request: dict) -> dict:
     root = RunStore(config.runtime.runs_dir).resolve(request["application_run_id"])
     if (root / "data/configuration/execution-safety.json").exists():
         raise ValueError("first-error recovery requires the existing successor-run procedure")
-    frozen = read_document(root / "data/configuration/manifest.json")
-    if config.resolved_sha256 != frozen["resolved_sha256"]:
-        raise ValueError("re-execution must retain the frozen configuration")
+    from appsec_review.runtime.configuration import candidate_configuration_changes
+    candidate_configuration_changes(config, root)
     release = load_release(config.runtime.repository_root)
     binding = current_binding(root)
     if release is None or binding is None:
@@ -215,7 +225,8 @@ def execute_request(request: dict) -> dict:
             step.key: {handle.step_key for item in step.inputs for handle in item.upstream_output_handles}
             for step in old.steps
         }
-        selected = selected_steps(dependencies, request["from_job"])
+        selected = selected_steps(dependencies, request["from_job"],
+                                  additional_jobs=request.get("additional_jobs", ()))
         stats = instance.get_run_step_stats(parent.run_id)
         outside_failures = [step.step_key for step in stats
                             if step.status.value == "FAILURE" and step.step_key not in selected]
@@ -241,6 +252,8 @@ def execute_request(request: dict) -> dict:
             "retained_step_count": len(dependencies) - len(selected),
             "verified_dispatches": sorted(verified_dispatches),
         }
+        if request.get("additional_jobs"):
+            plan["additional_jobs"] = request["additional_jobs"]
         plan["sha256"] = hashlib.sha256(canonical(plan)).hexdigest()
         if request["action"] == "preview":
             return plan

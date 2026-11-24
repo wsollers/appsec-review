@@ -117,16 +117,20 @@ def read_projection(root: Path, relative: str) -> Mapping[str, Any]:
     return body
 
 
-def _frozen(root: Path) -> tuple[dict[str, Any], str]:
+def _frozen(root: Path, configuration_sha256: str | None = None) -> tuple[dict[str, Any], str]:
     from .shared import safe_path
+    from appsec_review.runtime.configuration import (
+        base_configuration_sha256, configuration_directory, configuration_snapshot,
+    )
     from appsec_review.runtime.scope import require_hashable_evidence
     from appsec_review.observability.spans import count_work
-    manifest = json.loads(safe_path(root, "data/configuration/manifest.json").read_bytes())
-    path = safe_path(root, "data/configuration/resolved.json")
+    directory = configuration_directory(root, configuration_sha256)
+    manifest = json.loads(safe_path(root, (directory / "manifest.json").relative_to(root).as_posix()).read_bytes())
+    path = safe_path(root, (directory / "resolved.json").relative_to(root).as_posix())
     require_hashable_evidence(path)
     payload = path.read_bytes()
     validation = current_validation(root)
-    cache_key = ("admission-configuration", "data/configuration/resolved.json", "")
+    cache_key = ("admission-configuration", path.relative_to(root).as_posix(), "")
     cached = None
     if validation is not None:
         with validation.lock:
@@ -134,6 +138,8 @@ def _frozen(root: Path) -> tuple[dict[str, Any], str]:
     if cached is not None and cached[0] == payload:
         _, policy, digest = cached
     else:
+        if configuration_sha256 is not None and configuration_sha256 != base_configuration_sha256(root):
+            configuration_snapshot(root, configuration_sha256)
         digest = hashlib.sha256(payload).hexdigest()
         count_work("target_hash_bytes", len(payload))
         count_work("target_hash_objects")
@@ -163,7 +169,7 @@ def sign_claim(root: Path, claim: Mapping[str, Any]) -> str:
 
 
 def verify_claim(root: Path, claim: Mapping[str, Any]) -> None:
-    policy, digest = _frozen(root)
+    policy, digest = _frozen(root, claim.get("resolved_config_sha256"))
     if (claim.get("run_id") != root.name or claim.get("review_policy") != policy
             or claim.get("resolved_config_sha256") != digest):
         raise ValueError("managed attempt claim run or frozen policy mismatch")
@@ -176,7 +182,7 @@ def _upstream_records(context: Any, handoffs: Mapping[str, str]) -> list[tuple[s
     from appsec_review.retrieval.core import _accepted_handoff
     if not isinstance(handoffs, Mapping):
         raise ValueError("claimed upstream handoffs must be a mapping")
-    policy, _ = _frozen(context.run_root)
+    policy, _ = _frozen(context.run_root, getattr(context, "resolved_config_sha256", None))
     if policy != context.review_policy.view():
         raise ValueError("managed consumer differs from frozen policy")
     records = []
@@ -291,7 +297,7 @@ def verify_optional_prior_admission(context: Any, handoff: Mapping[str, Any]) ->
     """Authenticate an optional-prior publication in managed custody without adopting its target snapshot."""
     if context.review_policy.mode is not AssuranceMode.FIRST_PARTY_MANAGED:
         return
-    policy, _ = _frozen(context.run_root)
+    policy, _ = _frozen(context.run_root, getattr(context, "resolved_config_sha256", None))
     if policy != context.review_policy.view():
         raise ValueError("managed consumer differs from frozen policy")
     record = _read_admission(context.run_root, handoff)
@@ -307,7 +313,7 @@ def create_admission(context: Any, handoff: Mapping[str, Any]) -> dict[str, Any]
     from .shared import immutable_bytes, safe_path, verify_handoff
     from appsec_review.retrieval.index import MANIFEST_SCHEMA, load_verified_manifest
     root = context.run_root
-    policy, config_digest = _frozen(root)
+    policy, config_digest = _frozen(root, handoff.get("resolved_config_sha256"))
     if policy != context.review_policy.view():
         raise ValueError("managed publication differs from frozen policy")
     if context.source_fingerprint == "none":
@@ -441,7 +447,7 @@ def _read_admission(root: Path, handoff: Mapping[str, Any]) -> Mapping[str, Any]
     ref = handoff.get("validation_record")
     if ref is None:
         return None
-    policy, config_digest = _frozen(root)
+    policy, config_digest = _frozen(root, handoff.get("resolved_config_sha256"))
     if policy.get("mode") != AssuranceMode.FIRST_PARTY_MANAGED.value:
         return None
     from .shared import safe_path

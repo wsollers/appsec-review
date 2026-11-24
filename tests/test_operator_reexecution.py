@@ -44,6 +44,23 @@ def test_unknown_parent_dependency_is_refused():
         selected_steps(dependencies, "job_security_tagging")
 
 
+def test_multiple_failed_siblings_do_not_reexecute_their_successful_common_parent():
+    dependencies = {
+        "gate__begin": set(), "gate__finalize": {"gate__begin"},
+        "report__begin": {"gate__finalize"}, "report__assemble": {"report__begin"},
+        "report__finalize": {"report__assemble"},
+        "openvex__begin": {"gate__finalize"}, "openvex__load": {"openvex__begin"},
+        "openvex__finalize": {"openvex__load"},
+    }
+    assert selected_steps(dependencies, "job_report", additional_jobs=["job_openvex"]) == [
+        "openvex__begin", "openvex__finalize", "openvex__load",
+        "report__assemble", "report__begin", "report__finalize",
+    ]
+    for extra in (["job_missing"], ["job_report"], "job_openvex"):
+        with pytest.raises(ValueError):
+            selected_steps(dependencies, "job_report", additional_jobs=extra)
+
+
 def retained_fixture(tmp_path):
     handle = StepOutputHandle("catalog__finalize", "result")
     snapshot = SimpleNamespace(steps=[

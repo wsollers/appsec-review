@@ -87,6 +87,9 @@ def retained_parent_inputs(job: Any, root: Path, orchestration: Mapping[str, Any
     binding = current_binding(root)
     if binding is None or binding["release_sha256"] != plan.get("release_sha256"):
         raise ValueError("parent re-execution source is not the admitted implementation")
+    from appsec_review.runtime.configuration import admitted_configuration_sha256
+    if admitted_configuration_sha256(root, binding) != plan.get("resolved_config_sha256"):
+        raise ValueError("parent re-execution configuration is not admitted")
     repair = plan.get("source_repair")
     if repair is not None:
         if (not isinstance(repair, dict) or not binding.get("repair")

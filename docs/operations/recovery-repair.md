@@ -34,7 +34,7 @@ already excludes provenance from evidence equivalence. It does not waive computa
 Dagster graph assembly and deployment-only asset verification are kept out of the shared
 computation import closure, so an adapter-only metadata edit changes the signed deployment release
 without changing unrelated job identities. Actual imported computation code, validators,
-configuration, target or evidence changes still invalidate the affected work. Handlers and
+material configuration, target or evidence changes still invalidate the affected work. Handlers and
 validators that share a module remain conservatively coupled; this is not function-level reuse.
 
 Unit checkpoints accept structured `{path, sha256, size_bytes}` artifact references and verify
@@ -57,6 +57,29 @@ manifests remain immutable: installing a change to the identity/checkpoint machi
 require a conservative baseline rerun; it does not retroactively certify old computations under
 new rules.
 
+## Operational configuration revisions
+
+`config.operational.OPERATIONAL_SETTINGS` explicitly declares execution-only fields.
+Initially this is only `jobs.job_openvex_export.settings.timeout_seconds` (default and
+maximum 1800 seconds). Names or suffixes such as `timeout`, `workers` or `limit` do not
+grant compatibility: undeclared changes, authority, models, scope and output semantics
+remain material.
+
+Preview compares the full resolved documents without writing configuration state. Admission
+writes a full immutable snapshot under `data/configuration/revisions/<resolved-sha256>/`
+and records its exact deltas and original base identity. The existing atomic repair binding
+is the admission commit point; an orphan revision grants no permission to execute.
+Original `data/configuration/` files, accepted attempts, limits and coverage gaps remain
+unchanged. New claims record the actual effective configuration hash and manifest reference;
+their publications include both revision and original-base configuration artifacts.
+Managed claim authentication and publication checks resolve each attempt's own snapshot.
+
+Jobs needing full resolved settings use `runtime.configuration.context_configuration(context)`,
+not a mutable latest pointer. Admitted changes affect fresh attempts, never an active
+attempt's deadline. Retaining an accepted output does not claim expanded coverage or erase
+its original limitations. Configuration compatibility does not waive source, target,
+contract, custody, stopped-worker or publication-integrity checks.
+
 ## Targeted parent re-execution
 
 Resuming an application run ID and resuming at a failed job are different operations.
@@ -70,6 +93,9 @@ scripts/review-start.sh --run-id RUN --parent-run-id FAILED_DAGSTER_UUID \
 scripts/review-start.sh --run-id RUN --parent-run-id FAILED_DAGSTER_UUID \
   --restart-from-job job_security_tagging
 ```
+
+Repeat `--restart-from-job` for independent failed jobs. The plan selects the union of
+their whole-job descendant closures, not their successful common ancestor.
 
 Run these Linux commands over the configured WSL SSH connection from Windows; the native
 PowerShell wrapper does not expose the parent-selection flags.
@@ -97,14 +123,14 @@ ordinary standalone input selection still rejects stale handoffs. Their original
 artifacts, input schemas and authority are verified, and current `latest.json` pointers are
 never changed to make the old snapshot look current.
 
-Before submission the operator verifies the same application run, frozen configuration and
+Before submission the operator verifies the same application run, compatible frozen configuration and
 profile/compiler selection, admitted deployed release, stopped workers, unchanged execution
 graph/I/O types, and hash-bound retained parent outputs. It refuses missing outputs, failed
 steps outside the selected boundary, unsupported mapped/custom I/O, or any plan change; it never
 falls back to a whole-graph launch. First-error envelopes still require their existing successor
 procedure. Image, resource-budget and model-login launch guards continue to run.
 
-If the deployed source changed, the parent preview prepares source-repair admission for the
+If the deployed source or effective operational configuration changed, the parent preview prepares repair admission for the
 **selected application jobs only**, not all retained upstream producers. The exact scoped plan
 is included in the preview and rederived under the existing admission locks before submission.
 This retains source verification without repeating whole-run producer validation on the restart
@@ -458,7 +484,9 @@ dependencies. Unit regressions for the rewind are in `tests/test_stepwise_rewind
 `tests/test_stepwise_mount_paths.py`; the closed CI extension is in `tests/test_stepwise_ci_mount_paths.py`.
 
 The original configuration, target fingerprint, review policy and evidence are retained.
-Configuration changes, schema changes and incompatible dataset-contract changes are not compatible source repairs.
+Material configuration changes, schema changes and incompatible dataset-contract changes are
+not compatible source repairs. The explicitly declared operational revision above is separate
+from, and does not relax, those material boundaries.
 Host image bindings are a hashed configuration layer, not a source repair: changing
 `deploy/dagster/host-pins.toml` requires a fresh authorized run. Its old run-owned copy remains
 immutable. The T-051 cutover preserves `2026-11-10-0002` and starts a fresh c094 run by explicit

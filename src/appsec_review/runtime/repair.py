@@ -35,6 +35,7 @@ class ComputationAdmission:
     deployment: Mapping[str, Any]
     job_id: str
     schema_identity: str
+    candidate_configuration: AppConfig | None = field(default=None, repr=False, compare=False)
     _importers: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
     _input_handoffs: dict[tuple[str, str], tuple[Mapping[str, Any], Path]] = field(
         default_factory=dict, repr=False, compare=False)
@@ -49,6 +50,14 @@ class ComputationAdmission:
             raise ValueError("repair computation admission requires measured implementation evidence")
         return cls(release, claim["review_policy"]["releases"], claim["resolved_config_sha256"],
                    claim["deployment_identity"], claim["job_id"], claim["component_identities"]["schema"])
+
+    def _configuration_matches(self, root: Path, producer_sha256: str) -> bool:
+        from appsec_review.runtime.configuration import configuration_matches, configurations_compatible
+        if self.candidate_configuration is not None:
+            if self.candidate_configuration.resolved_sha256 != self.configuration_sha256:
+                raise ValueError("computation admission candidate identity changed")
+            return configuration_matches(self.candidate_configuration, root, producer_sha256)
+        return configurations_compatible(root, producer_sha256, self.configuration_sha256)
 
     def verify(self, root: Path, receipt: Mapping[str, Any]) -> None:
         from appsec_review.runtime.release import identities_from_release, validate_claim_release
@@ -71,7 +80,7 @@ class ComputationAdmission:
                   else producer["component_identities"]["schema"])
         expected = identities_from_release(self.release, producer_id, schema, self.declarations)
         if ("undeclared" in expected.values() or producer["component_identities"] != expected
-                or producer["resolved_config_sha256"] != self.configuration_sha256
+                or not self._configuration_matches(root, producer["resolved_config_sha256"])
                 or producer.get("deployment_identity") != self.deployment):
             raise IncompatibleComputation(
                 f"cached computation from {producer_id}/{producer['attempt_id']} has incompatible "
@@ -94,7 +103,7 @@ class ComputationAdmission:
                 raise IncompatibleComputation("input import has no measured consumer implementation")
             expected = identities_from_release(self.release, self.job_id, self.schema_identity, self.declarations)
             if (consumer["component_identities"] != expected
-                    or consumer["resolved_config_sha256"] != self.configuration_sha256
+                    or not self._configuration_matches(root, consumer["resolved_config_sha256"])
                     or consumer["deployment_identity"] != self.deployment):
                 raise IncompatibleComputation("input import belongs to an incompatible consumer")
             self._importers[key] = consumer
@@ -109,7 +118,8 @@ class ComputationAdmission:
             if key not in self._input_handoffs:
                 self._input_handoffs[key] = _accepted_handoff(root, producer, digest)
             handoff, path = self._input_handoffs[key]
-            if file_sha256(path) != digest or handoff["resolved_config_sha256"] != self.configuration_sha256:
+            if file_sha256(path) != digest or not self._configuration_matches(
+                    root, handoff["resolved_config_sha256"]):
                 raise IncompatibleComputation("supplied input publication changed")
             verify_publication(root, handoff, digest)
             if any(all(item.get(name) == origin_ref.get(name) for name in ("path", "sha256", "size_bytes"))
@@ -164,6 +174,10 @@ def current_binding(run_root: Path) -> dict[str, Any] | None:
                 or document.get("release_sha256") != value["release_sha256"]
                 or document.get("deployment") != value["deployment"]):
             raise ValueError("repair publication does not match the implementation binding")
+        if document.get("configuration") is not None:
+            configuration = read_document(verify_reference(run_root, document["configuration"]))
+            if configuration.get("resolved_sha256") != document["resolved_config_sha256"]:
+                raise ValueError("repair configuration reference does not match its admitted identity")
     return value
 
 
@@ -180,6 +194,9 @@ def bind_release(config: AppConfig, run_root: Path) -> dict[str, Any]:
     if current is not None:
         if current["release_sha256"] != release_sha or current["deployment"] != deployment:
             raise ValueError("implementation changed: plan-repair and admit-repair are required before restart")
+        from appsec_review.runtime.configuration import admitted_configuration_sha256
+        if admitted_configuration_sha256(run_root, current) != config.resolved_sha256:
+            raise ValueError("operational configuration changed: plan-repair and admit-repair are required")
         return current
     if any((run_root / "data/jobs").glob("*/attempts/*/claim.json")):
         raise ValueError("historical run requires explicit repair admission before restart")
@@ -542,17 +559,24 @@ def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_f
     from appsec_review.runtime.dependencies import graph_dependencies
     release = load_release(config.runtime.repository_root)
     current = current_binding(run_root)
-    config_manifest = read_document(run_root / "data/configuration/manifest.json")
     reasons = list(stopped_reasons(config, run_root))
     if successor:
         reasons = [reason for reason in reasons if reason !=
                    "frozen first-error controller cannot restart in-place; submit a new run"]
     if release is None:
         reasons.append("repaired implementation has no build-time release manifest")
-    if (config_manifest.get("resolved_sha256") != config.resolved_sha256
-            or file_sha256(run_root / "data/configuration/resolved.json") != config.resolved_sha256
-            or file_sha256(run_root / "data/configuration/appsec-review.toml") != config_manifest["source_sha256"]):
-        reasons.append("repair must retain the original target policy and frozen configuration")
+    from appsec_review.config.operational import operational_changes
+    from appsec_review.runtime.configuration import (
+        admitted_configuration_sha256, candidate_configuration_changes, configuration_snapshot,
+    )
+    changes = []
+    try:
+        candidate_configuration_changes(config, run_root)
+        prior_configuration = configuration_snapshot(
+            run_root, admitted_configuration_sha256(run_root, current))
+        changes = operational_changes(prior_configuration.document, json.loads(config.resolved_json))
+    except ValueError as exc:
+        reasons.append("repair must retain material frozen configuration: " + str(exc))
     historical = current is None or current.get("release") is None
     if historical and not historical_rerun:
         reasons.append("historical implementation is unverified; explicit historical-rerun is required")
@@ -636,6 +660,8 @@ def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_f
         "decisions": [item.as_dict() for item in decisions], "refusals": sorted(set(reasons)),
         "admissible": not reasons,
     }
+    if changes:
+        value["operational_configuration_changes"] = changes
     return {**value, "plan_sha256": digest(value)}
 
 
@@ -675,8 +701,12 @@ def admit_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], plan: M
             return {"successor_run_id": successor_id, "source_run_id": run_root.name,
                     "imported_successes": [], "requires_execution_safety": required is not None,
                     "binding": current_binding(successor_root)}
+        from appsec_review.runtime.configuration import persist_configuration_revision
+        snapshot = persist_configuration_revision(config, run_root)
+        configuration = reference(run_root, snapshot.directory / "manifest.json")
         repair_ref = immutable_bytes(run_root, f"data/recovery/repairs/{fresh['plan_sha256']}.json",
-                                     canonical_json({**fresh, "schema": REPAIR_SCHEMA, "admitted": True}))
+                                     canonical_json({**fresh, "schema": REPAIR_SCHEMA, "admitted": True,
+                                                     "configuration": configuration}))
         binding = {"schema": "appsec-review/implementation-binding/1",
                    "release_sha256": release["sha256"], "release": _release_ref(run_root, release),
                    "deployment": fresh["deployment"], "repair": repair_ref}

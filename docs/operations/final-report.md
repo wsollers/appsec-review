@@ -216,6 +216,11 @@ fails the job. No optional producer's latest pointer is read during report assem
 - `limitations`, `gap_ids`, `status` (including `review_complete`, true only for a `COMPLETE`
   review that is not `review_incomplete` and has no `gap` limitation), `provenance` and `notices`.
 
+Report `/4` preserves the exact runtime-profile name and digest in
+`provenance.configuration_profile`, including the configured Copilot profiles. Its closed name
+set follows the configuration loader's supported profiles; unknown names and malformed digests
+are rejected. The historical report `/2` and `/3` schemas are not changed.
+
 ### Domain coverage and unknown measurements (T-5088)
 
 The report's `security-radar-tracker/2` keeps exposure, inspected scope, accepted claims,

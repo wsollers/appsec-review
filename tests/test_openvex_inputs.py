@@ -36,6 +36,37 @@ def repin_gate_handoff(disk, handoff):
              {"handoff_path": reference["path"], "handoff_sha256": reference["sha256"]})
 
 
+def test_dependency_sca_is_read_through_the_bound_domain_artifact(tmp_path, monkeypatch):
+    from appsec_review.jobs.job_openvex_export.dependencies import DEPENDENCY_JOB, read_dependency_inputs
+
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    document = {
+        "schema": "appsec-review/sca-reachability/1", "source_fingerprint": disk.snapshot,
+        "configured_osv_mode": "disabled", "osv_matching_mode": "disabled",
+        "advisories": [], "coverage": "partial", "gaps": ["no dependency analysis"],
+        "telemetry": {"advisories_matched": 0, "osv_matching_mode": "disabled",
+                      "symbol_reachable_count": 0, "ffi_boundary_matches": 0},
+    }
+    sca = disk.put("data/dependency/sca.json", document)
+    domain = disk.put("data/dependency/handoff.json", {
+        "schema": "appsec-review/dependency-intelligence-handoff/1",
+        "source_fingerprint": disk.snapshot, "sca_reachability": sca,
+    })
+    handoff = disk.handoff(DEPENDENCY_JOB, {"acceptance.publish_handoff": {"artifact": domain}})
+    handoff["artifacts"] = [sca]
+    disk.publish(DEPENDENCY_JOB, handoff)
+    reader = inputs.BoundedInputReader(disk.root, disk.settings)
+    _accepted, reference, loaded = read_dependency_inputs(
+        reader, ROOT, resolved_config_sha256=disk.config_ref["sha256"], target_snapshot=disk.snapshot)
+    assert reference == c.ArtifactRef.from_mapping(sca)
+    assert loaded == document
+    assert domain["path"] in {item.path for item in reader.inventory}
+    (disk.root / domain["path"]).write_bytes(b"{}")
+    with pytest.raises(c.ExportError):
+        read_dependency_inputs(inputs.BoundedInputReader(disk.root, disk.settings), ROOT,
+                               resolved_config_sha256=disk.config_ref["sha256"], target_snapshot=disk.snapshot)
+
+
 def test_common_envelopes_use_the_real_shared_reader_and_bind_accounting_before_authority(tmp_path, monkeypatch):
     disk = AcceptedInputDisk(tmp_path, monkeypatch)
     reader = inputs.BoundedInputReader(disk.root, disk.settings)

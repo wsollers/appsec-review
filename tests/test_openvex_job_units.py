@@ -391,12 +391,28 @@ def test_original_attempt_deadline_applies_across_units_and_never_emits_completi
     units.assemble()
     claim = units.context.attempt_root / "claim.json"
     claim.write_bytes(canonical_bytes({
-        "started_at": (datetime.now(timezone.utc) - timedelta(seconds=121)).isoformat(),
+        "started_at": (datetime.now(timezone.utc) - timedelta(seconds=disk.settings.timeout_seconds + 1)).isoformat(),
     }))
     with pytest.raises(ExportError, match="deadline"):
         units.execute("acceptance.publish_handoff")
     records, _ = PipelineLog(disk.root).read()
     assert not any(row["event_type"] == "OPENVEX_EXPORT_COMPLETED" for row in records)
+
+
+@pytest.mark.parametrize("timeout,permitted", [(120, False), (1800, True)])
+def test_startup_time_uses_the_effective_allowance_without_resetting_claim_time(
+        tmp_path, monkeypatch, timeout, permitted):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, settings=enabled_settings(timeout_seconds=timeout))
+    units = ExportUnits(disk)
+    claim = units.context.attempt_root / "claim.json"
+    original = canonical_bytes({"started_at": (datetime.now(timezone.utc) - timedelta(seconds=221)).isoformat()})
+    claim.write_bytes(original)
+    if permitted:
+        units.execute("load.verify_inputs")
+    else:
+        with pytest.raises(ExportError, match="deadline"):
+            units.execute("load.verify_inputs")
+    assert claim.read_bytes() == original
 
 
 @pytest.mark.parametrize("at_deadline", [False, True])

@@ -124,6 +124,16 @@ class ResumePlanner:
                                    | {unit.unit_id.split(".")[0] for unit in job.units}), job.datasets,
                 job_contract=job.contract.document() if job.contract is not None else None)["sha256"]),
         }
+        from appsec_review.runtime.configuration import configuration_matches
+        if (handoff["resolved_config_sha256"] != self.config.resolved_sha256
+                and configuration_matches(self.config, self.run_root, handoff["resolved_config_sha256"])):
+            del checks["resolved configuration"]
+            # Publication verification already bound the original job hash to its exact snapshot.
+            del checks["job configuration"]
+            from appsec_review.runtime.handoff import frozen_job_config_sha256
+            checks["effective job configuration"] = (
+                frozen_job_config_sha256(json.loads(self.config.resolved_json), job.job_id),
+                job_config_sha256(self.config, job.job_id))
         if ignore_upstream:
             # A descendant of a job that will run: its own identities are checked now, the pinned
             # upstream handoffs only at dispatch, when the upstream has actually published.
@@ -176,7 +186,8 @@ class ResumePlanner:
             if release is not None:
                 admission = ComputationAdmission(
                     release, self.config.review_policy.releases.view(), self.config.resolved_sha256,
-                    deployment_identity(self.config.runtime.repository_root), job.job_id, job.schema_identity)
+                    deployment_identity(self.config.runtime.repository_root), job.job_id, job.schema_identity,
+                    candidate_configuration=self.config)
                 for artifact in handoff["artifacts"]:
                     parts = PurePosixPath(artifact["path"]).parts
                     if (len(parts) == 8 and parts[:2] == ("data", "jobs")

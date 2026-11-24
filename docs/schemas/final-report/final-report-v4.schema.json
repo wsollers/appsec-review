@@ -13,7 +13,40 @@
   "properties": {
     "schema": {"const": "appsec-review/final-report/4"},
     "run_id": {"$ref": "final-report-v3.schema.json#/properties/run_id"},
-    "provenance": {"$ref": "final-report-v3.schema.json#/properties/provenance"},
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_handoff", "gate_document", "review_handoff", "accepted_manifest_sha256",
+        "configuration_sha256", "ledger_head_sha256", "ship_block_policy_sha256"
+      ],
+      "properties": {
+        "configuration_profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "sha256"],
+          "properties": {
+            "name": {
+              "enum": [
+                "dev", "prod", "copilot-dev", "copilot-prod", "copilot-carbon-prod",
+                "copilot-dev-astra-6.2", "copilot-dev-gemini"
+              ]
+            },
+            "sha256": {
+              "$ref": "final-report.schema.json#/properties/provenance/properties/configuration_profile/properties/sha256"
+            }
+          }
+        },
+        "gate_handoff": {"$ref": "common.schema.json#/$defs/artifact_ref"},
+        "gate_document": {"$ref": "common.schema.json#/$defs/artifact_ref"},
+        "review_handoff": {"$ref": "common.schema.json#/$defs/artifact_ref"},
+        "accepted_manifest_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+        "configuration_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+        "ledger_head_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+        "ship_block_policy_sha256": {"$ref": "common.schema.json#/$defs/sha256"},
+        "poc_handoff": {"$ref": "common.schema.json#/$defs/artifact_ref"}
+      }
+    },
     "status": {"$ref": "final-report-v3.schema.json#/properties/status"},
     "summary": {"$ref": "final-report-v3.schema.json#/properties/summary"},
     "findings": {"$ref": "final-report-v3.schema.json#/properties/findings"},

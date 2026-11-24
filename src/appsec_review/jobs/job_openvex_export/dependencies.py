@@ -34,7 +34,11 @@ def read_dependency_inputs(
     _require(accepted.handoff["resolved_config_sha256"] == resolved_config_sha256,
              "dependency export configuration differs from the certified gate", Reason.IDENTITY_CONFLICT)
     output = accepted.handoff["outputs"]["acceptance.publish_handoff"]
-    raw_ref = output.get("sca_reachability")
+    published_ref = output.get("artifact")
+    _require(published_ref is not None, "accepted dependency output omits its domain artifact",
+             Reason.INPUT_MISSING)
+    published = reader.json(_ref(published_ref))
+    raw_ref = published.get("sca_reachability")
     _require(raw_ref is not None, "accepted dependency output omits SCA reachability", Reason.INPUT_MISSING)
     reference = _ref(raw_ref)
     document = reader.json(reference)

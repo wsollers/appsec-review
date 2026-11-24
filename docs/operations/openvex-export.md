@@ -185,7 +185,7 @@ max_document_bytes = 33554432
 max_manifest_bytes = 134217728
 max_action_bytes = 8192
 max_identifier_bytes = 2048
-timeout_seconds = 120
+timeout_seconds = 1800
 ```
 
 Set `enabled = false` before run creation to opt out. Automatic dispatch omits explicitly disabled
@@ -200,6 +200,12 @@ input size. JSON depth is bounded to 32, and result JSON has a fixed 1 MiB limit
 Unique references/aggregate input bytes are measured rather than silently truncated.
 The job enforces its attempt deadline at unit boundaries, with monotonic checks during
 bounded reads and processing. Exceeding a bound or timeout fails the attempt.
+
+The allowance includes startup time from the immutable attempt claim; entering another
+task does not reset it. This timeout is an explicitly declared execution-only setting.
+An admitted operational configuration revision can change it for a fresh attempt in the
+same application run, without changing earlier claims or invalidating accepted upstream
+results. See [recovery admission](recovery-repair.md#operational-configuration-revisions).
 
 | Input | Default and optional override |
 | --- | --- |

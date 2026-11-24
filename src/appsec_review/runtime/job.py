@@ -39,6 +39,7 @@ class JobContext:
     optional_prior_handoffs: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     contract: JobContract | None = None
     external_input_selection: Mapping[str, Any] | None = None
+    resolved_config_sha256: str | None = None
 
 
 class JobHandler(Protocol):

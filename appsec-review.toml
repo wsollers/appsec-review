@@ -3572,7 +3572,7 @@ max_document_bytes = 33554432
 max_manifest_bytes = 134217728
 max_action_bytes = 8192
 max_identifier_bytes = 2048
-timeout_seconds = 120
+timeout_seconds = 1800
 
 [jobs.job_openvex_export.steps.load]
 workers = 1

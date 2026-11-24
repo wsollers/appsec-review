@@ -827,7 +827,10 @@ def cmd_review_start(args: argparse.Namespace) -> int:
 
 def _review_start(args: argparse.Namespace) -> int:
     parent_run_id = getattr(args, "parent_run_id", None)
-    restart_from_job = getattr(args, "restart_from_job", None)
+    restart_jobs = getattr(args, "restart_from_job", None) or []
+    if isinstance(restart_jobs, str):
+        restart_jobs = [restart_jobs]
+    restart_from_job = restart_jobs[0] if restart_jobs else None
     if bool(parent_run_id) != bool(restart_from_job) or (parent_run_id and not args.run_id):
         raise OpsError("--parent-run-id and --restart-from-job require each other and --run-id", USAGE)
     if parent_run_id and not DAGSTER_RUN_ID.fullmatch(parent_run_id):
@@ -887,6 +890,8 @@ def _review_start(args: argparse.Namespace) -> int:
             "tags": {PROFILE_TAG: profile, OVERLAY_TAG: overlay or NO_OVERLAY,
                      COMPILER_TARGET_TAG: compiler_target},
         }
+        if len(restart_jobs) > 1:
+            request["additional_jobs"] = restart_jobs[1:]
         preview = docker(*reexecute_run.container_command(code.id, request), timeout=180)
         if preview.returncode != 0:
             raise OpsError("parent re-execution refused: " + redact(preview.stderr or preview.stdout, 1400), REFUSED)
@@ -895,6 +900,7 @@ def _review_start(args: argparse.Namespace) -> int:
                 or reexecution.get("parent_run_id") != parent_run_id
                 or reexecution.get("application_run_id") != args.run_id
                 or reexecution.get("from_job") != restart_from_job
+                or reexecution.get("additional_jobs", []) != restart_jobs[1:]
                 or reexecution.get("sha256") != hashlib.sha256(reexecute_run.canonical(
                     {key: value for key, value in reexecution.items() if key != "sha256"})).hexdigest()
                 or not isinstance(reexecution.get("retained_handoffs"), dict)
@@ -907,6 +913,8 @@ def _review_start(args: argparse.Namespace) -> int:
             "plan_sha256": reexecution["sha256"],
             "executor_sha256": hashlib.sha256(Path(reexecute_run.__file__).read_bytes()).hexdigest(),
         }
+        if len(restart_jobs) > 1:
+            identity["parent_reexecution"]["additional_jobs"] = restart_jobs[1:]
     safety_policy = None
     if getattr(args, "stop_on_first_error", False):
         if args.run_id:
@@ -942,7 +950,7 @@ def _review_start(args: argparse.Namespace) -> int:
     say(f"compiler:  {compiler_target}")
     say(f"recording: {code.settings.get(RECORDING_VARIABLE) or 'off'}")
     if reexecution is not None:
-        say(f"parent:    {parent_run_id}; restart from {restart_from_job}")
+        say(f"parent:    {parent_run_id}; restart from {', '.join(restart_jobs)}")
         say(f"steps:     {len(reexecution['step_keys'])} selected; "
             f"{reexecution['retained_step_count']} retained from the parent")
         say(f"re-execution plan: {reexecution['sha256']}")
@@ -1477,7 +1485,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_review_options(review)
     review.add_argument("--run-id", help="resume this existing application run (adds the appsec/application_run_id tag)")
     review.add_argument("--parent-run-id", help="terminal Dagster parent whose successful outputs are retained")
-    review.add_argument("--restart-from-job", help="re-execute this entire job and its descendants, not the whole graph")
+    review.add_argument("--restart-from-job", action="append",
+                        help="re-execute this entire job and descendants; repeat for independent failed jobs")
     review.add_argument("--stop-on-first-error", action="store_true",
                         help="freeze the run-scoped no-retry safety policy; requires the matching deployed code")
     review.add_argument("--no-probe", action="store_true",

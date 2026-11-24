@@ -12,6 +12,7 @@ from jsonschema import Draft202012Validator
 import pytest
 from referencing import Registry, Resource
 
+from appsec_review.config.loader import PROFILES
 from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_SCHEMA, FINAL_REPORT_SCHEMA
 from appsec_review.jobs.accepted_review import project_finding
 from appsec_review.jobs.job_inference_security_review import stages
@@ -257,6 +258,28 @@ def test_clean_and_incomplete_reports_are_schema_valid_and_track_completeness() 
     assert "review presented as complete: **no**" in md2
     assert "> This review is not complete." in md2
     assert "- runtime profile `prod`" in md2
+
+
+@pytest.mark.parametrize("profile_name", sorted(PROFILES))
+def test_report_preserves_supported_runtime_profile(profile_name: str) -> None:
+    profile = {
+        "name": profile_name,
+        "sha256": None if profile_name == "dev" else sha256_hex(profile_name),
+    }
+    _gate, report = _gate_and_report(verified_document(), configuration_profile=profile)
+    assert report["provenance"]["configuration_profile"] == profile
+    assert f"- runtime profile `{profile_name}`" in render_markdown(report, evidence_ids=8, gap_ids=16)
+
+
+@pytest.mark.parametrize("profile", [
+    {"name": "unknown-profile", "sha256": HASH},
+    {"name": "copilot-dev-astra-6.2", "sha256": "not-a-digest"},
+], ids=["unknown-profile", "invalid-profile-digest"])
+def test_report_rejects_invalid_runtime_profile_identity(profile: dict[str, Any]) -> None:
+    _gate, report = _gate_and_report(verified_document())
+    report["provenance"]["configuration_profile"] = profile
+    assert list(_validator(report_schema_name(report)).iter_errors(report))
+    assert SchemaSet(SCHEMAS).errors(report_schema_name(report), report)
 
 
 def test_decision_pending_with_and_without_bounds_projected_verbatim_and_never_hidden() -> None:

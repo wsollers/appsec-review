@@ -77,15 +77,17 @@ class JobRunner:
         if manifest_path.exists():
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             if manifest.get("resolved_sha256") != self.config.resolved_sha256:
-                bound = manifest.get("selection") or {}
-                raise ValueError(
-                    "run is already bound to a different configuration"
-                    + (f" (profile {bound.get('profile')}, overlay {bound.get('overlay') or 'none'}; "
-                       f"this attempt resolved profile {self.config.profile}, overlay "
-                       f"{self.config.overlay_path or 'none'})" if bound else ""))
+                from appsec_review.runtime.configuration import (
+                    candidate_configuration_changes, configuration_snapshot,
+                )
+                candidate_configuration_changes(self.config, run_root)
+                from appsec_review.runtime.repair import bind_release
+                bind_release(self.config, run_root)
+                # Only admit_repair publishes an effective configuration revision.
+                configuration_snapshot(run_root, self.config.resolved_sha256)
             if file_sha256(destination / "appsec-review.toml") != manifest.get("source_sha256"):
                 raise ValueError("run-owned configuration hash mismatch")
-            if file_sha256(destination / "resolved.json") != self.config.resolved_sha256:
+            if file_sha256(destination / "resolved.json") != manifest["resolved_sha256"]:
                 raise ValueError("run-owned resolved configuration hash mismatch")
             if (self.config.host_pins is not None and
                     file_sha256(destination / "host-pins.toml") != self.config.host_pins.sha256):
@@ -113,7 +115,8 @@ class JobRunner:
         from appsec_review.runtime.repair import bind_release
         bind_release(self.config, run_root)
 
-    def _context_from_claim(self, job: Job, claim: Mapping[str, Any]) -> JobContext:
+    def _context_from_claim(self, job: Job, claim: Mapping[str, Any], *,
+                            allow_operational_changes: bool = False) -> JobContext:
         safety.check_running()
         safety_path = self.runs.resolve(str(claim["run_id"])) / "data/configuration/execution-safety.json"
         if safety_path.exists() and json.loads(safety_path.read_text()) != safety.current_policy():
@@ -131,10 +134,20 @@ class JobRunner:
             from appsec_review.runtime.repair import deployment_identity
             if claim["deployment_identity"] != deployment_identity(self.config.runtime.repository_root):
                 raise ValueError("attempt image/script identity differs from the deployed release")
+        configuration_matches_current = claim.get("resolved_config_sha256") == self.config.resolved_sha256
+        if not configuration_matches_current and (claim.get("reused") or allow_operational_changes):
+            from appsec_review.runtime.configuration import configuration_matches
+            configuration_matches_current = configuration_matches(
+                self.config, run_root, claim["resolved_config_sha256"])
         if (claim.get("job_id") != job.job_id
                 or claim.get("repository_root") != str(self.config.runtime.repository_root)
-                or claim.get("resolved_config_sha256") != self.config.resolved_sha256):
+                or not configuration_matches_current):
             raise ValueError("attempt claim job or configuration mismatch")
+        if claim.get("configuration") is not None:
+            from appsec_review.runtime.configuration import configuration_snapshot
+            snapshot = configuration_snapshot(run_root, claim["resolved_config_sha256"])
+            if claim["configuration"] != reference(run_root, snapshot.directory / "manifest.json"):
+                raise ValueError("attempt configuration reference changed after admission")
         if policy.mode is AssuranceMode.FIRST_PARTY_MANAGED:
             from appsec_review.storage.admission import verify_claim
             verify_claim(run_root, claim)
@@ -203,6 +216,7 @@ class JobRunner:
             optional_prior_handoffs=MappingProxyType(dict(claim.get("optional_prior_handoffs", {}))),
             contract=job.contract,
             external_input_selection=claim.get("external_input_selection"),
+            resolved_config_sha256=claim.get("resolved_config_sha256"),
             target_root=Path(str(target)).resolve() if target else None,
             source_fingerprint=str(claim.get("source_fingerprint", "none")),
             input_manifest_path=(run_root / str(claim["input_manifest_path"])).resolve()
@@ -314,6 +328,9 @@ class JobRunner:
                 job.datasets, job_contract=job.contract.document() if job.contract is not None else None),
             "started_at": instant.isoformat(),
         }
+        from appsec_review.runtime.configuration import configuration_snapshot
+        snapshot = configuration_snapshot(run_root, self.config.resolved_sha256)
+        claim["configuration"] = reference(run_root, snapshot.directory / "manifest.json")
         from appsec_review.runtime.repair import (
             PUBLICATION_PROTOCOL, WORKER_PROTOCOL, current_binding, deployment_identity,
         )
@@ -468,7 +485,7 @@ class JobRunner:
                     raise ValueError("accepted attempt claim binding differs from its handoff")
                 if dict(original_claim.get("optional_prior_handoffs", {})) != optional_prior:
                     raise ValueError("accepted attempt optional-prior binding differs from requested inputs")
-                self._context_from_claim(job, original_claim)
+                self._context_from_claim(job, original_claim, allow_operational_changes=True)
                 claim = {"schema": "appsec-review/attempt-claim/1", "run_id": str(run_id),
                          "job_id": job.job_id, "attempt_id": handoff["attempt_id"],
                          "attempt_path": str(handoff["resolving_paths"]["attempt"]),
@@ -480,10 +497,10 @@ class JobRunner:
                          "handoff_path": handoff_path.relative_to(run_root).as_posix(),
                          "handoff_sha256": handoff_hash,
                          "repository_root": str(self.config.runtime.repository_root),
-                         "resolved_config_sha256": self.config.resolved_sha256}
+                         "resolved_config_sha256": original_claim["resolved_config_sha256"]}
                 if contract is not None:
                     claim["orchestration"]["build_environment_contract"] = canonical_json(contract).decode()
-                for key in ("evidence_target_snapshot", "input_manifest_path", "input_manifest_sha256",
+                for key in ("configuration", "evidence_target_snapshot", "input_manifest_path", "input_manifest_sha256",
                             "external_input_selection", "optional_prior_handoffs"):
                     if key in original_claim:
                         claim[key] = original_claim[key]
@@ -810,9 +827,9 @@ class JobRunner:
                           outcomes: Mapping[str, Any], outcomes_ref: Mapping[str, Any], *,
                           accepted: bool, completed: str, artifacts: list[dict[str, Any]]) -> dict[str, Any]:
         identities = claim["component_identities"]
-        artifacts = collect_artifacts(context.run_root, artifacts, [
-            reference(context.run_root, context.run_root / "data/configuration" / name)
-            for name in ("manifest.json", "resolved.json", "appsec-review.toml")])
+        from appsec_review.runtime.configuration import configuration_snapshot
+        snapshot = configuration_snapshot(context.run_root, claim["resolved_config_sha256"])
+        artifacts = collect_artifacts(context.run_root, artifacts, snapshot.artifacts(context.run_root))
         input_manifest = (reference(context.run_root, safe_path(context.run_root, claim["input_manifest_path"]),
                                     expected_sha256=claim["input_manifest_sha256"])
                           if claim.get("input_manifest_path") else None)
