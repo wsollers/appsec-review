@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from dataclasses import dataclass
 import base64
 from contextvars import ContextVar
@@ -424,15 +425,18 @@ class RetrievalCore:
             raise RetrievalIntegrityError(f"index integrity mismatch: {name}") from exc
         uri = f"file:{path.as_posix()}?mode=ro&immutable=1"
         database = sqlite3.connect(uri, uri=True, timeout=0.1)
-        database.row_factory = sqlite3.Row
-        database.execute("PRAGMA query_only=ON")
-        metadata = dict(database.execute("SELECT key, value FROM metadata"))
-        if (metadata.get("schema"), metadata.get("name"), metadata.get("fingerprint"),
-                metadata.get("shard_id", "default")) != (
-                identity["schema"], name, identity["fingerprint"], identity.get("shard_id", "default")):
+        try:
+            database.row_factory = sqlite3.Row
+            database.execute("PRAGMA query_only=ON")
+            metadata = dict(database.execute("SELECT key, value FROM metadata"))
+            if (metadata.get("schema"), metadata.get("name"), metadata.get("fingerprint"),
+                    metadata.get("shard_id", "default")) != (
+                    identity["schema"], name, identity["fingerprint"], identity.get("shard_id", "default")):
+                raise RetrievalIntegrityError(f"index metadata mismatch: {name}/{identity.get('shard_id', 'default')}")
+            database.set_progress_handler(lambda: 1 if self.clock() > deadline else 0, 1000)
+        except BaseException:
             database.close()
-            raise RetrievalIntegrityError(f"index metadata mismatch: {name}/{identity.get('shard_id', 'default')}")
-        database.set_progress_handler(lambda: 1 if self.clock() > deadline else 0, 1000)
+            raise
         return database
 
     def _check_deadline(self, deadline: float) -> None:
@@ -669,7 +673,7 @@ class RetrievalCore:
                     gaps.append(f"{name} index is unavailable")
                     continue
                 for shard in self.indexes[name]:
-                    with self._database(shard, deadline) as database:
+                    with closing(self._database(shard, deadline)) as database:
                         sql = """SELECT e.*, l.*, bm25(search_fts) AS rank FROM search_fts
                                  JOIN entities e ON e.identity=search_fts.identity
                                  LEFT JOIN locations l ON l.entity_id=e.identity
@@ -731,7 +735,7 @@ class RetrievalCore:
                 sql += " ORDER BY e.identity LIMIT ?"
                 values.append(offset + limit + 1)
                 for shard in self.indexes[index_name]:
-                    with self._database(shard, deadline) as database:
+                    with closing(self._database(shard, deadline)) as database:
                         for row in database.execute(sql, values):
                             item = self._entity(row, index_name)
                             item["shard_id"] = shard.get("shard_id", "default")
@@ -831,7 +835,7 @@ class RetrievalCore:
                 for index_name in sorted(self.indexes):
                     self._check_deadline(deadline)
                     for shard in self.indexes[index_name]:
-                        with self._database(shard, deadline) as database:
+                        with closing(self._database(shard, deadline)) as database:
                             for current in sorted(frontier):
                                 sql = "SELECT * FROM relations WHERE (source_id=? OR target_id=?)"
                                 values: list[Any] = [current, current]
@@ -894,7 +898,7 @@ class RetrievalCore:
                 selected.extend((name, shard) for shard in self.indexes[name])
             for name, shard in selected[offset:offset + limit]:
                 self._check_deadline(deadline)
-                with self._database(shard, deadline) as database:
+                with closing(self._database(shard, deadline)) as database:
                     rows = [dict(row) for row in database.execute(
                         "SELECT area, status, gap FROM coverage ORDER BY area, status, gap")]
                     count_metadata = dict(database.execute(
@@ -994,7 +998,7 @@ class RetrievalCore:
                 for relation_index in sorted(self.indexes):
                     for relation_shard in self.indexes[relation_index]:
                         self._check_deadline(deadline)
-                        with self._database(relation_shard, deadline) as database:
+                        with closing(self._database(relation_shard, deadline)) as database:
                             produced_ids.update(str(row[0]) for row in database.execute(
                                 "SELECT source_id FROM relations WHERE kind=? AND target_id=? "
                                 "ORDER BY source_id",
@@ -1041,7 +1045,7 @@ class RetrievalCore:
                     sql += " WHERE " + " AND ".join(clauses)
                 sql += " ORDER BY e.identity LIMIT ?"
                 values.append(offset + limit + 1)
-                with self._database(identity, deadline) as database:
+                with closing(self._database(identity, deadline)) as database:
                     for row in database.execute(sql, values):
                         item = self._entity(row, index_name)
                         item["shard_id"] = str(identity.get("shard_id", "default"))
@@ -1107,7 +1111,7 @@ class RetrievalCore:
                     sql += " WHERE " + " AND ".join(clauses)
                 sql += " ORDER BY e.identity LIMIT ?"
                 values.append(offset + limit + 1)
-                with self._database(identity, deadline) as database:
+                with closing(self._database(identity, deadline)) as database:
                     for row in database.execute(sql, values):
                         item = self._entity(row, index_name)
                         item["shard_id"] = identity.get("shard_id", "default")
@@ -1172,7 +1176,7 @@ class RetrievalCore:
                        "WHERE " + " AND ".join(clauses) + " ORDER BY e.identity LIMIT ?")
                 values.append(offset + limit + 1)
                 shard_id = str(identity.get("shard_id", "default"))
-                with self._database(identity, deadline) as database:
+                with closing(self._database(identity, deadline)) as database:
                     for row in database.execute(sql, values):
                         item = self._entity(row, "observations")
                         item["shard_id"] = shard_id
@@ -1231,7 +1235,7 @@ class RetrievalCore:
                        " AND ".join(clauses) + " ORDER BY json_extract(e.payload_json, '$.scope'), "
                        "CAST(json_extract(e.payload_json, '$.rank') AS INTEGER), e.identity LIMIT ?")
                 values.append(offset + limit + 1)
-                with self._database(identity, deadline) as database:
+                with closing(self._database(identity, deadline)) as database:
                     for row in database.execute(sql, values):
                         item = self._entity(row, "history")
                         item["shard_id"] = identity["shard_id"]
@@ -1282,7 +1286,7 @@ class RetrievalCore:
                        " AND ".join(clauses) + " ORDER BY CAST(json_extract(e.payload_json, '$.rank') AS INTEGER), "
                        "e.identity LIMIT ?")
                 values.append(offset + limit + 1)
-                with self._database(shard, deadline) as database:
+                with closing(self._database(shard, deadline)) as database:
                     for row in database.execute(sql, values):
                         item = self._entity(row, "priority")
                         item["shard_id"] = shard.get("shard_id", "default")
@@ -1333,7 +1337,7 @@ class RetrievalCore:
                 sql = ("SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE " +
                        " AND ".join(clauses) + " ORDER BY e.identity LIMIT ?")
                 values.append(offset + limit + 1)
-                with self._database(shard, deadline) as database:
+                with closing(self._database(shard, deadline)) as database:
                     for row in database.execute(sql, values):
                         item = self._entity(row, "precomputed")
                         if item["payload"].get("schema") != FACT_SCHEMA:
@@ -1402,7 +1406,7 @@ class RetrievalCore:
         states: dict[str, Mapping[str, Any]] = {}
         candidate_bound = max(1_000, self.limits.max_results * 100)
         for shard in shards:
-            with self._database(shard, deadline) as database:
+            with closing(self._database(shard, deadline)) as database:
                 for row in database.execute(
                         "SELECT payload_json FROM entities WHERE kind='precomputed_fact' "
                         "AND json_extract(payload_json, '$.fact_type') = 'lead'"):
@@ -1520,7 +1524,7 @@ class RetrievalCore:
                         values.extend((relation, target))
                 sql = ("SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity WHERE " +
                        " AND ".join(clauses) + " ORDER BY e.identity")
-                with self._database(identity, deadline) as database:
+                with closing(self._database(identity, deadline)) as database:
                     for row in database.execute(sql, values):
                         self._check_deadline(deadline)
                         scanned += 1
@@ -1632,7 +1636,7 @@ class RetrievalCore:
                 sql += " ORDER BY e.identity LIMIT ?"
                 values.append(offset + limit + 1)
                 shard_id = str(identity.get("shard_id", "default"))
-                with self._database(identity, deadline) as database:
+                with closing(self._database(identity, deadline)) as database:
                     for row in database.execute(sql, values):
                         item = self._entity(row, "inventory")
                         item["shard_id"] = shard_id
@@ -1699,7 +1703,7 @@ class RetrievalCore:
                 shard_id = str(identity.get("shard_id", "default"))
                 if shard is not None and shard_id != shard:
                     continue
-                with self._database(identity, deadline) as database:
+                with closing(self._database(identity, deadline)) as database:
                     rows = database.execute(
                         "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
                         "ORDER BY e.identity"
@@ -1992,7 +1996,7 @@ class RetrievalCore:
             for shard in doc_shards:
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
-                with self._database(shard, deadline) as database:
+                with closing(self._database(shard, deadline)) as database:
                     for row in database.execute(
                         "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
                         "WHERE e.kind='precomputed_fact' ORDER BY e.identity"
@@ -2027,7 +2031,7 @@ class RetrievalCore:
             for shard in obs_shards:
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
-                with self._database(shard, deadline) as database:
+                with closing(self._database(shard, deadline)) as database:
                     for row in database.execute(
                         "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
                         "ORDER BY e.identity"
@@ -2105,7 +2109,7 @@ class RetrievalCore:
             for fam, idx_name, shard in sources:
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
-                with self._database(shard, deadline) as database:
+                with closing(self._database(shard, deadline)) as database:
                     query = "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
                     arguments: list[Any] = []
                     if fam == "profile":
@@ -2189,7 +2193,7 @@ class RetrievalCore:
             for idx_name, shard in (*adv_shards, *dep_shards):
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
-                with self._database(shard, deadline) as database:
+                with closing(self._database(shard, deadline)) as database:
                     for row in database.execute(
                         "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
                         "ORDER BY e.identity"
@@ -2248,7 +2252,7 @@ class RetrievalCore:
             for index, shard in shards:
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
-                with self._database(shard, deadline) as database:
+                with closing(self._database(shard, deadline)) as database:
                     coverage = list(database.execute(
                         "SELECT area, status, gap FROM coverage WHERE area='sanitizer-readiness'"
                         if index == "inventory" else "SELECT area, status, gap FROM coverage"))

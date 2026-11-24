@@ -143,6 +143,10 @@ the stream instead of draining an unbounded input. Responses are at most 1 MiB. 
 most 4,096 entries; larger inventories fail explicitly rather than claim complete coverage.
 Individual operational JSON documents are limited to 1 MiB.
 
+Retrieval queries and manifest verification close their read-only SQLite connections
+deterministically, including failure paths. SQLite transaction context managers alone
+do not close connections; query-owned connections use an explicit closing scope.
+
 Page sizes are 1-100. Operator cursors are authenticated with a session-private key, expire after
 five minutes, and bind the application run, manifest, tool and exact supplied filters/page size.
 They cannot move between clients. A log or directory changed since a page was read invalidates its

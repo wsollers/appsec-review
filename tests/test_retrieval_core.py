@@ -149,6 +149,91 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     return runs, ids
 
 
+def _assert_connections_closed(connections):
+    closed = []
+    for database in connections:
+        try:
+            database.set_authorizer(None)
+        except sqlite3.ProgrammingError:
+            closed.append(True)
+        else:
+            closed.append(False)
+        finally:
+            database.close()
+    assert connections
+    assert all(closed), f"{closed.count(False)} query connections remained open"
+
+
+@pytest.mark.parametrize("query", ["find", "search", "coverage"])
+@pytest.mark.parametrize("denied", [False, True], ids=["success", "sql-error"])
+def test_query_connections_close_after_success_or_error(tmp_path, monkeypatch, query, denied):
+    runs, ids = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    connections = []
+    original = core._database
+
+    def opened(identity, deadline):
+        database = original(identity, deadline)
+        connections.append(database)
+        if denied:
+            database.set_authorizer(lambda *_args: sqlite3.SQLITE_DENY)
+        return database
+
+    monkeypatch.setattr(core, "_database", opened)
+    parameters = {"indexes": ("source",)}
+    if query == "find":
+        parameters["identity"] = ids["file"]
+    elif query == "search":
+        parameters["query"] = "authenticate"
+    try:
+        if denied:
+            with pytest.raises(sqlite3.DatabaseError, match="not authorized"):
+                getattr(core, query)(**parameters)
+        else:
+            assert getattr(core, query)(**parameters)["results"]
+    finally:
+        _assert_connections_closed(connections)
+
+
+def test_manifest_verification_connections_close(tmp_path, monkeypatch):
+    runs, _ids = _fixture(tmp_path)
+    original = sqlite3.connect
+    connections = []
+
+    def opened(*args, **kwargs):
+        database = original(*args, **kwargs)
+        connections.append(database)
+        return database
+
+    monkeypatch.setattr(sqlite3, "connect", opened)
+    try:
+        assert RetrievalCore(runs, RUN_ID).indexes
+    finally:
+        _assert_connections_closed(connections)
+
+
+def test_database_setup_connections_close_on_error(tmp_path, monkeypatch):
+    runs, _ids = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    path = core.run_root / "empty.sqlite"
+    sqlite3.connect(path).close()
+    identity = {**core.indexes["source"][0], "relative_path": path.name, "sha256": file_sha256(path)}
+    original = sqlite3.connect
+    connections = []
+
+    def opened(*args, **kwargs):
+        database = original(*args, **kwargs)
+        connections.append(database)
+        return database
+
+    monkeypatch.setattr(sqlite3, "connect", opened)
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="no such table: metadata"):
+            core._verified_database(identity, core.clock() + 10)
+    finally:
+        _assert_connections_closed(connections)
+
+
 def test_identity_and_location_contracts_reject_unsafe_or_ambiguous_values() -> None:
     for kind in EntityKind:
         assert LogicalIdentity.parse(LogicalIdentity.derive(kind, "snapshot", {"id": kind.value}).value).kind == kind

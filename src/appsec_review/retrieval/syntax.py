@@ -58,7 +58,7 @@ def query_syntax(core: "RetrievalCore", *, mode: str, subject: str, name: str | 
             for shard in core.indexes.get("analysis", ()):
                 if shard.get("producer", {}).get("job") != "job_tree_sitter_ast":
                     continue
-                with core._database(shard, deadline) as database:
+                with closing(core._database(shard, deadline)) as database:
                     row = database.execute("SELECT e.*, l.* FROM entities e JOIN locations l ON l.entity_id=e.identity "
                                            "WHERE e.identity=?", (subject,)).fetchone()
                     if row is not None:
@@ -76,7 +76,7 @@ def query_syntax(core: "RetrievalCore", *, mode: str, subject: str, name: str | 
         for shard in core.indexes.get("analysis", ()):
             if shard.get("producer", {}).get("job") != "job_tree_sitter_ast":
                 continue
-            with core._database(shard, deadline) as database:
+            with closing(core._database(shard, deadline)) as database:
                 # This expression is backed by syntax_lookup, not a scan of source trees.
                 base = ["e.kind='ast_node'", "json_extract(e.payload_json, '$.syntax.source_identity')=?",
                         "json_extract(e.payload_json, '$.syntax.schema')=?"]

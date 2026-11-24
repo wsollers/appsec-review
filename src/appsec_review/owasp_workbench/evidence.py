@@ -1,6 +1,7 @@
 """Run-pinned evidence bundles and citation re-resolution using the shared retrieval boundary."""
 from __future__ import annotations
 
+from contextlib import closing
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -161,7 +162,7 @@ class EvidenceResolver:
                     if shard is None:
                         continue
                     # Bind the original indexed record, not retrieval's lossy display sanitization.
-                    with self.core._database(shard, self.core.clock() + self.core.limits.timeout_ms / 1000) as database:
+                    with closing(self.core._database(shard, self.core.clock() + self.core.limits.timeout_ms / 1000)) as database:
                         row = database.execute("SELECT payload_json FROM entities WHERE identity=?", (identity,)).fetchone()
                     item = {**item, "payload": json.loads(row["payload_json"])}
                     if self._original(item):

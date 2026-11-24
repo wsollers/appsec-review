@@ -5,6 +5,7 @@ from __future__ import annotations
 from appsec_review.storage.validation import validation_operation
 
 from collections import Counter
+from contextlib import closing
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from functools import cached_property
@@ -715,7 +716,7 @@ def _load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | N
             continue
         count_work("shard_validations")
         uri = f"file:{candidate.as_posix()}?mode=ro&immutable=1"
-        with sqlite3.connect(uri, uri=True) as database:
+        with closing(sqlite3.connect(uri, uri=True)) as database:
             shard_entities, shard_relations = _validate_payload_database(
                 run_root, database, identity, document, swift_enabled=swift_enabled)
             entity_ids.update(shard_entities)
