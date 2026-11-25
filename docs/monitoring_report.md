@@ -118,11 +118,22 @@ For each job, reconcile:
 2. **Files and accounting:** committed publication marker and referenced hashes, schemas, actual
    files, row counts, partitions, duplicates, missing outputs, and meaningful consumer links.
    A successful rendering task is not proof of a PDF: inspect its receipt and actual PDF.
-3. **Meaning:** compare outputs with evidence independent of the producer (target source, raw
-   tool results, or independent counts). Trace joins, locations, relationships, and claimed
-   coverage. Existence, nonzero counts, and schema validity alone do not establish usefulness.
+3. **Meaning and physical payload invariants:** compare outputs with evidence independent of the
+   producer (target source, raw tool results, or independent counts). Checking `handoff.json`
+   hashes, receipt JSONs, aggregate counts, or `COMPLETED_WITH_GAPS` status never establishes
+   usefulness. For compiled and indexed stages, directly inspect binary section headers (`readelf -S`
+   `.debug_*` / `-g` flags in `compile_commands.json`), real build targets versus configure-probe
+   artifacts (`CMakeScratch`/`CompilerId`), first-party file and function-body coverage inside
+   SQLite `entities`, `locations`, and relationship tables (symbols, AST, IR, CFG, call graph,
+   CSA seeded neighborhoods, scanner shards), and tool stderr plus kernel/cgroup OOM logs (`dmesg`)
+   whenever any tool or sub-branch shard has `0` rows (even when container `oom_killed` is `false`).
    Record whether the check was exhaustive or sampled and what was not examined.
-4. **Gaps and findings:** group canonical outcome gaps by cause, not repeated log strings.
+4. **Look behind gate rejections and `BLOCKED` masks:** when a build or tool job rejects outputs
+   on a policy, capture, or schema gate (or leaves downstream jobs `BLOCKED`), still inspect the
+   raw built `.o`/ELF binaries, `compile_commands.json` flags, scratch outputs, and stderr/OOM
+   logs already on disk in that same verification pass so co-existing build, flag, or tool defects
+   are caught in the same repair cycle rather than hidden until the next epoch.
+5. **Gaps and findings:** group canonical outcome gaps by cause, not repeated log strings.
    Match expected causes to explicit user decisions; historical failures are not an expected
    list. Explain legitimate empty/not-applicable outputs. Unexplained zeros, missing compile
    evidence when compilation is applicable, and an all-insufficient-evidence result need a
@@ -299,7 +310,15 @@ retained-versus-recomputed work, telemetry lag, receipt limitations and observed
 The verifier follows every completed job, checking actual admitted inputs, published files,
 hashes/schemas/counts, semantic correctness and downstream usefulness against independent
 evidence and the applicable prior audit. Report whether outputs are CORRECT AND MEANINGFUL,
-not merely nonempty. Explain legitimate empty outputs; diagnose unexplained zeros and gaps.
+not merely nonempty: never rely on handoff/receipt JSONs or aggregate counts alone. For build
+and index stages, directly verify ELF debug sections (readelf -S .debug_* and -g flags), real
+targets versus CMakeScratch/CompilerId probes, first-party file/function-body joins inside
+SQLite entities/locations/edges (symbols, AST, IR, CFG, CSA seeded neighborhoods, scanner
+shards), and stderr plus kernel/cgroup OOM logs (dmesg) whenever any tool or sub-branch shard
+has 0 rows (even if container oom_killed is false). When a gate rejects outputs or blocks
+downstream jobs, still inspect the raw binaries, compile_commands.json flags, and tool logs
+already on disk in the same pass so co-existing defects are not masked until the next epoch.
+Explain legitimate empty outputs; diagnose unexplained zeros and gaps.
 Keep scanner observations, proposals, claim states and confirmed/published findings distinct.
 Some gaps may be expected, but no exact expected-gap list has yet been confirmed for this new
 run: record cause-level user decisions and coverage costs, not blanket exemptions.
