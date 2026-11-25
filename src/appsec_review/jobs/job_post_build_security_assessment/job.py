@@ -4,6 +4,7 @@ from appsec_review.interchange import bounded_gap_messages
 
 from collections.abc import Mapping
 from dataclasses import asdict
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -65,13 +66,23 @@ def _read_json_artifact(run_root: Path, identity: Mapping[str, Any]) -> Any:
 
 
 def _case_root(unit: UnitContext, case_id: str) -> Path:
-    accepted = load_accepted_cpp(unit.job.run_root)
-    catalog = accepted["result"]["outputs"]["catalog.projects"]["projects"][case_id]
-    _read_json_artifact(unit.job.run_root, catalog["compile_database"])
-    root = (unit.job.run_root / catalog["compile_database"]["path"]).resolve().parent
-    if unit.job.run_root.resolve() not in root.parents:
+    default_root = (unit.job.run_root / "data" / "cpp" / "projects" / case_id).resolve()
+    if unit.job.run_root.resolve() not in default_root.parents:
         raise ValueError("case root escapes the run")
-    return root
+    catalog = unit.outputs.get("load.accepted_cpp_build", {}).get("cases", {}).get(case_id)
+    if not isinstance(catalog, Mapping):
+        try:
+            accepted = load_accepted_cpp(unit.job.run_root)
+            catalog = accepted["result"]["outputs"]["catalog.projects"]["projects"].get(case_id)
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            catalog = None
+    if isinstance(catalog, Mapping) and isinstance(catalog.get("compile_database"), Mapping):
+        _read_json_artifact(unit.job.run_root, catalog["compile_database"])
+        root = (unit.job.run_root / str(catalog["compile_database"]["path"])).resolve().parent
+        if unit.job.run_root.resolve() not in root.parents:
+            raise ValueError("case root escapes the run")
+        return root
+    return default_root
 
 
 def _display(case_id: str) -> str:
@@ -129,6 +140,13 @@ def _case_path(value: str, directory: Any, *, root: Path, run_root: Path,
                 aliases.append((posixpath.normpath(posixpath.join(prefix, relative)), local))
         if not PurePosixPath(value).is_absolute():
             value = posixpath.join("/workspace", value)
+    elif isinstance(receipt.get("protected_compile_commands"), Mapping) and not PurePosixPath(value).is_absolute():
+        recipe = receipt.get("recipe", {}) if isinstance(receipt.get("recipe"), Mapping) else {}
+        build_rel = recipe.get("build_dir", mapping.get("build_dir", "build"))
+        if isinstance(build_rel, str) and build_rel and not PurePosixPath(build_rel).is_absolute() and ".." not in PurePosixPath(build_rel).parts:
+            aliases.append((posixpath.normpath(posixpath.join("/workspace", build_rel)), root / "build"))
+        aliases.append(("/workspace", root / "source" if (root / "source").is_dir() else root))
+        value = posixpath.join("/workspace", value)
     normalized = posixpath.normpath(value)
     for prefix, destination in sorted(aliases, key=lambda pair: -len(pair[0])):
         if normalized == prefix or normalized.startswith(prefix + "/"):
@@ -146,6 +164,174 @@ def _argv(row: Mapping[str, Any]) -> list[str]:
     if isinstance(row.get("arguments"), list):
         return [str(item) for item in row["arguments"]]
     return shlex.split(str(row.get("command", "")), posix=True)
+
+
+_BUILD_DRIVER_NAMES = frozenset({
+    "cmake", "ctest", "cpack", "ninja", "ninja-build", "make", "gmake", "nmake", "msbuild",
+})
+_INTERNAL_COMPILER_TOOLS = frozenset({"cc1", "cc1plus", "lto1", "f951", "collect2"})
+_PROBE_QUERY_FLAGS = frozenset({
+    "--help", "-help", "-wl,--help", "--version", "-dumpversion", "-dumpmachine",
+    "-print-search-dirs", "-v", "-###", "-e", "/e", "/ep", "/p", "-m", "-mm", "-fsyntax-only",
+})
+
+
+def _skip_protected_capture_row(row: Mapping[str, Any], argv: list[str]) -> bool:
+    if not argv or str(argv[0]).startswith("/capture/"):
+        return True
+    evidence = row.get("evidence") if isinstance(row.get("evidence"), Mapping) else {}
+    proc_exec = evidence.get("process_exec") if isinstance(evidence.get("process_exec"), Mapping) else {}
+    if str(proc_exec.get("executable", "")).startswith("/capture/"):
+        return True
+    exe_name = PurePosixPath(str(argv[0]).replace("\\", "/")).name.lower()
+    if row.get("tool_kind") == "build-driver" or exe_name in _BUILD_DRIVER_NAMES:
+        return True
+    if exe_name in _INTERNAL_COMPILER_TOOLS or any(arg in {"-cc1", "-cc1as"} for arg in argv[1:]):
+        return True
+    path_candidates: list[str] = []
+    for key in ("directory", "working_directory", "file", "output"):
+        value = row.get(key)
+        if isinstance(value, str) and value:
+            path_candidates.append(value)
+    for field in ("inputs", "outputs"):
+        items = row.get(field)
+        if isinstance(items, list):
+            for entry in items:
+                if isinstance(entry, Mapping):
+                    for subkey in ("workspace_path", "declared"):
+                        val = entry.get(subkey)
+                        if isinstance(val, str) and val:
+                            path_candidates.append(val)
+    for token in argv[1:]:
+        if token.startswith(("-o", "/Fo", "/Fe")) and len(token) > 3:
+            path_candidates.append(token[2:] if token.startswith("-o") else token[3:])
+        elif token.lower().startswith("/out:") and len(token) > 5:
+            path_candidates.append(token[5:])
+        elif not token.startswith("-"):
+            path_candidates.append(token)
+    if any(bookkeeping_reason(candidate) is not None for candidate in path_candidates):
+        return True
+    has_resolved_output = isinstance(row.get("outputs"), list) and any(
+        isinstance(item, Mapping) and item.get("mapping") == "exact-workspace-path"
+        for item in row["outputs"]
+    )
+    if not has_resolved_output:
+        lower_flags = {token.lower() for token in argv[1:]}
+        if lower_flags & _PROBE_QUERY_FLAGS or any(
+            flag.startswith(("-print-prog-name", "-print-file-name", "-print-libgcc-file-name"))
+            for flag in lower_flags
+        ):
+            return True
+    return False
+
+
+def _ns_to_iso(value: Any) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        secs, nanos = divmod(value, 1_000_000_000)
+        dt = datetime.fromtimestamp(secs, tz=timezone.utc)
+        return f"{dt.strftime('%Y-%m-%dT%H:%M:%S')}.{nanos // 1000:06d}Z"
+    return None
+
+
+def _parse_capture_envp(payload: Mapping[str, Any]) -> dict[str, str] | None:
+    raw_env = payload.get("envp")
+    if isinstance(raw_env, Mapping):
+        return {
+            str(k): str(v)
+            for k, v in raw_env.items()
+            if isinstance(k, str) and "\0" not in k and "\0" not in str(v)
+        }
+    if payload.get("envp_captured") is False:
+        return None
+    if isinstance(raw_env, list):
+        env_map: dict[str, str] = {}
+        for item in raw_env:
+            if not isinstance(item, Mapping):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or not name or "\0" in name:
+                continue
+            if item.get("redacted") is True:
+                env_map[name] = "<secret-redacted>"
+                continue
+            val = str(item.get("value") if item.get("value") is not None else "")
+            if "\0" not in val:
+                env_map[name] = val
+        return env_map
+    return None
+
+
+def _load_capture_telemetry(
+    run_root: Path, build_receipt: Mapping[str, Any],
+) -> tuple[dict[str, Mapping[str, Any]], dict[tuple[str, int], dict[str, Any]]]:
+    commands_by_id: dict[str, Mapping[str, Any]] = {}
+    telemetry: dict[tuple[str, int], dict[str, Any]] = {}
+    commands = build_receipt.get("commands") if isinstance(build_receipt, Mapping) else None
+    if not isinstance(commands, list):
+        return commands_by_id, telemetry
+    resolved_run_root = run_root.resolve()
+    for cmd in commands[:256]:
+        if not isinstance(cmd, Mapping):
+            continue
+        cmd_id = str(cmd.get("command_id") or cmd.get("id") or "")
+        if cmd_id:
+            commands_by_id[cmd_id] = cmd
+        capture = cmd.get("execution_capture")
+        events_meta = capture.get("events") if isinstance(capture, Mapping) else None
+        if not cmd_id or not isinstance(events_meta, Mapping) or not isinstance(events_meta.get("path"), str):
+            continue
+        try:
+            events_path = (run_root / events_meta["path"]).resolve()
+            if (
+                resolved_run_root not in events_path.parents
+                or not events_path.is_file()
+                or events_path.is_symlink()
+                or events_path.stat().st_size > 64 * 1024 * 1024
+                or file_sha256(events_path) != events_meta.get("sha256")
+            ):
+                continue
+            active: dict[tuple[Any, Any], int] = {}
+            with events_path.open("r", encoding="utf-8") as stream:
+                for line in stream:
+                    if '"process_exec"' not in line and '"process_exit"' not in line:
+                        continue
+                    ev = json.loads(line)
+                    if not isinstance(ev, Mapping):
+                        continue
+                    ev_type = ev.get("kind") or ev.get("event")
+                    payload = ev.get("payload") if isinstance(ev.get("payload"), Mapping) else ev
+                    exec_ok = (
+                        payload.get("result") == 0
+                        if "result" in payload
+                        else payload.get("ok") is True
+                        if "ok" in payload
+                        else True
+                    )
+                    if ev_type == "process_exec" and exec_ok and isinstance(ev.get("ordinal"), int):
+                        ordinal = int(ev["ordinal"])
+                        start_ts = _ns_to_iso(
+                            ev.get("timestamp_ns") if ev.get("timestamp_ns") is not None else ev.get("timestamp")
+                        )
+                        telemetry[(cmd_id, ordinal)] = {
+                            "start": start_ts,
+                            "end": None,
+                            "exit_status": None,
+                            "environment": _parse_capture_envp(payload),
+                        }
+                        active[(ev.get("pid"), ev.get("tid"))] = ordinal
+                    elif ev_type == "process_exit":
+                        exec_ordinal = active.pop((ev.get("pid"), ev.get("tid")), None)
+                        if exec_ordinal is not None and (cmd_id, exec_ordinal) in telemetry:
+                            end_ts = _ns_to_iso(
+                                ev.get("timestamp_ns") if ev.get("timestamp_ns") is not None else ev.get("timestamp")
+                            )
+                            telemetry[(cmd_id, exec_ordinal)]["end"] = end_ts
+                            telemetry[(cmd_id, exec_ordinal)]["exit_status"] = payload.get("exit_code")
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+    return commands_by_id, telemetry
 
 
 _BINARY_MAGICS = (b"\x7fELF", b"MZ", b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe",
@@ -481,15 +667,19 @@ def build_job(*, infer: Infer | None = None) -> Job:
                 rows.extend(links)
                 if not links:
                     gaps.append("exact linker/archiver provenance was not emitted by this build system")
-            if rows:
-                gaps.append("per-action environment was not emitted; only sanitized empty facts are retained")
             protected = root / "build-security" / "protected-commands"
             if generic_protected is None:
                 protected.mkdir(parents=True, exist_ok=True)
-            actions = []
+            action_entries: list[tuple[dict[str, Any], str, bool]] = []
+            missing_action_env = False
             mapping = catalog.get("mapping", {})
             profile = str(catalog.get("profile") or mapping.get("build_system") or "unknown")
             build_execution = build_receipt if isinstance(build_receipt, Mapping) else {}
+            commands_by_id, capture_telemetry = (
+                _load_capture_telemetry(unit.job.run_root, build_execution)
+                if generic_protected is not None
+                else ({}, {})
+            )
             execution_identity = build_execution.get("execution") if isinstance(build_execution, Mapping) else None
             try:
                 execution = (_read_json_artifact(unit.job.run_root, execution_identity)
@@ -499,13 +689,26 @@ def build_job(*, infer: Infer | None = None) -> Job:
                 gaps.append("accepted build execution receipt is unavailable")
             roots = {str(root): f"<run>/data/cpp/projects/{case_id}",
                      str(root / "source"): str(mapping.get("root", case_id))}
+            if isinstance(build_execution.get("workspace"), str) and build_execution["workspace"]:
+                recipe = build_execution.get("recipe", {}) if isinstance(build_execution.get("recipe"), Mapping) else {}
+                build_rel = recipe.get("build_dir", mapping.get("build_dir", "build"))
+                if isinstance(build_rel, str) and build_rel and not PurePosixPath(build_rel).is_absolute() and ".." not in PurePosixPath(build_rel).parts:
+                    roots[posixpath.normpath(posixpath.join("/workspace", build_rel))] = f"<run>/data/cpp/projects/{case_id}/build"
+                source_label = str(mapping.get("root", case_id))
+                if source_label in {"", "."}:
+                    source_label = f"<run>/data/cpp/projects/{case_id}/source"
+                roots["/workspace"] = source_label
+            image_meta = build_execution.get("image", {}) if isinstance(build_execution.get("image"), Mapping) else {}
             for index, row in enumerate(rows):
                 argv = _argv(row)
                 if not argv:
                     gaps.append(f"build action {index} had no parseable argv")
                     continue
+                if generic_protected is not None and _skip_protected_capture_row(row, argv):
+                    continue
+                raw_directory = row.get("directory") if row.get("directory") is not None else row.get("working_directory")
                 action_id = hashlib.sha256(canonical_json({"case": case_id, "index": index, "argv": argv,
-                                                          "directory": row.get("directory")})).hexdigest()
+                                                          "directory": raw_directory})).hexdigest()
                 exact_argv = isinstance(row.get("argv"), list) or isinstance(row.get("arguments"), list)
                 if generic_protected is not None:
                     protected_artifact = generic_protected
@@ -515,15 +718,70 @@ def build_job(*, infer: Infer | None = None) -> Job:
                     protected_value = {"schema": "appsec-review/protected-build-command/1", "argv": argv,
                                        "argv_source": "arguments" if exact_argv else "parsed-command",
                                        "original_command": (None if exact_argv else str(row.get("command", ""))),
-                                       "directory": row.get("directory"), "origin": row.get("origin"),
+                                       "directory": raw_directory, "origin": row.get("origin"),
                                        "environment": {}, "access": "run-owned-protected"}
                     protected_artifact = _artifact(unit.job.run_root, protected_path, protected_value)
                     protected_path.chmod(0o600)
-                has_action_timing = all(row.get(key) is not None for key in ("start", "end", "exit_status"))
-                timed_row = {**dict(row), "start": row.get("start", execution.get("started_at")),
-                             "end": row.get("end", execution.get("completed_at")),
-                             "exit_status": row.get("exit_status", execution.get("exit_code")),
-                             "arguments": argv}
+                evidence = row.get("evidence") if isinstance(row.get("evidence"), Mapping) else {}
+                tool_call = evidence.get("tool_call") if isinstance(evidence.get("tool_call"), Mapping) else {}
+                has_tool_call = bool(tool_call)
+                parent_cmd_id = str(row.get("parent_command_id") or "")
+                proc_exec_ev = evidence.get("process_exec") if isinstance(evidence.get("process_exec"), Mapping) else {}
+                ordinals = (
+                    proc_exec_ev.get("event_ordinals")
+                    if isinstance(proc_exec_ev.get("event_ordinals"), list)
+                    else evidence.get("event_ordinals")
+                    if isinstance(evidence.get("event_ordinals"), list)
+                    else []
+                )
+                exec_telemetry = (
+                    capture_telemetry.get((parent_cmd_id, int(ordinals[0])))
+                    if parent_cmd_id and ordinals and isinstance(ordinals[0], int)
+                    else None
+                )
+                row_start = (
+                    row.get("start")
+                    if row.get("start") is not None
+                    else (exec_telemetry or {}).get("start") or tool_call.get("started_at")
+                )
+                row_end = (
+                    row.get("end")
+                    if row.get("end") is not None
+                    else (exec_telemetry or {}).get("end") or tool_call.get("completed_at")
+                )
+                row_exit = (
+                    row.get("exit_status")
+                    if row.get("exit_status") is not None
+                    else (
+                        exec_telemetry["exit_status"]
+                        if exec_telemetry and exec_telemetry.get("exit_status") is not None
+                        else tool_call.get("exit_code")
+                    )
+                )
+                has_action_timing = row_start is not None and row_end is not None and row_exit is not None
+                parent_cmd = commands_by_id.get(parent_cmd_id, {})
+                fallback_start = parent_cmd.get("started_at") or build_execution.get("started_at") or execution.get("started_at")
+                fallback_end = parent_cmd.get("completed_at") or build_execution.get("completed_at") or execution.get("completed_at")
+                fallback_exit = (
+                    parent_cmd["exit_code"]
+                    if "exit_code" in parent_cmd and parent_cmd.get("exit_code") is not None
+                    else execution.get("exit_code")
+                )
+                action_env = (
+                    row.get("environment")
+                    if isinstance(row.get("environment"), Mapping)
+                    else (exec_telemetry or {}).get("environment")
+                )
+                if action_env is None:
+                    missing_action_env = True
+                timed_row = {
+                    **dict(row),
+                    "directory": raw_directory,
+                    "start": row_start if row_start is not None else fallback_start,
+                    "end": row_end if row_end is not None else fallback_end,
+                    "exit_status": row_exit if row_exit is not None else fallback_exit,
+                    "arguments": argv,
+                }
                 normalized = normalize_action(timed_row, action_id=action_id, run_id=unit.job.run_id,
                     target_snapshot=unit.job.source_fingerprint,
                     project=str(mapping.get("root", case_id)),
@@ -531,10 +789,12 @@ def build_job(*, infer: Infer | None = None) -> Job:
                     producer={"job": "job_language_build", "task": "execute.native"},
                     toolchain={"executable": PurePosixPath(argv[0].replace("\\", "/")).name,
                                "tool_id": "generic-native-build",
-                               "tool_version": str(build_receipt.get("image", {}).get("image_tag", "unknown")),
-                               "image_id": str(catalog.get("image_id", execution.get("image_id", "unknown"))),
-                               "image_digest": str(execution.get("image_digest", catalog.get("image_id", "unknown")))},
-                    protected_artifact=protected_artifact, roots=roots)
+                               "tool_version": str(image_meta.get("image_tag", "unknown")),
+                               "image_id": str(catalog.get("image_id") or image_meta.get("image_id") or execution.get("image_id", "unknown")),
+                               "image_digest": str(execution.get("image_digest") or image_meta.get("image_digest") or catalog.get("image_id", "unknown"))},
+                    protected_artifact=protected_artifact,
+                    environment=action_env,
+                    roots=roots)
                 normalized["timing_granularity"] = "action" if has_action_timing else "build-invocation"
                 normalized["argv_source"] = protected_value["argv_source"]
                 if not exact_argv:
@@ -545,24 +805,82 @@ def build_job(*, infer: Infer | None = None) -> Job:
                     gaps.append(f"compiler/tool identity could not be classified for {action_id}")
                 if has_unexpanded_response_file(argv):
                     gaps.append(f"unexpanded response file leaves effective flags unknown for {action_id}")
-                if not row.get("directory"):
+                if not raw_directory:
                     gaps.append(f"working directory unavailable for {action_id}; relative paths are unresolved")
-                inputs, outputs = discover_io(argv, working_directory=str(row.get("directory") or ""))
+                inputs, outputs = discover_io(argv, working_directory=str(raw_directory or ""))
                 if isinstance(row.get("output"), str) and row["output"] not in outputs:
                     outputs.append(row["output"])
-                discovered = []
+                discovered_by_path: dict[str, dict[str, Any]] = {}
+                if isinstance(row.get("inputs"), list):
+                    for item in row["inputs"]:
+                        if isinstance(item, Mapping) and item.get("mapping") == "exact-workspace-path" and isinstance(item.get("workspace_path"), str):
+                            match = _case_path(item["workspace_path"], ".", root=root,
+                                               run_root=unit.job.run_root, catalog=catalog)
+                            if match is not None and match.is_file():
+                                rel_path = match.relative_to(root).as_posix()
+                                discovered_by_path[rel_path] = {
+                                    "path": rel_path,
+                                    "sha256": file_sha256(match),
+                                    "size_bytes": match.stat().st_size,
+                                }
                 for declared in inputs:
-                    match = _case_path(declared, row.get("directory"), root=root,
+                    match = _case_path(declared, raw_directory, root=root,
                                        run_root=unit.job.run_root, catalog=catalog)
                     if match is not None and match.is_file():
-                        discovered.append({"path": match.relative_to(root).as_posix(),
-                                           "sha256": file_sha256(match), "size_bytes": match.stat().st_size})
-                normalized["discovered_inputs"] = discovered
-                normalized["resolved_outputs"] = sorted({
-                    match.relative_to(root).as_posix() for output in outputs
-                    if (match := _case_path(output, row.get("directory"), root=root,
-                                           run_root=unit.job.run_root, catalog=catalog)) is not None})
-                actions.append({**normalized, "command_fingerprint": command_fingerprint(normalized)})
+                        rel_path = match.relative_to(root).as_posix()
+                        discovered_by_path.setdefault(rel_path, {
+                            "path": rel_path,
+                            "sha256": file_sha256(match),
+                            "size_bytes": match.stat().st_size,
+                        })
+                normalized["discovered_inputs"] = [discovered_by_path[key] for key in sorted(discovered_by_path)]
+                resolved_outputs: set[str] = set()
+                if isinstance(row.get("outputs"), list):
+                    for item in row["outputs"]:
+                        if isinstance(item, Mapping) and item.get("mapping") == "exact-workspace-path" and isinstance(item.get("workspace_path"), str):
+                            match = _case_path(item["workspace_path"], ".", root=root,
+                                               run_root=unit.job.run_root, catalog=catalog)
+                            if match is not None:
+                                resolved_outputs.add(match.relative_to(root).as_posix())
+                for output in outputs:
+                    match = _case_path(output, raw_directory, root=root,
+                                       run_root=unit.job.run_root, catalog=catalog)
+                    if match is not None:
+                        resolved_outputs.add(match.relative_to(root).as_posix())
+                normalized["resolved_outputs"] = sorted(resolved_outputs)
+                action_entries.append((
+                    {**normalized, "command_fingerprint": command_fingerprint(normalized)},
+                    parent_cmd_id,
+                    has_tool_call,
+                ))
+            if rows and (missing_action_env or not action_entries):
+                gaps.append("per-action environment was not emitted; only sanitized empty facts are retained")
+            if generic_protected is not None:
+                driver_outputs = {
+                    (cmd_id, tuple(action["resolved_outputs"]))
+                    for action, cmd_id, _ in action_entries
+                    if action["classification"] == "linker_driver" and action["resolved_outputs"]
+                }
+                unscoped_driver_outputs = {
+                    tuple(action["resolved_outputs"])
+                    for action, cmd_id, _ in action_entries
+                    if action["classification"] == "linker_driver" and action["resolved_outputs"] and not cmd_id
+                }
+                actions = [
+                    action
+                    for action, cmd_id, has_tool_call in action_entries
+                    if not (
+                        action["classification"] == "linker"
+                        and not has_tool_call
+                        and action["resolved_outputs"]
+                        and (
+                            (cmd_id, tuple(action["resolved_outputs"])) in driver_outputs
+                            or (not cmd_id and tuple(action["resolved_outputs"]) in unscoped_driver_outputs)
+                        )
+                    )
+                ]
+            else:
+                actions = [action for action, _, _ in action_entries]
             artifacts = []
             cataloged_paths: set[Path] = set()
             for item in catalog.get("outputs", ()):

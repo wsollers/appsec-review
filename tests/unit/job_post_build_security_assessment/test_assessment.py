@@ -463,3 +463,87 @@ def test_shard_fingerprint_and_retrieval_mcp_query_scopes(tmp_path: Path) -> Non
         assert len(response["results"]) == 1
         assert any("exact link timing unavailable" in gap for gap in response["coverage_gaps"])
     assert adapter.call("query_build_security", {"project": "missing"})["results"] == []
+
+
+def test_protected_capture_classification_normalization_and_check_scoping() -> None:
+    assert classify_action(["llvm-ranlib-18", "libsmoke_zlib.a"]) == "post_link"
+    assert classify_action(["ranlib", "libsmoke_zlib.a"]) == "post_link"
+    assert classify_action(["gcc-ranlib", "libsmoke_zlib.a"]) == "post_link"
+    assert classify_action(["clang", "-cc1", "-E", "probe.c", "-o", "-"]) == "unknown"
+    assert classify_action(["clang++-18", "main.cpp.o", "libsmoke.a", "-o", "smoke_server"]) == "linker_driver"
+
+    roots = {"/workspace/build": "<run>/data/cpp/projects/u1/build", "/workspace": "pkg/smoke"}
+    act_a = normalize_action(
+        {
+            "argv": [
+                "/usr/bin/clang++-18", "-O2", "-fstack-protector-strong", "-D_FORTIFY_SOURCE=2",
+                "-fcf-protection=full", "-fvisibility=hidden", "-c", "/workspace/src/a.cpp", "-o", "a.cpp.o",
+            ],
+            "working_directory": "build",
+            "inputs": [{"declared": "/workspace/src/a.cpp", "mapping": "exact-workspace-path", "workspace_path": "src/a.cpp"}],
+        },
+        action_id="act-a",
+        run_id=RUN_ID,
+        target_snapshot="snap",
+        project="pkg/smoke",
+        build_root="data/cpp/projects/u1/build",
+        configuration="accepted-recipe",
+        producer={"job": "job_language_build", "task": "execute.native"},
+        toolchain={"executable": "clang++-18"},
+        protected_artifact={"path": "pcc.json", "sha256": "1" * 64},
+        roots=roots,
+    )
+    act_b = normalize_action(
+        {
+            "argv": ["/usr/bin/clang++-18", "-O2", "-c", "/workspace/src/b.cpp", "-o", "b.cpp.o"],
+            "working_directory": "build",
+            "inputs": [{"declared": "/workspace/src/b.cpp", "mapping": "exact-workspace-path", "workspace_path": "src/b.cpp"}],
+        },
+        action_id="act-a",
+        run_id=RUN_ID,
+        target_snapshot="snap",
+        project="pkg/smoke",
+        build_root="data/cpp/projects/u1/build",
+        configuration="accepted-recipe",
+        producer={"job": "job_language_build", "task": "execute.native"},
+        toolchain={"executable": "clang++-18"},
+        protected_artifact={"path": "pcc.json", "sha256": "1" * 64},
+        roots=roots,
+    )
+    assert act_a["working_directory"] == "build"
+    assert act_a["compile_unit_id"] is not None
+    assert act_a["compile_unit_id"] != act_b["compile_unit_id"]
+
+    pure_link = normalize_action(
+        {
+            "argv": ["/usr/bin/clang++-18", "a.cpp.o", "-o", "smoke_server"],
+            "working_directory": "build",
+        },
+        action_id="act-link",
+        run_id=RUN_ID,
+        target_snapshot="snap",
+        project="pkg/smoke",
+        build_root="data/cpp/projects/u1/build",
+        configuration="accepted-recipe",
+        producer={"job": "job_language_build", "task": "execute.native"},
+        toolchain={"executable": "clang++-18"},
+        protected_artifact={"path": "pcc.json", "sha256": "1" * 64},
+        roots=roots,
+    )
+    assert pure_link["classification"] == "linker_driver"
+    assert pure_link["compile_unit_id"] is None
+
+    elf_obj = {"artifact_id": "obj-a", "sha256": "a" * 64, "format": "ELF", "kind": "object", "hardening": {"nx_stack": True}}
+    elf_unk = {"artifact_id": "unk-a", "sha256": "b" * 64, "format": "ELF", "kind": "unknown", "hardening": {}}
+    checks = deterministic_checks([act_a, pure_link], [elf_obj, elf_unk])
+    by_key = {(c["check_id"], c["scope"]): c for c in checks}
+
+    link_checks = [c["check_id"] for c in checks if c["scope"] == "act-link"]
+    assert link_checks == ["gnu.insecure_override"]
+    assert not [c for c in checks if c["check_id"].startswith("cross_tu.")]
+
+    assert by_key[("elf.nx_stack", "obj-a")]["status"] == "PASS"
+    for cid in ("elf.pie", "elf.relro", "elf.now", "elf.control_flow", "elf.stack_canary", "elf.fortify"):
+        assert by_key[(cid, "obj-a")]["status"] == "NOT_APPLICABLE"
+        assert by_key[(cid, "obj-a")]["applicable"] is False
+        assert by_key[(cid, "unk-a")]["status"] == "UNKNOWN"

@@ -460,3 +460,149 @@ def test_pe_coff_macho_archive_bitcode_linkmap_and_bounds(
     over = inspect_binary(misc)
     assert over["format"] == "unsupported"
     assert over["gaps"] == ["artifact exceeds binary inspection byte bound"]
+
+
+def _write_elf64_gnu_property_pie(
+    path: Path,
+    *,
+    machine: int = 62,
+    prop_type: int = 0xC0000002,
+    prop_val: int = 0x3,
+    imports: tuple[str, ...] = ("memcpy",),
+) -> None:
+    shstr_names = ["", ".shstrtab", ".dynstr", ".dynsym", ".note.gnu.property"]
+    shstr_offsets: dict[str, int] = {}
+    shstr = bytearray()
+    for name in shstr_names:
+        shstr_offsets[name] = len(shstr)
+        shstr.extend(name.encode("ascii") + b"\x00")
+
+    dyn_names = ["", "libc.so.6", *imports]
+    dyn_offsets: dict[str, int] = {}
+    dynstr = bytearray()
+    for name in dyn_names:
+        dyn_offsets[name] = len(dynstr)
+        dynstr.extend(name.encode("ascii") + b"\x00")
+
+    dynsym = b"".join(
+        [
+            struct.pack("<IBBHQQ", 0, 0, 0, 0, 0, 0),
+            *[struct.pack("<IBBHQQ", dyn_offsets[sym], 0x10, 0, 0, 0, 0) for sym in imports],
+        ]
+    )
+    prop_desc = struct.pack("<III", prop_type, 4, prop_val) + b"\x00\x00\x00\x00"
+    gnu_prop = struct.pack("<III", 4, len(prop_desc), 5) + b"GNU\x00" + prop_desc
+    interp = b"/lib64/ld-linux-x86-64.so.2\x00"
+
+    phnum = 5
+    phoff = 64
+    phentsize = 56
+    cursor = phoff + phnum * phentsize
+
+    interp_off = (cursor + 7) & ~7
+    cursor = interp_off + len(interp)
+    dynstr_off = (cursor + 7) & ~7
+    cursor = dynstr_off + len(dynstr)
+    dynsym_off = (cursor + 7) & ~7
+    cursor = dynsym_off + len(dynsym)
+    shstr_off = (cursor + 7) & ~7
+    cursor = shstr_off + len(shstr)
+    prop_off = (cursor + 7) & ~7
+    cursor = prop_off + len(gnu_prop)
+
+    dyn_entries = b"".join(
+        struct.pack("<qQ", tag, val)
+        for tag, val in [(5, dynstr_off), (10, len(dynstr)), (1, dyn_offsets["libc.so.6"]), (0, 0)]
+    )
+    dyn_off = (cursor + 7) & ~7
+    cursor = dyn_off + len(dyn_entries)
+    shoff = (cursor + 7) & ~7
+    total_size = shoff + 5 * 64
+
+    phdrs = b"".join(
+        [
+            struct.pack("<IIQQQQQQ", 1, 5, 0, 0, 0, total_size, total_size, 4096),
+            struct.pack("<IIQQQQQQ", 3, 4, interp_off, interp_off, interp_off, len(interp), len(interp), 1),
+            struct.pack("<IIQQQQQQ", 2, 6, dyn_off, dyn_off, 0, len(dyn_entries), len(dyn_entries), 8),
+            struct.pack("<IIQQQQQQ", 0x6474E551, 6, 0, 0, 0, 0, 0, 16),
+            struct.pack("<IIQQQQQQ", 0x6474E552, 4, 0, 0, 0, 64, 64, 1),
+        ]
+    )
+    shdrs = b"".join(
+        [
+            struct.pack("<IIQQQQIIQQ", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+            struct.pack("<IIQQQQIIQQ", shstr_offsets[".shstrtab"], 3, 0, 0, shstr_off, len(shstr), 0, 0, 1, 0),
+            struct.pack("<IIQQQQIIQQ", shstr_offsets[".dynstr"], 3, 0, dynstr_off, dynstr_off, len(dynstr), 0, 0, 1, 0),
+            struct.pack("<IIQQQQIIQQ", shstr_offsets[".dynsym"], 11, 0, dynsym_off, dynsym_off, len(dynsym), 2, 0, 8, 24),
+            struct.pack("<IIQQQQIIQQ", shstr_offsets[".note.gnu.property"], 7, 2, prop_off, prop_off, len(gnu_prop), 0, 0, 8, 0),
+        ]
+    )
+    image = bytearray(total_size)
+    image[:16] = b"\x7fELF" + bytes([2, 1, 1, 0]) + bytes(8)
+    struct.pack_into("<HHIQQQIHHHHHH", image, 16, 3, machine, 1, 0x1000, phoff, shoff, 0, 64, phentsize, phnum, 64, 5, 1)
+    image[phoff : phoff + len(phdrs)] = phdrs
+    image[interp_off : interp_off + len(interp)] = interp
+    image[dynstr_off : dynstr_off + len(dynstr)] = dynstr
+    image[dynsym_off : dynsym_off + len(dynsym)] = dynsym
+    image[shstr_off : shstr_off + len(shstr)] = shstr
+    image[prop_off : prop_off + len(gnu_prop)] = gnu_prop
+    image[dyn_off : dyn_off + len(dyn_entries)] = dyn_entries
+    image[shoff : shoff + len(shdrs)] = shdrs
+    path.write_bytes(image)
+
+
+def _write_elf64_relocatable_with_gnu_stack(path: Path, *, exec_stack: bool) -> None:
+    shstr = b"\x00.shstrtab\x00.note.GNU-stack\x00"
+    shstr_off = 64
+    shoff = (shstr_off + len(shstr) + 7) & ~7
+    flags = 0x4 if exec_stack else 0x0
+    shdrs = b"".join(
+        [
+            struct.pack("<IIQQQQIIQQ", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+            struct.pack("<IIQQQQIIQQ", 1, 3, 0, 0, shstr_off, len(shstr), 0, 0, 1, 0),
+            struct.pack("<IIQQQQIIQQ", 11, 1, flags, 0, shoff, 0, 0, 0, 1, 0),
+        ]
+    )
+    image = bytearray(shoff + len(shdrs))
+    image[:16] = b"\x7fELF" + bytes([2, 1, 1, 0]) + bytes(8)
+    struct.pack_into("<HHIQQQIHHHHHH", image, 16, 1, 62, 1, 0, 0, shoff, 0, 64, 0, 0, 64, 3, 1)
+    image[shstr_off : shstr_off + len(shstr)] = shstr
+    image[shoff : shoff + len(shdrs)] = shdrs
+    path.write_bytes(image)
+
+
+def test_elf_gnu_property_control_flow_relocatable_nx_stack_and_negative_dynsym(tmp_path: Path) -> None:
+    cet_pie = tmp_path / "cet.pie"
+    _write_elf64_gnu_property_pie(cet_pie, machine=62, prop_type=0xC0000002, prop_val=0x3, imports=("memcpy",))
+    cet_rec = inspect_binary(cet_pie)
+    assert cet_rec["hardening"]["control_flow"] is True
+    assert cet_rec["hardening"]["stack_canary"] is False
+    assert cet_rec["hardening"]["fortify"] is False
+
+    nocet_pie = tmp_path / "nocet.pie"
+    _write_elf64_gnu_property_pie(nocet_pie, machine=62, prop_type=0xC0008002, prop_val=0x1, imports=("puts",))
+    nocet_rec = inspect_binary(nocet_pie)
+    assert nocet_rec["hardening"]["control_flow"] is False
+    assert nocet_rec["hardening"]["stack_canary"] is False
+    assert nocet_rec["hardening"]["fortify"] is None
+
+    bti_pie = tmp_path / "bti.pie"
+    _write_elf64_gnu_property_pie(
+        bti_pie,
+        machine=183,
+        prop_type=0xC0000000,
+        prop_val=0x1,
+        imports=("__stack_chk_fail", "__snprintf_chk"),
+    )
+    bti_rec = inspect_binary(bti_pie)
+    assert bti_rec["hardening"]["control_flow"] is True
+    assert bti_rec["hardening"]["stack_canary"] is True
+    assert bti_rec["hardening"]["fortify"] is True
+
+    nx_obj = tmp_path / "nx.o"
+    _write_elf64_relocatable_with_gnu_stack(nx_obj, exec_stack=False)
+    assert inspect_binary(nx_obj)["hardening"]["nx_stack"] is True
+
+    wx_obj = tmp_path / "wx.o"
+    _write_elf64_relocatable_with_gnu_stack(wx_obj, exec_stack=True)
+    assert inspect_binary(wx_obj)["hardening"]["nx_stack"] is False

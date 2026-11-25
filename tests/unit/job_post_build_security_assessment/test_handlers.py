@@ -573,12 +573,19 @@ def test_handler_executes_native_family_na_and_blocked_cases_and_reuses_shards(t
     assert set(indexed1) == {"family-go-1", "unit-a", "unit-blocked", "unit-na"}
     assert all(item["index_reused"] is False for item in indexed1.values())
 
-    # Second run reuses every immutable shard via attest_existing()
+    # Re-executing within the same attempt reuses attempt-scoped immutable shards;
+    # a fresh attempt_0002 isolates its own attempt-scoped shards.
+    ctx1_rerun = replace(ctx1, attempt_root=run_root / "data" / "jobs" / JOB_ID / "attempts" / "attempt_0001_rerun")
+    ctx1_rerun.attempt_root.mkdir(parents=True, exist_ok=True)
+    with upstream_scope(run_root, JOB_ID, pins, contract=CONTRACT):
+        same_attempt = job.handler(ctx1_rerun)
+    assert all(item["index_reused"] is True for item in same_attempt["outputs"]["index.native_units"]["projects"].values())
+
     ctx2 = _make_ctx(run_root, target, pins, attempt_id="attempt_0002")
     with upstream_scope(run_root, JOB_ID, pins, contract=CONTRACT):
         second = job.handler(ctx2)
     indexed2 = second["outputs"]["index.native_units"]["projects"]
-    assert all(item["index_reused"] is True for item in indexed2.values())
+    assert all(item["index_reused"] is False for item in indexed2.values())
 
     # Bind accepted.json to inspect build_security relations via RetrievalCore
     pub = second["outputs"]["publication.publish_handoff"]
@@ -846,3 +853,345 @@ def test_handler_inference_modes_retries_empty_cases_and_snapshot_drift(tmp_path
         )
     inf_fail = failed["outputs"]["inference.native_units"]["projects"]["unit-inf"]
     assert any("failed after bounded retries (ProviderError)" in g for g in inf_fail["gaps"])
+
+
+def test_protected_compile_commands_v1_end_to_end_provenance_and_checks(tmp_path: Path) -> None:
+    import sqlite3
+    from tests.unit.job_post_build_security_assessment.test_binary_inspection import (
+        _write_elf64_gnu_property_pie,
+        _write_elf64_relocatable_with_gnu_stack,
+    )
+
+    run_root = tmp_path / "runs" / RUN_ID
+    target = tmp_path / "target"
+    target.mkdir()
+
+    case_id = "build-unit-smoke"
+    case_root = run_root / "data" / "cpp" / "attempts" / "attempt_0001" / "projects" / case_id
+    (case_root / "source" / "src").mkdir(parents=True)
+    (case_root / "build" / "CMakeFiles" / "smoke.dir" / "src").mkdir(parents=True)
+    (case_root / "analysis" / "binary").mkdir(parents=True)
+
+    src_file = case_root / "source" / "src" / "main.cpp"
+    src_file.write_text("int main() { return 0; }\n", encoding="utf-8")
+
+    obj_file = case_root / "build" / "CMakeFiles" / "smoke.dir" / "src" / "main.cpp.o"
+    _write_elf64_relocatable_with_gnu_stack(obj_file, exec_stack=False)
+
+    lib_file = case_root / "build" / "libsmoke.a"
+    _write_archive(lib_file)
+
+    exe_file = case_root / "build" / "smoke_server"
+    _write_elf64_gnu_property_pie(
+        exe_file,
+        machine=62,
+        prop_type=0xC0008002,
+        prop_val=0x1,
+        imports=("memcpy",),
+    )
+
+    comp_db = case_root / "compile-database-attempt_0001.json"
+    atomic_json(comp_db, [])
+
+    atomic_json(
+        case_root / "analysis" / "binary" / "records.json",
+        [
+            {"sha256": file_sha256(obj_file), "symbols": ["main T"], "metadata": "ELF 64-bit LSB relocatable"},
+            {"sha256": file_sha256(exe_file), "symbols": ["main T"], "metadata": "ELF 64-bit LSB pie executable"},
+        ],
+    )
+
+    cmd_cfg_id = "c" * 64
+    cmd_bld_id = "b" * 64
+    events_dir = run_root / "data" / "captures"
+    events_dir.mkdir(parents=True)
+    events_path = events_dir / "events.jsonl"
+    base_ns = 1_795_633_916_000_000_000
+    envp_entries = [
+        {"name": "CXXFLAGS", "redacted": False, "value": "-g -I/home/builder/ext_inc"},
+        {"name": "GITHUB_TOKEN", "redacted": True, "value": None},
+        {"name": "HOME", "redacted": False, "value": "/tmp"},
+    ]
+    syscall_events = []
+    for ordinal, pid in ((10, 101), (20, 102), (30, 103), (40, 104), (41, 105)):
+        syscall_events.append(
+            json.dumps(
+                {
+                    "schema": "appsec-review/build-syscall-event/2",
+                    "kind": "process_exec",
+                    "ordinal": ordinal,
+                    "pid": pid,
+                    "tid": pid,
+                    "result": 0,
+                    "timestamp_ns": base_ns + ordinal * 1_000_000,
+                    "envp_captured": True,
+                    "envp": envp_entries,
+                }
+            )
+        )
+        syscall_events.append(
+            json.dumps(
+                {
+                    "schema": "appsec-review/build-syscall-event/2",
+                    "kind": "process_exit",
+                    "ordinal": ordinal + 1,
+                    "pid": pid,
+                    "tid": pid,
+                    "exit_code": 0,
+                    "timestamp_ns": base_ns + ordinal * 1_000_000 + 500_000,
+                }
+            )
+        )
+    events_path.write_text("\n".join(syscall_events) + "\n", encoding="utf-8")
+
+    pcc_path = run_root / "data" / "build" / "protected-compile-commands.json"
+    pcc_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_json(
+        pcc_path,
+        {
+            "schema": "appsec-review/protected-compile-commands/1",
+            "rows": [
+                # Build-driver orchestration rows (cmake, ninja) -> skipped cleanly
+                {
+                    "argv": ["cmake", "--build", "build"],
+                    "tool": "cmake",
+                    "tool_kind": "build-driver",
+                    "working_directory": ".",
+                    "inputs": [],
+                    "outputs": [],
+                    "parent_command_id": cmd_bld_id,
+                    "evidence": {"process_exec": {"event_ordinals": [1]}, "tool_call": None},
+                },
+                {
+                    "argv": ["/usr/bin/ninja", "-C", "build"],
+                    "tool": "ninja",
+                    "tool_kind": "build-driver",
+                    "working_directory": ".",
+                    "inputs": [],
+                    "outputs": [],
+                    "parent_command_id": cmd_bld_id,
+                    "evidence": {"process_exec": {"event_ordinals": [2]}, "tool_call": {"exit_code": 0}},
+                },
+                # Configure-time CMakeScratch/TryCompile + capability query + internal -cc1 rows -> skipped cleanly
+                {
+                    "argv": ["/usr/bin/clang++-18", "-c", "testCXXCompiler.cxx", "-o", "testCXXCompiler.cxx.o"],
+                    "tool": "clang++",
+                    "tool_kind": "compiler",
+                    "working_directory": "build/CMakeFiles/CMakeScratch/TryCompile-abc123",
+                    "inputs": [],
+                    "outputs": [],
+                    "parent_command_id": cmd_cfg_id,
+                    "evidence": {"process_exec": {"event_ordinals": [3]}, "tool_call": {"exit_code": 0}},
+                },
+                {
+                    "argv": ["/usr/bin/clang++-18", "-Wl,--help"],
+                    "tool": "clang++",
+                    "tool_kind": "linker-driver",
+                    "working_directory": "build",
+                    "inputs": [],
+                    "outputs": [],
+                    "parent_command_id": cmd_cfg_id,
+                    "evidence": {"process_exec": {"event_ordinals": [4]}, "tool_call": {"exit_code": 0}},
+                },
+                {
+                    "argv": ["/usr/bin/clang++-18", "-cc1", "-E", "/workspace/src/main.cpp", "-o", "-"],
+                    "tool": "clang++",
+                    "tool_kind": "compiler",
+                    "working_directory": "build",
+                    "inputs": [],
+                    "outputs": [],
+                    "parent_command_id": cmd_cfg_id,
+                    "evidence": {"process_exec": {"event_ordinals": [5]}, "tool_call": None},
+                },
+                # Paired /capture/wrappers/clang++ wrapper + real /usr/bin/clang++-18 compile
+                {
+                    "argv": [
+                        "/capture/wrappers/clang++",
+                        "-O2",
+                        "-c",
+                        "/workspace/src/main.cpp",
+                        "-o",
+                        "CMakeFiles/smoke.dir/src/main.cpp.o",
+                    ],
+                    "tool": "clang++",
+                    "tool_kind": "compiler",
+                    "working_directory": "build",
+                    "inputs": [{"declared": "/workspace/src/main.cpp", "mapping": "exact-workspace-path", "workspace_path": "src/main.cpp"}],
+                    "outputs": [{"declared": "CMakeFiles/smoke.dir/src/main.cpp.o", "mapping": "exact-workspace-path", "workspace_path": "build/CMakeFiles/smoke.dir/src/main.cpp.o"}],
+                    "parent_command_id": cmd_bld_id,
+                    "evidence": {"process_exec": {"event_ordinals": [9]}, "tool_call": None},
+                },
+                {
+                    "argv": [
+                        "/usr/bin/clang++-18",
+                        "-O2",
+                        "-c",
+                        "/workspace/src/main.cpp",
+                        "-o",
+                        "CMakeFiles/smoke.dir/src/main.cpp.o",
+                    ],
+                    "tool": "clang++",
+                    "tool_kind": "compiler",
+                    "working_directory": "build",
+                    "inputs": [{"declared": "/workspace/src/main.cpp", "mapping": "exact-workspace-path", "workspace_path": "src/main.cpp"}],
+                    "outputs": [{"declared": "CMakeFiles/smoke.dir/src/main.cpp.o", "mapping": "exact-workspace-path", "workspace_path": "build/CMakeFiles/smoke.dir/src/main.cpp.o"}],
+                    "parent_command_id": cmd_bld_id,
+                    "evidence": {"process_exec": {"event_ordinals": [10]}, "tool_call": {"exit_code": 0}},
+                },
+                # Archiver (ar) + post-link archive indexer (ranlib) on libsmoke.a
+                {
+                    "argv": ["/usr/bin/llvm-ar-18", "qc", "libsmoke.a", "CMakeFiles/smoke.dir/src/main.cpp.o"],
+                    "tool": "ar",
+                    "tool_kind": "archiver",
+                    "working_directory": "build",
+                    "inputs": [{"declared": "CMakeFiles/smoke.dir/src/main.cpp.o", "mapping": "exact-workspace-path", "workspace_path": "build/CMakeFiles/smoke.dir/src/main.cpp.o"}],
+                    "outputs": [{"declared": "libsmoke.a", "mapping": "exact-workspace-path", "workspace_path": "build/libsmoke.a"}],
+                    "parent_command_id": cmd_bld_id,
+                    "evidence": {"process_exec": {"event_ordinals": [20]}, "tool_call": {"exit_code": 0}},
+                },
+                {
+                    "argv": ["/usr/bin/llvm-ranlib-18", "libsmoke.a"],
+                    "tool": "ranlib",
+                    "tool_kind": "archiver",
+                    "working_directory": "build",
+                    "inputs": [],
+                    "outputs": [{"declared": "libsmoke.a", "mapping": "exact-workspace-path", "workspace_path": "build/libsmoke.a"}],
+                    "parent_command_id": cmd_bld_id,
+                    "evidence": {"process_exec": {"event_ordinals": [30]}, "tool_call": {"exit_code": 0}},
+                },
+                # Linker driver (clang++) + internal child ld subprocess producing smoke_server
+                {
+                    "argv": ["/usr/bin/clang++-18", "libsmoke.a", "-o", "smoke_server"],
+                    "tool": "clang++",
+                    "tool_kind": "linker-driver",
+                    "working_directory": "build",
+                    "inputs": [{"declared": "libsmoke.a", "mapping": "exact-workspace-path", "workspace_path": "build/libsmoke.a"}],
+                    "outputs": [{"declared": "smoke_server", "mapping": "exact-workspace-path", "workspace_path": "build/smoke_server"}],
+                    "parent_command_id": cmd_bld_id,
+                    "evidence": {"process_exec": {"event_ordinals": [40]}, "tool_call": {"exit_code": 0}},
+                },
+                {
+                    "argv": ["/usr/bin/ld", "-pie", "libsmoke.a", "-o", "smoke_server"],
+                    "tool": "ld",
+                    "tool_kind": "linker",
+                    "working_directory": "build",
+                    "inputs": [],
+                    "outputs": [{"declared": "smoke_server", "mapping": "exact-workspace-path", "workspace_path": "build/smoke_server"}],
+                    "parent_command_id": cmd_bld_id,
+                    "evidence": {"process_exec": {"event_ordinals": [41]}, "tool_call": None},
+                },
+            ],
+        },
+    )
+
+    projects = {
+        case_id: {
+            "terminal_status": "SUCCEEDED",
+            "mapping": {"root": ".", "build_system": "cmake", "build_dir": "build"},
+            "compile_database": {
+                "path": comp_db.relative_to(run_root).as_posix(),
+                "sha256": file_sha256(comp_db),
+                "size_bytes": comp_db.stat().st_size,
+            },
+            "build_receipt": {
+                "workspace": "data/build/probes/workspace",
+                "recipe": {"build_dir": "build"},
+                "protected_compile_commands": {
+                    "path": pcc_path.relative_to(run_root).as_posix(),
+                    "sha256": file_sha256(pcc_path),
+                },
+                "commands": [
+                    {"command_id": cmd_cfg_id, "exit_code": 0},
+                    {
+                        "command_id": cmd_bld_id,
+                        "exit_code": 0,
+                        "execution_capture": {
+                            "complete": True,
+                            "envp_captured": True,
+                            "events": {
+                                "path": events_path.relative_to(run_root).as_posix(),
+                                "sha256": file_sha256(events_path),
+                            },
+                        },
+                    },
+                ],
+            },
+            "outputs": [
+                {
+                    "path": "build/CMakeFiles/smoke.dir/src/main.cpp.o",
+                    "kind": "object",
+                    "sha256": file_sha256(obj_file),
+                    "size_bytes": obj_file.stat().st_size,
+                },
+                {
+                    "path": "build/libsmoke.a",
+                    "kind": "static_library",
+                    "sha256": file_sha256(lib_file),
+                    "size_bytes": lib_file.stat().st_size,
+                },
+                {
+                    "path": "build/smoke_server",
+                    "kind": "executable",
+                    "sha256": file_sha256(exe_file),
+                    "size_bytes": exe_file.stat().st_size,
+                },
+            ],
+        }
+    }
+
+    cpp_sha = _publish_cpp_handoff(run_root, target, projects)
+    lang_sha = _publish_language_build_handoff(run_root, [])
+    pins = {"job_cpp_compiled_analysis": cpp_sha, "job_language_build": lang_sha}
+    ctx = _make_ctx(run_root, target, pins, attempt_id="attempt_0001")
+    with upstream_scope(run_root, JOB_ID, pins, contract=CONTRACT):
+        res = build_job().handler(ctx)
+
+    prov = res["outputs"]["provenance.native_units"]["projects"][case_id]
+    insp = res["outputs"]["inspection.native_units"]["projects"][case_id]
+    det = res["outputs"]["deterministic.native_units"]["projects"][case_id]
+    idx = res["outputs"]["index.native_units"]["projects"][case_id]
+
+    assert prov["terminal_status"] == "SUCCEEDED"
+    assert prov["gaps"] == []
+    assert prov["relationships_exact"] is True
+    assert prov["relationship_count"] == 3
+    assert [a["classification"] for a in prov["actions"]] == ["compiler", "archiver", "post_link", "linker_driver"]
+    assert all(a["timing_granularity"] == "action" and a["exit_status"] == 0 for a in prov["actions"])
+    assert prov["actions"][0]["environment"]["facts"]["CXXFLAGS"]["value"] == "-g -I<external-path>"
+    assert prov["actions"][0]["environment"]["omitted_count"] == 2
+
+    assert insp["terminal_status"] == "SUCCEEDED"
+    assert insp["gaps"] == []
+    assert len(insp["records"]) == 3
+
+    elf_unknown = [c for c in det["checks"] if c["check_id"].startswith("elf.") and c["status"] == "UNKNOWN"]
+    assert elf_unknown == []
+    link_act = next(a for a in prov["actions"] if a["classification"] == "linker_driver")
+    assert [c["check_id"] for c in det["checks"] if c["scope"] == link_act["build_action_id"]] == ["gnu.insecure_override"]
+
+    exe_art = next(a for a in prov["artifacts"] if a["path"] == "build/smoke_server")
+    by_check = {(c["check_id"], c["scope"]): c["status"] for c in det["checks"]}
+    assert by_check[("elf.pie", exe_art["artifact_id"])] == "PASS"
+    assert by_check[("elf.relro", exe_art["artifact_id"])] == "PASS"
+    assert by_check[("elf.now", exe_art["artifact_id"])] == "FAIL"
+    assert by_check[("elf.nx_stack", exe_art["artifact_id"])] == "PASS"
+    assert by_check[("elf.control_flow", exe_art["artifact_id"])] == "FAIL"
+    assert by_check[("elf.stack_canary", exe_art["artifact_id"])] == "FAIL"
+    assert by_check[("elf.fortify", exe_art["artifact_id"])] == "FAIL"
+
+    with sqlite3.connect(run_root / idx["artifact"]["path"]) as db:
+        edges = {
+            (src_name, kind, dst_name)
+            for src_name, kind, dst_name in db.execute(
+                """
+                SELECT s.name, r.kind, t.name
+                FROM relations r
+                JOIN entities s ON s.identity = r.source_id
+                JOIN entities t ON t.identity = r.target_id
+                WHERE r.kind IN ('COMPILES_TO', 'LINKS_INTO')
+                """
+            ).fetchall()
+        }
+    assert ("main.cpp", "COMPILES_TO", "main.cpp.o") in edges
+    assert ("main.cpp.o", "LINKS_INTO", "libsmoke.a") in edges
+    assert ("libsmoke.a", "LINKS_INTO", "smoke_server") in edges
