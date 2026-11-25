@@ -1178,7 +1178,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_plan(unit.job.run_root)
         actions = list(accepted["build_topology"]["build_actions"])
-        configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
+        configuration_sha256 = unit.job.resolved_config_sha256
         dependencies: dict[str, set[str]] = {str(item["build_unit_id"]): set() for item in actions}
         accepted_graph = accepted.get("build_topology", {}).get("executable_graph")
         if not isinstance(accepted_graph, Mapping):

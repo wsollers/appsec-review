@@ -132,3 +132,59 @@ flowchart TD
   manifest --> consumer["Admitted application or capability-scoped query"]
   handoff --> resume["Identity-checked reuse or explicitly admitted repair"]
 ```
+
+
+## Operational configuration compatibility and attempt ownership
+
+`config/operational.py` is the single exact-leaf declaration and comparison mechanism.
+It compares full resolved documents; unknown paths, missing values and mixed material
+changes remain incompatible. Execution settings change how a new attempt runs;
+coverage settings change how much it can inspect. Both preserve already accepted
+results, including the limits and gaps under which those results were produced.
+Increasing coverage requires an explicit whole-producer rerun and reconsideration of
+its affected downstream jobs, never reuse of selected cells from a failed attempt.
+
+Reviewed execution controls include CodeQL concurrency, threads, RAM, inventory wait,
+and export compile threads/RAM/wait; the Clang, C++ symbol, CPG and code-graph worker
+pools; project/language build command waits and project image-build waits. CodeQL
+database/query/export analysis deadlines and Tree-sitter workers are **coverage**
+controls: Tree-sitter workers also multiply generated-source caps. CodeQL step/task
+workers remain fixed at one. Existing parser bounds and resource admission still apply.
+The exact fields are listed in [job tuning](../operations/job-tuning.md).
+
+Declarations have a numeric value kind, not a blanket table exemption. Positive
+integers remain the default. Debug-symbol reader deadlines permit positive fractional
+seconds; the two reviewed reservation IO-slot fields permit zero. Runtime progress
+and sample intervals permit finite nonnegative numbers, including zero to disable
+reporting. The existing Dagster maximum concurrency and named pool capacities permit
+positive integers. Global declarations use `job_id: null` and an absolute path in the
+same delta record. Booleans, strings, sequences, unreviewed global settings and
+resource-authority policies are not implicitly operational. Model/provider/reasoning,
+rules, sources, schemas, signing, authority and input-scope changes remain material.
+
+The original full snapshot and its raw hash never change. Admission writes a full
+immutable revision, its exact typed deltas and its original-snapshot binding. A new
+attempt claims its effective revision hash; `context_configuration` resolves that
+hash and snapshot artifacts include both revision and original references. Retained
+producer settings must be read through the producer's own pinned hash, never through
+a consumer's current limits. Build iteration transactions now carry the parent's
+revision and reconstruct validated configuration from pinned source, embedded profile
+and overlay documents, and pinned host bindings, not current source TOML. Reconstruction
+must reproduce the exact admitted resolved hash. Historical workspace-resume meaning
+is unchanged; this is configuration propagation, not permission to salvage build cells.
+
+New CodeQL database/query/export trees live below `data/codeql/attempts/<attempt>/`;
+predecessor imports write there and resolve old or new accepted source manifests by
+verified references. Tree-sitter shards, indices, CFG outputs and generated-source
+mounts are attempt-isolated. Code-graph stages, checkpoints and shards are likewise
+attempt-isolated; Alternate CPG outputs live under its attempt's publication unit.
+Artifact declarations retain historical paths and add the new paths. An explicit new
+attempt cannot discover an older attempt's checkpoints. Invalid graph checkpoints do
+not authorize deletion of their referenced shards. Content identities and accepted
+artifact references remain intact; immutable tool compilation caches are not target
+analysis-result reuse.
+
+Unsupported boundaries remain explicit: changing review-policy resource budgets,
+string/sequence controls or profile/overlay metadata is not covered by these exact
+numeric declarations. Such differences are refused rather than silently exempted.
+No configuration admission is proof of execution, new coverage or a successful review.

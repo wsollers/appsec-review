@@ -6700,19 +6700,21 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   `src/appsec_review/jobs/job_dossier_publication/job.py`,
   `docs/operations/final-report.md`; approved report design and production integration, 2026-11-22.
 
-### T-5273 — Complete whole-job-safe operational tuning declarations
+### T-5273 ? Complete whole-job-safe operational tuning declarations
 
 - **State:** open
 - **Area:** pipeline
-- **Why:** The first reviewed tuning declarations preserve accepted configuration provenance,
-  but other candidates still cross shared checkpoint or original-only configuration readers.
-- **Scope:** Complete attempt-safe CodeQL, Tree-sitter and graph outputs, build-iteration
-  revision propagation, analyzer pool-value regressions and reviewed non-integer/global
-  support before declaring those exact fields operationally compatible.
-- **Done when:** Focused regressions prove effective settings reach real consumers, accepted
-  originals retain bytes/limits/gaps, whole-job retries do not salvage prior cells, and material
-  or invalid changes remain refused without weakening validators or admission.
-- **Refs:** `docs/operations/job-tuning.md`, `docs/operations/analyzer-attempt-scopes.md`.
+- **Why:** The remaining implementation is now present, but regression execution was explicitly
+  withheld by the owner; effective-pool and end-to-end restart validation is not claimed.
+- **Scope:** Validate the attempt-isolated CodeQL/Tree-sitter/graph outputs, immutable build-iteration
+  revision propagation, analyzer pool consumption and reviewed numeric/global declarations.
+  String/sequence controls, review-policy resource budgets and changed layer metadata remain
+  deliberately unsupported rather than accepted without a bounded semantic review.
+- **Done when:** Requested validation confirms effective settings reach consumers, accepted original
+  bytes/limits/gaps survive retries, whole-job attempts do not salvage earlier cells, and material
+  or invalid changes remain refused without weakening admission.
+- **Refs:** `docs/operations/job-tuning.md`, `docs/architecture/runtime-interchange.md`,
+  `docs/operations/analyzer-attempt-scopes.md`.
 
 ## Legacy backlog
 

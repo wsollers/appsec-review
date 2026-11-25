@@ -14,7 +14,7 @@ from appsec_review.runtime.datasets import artifact_only, indexed
 
 
 _A = "data/jobs/job_code_graph_index/attempts/*/steps"
-_SCOPES = "data/code-graph/scopes/*"
+_SCOPES = "data/code-graph/attempts/*/scopes/*"
 DATASETS = (
     indexed("code_graph_facts", "correlate", "graph", "appsec-review/graph-fact/1",
             "Normalized, cross-checked and SARIF-correlated code-graph facts, one shard per CodeQL scope and "
@@ -28,11 +28,11 @@ DATASETS = (
                   "(include flow, diagnostics, symbols); query_observations (seed, function, fix_it, min_trace_length)"),
     artifact_only("code_graph_stages", "normalize", "graph", "appsec-review/code-graph-stage/1",
                   "Per-scope normalized and cross-checked intermediate fact sets handed between units.",
-                  artifacts=(_SCOPES + "/work/**",),
+                  artifacts=("data/code-graph/scopes/*/work/**", _SCOPES + "/work/**"),
                   reason="intermediate copies of facts that the accepted graph shards publish"),
     artifact_only("code_graph_checkpoints", "correlate", "graph", "appsec-review/code-graph-checkpoint/1",
                   "Per-scope reuse checkpoints binding every input identity to the published shards.",
-                  artifacts=(_SCOPES + "/checkpoint.json",),
+                  artifacts=("data/code-graph/scopes/*/checkpoint.json", _SCOPES + "/checkpoint.json"),
                   reason="reuse bookkeeping; the shards themselves are indexed"),
     artifact_only("code_graph_summary", "acceptance", "graph", "appsec-review/code-graph-index/1",
                   "Accepted inputs, per-scope counts, coverage and gaps of one attempt.",
@@ -56,6 +56,7 @@ DATASETS = (
                   "Portable universal Alternate CPG node, edge, precomputed inter-procedural path JSONL "
                   "artifacts and attempt summary.",
                   artifacts=("data/code-graph/alternate-cpg/**",
+                             _A + "/acceptance/tasks/publish_handoff/alternate-cpg/**",
                              _A + "/acceptance/tasks/publish_handoff/alternate-cpg-summary.json"),
                   reason="same Alternate CPG nodes, edges and paths as the accepted alternate-cpg analysis shard"),
 )

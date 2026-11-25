@@ -1033,7 +1033,8 @@ def _config_source(path: str | Path) -> Path:
 
 def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path | None = None,
                 profile: str | None = None, compiler_target: str | None = None,
-                host_pins: str | Path | HostPins | None = None) -> AppConfig:
+                host_pins: str | Path | HostPins | None = None,
+                _snapshot: Any | None = None) -> AppConfig:
     """Load the explicit (or repository default) configuration, a runtime profile and an optional capacity overlay.
 
     The profile is ``profile`` when given, otherwise ``APPSEC_REVIEW_PROFILE``, otherwise ``dev``. ``dev``
@@ -1051,43 +1052,67 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     the native build profile's bound image id; ``configuration_release_sources`` in the resolved
     configuration records whether each release id was declared or derived and from what.
     """
-    source = _config_source(path)
+    source = (_config_source(path) if _snapshot is None else
+              Path(_snapshot.manifest["sources"][0]["path"]))
     repository_root = source.parent
-    source_bytes = source.read_bytes()
+    source_bytes = (source.read_bytes() if _snapshot is None else
+                    (_snapshot.directory / "appsec-review.toml").read_bytes())
     document = tomllib.loads(source_bytes.decode("utf-8"))
-    profile_name = resolve_profile_name(profile)
+    profile_name = resolve_profile_name(profile if _snapshot is None else _snapshot.manifest["selection"]["profile"])
     profile_source: Path | None = None
     profile_sha256: str | None = None
     profile_record: dict[str, Any] = {"name": profile_name, "path": None, "sha256": None, "keys": []}
     if profile_name != DEFAULT_PROFILE:
-        profile_source = _config_source(repository_root / PROFILE_DIRECTORY / f"{profile_name}.toml")
-        profile_bytes = profile_source.read_bytes()
-        profile_document = tomllib.loads(profile_bytes.decode("utf-8"))
+        if _snapshot is None:
+            profile_source = _config_source(repository_root / PROFILE_DIRECTORY / f"{profile_name}.toml")
+            profile_bytes = profile_source.read_bytes()
+            profile_document = tomllib.loads(profile_bytes.decode("utf-8"))
+            profile_sha256 = hashlib.sha256(profile_bytes).hexdigest()
+        else:
+            record = _snapshot.document["configuration_profile"]
+            profile_source = Path(record["path"])
+            profile_sha256 = record["sha256"]
+            profile_document = copy.deepcopy(record["document"])
         profile_keys = profile_override_keys(profile_document)
         _apply_profile(document, profile_document)
-        profile_sha256 = hashlib.sha256(profile_bytes).hexdigest()
         profile_record = {"layer": PROFILE_LAYER, "name": profile_name, "path": str(profile_source),
                           "sha256": profile_sha256, "keys": list(profile_keys), "document": profile_document}
-    overlay_value = (overlay or None) if overlay is not None else (os.environ.get(OVERLAY_ENVIRONMENT) or None)
+    overlay_value = ((overlay or None) if overlay is not None else
+                     (os.environ.get(OVERLAY_ENVIRONMENT) or None)) if _snapshot is None else (
+                         _snapshot.manifest["selection"].get("overlay"))
     overlay_source: Path | None = None
     overlay_sha256: str | None = None
     overlay_record: dict[str, Any] | None = None
     if overlay_value is not None:
-        overlay_source = _config_source(overlay_value)
-        overlay_bytes = overlay_source.read_bytes()
-        overlay_document = tomllib.loads(overlay_bytes.decode("utf-8"))
+        if _snapshot is None:
+            overlay_source = _config_source(overlay_value)
+            overlay_bytes = overlay_source.read_bytes()
+            overlay_document = tomllib.loads(overlay_bytes.decode("utf-8"))
+            overlay_sha256 = hashlib.sha256(overlay_bytes).hexdigest()
+        else:
+            record = _snapshot.document["configuration_overlay"]
+            overlay_source = Path(record["path"])
+            overlay_sha256 = record["sha256"]
+            overlay_document = copy.deepcopy(record["document"])
         overlay_keys = overlay_capacity_keys(overlay_document)
         _apply_overlay(document, overlay_document)
-        overlay_sha256 = hashlib.sha256(overlay_bytes).hexdigest()
         overlay_record = {"layer": OVERLAY_LAYER, "path": str(overlay_source), "sha256": overlay_sha256,
                           "keys": list(overlay_keys), "document": overlay_document}
-    pins = host_pins if isinstance(host_pins, HostPins) else load_host_pins(repository_root, host_pins)
+    if _snapshot is None:
+        pins = host_pins if isinstance(host_pins, HostPins) else load_host_pins(repository_root, host_pins)
+    else:
+        pin_layer = next((layer for layer in _snapshot.manifest["sources"]
+                          if layer.get("layer") == HOST_PINS_LAYER), None)
+        pins = (HostPins(Path(pin_layer["path"]), (_snapshot.directory / "host-pins.toml").read_bytes())
+                if pin_layer is not None else None)
     apply_host_pins(document, pins)
     release_sources = _resolve_release_defaults(
         document, pins, overlay_record["document"] if overlay_record is not None else None)
     resolved_document = copy.deepcopy(document)
     resolved_document[RELEASE_SOURCES_KEY] = release_sources
-    selected_compiler = parse_compiler_target("clang" if compiler_target is None else compiler_target)
+    selected_compiler = parse_compiler_target(
+        ("clang" if compiler_target is None else compiler_target) if _snapshot is None else
+        _snapshot.manifest["selection"]["compiler_target"])
     resolved_document["compiler_target"] = selected_compiler.value
     review_policy = parse_review_policy(document.get("review_policy", {}))
     resolved_document["review_policy"] = review_policy.view()
@@ -1564,6 +1589,8 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             job_id: resolved_document["jobs"].pop(job_id) for job_id in pending}
     resolved_json = (json.dumps(resolved_document, sort_keys=True, separators=(",", ":"),
                                 ensure_ascii=False) + "\n").encode("utf-8")
+    if _snapshot is not None and hashlib.sha256(resolved_json).hexdigest() != _snapshot.sha256:
+        raise ValueError("immutable configuration no longer resolves under the current parser")
     return AppConfig(
         source_path=source,
         source_sha256=hashlib.sha256(source_bytes).hexdigest(),

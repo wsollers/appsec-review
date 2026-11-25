@@ -1910,7 +1910,7 @@ def iteration_controller(unit: UnitContext):
                     **preparation["action"], "terminal_status": preparation["terminal_status"],
                     "gaps": _receipt_gaps(preparation.get("gaps", ()), probe.get("gaps", ()))}, accepted))
     typed = unit.job.config.typed_settings
-    configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
+    configuration_sha256 = unit.job.resolved_config_sha256
     for dispatch in dispatches:
         if dispatch.get("execution_owner") == "job_project_build":
             receipt = next(item for item in accepted["probe_receipts"]
@@ -1968,7 +1968,7 @@ def build_job(*, executor_factory=None) -> Job:
         if executor_factory is None:
             from appsec_review.jobs.job_build_iteration.job import invoke_registered_iteration
             invoke = lambda request, label, _execute: invoke_registered_iteration(
-                unit.job.run_root, request, label)
+                unit.job.run_root, request, label, unit.job.resolved_config_sha256)
         result = controller.run(lambda request, run_id: _production_iteration(
             unit, request, run_id, accepted, executor_factory), invoke=invoke)
         return result
@@ -1978,7 +1978,7 @@ def build_job(*, executor_factory=None) -> Job:
         typed = unit.job.config.typed_settings
         if not isinstance(typed, LanguageBuildSettings):
             raise ValueError("typed language-build settings are unavailable")
-        configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
+        configuration_sha256 = unit.job.resolved_config_sha256
         wasm_rules = wasm._producer_rules(unit.job.config.settings["wasm"])
         consumed_families = (frozenset(value for rule in wasm_rules.values()
                                        for value in rule["families"])

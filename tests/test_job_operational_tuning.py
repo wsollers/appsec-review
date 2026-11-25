@@ -122,13 +122,12 @@ def test_declarations_do_not_coerce_unsupported_types(shipped, value):
     (("jobs", "job_tree_sitter_ast", "settings", "max_files_per_scope"), 128, 256),
     (("jobs", "job_codeql_analysis", "steps", "execution", "workers"), 1, 2),
     (("jobs", "job_codeql_analysis", "steps", "acceptance", "tasks", "publish_handoff", "workers"), 1, 2),
-    (("jobs", "job_review_prioritization", "settings", "syntax_metrics_reservation", "io_slots"), 0, 1),
     (("source", "identity"), "source-a", "source-b"),
     (("rules", "identity"), "rules-a", "rules-b"),
     (("schema", "identity"), "schema-a", "schema-b"),
     (("review_policy", "mode"), "strict", "first_party_managed"),
 ], ids=["scoring", "model", "provider", "reasoning", "scope", "codeql-step", "codeql-task",
-        "zero-io", "source", "rules", "schema", "authority"])
+        "source", "rules", "schema", "authority"])
 def test_mixed_material_changes_are_not_hidden_by_a_timeout(path, old, new):
     before = {"jobs": {CONNECTIVITY: {"settings": {"timeout_seconds": 30}}}}
     node = before
@@ -568,3 +567,101 @@ def test_dossier_renderer_retains_timeout_gap_when_a_later_attempt_gets_more_tim
     assert any("dossier_render_failed" in gap for gap in first["gap_ids"])
     assert second["status"] == "rendered" and second["files"]["pdf"] is not None
     _assert_retained(original)
+
+
+@pytest.mark.parametrize("path,old,new,category", [
+    (("jobs", "job_tree_sitter_ast", "settings", "workers"), 1, 4, "coverage"),
+    (("jobs", "job_codeql_analysis", "settings", "query_timeout_seconds"), 60, 120, "coverage"),
+    (("jobs", "job_codeql_analysis", "settings", "export_queries", "compile_threads"), 2, 4, "execution"),
+    (("jobs", "job_debug_symbol_indexing", "settings", "reader", "timeout_seconds"), 1, 1.5, "execution"),
+    (("jobs", "job_review_prioritization", "settings", "syntax_metrics_reservation", "io_slots"), 0, 1, "execution"),
+    (("runtime", "operation_sample_interval_seconds"), 0, 0.25, "execution"),
+    (("orchestration", "dagster", "pools", "cpp_analysis"), 1, 4, "execution"),
+])
+def test_extended_tuning_types_and_categories(path, old, new, category):
+    before = {}
+    node = before
+    for key in path[:-1]:
+        node = node.setdefault(key, {})
+    node[path[-1]] = old
+    after = deepcopy(before)
+    _set(after, path, new)
+    change, = operational_changes(before, after)
+    assert (change["before"], change["after"], change["category"]) == (old, new, category)
+    _set(after, path, True)
+    with pytest.raises(MaterialConfigurationChange):
+        operational_changes(before, after)
+
+
+def test_graph_new_attempt_does_not_reuse_or_delete_prior_checkpoint(tmp_path):
+    from appsec_review.jobs.job_code_graph_index.scopes import reuse_checkpoint, save_checkpoint
+    shard = tmp_path / "retained.sqlite"
+    shard.write_bytes(b"retained")
+    result = {"scope_id": "cpp-s1", "shards": [
+        {"relative_path": "retained.sqlite", "sha256": file_sha256(shard)}]}
+    save_checkpoint(tmp_path, "cpp-s1", "identity", result, attempt_id="attempt_0001")
+    assert reuse_checkpoint(tmp_path, "cpp-s1", "identity", attempt_id="attempt_0002") is None
+    shard.write_bytes(b"changed")
+    assert reuse_checkpoint(tmp_path, "cpp-s1", "identity", attempt_id="attempt_0001") is None
+    assert shard.read_bytes() == b"changed"
+
+
+
+def test_iteration_configuration_reconstructs_pinned_layers_not_live_source(tmp_path, shipped, monkeypatch):
+    from appsec_review.runtime.configuration import ConfigurationSnapshot
+    from appsec_review.jobs.job_build_iteration.job import load_iteration_configuration
+    import appsec_review.runtime.configuration as snapshots
+
+    pinned = tmp_path / "configuration"
+    pinned.mkdir()
+    (pinned / "appsec-review.toml").write_bytes(shipped.source_path.read_bytes())
+    if shipped.host_pins is not None:
+        (pinned / "host-pins.toml").write_bytes(shipped.host_pins.content)
+    snapshot = ConfigurationSnapshot(pinned, {
+        "sources": list(shipped.layers), "resolved_sha256": shipped.resolved_sha256,
+        "selection": {"profile": shipped.profile, "overlay": None,
+                      "compiler_target": shipped.compiler_target.value},
+    }, json.loads(shipped.resolved_json))
+    selected = []
+    def resolve(root, expected):
+        selected.append(expected)
+        return snapshot
+    monkeypatch.setattr(snapshots, "configuration_snapshot", resolve)
+    read = Path.read_bytes
+    def guarded(path):
+        if path == shipped.source_path:
+            raise AssertionError("iteration read current source rather than its pinned revision")
+        return read(path)
+    monkeypatch.setattr(Path, "read_bytes", guarded)
+    effective = load_iteration_configuration(tmp_path, shipped.resolved_sha256)
+    assert selected == [shipped.resolved_sha256]
+    assert effective.resolved_json == shipped.resolved_json
+    assert effective.job("job_language_build").settings == shipped.job("job_language_build").settings
+
+
+@pytest.mark.parametrize("job_id,unit_id", [
+    ("job_clang_static_analysis", "analyze.scopes"),
+    ("job_cpp_symbol_index", "index.scopes"),
+    ("job_cpg_analysis", "generate.scopes"),
+])
+def test_analyzer_effective_workers_reach_real_pool(tmp_path, shipped, monkeypatch, job_id, unit_id):
+    import importlib
+    module = importlib.import_module(f"appsec_review.jobs.{job_id}.job")
+    original = shipped.job(job_id)
+    settings = dict(original.settings)
+    if job_id == "job_cpg_analysis":
+        settings["enabled"] = True
+    seen = []
+    pool_type = module.ThreadPoolExecutor
+    class ObservedPool(pool_type):
+        def __init__(self, *, max_workers):
+            seen.append(max_workers)
+            super().__init__(max_workers=max_workers)
+    monkeypatch.setattr(module, "ThreadPoolExecutor", ObservedPool)
+    monkeypatch.setattr(module, "accepted_cpp_scopes", lambda root: ({}, [], {}))
+    for workers in (1, 3):
+        config = replace(original, settings={**settings, "workers": workers})
+        unit = _unit(tmp_path, config, unit_id, {"load.accepted_cpp": {"scopes": []}})
+        result = _handler(module.build_job(), unit_id)(unit)
+        assert result["scope_count"] == 0
+    assert seen == [1, 3]
