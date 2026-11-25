@@ -191,3 +191,35 @@ def test_the_real_catalog_loader_is_called_with_the_run_root(upstream) -> None:
     _accepted_inputs(unit(upstream.context, "decide.target"), SETTINGS)
     assert upstream.calls[0] == ("artifacts", run_root)
     assert file_sha256(run_root / upstream.accepted["index_manifest"]["path"]) == upstream.accepted["index_manifest"]["sha256"]
+
+
+def test_non_symbol_build_artifacts_and_static_libraries_are_excluded_from_the_catalog(upstream) -> None:
+    from appsec_review.retrieval import EntityKind, EntityRecord, INDEX_SCHEMA, IndexBuilder, IndexIdentity, LogicalIdentity
+    run_root = upstream.context.run_root
+    exe = artifact(run_root, "build/smoke_server", ELF, "executable")
+    obj = artifact(run_root, "build/main.cpp.o", ELF + b"o", "object")
+    compdb = artifact(run_root, "build/compile_commands.json", b"[]", "compile-database")
+    static_lib = artifact(run_root, "build/libsmoke_zlib.a", b"!<arch>\n", "static-library")
+
+    shard_path = run_root / "data" / "indices" / "artifacts" / "catalog-mixed.sqlite"
+    builder = IndexBuilder(shard_path, name="artifacts", fingerprint="c" * 64, target_snapshot=SNAPSHOT,
+                           shard_id="catalog-mixed")
+    for entity_kind, item in (
+        (EntityKind.EXECUTABLE, exe),
+        (EntityKind.OBJECT_FILE, obj),
+        (EntityKind.BUILD_ARTIFACT, compdb),
+        (EntityKind.LIBRARY, static_lib),
+    ):
+        ref_doc = item["reference"]
+        ident = LogicalIdentity.derive(entity_kind, SNAPSHOT, {"sha256": ref_doc["sha256"], "path": ref_doc["workspace_path"]})
+        item["artifact_identity"] = ident.value
+        ref_doc["canonical_identity"] = ident.value
+        builder.add_entity(EntityRecord(ident, ref_doc["sha256"], ref_doc["workspace_path"], "", ref_doc))
+    builder.add_coverage("fixture", "complete")
+    mixed_shard = IndexIdentity("artifacts", INDEX_SCHEMA, builder.build(), "c" * 64,
+                                shard_path.relative_to(run_root).as_posix(), {}, (), "catalog-mixed")
+
+    upstream.accepted = _accepted(run_root, [exe, obj, compdb, static_lib], shards=[mixed_shard])
+    result = _accepted_inputs(unit(upstream.context, "decide.target"), SETTINGS)
+    assert sorted(item["kind"] for item in result["artifacts"]) == ["executable", "object"]
+    assert result["gaps"] == []

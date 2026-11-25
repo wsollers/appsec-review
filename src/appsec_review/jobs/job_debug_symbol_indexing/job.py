@@ -9,6 +9,7 @@ import importlib
 import inspect
 import json
 from pathlib import Path
+import posixpath
 import re
 import time
 from typing import Any
@@ -50,7 +51,17 @@ _TOPOLOGY = {"decide": ("target",), "extract": ("clang_dwarf", "msvc_pdb"),
              "acceptance": ("publish_handoff",)}
 _ARTIFACT_KINDS = {EntityKind.EXECUTABLE, EntityKind.OBJECT_FILE, EntityKind.LIBRARY,
                    EntityKind.BUILD_ARTIFACT}
-_DEBUG_KINDS = {"native-symbols", "debug-information", "debug-metadata"}
+_DEBUG_KINDS = {
+    "native-symbols", "debug-information", "debug-metadata",
+    "debug-companion", "dwp", "dsym", "pdb",
+}
+_NON_SYMBOL_ARTIFACT_KINDS = {
+    "static-library", "compile-database", "link-map",
+    "generated-source", "preprocess-output", "sanitizer-build-tree",
+}
+_WORKSPACE_BUILD_ROOT = "/workspace"
+_CONTAINER_SYSTEM_ROOTS = ("/usr", "/lib", "/lib64", "/install")
+_RUN_OWNED_ARTIFACT_ORIGINS = {"build-output"}
 _LIMIT_GAPS = {
     "max_input_bytes", "max_records", "max_records_total", "max_output_bytes",
     "input_limit", "output_limit", "record_limit", "depth_limit",
@@ -176,10 +187,14 @@ def _accepted_inputs(unit: UnitContext, settings: Mapping[str, Any]) -> dict[str
             continue
         with closing(open_shard(unit.job.run_root, shard)) as db:
             kinds = sorted(kind.value for kind in _ARTIFACT_KINDS)
+            excluded_kinds = sorted(_NON_SYMBOL_ARTIFACT_KINDS)
             rows = db.execute(
                 "SELECT identity, kind, payload_json FROM entities WHERE kind IN ("
-                + ",".join("?" for _ in kinds) + ") ORDER BY identity LIMIT ?",
-                (*kinds, limit + 1)).fetchall()
+                + ",".join("?" for _ in kinds)
+                + ") AND COALESCE(json_extract(payload_json, '$.kind'), '') NOT IN ("
+                + ",".join("?" for _ in excluded_kinds)
+                + ") ORDER BY identity LIMIT ?",
+                (*kinds, *excluded_kinds, limit + 1)).fetchall()
         for logical_id, kind, payload_json in rows:
             if logical_id in seen_artifacts:
                 continue
@@ -264,7 +279,17 @@ def _probe(root: Path, artifact: Mapping[str, Any], maximum: int) -> dict[str, A
         with path.open("rb") as stream:
             header = stream.read(64)
         debug = header.startswith(b"Microsoft C/C++ MSF") or is_debug
-        return {**artifact, "probe": value, "path": path, "is_debug": debug}
+        not_applicable = (
+            not debug
+            and (
+                artifact.get("kind") in _NON_SYMBOL_ARTIFACT_KINDS
+                or header.startswith((b"!<arch>\n", b"!<thin>\n"))
+            )
+        )
+        probed = {**artifact, "probe": value, "path": path, "is_debug": debug}
+        if not_applicable:
+            probed["is_not_applicable"] = True
+        return probed
     except FrameworkIntegrityError:
         raise
     except (OSError, KeyError, TypeError, ValueError):
@@ -390,9 +415,68 @@ class _Sources:
             self.line_offset_bytes += size
         return offsets
 
-    def resolve(self, span) -> tuple[Mapping[str, Any] | None, str | None]:
+    def _bind_row(self, row: Mapping[str, Any], data: bytes, span,
+                  source_mapping: str) -> tuple[Mapping[str, Any] | None, str | None]:
+        offsets = self._line_table(row["sha256"], data)
+        if offsets is None:
+            return None, "source_line_offset_bound"
+        if not 1 <= span.line < len(offsets):
+            return None, "source_line_out_of_bounds"
+        start, end = offsets[span.line - 1], offsets[span.line]
+        if span.column > len(data[start:end].rstrip(b"\r\n")) + 1:
+            return None, "source_line_out_of_bounds"
+        return {**row, "start_byte": start, "end_byte": end, "source_mapping": source_mapping}, None
+
+    def _resolve_workspace_path(
+        self, span, comp_dir: str | None = None,
+    ) -> tuple[Mapping[str, Any] | None, str | None]:
+        if (not isinstance(span.path, str) or not span.path
+                or "\x00" in span.path or "\\" in span.path
+                or re.match(r"^[A-Za-z]:", span.path) is not None):
+            return None, "source_mapping_unverified: external source path"
+        candidate = span.path
+        if not candidate.startswith("/"):
+            if (isinstance(comp_dir, str) and comp_dir.startswith("/")
+                    and not comp_dir.startswith("//")
+                    and "\x00" not in comp_dir and "\\" not in comp_dir):
+                candidate = comp_dir.rstrip("/") + "/" + candidate
+            else:
+                return None, "source_mapping_unverified: checksum unavailable"
+        elif candidate.startswith("//"):
+            return None, "source_mapping_unverified: external source path"
+        normalized = posixpath.normpath(candidate)
+        prefix = _WORKSPACE_BUILD_ROOT + "/"
+        if not normalized.startswith(prefix):
+            if any(normalized == root or normalized.startswith(root + "/")
+                   for root in _CONTAINER_SYSTEM_ROOTS):
+                return None, None
+            return None, "source_mapping_unverified: external source path"
+        if type(span.line) is not int or span.line < 1:
+            return None, "source_line_out_of_bounds"
+        if type(span.column) is not int or span.column < 0:
+            return None, "source_line_out_of_bounds"
+        relative = normalized[len(prefix):]
+        matches = self.by_path.get(relative, ())
+        if not matches:
+            return None, "source_mapping_unverified: workspace source unavailable"
+        if len(matches) > 1:
+            return None, "source_path_ambiguous"
+        row = matches[0]
+        try:
+            data = self._bytes(row)
+        except (OSError, ValueError):
+            return None, "source_mapping_unverified: workspace source unavailable"
+        return self._bind_row(row, data, span, "workspace-verified")
+
+    def resolve(
+        self, span, *, allow_workspace_path: bool = False, comp_dir: str | None = None,
+    ) -> tuple[Mapping[str, Any] | None, str | None]:
         if self.gaps:
             return None, self.gaps[0]
+        if not span.checksum and not span.checksum_kind:
+            if not allow_workspace_path:
+                return None, "source_mapping_unverified: checksum unavailable"
+            return self._resolve_workspace_path(span, comp_dir=comp_dir)
         if not span.checksum or not span.checksum_kind:
             return None, "source_mapping_unverified: checksum unavailable"
         if not isinstance(span.checksum, str) or not isinstance(span.checksum_kind, str):
@@ -421,15 +505,12 @@ class _Sources:
                 continue
             if hashlib.new(algorithm, data, usedforsecurity=False).hexdigest() != span.checksum.lower():
                 continue
-            offsets = self._line_table(row["sha256"], data)
-            if offsets is None:
-                return None, "source_line_offset_bound"
-            if not 1 <= span.line < len(offsets):
+            bound, bound_gap = self._bind_row(row, data, span, "checksum-verified")
+            if bound_gap == "source_line_offset_bound":
+                return None, bound_gap
+            if bound is None:
                 continue
-            start, end = offsets[span.line - 1], offsets[span.line]
-            if span.column > len(data[start:end].rstrip(b"\r\n")) + 1:
-                continue
-            matched.append({**row, "start_byte": start, "end_byte": end})
+            matched.append(bound)
             if len(matched) > 1:
                 return None, "source_checksum_ambiguous"
         if len(matched) != 1:
@@ -437,18 +518,34 @@ class _Sources:
         return matched[0], None
 
 
+def _is_run_owned_build_artifact(artifact: Mapping[str, Any]) -> bool:
+    ref = artifact.get("reference")
+    return isinstance(ref, Mapping) and ref.get("artifact_origin") in _RUN_OWNED_ARTIFACT_ORIGINS
+
+
 def _normalize(builder: IndexBuilder, artifact: Mapping[str, Any], debug: Mapping[str, Any] | None,
                extraction: Extraction, unit: UnitContext, target: str, sources: _Sources,
                reader_executions=()) -> list[str]:
     ref = artifact["reference"]
     debug_ref = debug["reference"] if debug else ref
+    allow_workspace_path = _is_run_owned_build_artifact(artifact) and (
+        debug is None or _is_run_owned_build_artifact(debug)
+    )
     identities = {}
     source_bindings = {}
     gaps = [_private_text(gap) for gap in extraction.gaps]
     for record in extraction.records:
         if record.key in identities:
             raise ValueError("duplicate native debug-symbol record key")
-        binding, gap = sources.resolve(record.source) if record.source is not None else (None, None)
+        comp_dir = None
+        if isinstance(record.data, Mapping):
+            raw_comp_dir = record.data.get("compilation_directory") or record.data.get("comp_dir")
+            if isinstance(raw_comp_dir, str):
+                comp_dir = raw_comp_dir
+        binding, gap = (
+            sources.resolve(record.source, allow_workspace_path=allow_workspace_path, comp_dir=comp_dir)
+            if record.source is not None else (None, None)
+        )
         source_bindings[record.key] = binding
         if gap:
             gaps.append(gap)
@@ -476,11 +573,12 @@ def _normalize(builder: IndexBuilder, artifact: Mapping[str, Any], debug: Mappin
                    "reader_identity": _private_text(extraction.producer or READER_IDENTITY)}
         binding = source_bindings[record.key]
         location = None
+        source_mapping = binding.get("source_mapping", "checksum-verified") if binding else "unverified"
         if record.source is not None:
             source = record.source
             payload.update({"source_name_sha256": hashlib.sha256(source.path.encode()).hexdigest(),
                             "line": source.line, "column": source.column, "end_line": source.line,
-                            "source_mapping": "checksum-verified" if binding else "unverified"})
+                            "source_mapping": source_mapping})
             if binding:
                 from appsec_review.retrieval.model import SourceLocation
                 payload.update({"source_identity": binding["identity"], "source_path": binding["path"]})
@@ -489,9 +587,10 @@ def _normalize(builder: IndexBuilder, artifact: Mapping[str, Any], debug: Mappin
                     binding["start_byte"], binding["end_byte"], source.line, source.line,
                     max(1, source.column), max(1, source.column),
                     {"artifact_identity": artifact["artifact_identity"], "checksum_kind": source.checksum_kind,
+                     "source_mapping": source_mapping,
                      **({"source_domain": "generated", "source_backing": binding["payload"]["source_backing"]}
                         if "source_backing" in binding["payload"] else {})},
-                    "debug-symbol-checksum-verified", 1.0)
+                    f"debug-symbol-{source_mapping}", 1.0)
         identity = identities[record.key]
         name = _private_text(record.name)
         if record.kind is RecordKind.COMPILATION_UNIT:
@@ -505,7 +604,8 @@ def _normalize(builder: IndexBuilder, artifact: Mapping[str, Any], debug: Mappin
         if binding:
             builder.add_relation(RelationRecord(RelationKind.OBSERVED_AT, identity.value,
                                 binding["identity"], True, 1.0,
-                                payload={"checksum_kind": record.source.checksum_kind}))
+                                payload={"checksum_kind": record.source.checksum_kind,
+                                         "source_mapping": source_mapping}))
         if record.parent_key in identities:
             builder.add_relation(RelationRecord(RelationKind.CONTAINS, identities[record.parent_key].value,
                                 identity.value, True, 1.0, payload={"evidence": dict(debug_ref)}))
@@ -542,7 +642,6 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
     all_gaps.extend(sources.gaps)
     debug_candidates = [item for item in probes if item.get("is_debug")]
     artifact_count = 0
-    output_bytes = 0
     lookup_rows = 0
     reader = extractor
     if reader is None:
@@ -551,7 +650,7 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
         except ImportError:
             all_gaps.append("debug_symbol_reader_unavailable")
     for artifact in probes:
-        if artifact.get("is_debug"):
+        if artifact.get("is_debug") or artifact.get("is_not_applicable"):
             continue
         artifact_started = time.monotonic()
         artifact_count += 1
@@ -606,11 +705,15 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
                     if len(result.records) > settings["reader"]["max_records"]:
                         gaps.append("max_records")
                         continue
-                    if len(builder.entities) + len(result.records) > settings["reader"]["max_records"]:
+                    max_records_total = settings["reader"].get(
+                        "max_records_total",
+                        settings.get("max_records_total", settings["reader"]["max_records"]),
+                    )
+                    if len(builder.entities) + len(result.records) > max_records_total:
                         gaps.append("max_records_total")
                         continue
                     result_bytes = len(canonical_json(asdict(result)))
-                    if output_bytes + result_bytes > settings["reader"]["max_output_bytes"]:
+                    if result_bytes > settings["reader"]["max_output_bytes"]:
                         gaps.append("max_output_bytes")
                         continue
                     result_lookup_rows = 0
@@ -645,7 +748,6 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
                         gaps = sorted(set(_normalize(
                             builder, artifact, debug, extracted, unit, target.value, sources,
                             selected_executions) + matched_gaps + retained_gaps))
-                        output_bytes += len(canonical_json(asdict(extracted)))
                         lookup_rows += selected_lookup_rows
                     except (ValueError, KeyError, TypeError):
                         raise ValueError("invalid normalized debug-symbol records") from None

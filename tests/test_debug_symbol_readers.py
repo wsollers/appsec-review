@@ -730,3 +730,89 @@ def test_msvc_fixtures_contain_no_private_or_installed_host_paths(filename):
     if filename.endswith(".exe"):
         pdb = filename.removesuffix(".exe") + ".pdb"
         assert ("fixture\\" + pdb).encode() in data
+
+
+def test_dwarf_v5_cpp_without_md5_composes_workspace_and_system_paths(tmp_path):
+    dwarf_cpp = b"""file format elf64-x86-64
+
+.debug_info contents:
+0x00000000: Compile Unit: length = 0x00000060, format = DWARF32, version = 0x0005, unit_type = DW_UT_compile, abbr_offset = 0x0000, addr_size = 0x08
+
+0x0000000c: DW_TAG_compile_unit
+              DW_AT_producer	("Ubuntu clang version 18.1.3")
+              DW_AT_language	(DW_LANG_C_plus_plus_14)
+              DW_AT_name	("../src/request.cpp")
+              DW_AT_stmt_list	(0x00000000)
+              DW_AT_comp_dir	("/workspace/build")
+              DW_AT_low_pc	(0x0000000000001000)
+              DW_AT_high_pc	(0x0000000000001020)
+
+0x00000020:   DW_TAG_subprogram
+                DW_AT_low_pc	(0x0000000000001000)
+                DW_AT_high_pc	(0x0000000000001010)
+                DW_AT_name	("handle_request")
+                DW_AT_decl_file	(0x01)
+                DW_AT_decl_line	(12)
+
+0x00000030:   DW_TAG_subprogram
+                DW_AT_low_pc	(0x0000000000001010)
+                DW_AT_high_pc	(0x0000000000001020)
+                DW_AT_name	("basic_string")
+                DW_AT_decl_file	(0x02)
+                DW_AT_decl_line	(80)
+
+0x00000040:   NULL
+
+.debug_line contents:
+debug_line[0x00000000]
+include_directories[  0] = "/workspace/build"
+include_directories[  1] = "../src"
+include_directories[  2] = "/usr/include/c++/13"
+file_names[  0]:
+           name: "../src/request.cpp"
+      dir_index: 0
+file_names[  1]:
+           name: "request.cpp"
+      dir_index: 1
+file_names[  2]:
+           name: "string"
+      dir_index: 2
+
+Address            Line   Column File   ISA Discriminator OpIndex Flags
+------------------ ------ ------ ------ --- ------------- ------- -------------
+0x0000000000001000     12      5      1   0             0       0  is_stmt
+0x0000000000001010     80      3      2   0             0       0  is_stmt
+0x0000000000001020     80      3      2   0             0       0  end_sequence
+
+.debug_ranges contents:
+
+.debug_rnglists contents:
+"""
+    result = extract_symbols(
+        FIXTURES / "tiny.elf", None, target=CompilerTarget.CLANG,
+        settings=settings(tmp_path), runner=lambda *a, **k: dwarf_cpp,
+    )
+    cu = next(r for r in result.records if r.kind is RecordKind.COMPILATION_UNIT)
+    assert cu.name == "request.cpp" and cu.source.path == "/workspace/build/../src/request.cpp"
+    assert cu.source.checksum is None and cu.source.checksum_kind is None
+    fn = next(r for r in result.records if r.kind is RecordKind.SYMBOL and r.name == "handle_request")
+    assert fn.source.path == "/workspace/build/../src/request.cpp" and fn.source.line == 12
+    std_fn = next(r for r in result.records if r.kind is RecordKind.SYMBOL and r.name == "basic_string")
+    assert std_fn.source.path == "/usr/include/c++/13/string"
+    ranges = [r for r in result.records if r.kind is RecordKind.SOURCE_RANGE]
+    assert [r.source.path for r in ranges] == ["/workspace/build/../src/request.cpp", "/usr/include/c++/13/string"]
+    assert "source_checksums_unavailable" in result.gaps
+
+    tiny_result = extract_symbols(
+        FIXTURES / "tiny.elf", None, target=CompilerTarget.CLANG,
+        settings=settings(tmp_path), runner=fixture_runner("tiny.dwarf.txt"),
+    )
+    entry = next(r for r in tiny_result.records if r.kind is RecordKind.SYMBOL and r.name == "entry")
+    assert entry.source.path == "fixture/tests/fixtures/debug_symbols/tiny.c"
+
+
+def test_macho_binary_remains_unsupported_binary_format(tmp_path):
+    macho = tmp_path / "macho.bin"
+    macho.write_bytes(b"\xcf\xfa\xed\xfe" + bytes(60))
+    result = extract_symbols(macho, None, target=CompilerTarget.CLANG, settings=settings(tmp_path))
+    assert result.records == () and "unsupported_binary_format" in result.gaps

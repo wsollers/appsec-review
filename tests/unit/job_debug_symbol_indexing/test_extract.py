@@ -329,7 +329,7 @@ def test_immutable_shard_is_reused_for_identical_inputs_and_differs_per_target_o
                                                             {"decide.target": first.decision}))
     assert again["indexes"] == first.result["indexes"], "a second extraction over the same run reuses the shard"
     assert again["input_fingerprint"] == first.result["input_fingerprint"]
-    assert len(list((first.context.run_root / "data" / "indices" / "debug_symbols").glob("*.sqlite"))) == 1
+    assert len(list((first.context.run_root / "data" / "indices" / "debug_symbols").rglob("*.sqlite"))) == 1
     # the decision fingerprint binds the upstream manifest bytes, so another run root is another shard identity
     second = _run(tmp_path / "second", monkeypatch, reader=reader)
     assert second.result["indexes"][0]["fingerprint"] != first.result["indexes"][0]["fingerprint"]
@@ -355,3 +355,76 @@ def test_native_parent_outside_the_extraction_is_a_named_gap(tmp_path, monkeypat
     assert run.result["gaps"] == _gaps(run, "native_parent_unavailable")
     assert _coverage(run) == [(run.items[0]["artifact_identity"], "partial", "native_parent_unavailable")]
     assert run.result["record_count"] == 1
+
+
+def test_max_output_bytes_applies_per_artifact_not_cumulatively_across_the_job(tmp_path, monkeypatch):
+    from dataclasses import asdict
+    from appsec_review.retrieval.model import canonical_json
+
+    single_size = len(canonical_json(asdict(extracted())))
+    three_objs = [
+        ("build/main.cpp.o", ELF + b"m", "object"),
+        ("build/lz4frame.c.o", ELF + b"f", "object"),
+        ("build/lz4hc.c.o", ELF + b"h", "object"),
+    ]
+    # Cumulative output is 3 * single_size, which exceeds single_size + 32, yet each artifact fits within its budget.
+    run = _run(tmp_path / "ok", monkeypatch, settings={"reader": {"max_output_bytes": single_size + 32}},
+               artifacts=three_objs)
+    assert run.result["gaps"] == []
+    assert run.result["artifact_count"] == 3 and run.result["record_count"] == 9
+    assert all(status == "complete" for _, status, _ in _coverage(run))
+
+    # A single artifact whose own output exceeds max_output_bytes is still bounded with max_output_bytes.
+    over = _run(tmp_path / "over", monkeypatch, settings={"reader": {"max_output_bytes": single_size - 1}},
+                artifacts=three_objs[:1])
+    assert over.result["gaps"] == [f"{over.items[0]['artifact_identity']}: max_output_bytes"]
+    assert over.result["record_count"] == 0
+
+
+def test_non_elf_build_and_archive_artifacts_are_skipped_without_unsupported_format_gaps(tmp_path, monkeypatch):
+    run = _run(
+        tmp_path,
+        monkeypatch,
+        artifacts=[
+            ("build/smoke_server", ELF, "executable"),
+            ("build/compile_commands.json", b"[{\"file\": \"src/main.cpp\"}]", "compile-database"),
+            ("build/libsmoke_lz4.a", b"!<arch>\nlz4.o           ", "library"),
+        ],
+    )
+    assert len(run.calls) == 1
+    assert (run.result["artifact_count"], run.result["record_count"], run.result["gaps"]) == (1, 3, [])
+    assert _coverage(run) == [(run.items[0]["artifact_identity"], "complete", None)]
+
+
+def test_max_records_total_caps_cumulative_job_records_independently_of_per_artifact_max_records(
+    tmp_path, monkeypatch,
+):
+    from appsec_review.config.debug_symbols import parse_debug_symbol_settings as real_parse
+
+    def parse_with_total(raw):
+        parsed = real_parse({k: v for k, v in raw.items() if k != "max_records_total"}
+                            if isinstance(raw, dict) else raw)
+        parsed["reader"]["max_records_total"] = 7
+        return parsed
+
+    monkeypatch.setattr("appsec_review.jobs.job_debug_symbol_indexing.job.parse_debug_symbol_settings",
+                        parse_with_total)
+    context = job_context(tmp_path, settings={"reader": {"max_records": 4}})
+    items = [
+        artifact(context.run_root, "build/a.cpp.o", ELF + b"a", "object"),
+        artifact(context.run_root, "build/b.cpp.o", ELF + b"b", "object"),
+        artifact(context.run_root, "build/c.cpp.o", ELF + b"c", "object"),
+    ]
+    job = build_job(extractor=extractor())
+    decision = decide(monkeypatch, job, context, accepted_inputs(items, manifest(context.run_root)))
+    # Per-artifact max_records=4 permits each 3-record extraction; cumulative max_records_total=7 admits 2 (6 <= 7) and caps the 3rd (9 > 7).
+    result = handlers(job)["extract.clang_dwarf"](unit(context, "extract.clang_dwarf", {"decide.target": decision}))
+    assert result["record_count"] == 6
+    assert result["gaps"] == [f"{items[2]['artifact_identity']}: max_records_total"]
+    with shard(context, result) as database:
+        rows = database.execute("SELECT area, status, gap FROM coverage ORDER BY area").fetchall()
+    assert set(rows) == {
+        (items[0]["artifact_identity"], "complete", None),
+        (items[1]["artifact_identity"], "complete", None),
+        (items[2]["artifact_identity"], "unavailable", "max_records_total"),
+    }
