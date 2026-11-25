@@ -227,6 +227,7 @@ OPERATIONAL_SETTINGS = (
     OperationalSetting('job_project_build', ('settings', 'model', 'timeout_seconds'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_project_build', ('settings', 'output_bytes'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_project_build', ('settings', 'repair_attempts'), category='coverage', value_type='positive_integer'),
+    OperationalSetting('job_review_package_assembly', ('settings', 'max_page_size'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_svf_alias_analysis', ('settings', 'andersen_time_limit_seconds'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_svf_alias_analysis', ('settings', 'compile_timeout_seconds'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_svf_alias_analysis', ('settings', 'link_timeout_seconds'), category='coverage', value_type='positive_integer'),
