@@ -35,6 +35,21 @@ _KNOWN = {
 }
 _PATH_FLAGS = ("-isystem", "-iquote", "-idirafter", "-I", "-L", "/external:I", "/LIBPATH:", "/I")
 _OUTPUT_FLAGS = ("-o", "--output", "/Fo", "/Fe", "/Fd", "/OUT:")
+_NON_DEPENDENCY_ARG_FLAGS = (
+    "-dynamic-linker", "--dynamic-linker", "-rpath", "-rpath-link", "-soname", "-h",
+    "-Map", "-z", "-m", "-MF", "-MT", "-MQ", "-x", "-target", "--target",
+)
+_NON_DEPENDENCY_INLINE_PREFIXES = (
+    "--dynamic-linker=", "-rpath=", "-rpath-link=", "-soname=", "-Map=", "--target=",
+)
+_WL_ARG_FLAGS = frozenset({
+    "-dynamic-linker", "--dynamic-linker", "-rpath", "-rpath-link", "-soname", "-h", "-Map", "-z",
+})
+_STANDARD_RUNTIME_LIBRARIES = frozenset({
+    "c", "m", "dl", "rt", "pthread", "pthreads", "resolv", "util", "anl", "crypt",
+    "nsl", "mvec", "gcc", "gcc-s", "gcc-eh", "stdc++", "c++", "c++abi", "supc++",
+    "atomic", "ssp", "ssp-nonshared", "gomp", "omp", "quadmath",
+})
 _DIRECTIVE = re.compile(r"^\s*#\s*(\w+)\b(.*)")
 _DEFINE = re.compile(r"^\s*#\s*define\s+([A-Za-z_]\w*)\s+(.+?)\s*$")
 _TUPLE = re.compile(r"(.+)_VERSION_(MAJOR|MINOR|PATCH|RELEASE|MICRO)")
@@ -135,6 +150,16 @@ def _normalized_name(name: str) -> str:
     return name.strip().casefold().replace("_", "-")
 
 
+def _is_standard_runtime_library(name: str) -> bool:
+    normalized = _normalized_name(name)
+    return normalized in _STANDARD_RUNTIME_LIBRARIES or normalized.startswith(("ld-linux", "ld-musl"))
+
+
+def _path_prefixes(path: str) -> tuple[str, ...]:
+    parts = [part for part in path.split("/") if part and part != "."]
+    return tuple("/".join(parts[:index]) for index in range(1, len(parts) + 1))
+
+
 def _prefix_name(prefix: str) -> str:
     """Component name spelled by a version-macro prefix, through the documented alias table."""
     name = prefix.casefold()
@@ -221,8 +246,19 @@ def _header_lines(lines: Sequence[tuple[str, tuple[int, int, int, int]]]
 
 
 class _Discovery:
-    def __init__(self, fingerprint: str, bounds: NativeBounds) -> None:
+    def __init__(
+        self, fingerprint: str, bounds: NativeBounds,
+        accepted_files: Mapping[tuple[str, str, str], NativeFile] | None = None,
+    ) -> None:
         self.fingerprint = fingerprint
+        self.workspace_prefixes: dict[str, set[str]] = defaultdict(set)
+        self.target_prefixes: set[str] = set()
+        for (domain, root_id, path) in (accepted_files or ()):
+            prefixes = _path_prefixes(path)
+            if domain == "target" and root_id == "target":
+                self.target_prefixes.update(prefixes)
+            elif domain == "workspace":
+                self.workspace_prefixes[root_id].update(prefixes)
         self.bounds = bounds
         self.metrics = dict.fromkeys(DISCOVERY_COUNTERS, 0)
         self.omissions = dict.fromkeys((field.name for field in fields(bounds)), 0)
@@ -372,6 +408,10 @@ class _Discovery:
         result = "/".join(parts) or "."
         if not self.scalar(result, result, path=True):
             return None
+        if (domain == "workspace" and result != "."
+                and result not in self.workspace_prefixes.get(root_id, ())
+                and result in self.target_prefixes):
+            domain, root_id = "target", "target"
         return domain, root_id, result
 
     def command(self, row: Mapping[str, Any]) -> None:
@@ -403,12 +443,13 @@ class _Discovery:
                 index += 1
                 continue
             if any(len(value) == len(flag) and _option_prefix(value, flag, msvc=msvc)
-                   for flag in _OUTPUT_FLAGS):
+                   for flag in _OUTPUT_FLAGS) or value in _NON_DEPENDENCY_ARG_FLAGS:
                 index += 2
                 continue
             if (any(_option_prefix(value, flag, msvc=msvc) and len(value) > len(flag)
                     for flag in _OUTPUT_FLAGS if flag.startswith("/"))
-                    or value.startswith("--output=") or (value.startswith("-o") and len(value) > 2)):
+                    or value.startswith(("--output=", *_NON_DEPENDENCY_INLINE_PREFIXES))
+                    or (value.startswith("-o") and len(value) > 2)):
                 index += 1
                 continue
             flag = next((flag for flag in _PATH_FLAGS
@@ -452,6 +493,9 @@ class _Discovery:
                 offset = 0
                 while offset < len(parts):
                     part = parts[offset]
+                    if part in _WL_ARG_FLAGS:
+                        offset += 2
+                        continue
                     if part == "-l" and offset + 1 < len(parts):
                         offset += 1
                         names.append((parts[offset], "linker_forwarded_flag", parts[offset]))
@@ -466,14 +510,24 @@ class _Discovery:
                 parsed = _name_from_file(value)
                 if parsed:
                     names.append((parsed[0], parsed[1], value))
+            build_outputs = frozenset(row.get("build_outputs") or ())
             for name, kind, literal in names:
-                evidence = self.structured(row, kind, literal, suffix)
+                if kind != "framework" and _is_standard_runtime_library(name):
+                    continue
                 domain, root_id, root = _domain(row), row["root_id"], command_root
+                resolved_path: str | None = None
                 if "/" in literal or "\\" in literal:
                     mapped = self.mapped_path(row, literal)
                     if mapped:
-                        domain, root_id, path = mapped
-                        root = _locality(path)
+                        domain, root_id, resolved_path = mapped
+                        root = _locality(resolved_path)
+                elif kind in {"archive_path", "shared_library_path", "soname", "import_name"}:
+                    base_dir = row.get("directory", ".")
+                    resolved_path = f"{base_dir}/{literal}" if base_dir != "." else literal
+                if (build_outputs and resolved_path in build_outputs
+                        and domain == "workspace" and root_id == row["root_id"]):
+                    continue
+                evidence = self.structured(row, kind, literal, suffix)
                 self.fact(domain=domain, root_id=root_id, root=root, name=name,
                           role="link", evidence_id=evidence,
                           observation={"kind": kind, "value": literal, **context})
@@ -483,16 +537,28 @@ class _Discovery:
         self.metrics["artifacts_inspected"] += 1
         path = row["path"]
         root = _locality(path)
-        names = [(row["path"], "artifact_filename", "/path")]
-        names.extend((value, "loader_needed", f"/loader_dependencies/{index}")
-                     for index, value in enumerate(row.get("loader_dependencies", ()) or ()))
-        if row.get("loader_soname"):
+        is_build_output = bool(row.get("build_output"))
+        build_output_names = {
+            PurePosixPath(item).name for item in (row.get("build_outputs") or ())
+        }
+        names: list[tuple[str, str, str]] = []
+        if not is_build_output:
+            names.append((row["path"], "artifact_filename", "/path"))
+        names.extend(
+            (value, "loader_needed", f"/loader_dependencies/{index}")
+            for index, value in enumerate(row.get("loader_dependencies", ()) or ())
+            if not is_build_output
+            or PurePosixPath(value.replace("\\", "/")).name not in build_output_names
+        )
+        if not is_build_output and row.get("loader_soname"):
             names.append((row["loader_soname"], "soname", "/loader_soname"))
-        elif "loader_dependencies" not in row:
+        elif not is_build_output and "loader_dependencies" not in row:
             self.gap("unsupported_metadata", path, "accepted artifact has no supported loader metadata")
         for value, kind, suffix in names:
             parsed = _name_from_file(value)
             if not parsed:
+                continue
+            if kind == "loader_needed" and _is_standard_runtime_library(parsed[0]):
                 continue
             evidence = self.structured(row, kind, value, suffix)
             self.fact(domain=_domain(row), root_id=row["root_id"], root=root, name=parsed[0],
@@ -1061,7 +1127,7 @@ def discover_native_dependencies(
             raise ValueError("loader_dependencies must be a string sequence")
         if row.get("loader_soname") is not None and not isinstance(row["loader_soname"], str):
             raise ValueError("loader_soname must be a string")
-    discovery = _Discovery(source_fingerprint, bounds)
+    discovery = _Discovery(source_fingerprint, bounds, accepted)
     discovery.metrics["commands_available"] = len(invocations)
     for row in sorted(invocations, key=canonical_json):
         discovery.command(row)

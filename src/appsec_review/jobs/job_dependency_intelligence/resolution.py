@@ -247,6 +247,12 @@ def normalize_dependencies(
         ecosystem = raw.get("ecosystem") if isinstance(raw.get("ecosystem"), str) else None
         scope = {field: raw[field] for field in ("domain", "root_id", "package_root")
                  if raw.get(field) is not None}
+        pkg_root = scope.get("package_root")
+        key_scope = (
+            {**scope, "package_root": "@command"}
+            if isinstance(pkg_root, str) and pkg_root.startswith("@command/")
+            else scope
+        )
         repository_record = raw.get("repository")
         repo_value = (raw.get("repository_url") or
                       (repository_record.get("url") if isinstance(repository_record, Mapping) else repository_record) or
@@ -254,7 +260,7 @@ def normalize_dependencies(
         repo = repository_identity(repo_value, supported_hosts=supported_hosts)
         key = canonical_json({
             "purl": purl, "name": None if purl else name, "version": version,
-            "ecosystem": ecosystem, **scope,
+            "ecosystem": ecosystem, **key_scope,
             "unresolved_version_kind": version_kind if version is None else None,
         }).decode()
         if not name:
@@ -271,6 +277,11 @@ def normalize_dependencies(
             "repository_url_observed": str(repo_value)[:4096] if repo_value else None,
             "_exposure_evidence": [],
         })
+        if (isinstance(pkg_root, str) and pkg_root.startswith("@command/")
+                and isinstance(entry.get("package_root"), str)
+                and entry["package_root"].startswith("@command/")
+                and entry["package_root"] != pkg_root):
+            entry["package_root"] = "@command"
         entry["aliases"] = sorted(set([*entry["aliases"], name]))
         for field in ("ecosystem", "relationship", "scope", "constraint", "release"):
             if raw.get(field) is not None:
