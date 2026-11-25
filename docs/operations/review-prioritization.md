@@ -242,3 +242,81 @@ that accounting. These are offline publication guarantees, not evidence that a l
 `python tests/fixtures/review_prioritization/generate_ast.py` in an environment with the pinned
 `tree-sitter==0.26.0` and `tree-sitter-language-pack==1.12.5` wheels. The tests fail if the golden
 no longer matches the fixture bytes, and re-parse and compare when those wheels are installed.
+
+
+## Tuning and whole-job recovery: `job_review_prioritization`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.index.max_evidence_links_per_item` | `50` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.index.max_graph_neighbors` | `5000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.index.max_indexed_items` | `5000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_file_bytes` | `2097152` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_files` | `50000` | coverage | 1..1000000; cross-field checks apply |
+| `settings.max_flow_steps_per_path` | `128` | coverage | 2..10000; cross-field checks apply |
+| `settings.max_functions` | `500000` | coverage | 1..5000000; cross-field checks apply |
+| `settings.max_import_records` | `500000` | coverage | 1..5000000; cross-field checks apply |
+| `settings.max_semantic_paths` | `5000` | coverage | 0..1000000; cross-field checks apply |
+| `settings.max_signals_per_file` | `200` | coverage | 1..100000; cross-field checks apply |
+| `settings.syntax_metrics_reservation.admission_timeout_seconds` | `3600` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.syntax_metrics_reservation.cpu` | `1` | execution | 1..256; cross-field checks apply |
+| `settings.syntax_metrics_reservation.io_slots` | `0` | execution | 0..256; cross-field checks apply |
+| `settings.syntax_metrics_reservation.memory_mb` | `2048` | execution | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_review_prioritization/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.scored_threshold` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.count_error_propagation` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.min_edge_confidence` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.custom_parsing_min_operations` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.custom_parsing_min_density` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.state_mutation_min_operations` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.sast_silence_min_complexity` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.composite_weights.change_context_boost` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.composite_weights.uncovered_risk_boost` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.composite_weights.profile_hotpath_boost` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.composite_weights.sca_reachability_boost` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.composite_weights.sast_silence_hunt_boost` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.cyclomatic` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.cognitive` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.complexity_density` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.share_above_threshold` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.afferent_coupling` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.efferent_coupling` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.instability` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.suppression_density` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.ingress` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.sink` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.privilege_shift` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.sensitive_wrapper` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.state_mutation` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.custom_parsing` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.public_api` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.parser` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.validator` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.middleware` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.semantic_path` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.priority_weights.history_hotspot` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.index.file_top_fraction` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.index.file_top_count` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.index.function_top_fraction` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.index.function_top_count` | Changes scoring, graph-confidence predicates or rank-selection policy, rather than an execution/coverage ceiling. |
+| `settings.sources.history` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.sources.semgrep` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.sources.codeql` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.extract.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.prioritize.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
