@@ -288,3 +288,47 @@ not built.
   host user, but removal of `data/binary-decompilation/.staging/` is best effort.
 - **Disk.** A publication holds one small file per decompiled function. A binary with 50,000
   functions produces about 100,000 files.
+
+
+## Tuning and whole-job recovery: `job_binary_evidence_indexing`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `[global] binary_decompilation.analysis_timeout_seconds` | `3600` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.cpus` | `4` | execution | finite number >0; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.decompile_timeout_seconds` | `60` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_binary_bytes` | `536870912` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_function_bytes` | `262144` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_functions` | `50000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_heap` | `"6g"` | execution | positive integer m/g; memory/headroom admission |
+| `[global] binary_decompilation.max_pcode_ops` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_strings` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.memory` | `"8g"` | execution | positive integer m/g; memory/headroom admission |
+| `[global] binary_decompilation.output_file_bytes` | `2147483648` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.pids_limit` | `1024` | execution | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.timeout_seconds` | `7200` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_call_sites_per_binary` | `1000000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_entity_text_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_functions_per_binary` | `200000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_imports_per_binary` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_string_chars` | `4096` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_string_xrefs` | `64` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_strings_per_binary` | `200000` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_binary_evidence_indexing/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.index.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acceptance.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

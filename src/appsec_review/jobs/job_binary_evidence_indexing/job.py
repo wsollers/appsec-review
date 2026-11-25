@@ -364,7 +364,7 @@ def index_binary(unit: UnitContext, document: Mapping[str, Any], entry: Mapping[
                                             for key in ("tool_id", "image_id", "ghidra_version", "export_schema")}},
         parser_identity="binary-decompilation-publication/1", normalizer_identity=NORMALIZER,
         mapping_identity=json.dumps({"mapping": MAPPING, "limits": dict(sorted(limits.items()))}, sort_keys=True))
-    path = (unit.job.run_root / "data" / "indices" / "binary" /
+    path = (unit.job.run_root / "data" / "indices" / "binary" / "attempts" / unit.job.config.job_id / unit.job.attempt_id /
             f"{fingerprint}-{hashlib.sha256(shard.encode()).hexdigest()[:16]}.sqlite")
     builder = IndexBuilder(path, name="binary", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
