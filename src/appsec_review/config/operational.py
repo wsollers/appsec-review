@@ -579,6 +579,11 @@ def _canonical(value: Any) -> bytes:
                       ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
+def _development(path: tuple[str, ...]) -> bool:
+    """``jobs.<job>.development``: loader-validated, development-profile-only input overrides."""
+    return len(path) >= 3 and path[0] == "jobs" and path[2] == "development"
+
+
 def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Return exact admitted deltas, rejecting every other changed field."""
     if not isinstance(before, Mapping) or not isinstance(after, Mapping):
@@ -612,7 +617,7 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
             for key in sorted(set(first) | set(second)):
                 if key in first and key in second and _canonical(first[key]) == _canonical(second[key]):
                     continue
-                if key not in declarations:
+                if key not in declarations and not _development(key):
                     material.append(".".join((*path, "document", *key)))
             # Source-layer digests are provenance, not authority. Effective leaf values are
             # validated below and the immutable layer bytes are verified by configuration_snapshot.
@@ -621,6 +626,10 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
                 if digest is not None and (not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)):
                     material.append(".".join((*path, "sha256")))
             changes.append({"job_id": None, "path": list(path), "category": "provenance",
+                            "before": left, "after": right})
+            return
+        if _development(path):
+            changes.append({"job_id": path[1], "path": list(path[2:]), "category": "development",
                             "before": left, "after": right})
             return
         setting = declarations.get(path)
@@ -650,6 +659,8 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
                 if key not in left or key not in right:
                     if not path and key in ("configuration_profile", "configuration_overlay"):
                         compare(left.get(key, {}), right.get(key, {}), (key,))
+                    elif _development((*path, key)):
+                        compare(left.get(key), right.get(key), (*path, key))
                     else:
                         material.append(".".join((*path, key)))
                 else:

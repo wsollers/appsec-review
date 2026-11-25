@@ -607,7 +607,7 @@ def observe_external(root: Path, producer: str, output_kind: str, schema: str,
 
 @_read_boundary
 def observe_output(root: Path, producer: str, output_kind: str, reference: Mapping[str, Any],
-                   *, prior: bool = False) -> None:
+                   *, prior: bool = False, _resolved: bool = False) -> None:
     reads = _READS.get()
     if reads is None:
         return
@@ -627,9 +627,40 @@ def observe_output(root: Path, producer: str, output_kind: str, reference: Mappi
     if file_sha256(safe_path(root, path)) != sha:
         raise ValueError("consumed output bytes changed")
     digest = prior_map[producer] if prior else reads.context.upstream_handoffs[producer]
-    reads.record(requirement, {"path": path, "sha256": sha,
-                               "handoff_sha256": digest,
-                               "attempt_id": handoff["attempt_id"], "target_snapshot": handoff["target_snapshot"]})
+    identity: dict[str, Any] = {"path": path, "sha256": sha, "handoff_sha256": digest,
+                                "attempt_id": handoff["attempt_id"], "target_snapshot": handoff["target_snapshot"]}
+    development = None if prior else _development_record(reads.context, producer, output_kind, path)
+    if development is not None:
+        if not _resolved:
+            raise ValueError(f"development input override for {path} requires its consumer to open "
+                             "the file through runtime.inputs.input_file; the original bytes were not read")
+        identity["development_replacement"] = {
+            key: development["replacement"][key] for key in ("root", "path", "sha256", "size_bytes")}
+    reads.record(requirement, identity)
+
+
+def _development_record(context: Any, producer: str, output_kind: str, path: str) -> Mapping[str, Any] | None:
+    if not getattr(context, "development_inputs", ()):
+        return None
+    return context.development_input(producer, output_kind, path)
+
+
+@_read_boundary
+def input_file(root: Path, producer: str, output_kind: str, reference: Mapping[str, Any],
+               *, prior: bool = False):
+    """Observe one declared upstream output and return the file this attempt must open.
+
+    The common reader for local and Dagster execution: ``observe_output`` admits the original
+    pinned reference, then ``JobContext.input_file`` decides whether the attempt reads it or its
+    development replacement snapshot. Readers verify the bytes they open against ``identity``.
+    """
+    from appsec_review.runtime.job import InputFile
+    observe_output(root, producer, output_kind, reference, prior=prior, _resolved=True)
+    reads = _READS.get()
+    if reads is not None and getattr(reads.context, "development_inputs", ()):
+        return reads.context.input_file(producer, output_kind, reference, prior=prior)
+    original = {key: reference[key] for key in ("path", "sha256", "size_bytes") if key in reference}
+    return InputFile(safe_path(root, str(reference.get("path", ""))), original, original, False)
 
 
 @_read_boundary

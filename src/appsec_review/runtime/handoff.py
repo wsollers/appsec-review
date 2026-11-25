@@ -190,6 +190,8 @@ def frozen_job_config_sha256(document: Mapping[str, Any], job_id: str) -> str:
             for step_id, step in job.get("steps", {}).items()
         },
     }
+    if "development" in job:
+        value["development"] = job["development"]
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
 

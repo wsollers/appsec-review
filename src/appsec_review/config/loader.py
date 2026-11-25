@@ -29,6 +29,9 @@ from .assurance import ResourceBudget, ReviewPolicy, parse_review_policy
 from .compiler_target import CompilerTarget, compiler_target as parse_compiler_target
 from .signing import SigningConfig, parse_signing
 from .host_pins import HostPins, HOST_PINS_LAYER, apply_host_pins, load_host_pins
+from .development import (
+    DEVELOPMENT_PROFILES, JobDevelopment, parse_job_development, reject_development, split_profile_development,
+)
 from . import cppcheck
 
 
@@ -617,6 +620,8 @@ class JobConfig:
     inventory_max_file_bytes: int = INVENTORY_FILE_BYTES_DEFAULT
     # The top-level [build_outputs] policy; set only on the three build jobs (config/build_outputs.py).
     build_outputs: BuildOutputPolicy | None = None
+    # Development-profile-only input overrides (config/development.py); None in every other profile.
+    development: JobDevelopment | None = None
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"job_[a-z][a-z0-9_]*", self.job_id):
@@ -1062,6 +1067,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     source_bytes = (source.read_bytes() if _snapshot is None else
                     (_snapshot.directory / "appsec-review.toml").read_bytes())
     document = tomllib.loads(source_bytes.decode("utf-8"))
+    reject_development(document, "the base configuration")
     profile_name = resolve_profile_name(profile if _snapshot is None else _snapshot.manifest["selection"]["profile"])
     profile_source: Path | None = None
     profile_sha256: str | None = None
@@ -1077,8 +1083,18 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             profile_source = Path(record["path"])
             profile_sha256 = record["sha256"]
             profile_document = copy.deepcopy(record["document"])
-        profile_keys = profile_override_keys(profile_document)
-        _apply_profile(document, profile_document)
+        profile_settings, development_tables = split_profile_development(profile_document)
+        if development_tables and profile_name not in DEVELOPMENT_PROFILES:
+            reject_development(profile_document, f"the non-development profile {profile_name}")
+        profile_keys = tuple(sorted((
+            *(profile_override_keys(profile_settings) if profile_settings or not development_tables else ()),
+            *(f"jobs.{job_id}.development.input_overrides" for job_id in development_tables))))
+        if profile_settings:
+            _apply_profile(document, profile_settings)
+        for job_id, table in development_tables.items():
+            if not isinstance(document.get("jobs", {}).get(job_id), dict):
+                raise ValueError(f"configuration profile sets jobs.{job_id}.development for an unconfigured job")
+            document["jobs"][job_id]["development"] = copy.deepcopy(table)
         profile_record = {"layer": PROFILE_LAYER, "name": profile_name, "path": str(profile_source),
                           "sha256": profile_sha256, "keys": list(profile_keys), "document": profile_document}
     overlay_value = ((overlay or None) if overlay is not None else
@@ -1501,6 +1517,12 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             settings["compiler_target"] = selected_compiler.value
             settings = parse_debug_symbol_settings(settings)
             typed_settings = MappingProxyType(settings)
+        development = None
+        if "development" in value:
+            if profile_name not in DEVELOPMENT_PROFILES:
+                raise ValueError(f"jobs.{job_id}.development requires an explicitly selected development profile")
+            development = parse_job_development(job_id, value["development"])
+            resolved_document["jobs"][job_id]["development"] = development.view()
         jobs[job_id] = JobConfig(
             job_id=job_id,
             name=str(value.get("name", "")),
@@ -1513,6 +1535,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             exclusions=job_exclusions(job_id, value, excluded_globally, excluded_assets),
             inventory_max_file_bytes=inventory_file_bytes,
             build_outputs=build_output_policy if job_id in BUILD_OUTPUT_JOBS else None,
+            development=development,
         )
     tagging_job = jobs.get("job_security_tagging")
     if tagging_job is not None:

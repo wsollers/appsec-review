@@ -23,6 +23,8 @@
 /data/target-acquisitions/
 # Tool-output cache and per-item memo (brief N): pointers into run trees, never committed.
 /data/caches/
+# Operator-edited development input-override copies (config/development.py); host-local.
+/data/development/
 *.jsonl
 !schemas/**/*.jsonl
 # licensed inputs (MSVC headers/libs) are mounted, never committed

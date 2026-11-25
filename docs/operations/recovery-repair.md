@@ -161,6 +161,82 @@ retain known-bad evidence merely to save time. Retaining accepted results as inp
 claim that their original producers ran under the newly deployed implementation. Source changes still require normal deployment and the selected jobs' inspected repair
 admission before this selection can launch.
 
+## Development input overrides
+
+In an explicitly selected development profile (`copilot-dev`, `copilot-dev-astra-6.2`,
+`copilot-dev-gemini`, `wsollers1-dev`), one job may read an edited copy of a declared upstream data
+artifact instead of the producer's file. Use it to test a fix to a bad lookup without repeating the
+expensive upstream job. The upstream job's accepted output, receipt and hash stay unchanged. Fix the
+producer's source separately for its next run. The base `appsec-review.toml`, a capacity overlay and
+every other profile reject the table.
+
+1. Copy the artifact named in the failure (a path in the producer's accepted handoff) to
+   `data/development/input-overrides/<consuming job>/` (Git-ignored) and edit the copy.
+2. Add the override to the selected profile, for example `profiles/wsollers1-dev.toml`:
+
+   ```toml
+   [[jobs.job_build_environment_analysis.development.input_overrides]]
+   producer = "job_target_catalog"
+   output_kind = "catalog_documents"
+   artifact = "data/jobs/job_target_catalog/attempts/attempt_0001/artifacts/catalog/catalog.json"
+   replacement = "data/development/input-overrides/job_build_environment_analysis/catalog.json"
+   ```
+
+   `producer`/`output_kind` must be a declared handoff input of the job, and `artifact` must be a declared
+   artifact of that output in the supplied producer handoff. Handoff envelopes, control records,
+   executable code and signing material are rejected. Repeat the table for more artifacts. There is
+   no global switch and no step or task setting.
+3. Check the lookup before dispatching anything. This uses the job's last claimed pins, the same
+   resolver and the consumer's real function. It prints the result or the exception and does not
+   claim an attempt, launch Dagster or write to the run:
+
+   ```sh
+   .venv/bin/appsec-review --profile wsollers1-dev check-dev-input --run-id RUN \
+     --job job_build_environment_analysis \
+     --lookup appsec_review.jobs.job_target_catalog.reader:load_accepted_catalog          # edited copy
+   .venv/bin/appsec-review --profile wsollers1-dev check-dev-input --run-id RUN \
+     --job job_build_environment_analysis --original \
+     --lookup appsec_review.jobs.job_target_catalog.reader:load_accepted_catalog          # original
+   ```
+
+   The function is called as `function(run_root, *--args)`. Exit status is 0 when it returns and 1
+   when it raises.
+4. Retry the whole job with the existing restart, for example
+   `scripts/review-start.sh --run-id RUN --parent-run-id FAILED_DAGSTER_UUID --restart-from-job
+   job_build_environment_analysis`. The override is an admitted operational change (category
+   `development`), so the preview prepares scoped repair admission for the selected jobs only.
+   Successful upstream jobs are retained, and the job starts from its beginning.
+5. Turn it off by deleting the table, after the dispatch ends, then restart as usual. Fresh attempts
+   read the producer's artifact again.
+
+When a fresh attempt starts, `Job.resolve_development_inputs` copies each edited file once to
+`<attempt>/inputs/development/NN-<name>`. The claim records `development_input_overrides`, with the
+original `{path, sha256, size_bytes}`, the snapshot's hash and the source path. A differing hash is
+expected and is recorded, not rejected. Every step and task opens files through
+`runtime.inputs.input_file`, and `JobContext.input_file` returns the snapshot, so later edits to the
+working copy do not reach that attempt. An in-flight attempt also keeps its claimed snapshot if only
+development settings change. Read receipts keep the original reference and add
+`development_replacement`. A consumer that reads an overridden artifact through bare
+`observe_output` fails instead of reading the original. So far `job_target_catalog`'s
+`load_accepted_catalog` (used by build-environment analysis and planning) is the consumer wired
+through `input_file`. Another consumer must switch to `input_file` before its inputs can be
+overridden.
+
+`job_config_sha256` covers the setting, and `ResumePlanner` refuses reuse when an accepted attempt's
+recorded overrides differ from the current setting or edited-copy hash. A development result is
+never reused as an ordinary one, nor the reverse. Output validation, signing, permissions and
+resource controls are unchanged.
+
+Example (scratch run, 2026-11-25). The original `catalog.json` lacks
+`build_discovery.catalog_build_targets`:
+
+| Read | Result |
+| --- | --- |
+| `check-dev-input --original` (producer file) | `KeyError: 'build_discovery.catalog_build_targets'` |
+| `check-dev-input` (edited copy adds the key) | returns `build_units: [{"target_id": "app"}]` |
+| `job_build_environment_analysis` attempt, working copy edited again mid-attempt | still the snapshot: `[{"target_id": "app"}]` |
+| `job_target_analysis_plan` (no override) in the same run | original file: `KeyError` |
+
 ## Release and deployment identity
 
 `release-dependencies.json` declares job packages, shared application code and package resources,

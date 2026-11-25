@@ -99,7 +99,9 @@ def runtime_claims(job_steps: Mapping[str, Sequence[str]], *,
              f"{base}/attempts/*/rejected-handoff.json", f"{base}/attempts/*/rejected-outcomes.json",
              # Written by the runner (materialize_attempt_input_manifest) when an attempt inherits
              # more than one upstream index lineage; it merges manifests and adds no shards.
-             f"{base}/attempts/*/inputs/retrieval-manifest.json"),
+             f"{base}/attempts/*/inputs/retrieval-manifest.json",
+             # Development-profile input-override snapshots (Job.resolve_development_inputs).
+             f"{base}/attempts/*/inputs/development/*"),
             "unit results may embed exact recipes, host paths and unredacted records; only status, counts "
             "and hashes are published", sensitivity="sensitive", disposition="protected")))
         for step in steps:

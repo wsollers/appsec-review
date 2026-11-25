@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import re
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Protocol, TYPE_CHECKING
 
@@ -40,6 +41,49 @@ class JobContext:
     contract: JobContract | None = None
     external_input_selection: Mapping[str, Any] | None = None
     resolved_config_sha256: str | None = None
+    # Development input overrides resolved once when this attempt was claimed (claim
+    # ``development_input_overrides``); every step and task reads these exact snapshot bytes.
+    development_inputs: tuple[Mapping[str, Any], ...] = ()
+
+    def development_input(self, producer: str, output_kind: str, path: str) -> Mapping[str, Any] | None:
+        return next((record for record in self.development_inputs
+                     if (record["producer"], record["output_kind"], record["original"]["path"])
+                     == (producer, output_kind, path)), None)
+
+    def input_file(self, producer: str, output_kind: str, reference: Mapping[str, Any], *,
+                   prior: bool = False) -> InputFile:
+        """The single decision of which bytes this attempt reads for one declared upstream output.
+
+        Ordinary attempts read the producer's accepted artifact. An attempt whose claim resolved a
+        development override reads its replacement snapshot instead; the original reference is kept
+        alongside it, and the producer's file, receipt and hash are never touched.
+        """
+        from appsec_review.storage import file_sha256
+        from appsec_review.storage.shared import safe_path
+        original = {key: reference[key] for key in ("path", "sha256", "size_bytes") if key in reference}
+        record = None if prior else self.development_input(producer, output_kind, str(reference.get("path")))
+        if record is None:
+            return InputFile(safe_path(self.run_root, str(reference.get("path", ""))), original, original, False)
+        if record["original"]["sha256"] != reference.get("sha256"):
+            raise ValueError(f"development override was resolved for other {producer} bytes: {reference.get('path')}")
+        replacement = record["replacement"]
+        # Claims only carry run-owned snapshots; a repository working copy is the pre-dispatch check.
+        base = self.run_root if replacement["root"] == "run" else self.repository_root
+        path = safe_path(base, replacement["path"])
+        if not path.is_file() or file_sha256(path) != replacement["sha256"]:
+            raise ValueError(f"development replacement changed after it was resolved: {replacement['path']}")
+        identity = {"path": replacement["path"], "sha256": replacement["sha256"],
+                    "size_bytes": replacement["size_bytes"]}
+        return InputFile(path, identity, original, True)
+
+
+@dataclass(frozen=True, slots=True)
+class InputFile:
+    """The file a reader opens and the identity its bytes must have, with the original reference."""
+    path: Path
+    identity: Mapping[str, Any]
+    original: Mapping[str, Any]
+    replaced: bool
 
 
 class JobHandler(Protocol):
@@ -132,6 +176,89 @@ class Job:
     def configured_workers(self, step_id: str, task_id: str) -> int:
         return self.worker_lookup(step_id, task_id) if self.worker_lookup is not None else 1
 
+    def resolve_development_inputs(self, context: JobContext, *,
+                                   snapshot: bool = True) -> tuple[dict[str, Any], ...]:
+        """Resolve this job's development input overrides once, for one fresh whole-job attempt.
+
+        Each override must name an artifact of a declared, supplied handoff input. A differing hash
+        is the point of the override and is recorded, not rejected. With ``snapshot`` the edited copy
+        is streamed once into the attempt; ``snapshot=False`` describes the working copy for the
+        pre-dispatch lookup check and writes nothing.
+        """
+        development = context.config.development
+        if development is None:
+            return ()
+        if self.contract is None:
+            raise ValueError(f"development input overrides require a typed input contract: {self.job_id}")
+        from appsec_review.indexing.inventory import compile_glob
+        from appsec_review.retrieval.core import _accepted_handoff
+        from appsec_review.runtime.contracts import InputChannel
+        from appsec_review.runtime.inputs import producer_contract
+        from appsec_review.storage import file_sha256
+        from appsec_review.storage.shared import safe_path
+        records = []
+        for index, item in enumerate(development.input_overrides):
+            requirement = next((value for value in self.contract.inputs
+                                if value.channel is InputChannel.HANDOFF and value.producer == item.producer
+                                and value.output_kind == item.output_kind), None)
+            if requirement is None:
+                raise ValueError(f"development override names an undeclared input of {self.job_id}: "
+                                 f"{item.producer}/{item.output_kind}")
+            digest = context.upstream_handoffs.get(item.producer)
+            if digest is None:
+                raise ValueError(f"development override producer is not supplied to this attempt: {item.producer}")
+            handoff, _ = _accepted_handoff(context.run_root, item.producer, digest)
+            declaration = next((value for value in producer_contract(context.run_root, handoff)
+                                if value.output_kind == item.output_kind), None)
+            declared = [ref for ref in handoff["artifacts"] if declaration is not None
+                        and any(compile_glob(pattern).fullmatch(ref["path"]) for pattern in declaration.artifacts)]
+            original = next((ref for ref in declared if ref["path"] == item.artifact), None)
+            if original is None:
+                raise ValueError(
+                    f"development override artifact is not a declared {item.producer}/{item.output_kind} "
+                    f"output of the supplied handoff: {item.artifact}; declared: "
+                    + (", ".join(sorted(ref["path"] for ref in declared)[:20]) or "none"))
+            source = safe_path(context.repository_root, item.replacement)
+            if not source.is_file():
+                raise ValueError(f"development replacement is missing: {item.replacement}")
+            if snapshot:
+                name = re.sub(r"[^A-Za-z0-9._-]", "_", PurePosixPath(item.artifact).name)
+                relative = (context.attempt_root.relative_to(context.run_root).as_posix()
+                            + f"/inputs/development/{index:02d}-{name}")
+                replacement = {"root": "run", **_snapshot_copy(context.run_root, relative, source)}
+            else:
+                replacement = {"root": "repository", "path": item.replacement,
+                               "sha256": file_sha256(source), "size_bytes": source.stat().st_size}
+            records.append({
+                "producer": item.producer, "output_kind": item.output_kind, "schema": requirement.schema,
+                "producer_handoff_sha256": digest,
+                "original": {key: original[key] for key in ("path", "sha256", "size_bytes")},
+                "source": item.replacement, "replacement": replacement,
+            })
+        return tuple(records)
+
+    def development_reuse_reasons(self, config: JobConfig, repository_root: Path,
+                                  claim: Mapping[str, Any]) -> list[str]:
+        """Why an accepted attempt cannot stand for the current development setting.
+
+        A development result never stands in for an ordinary one (or the reverse), and an edited
+        copy that changed since the accepted attempt requires a fresh whole-job attempt.
+        """
+        from appsec_review.storage import file_sha256
+        from appsec_review.storage.shared import safe_path
+        recorded = sorted((item["producer"], item["output_kind"], item["original"]["path"], item["source"],
+                           item["replacement"]["sha256"])
+                          for item in claim.get("development_input_overrides", ()))
+        if config.development is None:
+            return ["accepted attempt read development input overrides"] if recorded else []
+        current = []
+        for item in config.development.input_overrides:
+            source = safe_path(repository_root, item.replacement)
+            if not source.is_file():
+                return [f"development replacement is missing: {item.replacement}"]
+            current.append((item.producer, item.output_kind, item.artifact, item.replacement, file_sha256(source)))
+        return [] if sorted(current) == recorded else ["development input overrides or their edited copies changed"]
+
     def finalize_result(self, context: JobContext, result: Mapping[str, Any]) -> Mapping[str, Any]:
         return self.result_transform(context, result) if self.result_transform is not None else result
 
@@ -147,3 +274,26 @@ class Job:
         for validator in self.output_validators:
             validator(context, result)
         return result
+
+
+def _snapshot_copy(run_root: Path, relative: str, source: Path) -> dict[str, Any]:
+    """Stream ``source`` once into a new run-owned file; the recorded hash is of the copied bytes."""
+    import hashlib
+    import os
+    import tempfile
+    from appsec_review.storage.shared import reference, safe_path
+    path = safe_path(run_root, relative)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256()
+    descriptor, temporary = tempfile.mkstemp(prefix=".snapshot-", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as target, source.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+                target.write(chunk)
+            target.flush()
+            os.fsync(target.fileno())
+        os.link(temporary, path)
+    finally:
+        os.unlink(temporary)
+    return reference(run_root, path, expected_sha256=digest.hexdigest())

@@ -115,6 +115,18 @@ def parser() -> argparse.ArgumentParser:
     tools = commands.add_parser("plan-tools", help="list planned static-tool applicability")
     tools.add_argument("--run-id", required=True)
 
+    development = commands.add_parser(
+        "check-dev-input",
+        help="call a consumer's lookup on a job's development input override; no attempt, Dagster or publication")
+    development.add_argument("--run-id", required=True)
+    development.add_argument("--job", required=True, help="the consuming job whose override is checked")
+    development.add_argument("--lookup", required=True,
+                             help="appsec_review.<module>:<function>, called as function(run_root, *--args)")
+    development.add_argument("--args", default="[]", help="JSON array of further positional arguments")
+    development.add_argument("--original", action="store_true",
+                             help="resolve ordinary inputs instead of the override (the before case)")
+    development.add_argument("--max-chars", type=int, default=20000, help="truncate the printed result")
+
     context = commands.add_parser("build-failure-context", help="pin actual failure inputs and explicit product declarations")
     context.add_argument("--run-id", required=True)
     context.add_argument("--node-id", required=True)
@@ -207,7 +219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.profile = "wsollers1-dev"
     compiler = getattr(args, "compiler_target", None)
     if args.command in {"run", "plan-resume", "resume", "plan-repair", "admit-repair", "verify-repair-stop",
-                        "failure-replay", "build-failure-context",
+                        "failure-replay", "build-failure-context", "check-dev-input",
                         "replay-build-recipe", "promote-build-recipe"} and getattr(args, "run_id", None):
         preliminary = load_config(args.config, profile=args.profile)
         manifest_path = (preliminary.runtime.runs_dir / args.run_id /
@@ -216,6 +228,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             compiler = json.loads(manifest_path.read_text(encoding="utf-8")).get(
                 "selection", {}).get("compiler_target", "clang")
     config = load_config(args.config, profile=args.profile, compiler_target=compiler)
+    if args.command == "check-dev-input":
+        from appsec_review.runtime.development import check_lookup, lookup_function
+        from appsec_review.storage import RunStore
+        arguments = json.loads(args.args)
+        if not isinstance(arguments, list):
+            parser().error("--args must be a JSON array")
+        outcome = check_lookup(config, RunStore(config.runtime.runs_dir).resolve(args.run_id), args.job,
+                               lookup_function(args.lookup), arguments, original=args.original)
+        if "result" in outcome:
+            text = json.dumps(outcome["result"], sort_keys=True, default=repr)
+            outcome["result"] = (json.loads(text) if len(text) <= args.max_chars
+                                 else {"truncated": True, "chars": len(text), "head": text[:args.max_chars]})
+        print(json.dumps(outcome, sort_keys=True, indent=2))
+        return 0 if outcome["status"] == "returned" else 1
     if args.command == "verify-repair-stop":
         from appsec_review.runtime.repair import verify_dispatch_stop
         from appsec_review.storage import RunStore

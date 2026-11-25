@@ -96,6 +96,17 @@
         "manifest_sha256": {"$ref": "#/$defs/sha256"},
         "binary_id": {"$ref": "#/$defs/text"},
         "binary_sha256": {"$ref": "#/$defs/sha256"},
+        "development_replacement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["root", "path", "sha256", "size_bytes"],
+          "properties": {
+            "root": {"enum": ["run", "repository"]},
+            "path": {"$ref": "#/$defs/text"},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "size_bytes": {"type": "integer", "minimum": 0}
+          }
+        },
         "coverage": {
           "type": "object",
           "additionalProperties": false,

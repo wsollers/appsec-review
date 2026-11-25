@@ -13,10 +13,18 @@ def read_artifact(run_root: Path, identity: Mapping[str, Any], *,
                   before_read: Callable[[], None] | None = None) -> Mapping[str, Any]:
     """Read a hash-bound catalog or planning document within its supported byte ceiling."""
     from appsec_review.storage.shared import safe_path
+    path = safe_path(run_root, str(identity.get("path", "")))
+    if run_root.resolve() not in path.parents:
+        raise ValueError("accepted upstream artifact is unavailable or outside the run")
+    return read_bounded(path, identity, byte_limit=byte_limit, before_read=before_read)
+
+
+def read_bounded(path: Path, identity: Mapping[str, Any], *, byte_limit: int = 16 * 1024 * 1024,
+                 before_read: Callable[[], None] | None = None) -> Mapping[str, Any]:
+    """Read the resolved file of a hash-bound document; ``identity`` describes those exact bytes."""
     if byte_limit not in {16 * 1024 * 1024, 32 * 1024 * 1024}:
         raise ValueError("unsupported accepted-artifact byte limit")
-    path = safe_path(run_root, str(identity.get("path", "")))
-    if run_root.resolve() not in path.parents or not path.is_file():
+    if not path.is_file():
         raise ValueError("accepted upstream artifact is unavailable or outside the run")
     size = path.stat().st_size
     if size > byte_limit:
@@ -67,7 +75,7 @@ def load_accepted_catalog(run_root: Path) -> dict[str, Any]:
     """Resolve the admitted catalog pin and validate its bounded documents without widening grants."""
     from appsec_review.storage.shared import safe_path
     from appsec_review.runtime.consume import accepted_upstream
-    from appsec_review.runtime.inputs import observe_output
+    from appsec_review.runtime.inputs import input_file
     accepted = accepted_upstream(run_root, "job_target_catalog")
     if safe_path(run_root, accepted.path).stat().st_size > 32 * 1024 * 1024:
         raise ValueError("accepted catalog handoff exceeds its byte bound")
@@ -75,8 +83,10 @@ def load_accepted_catalog(run_root: Path) -> dict[str, Any]:
     published = handoff.get("outputs", {}).get("publish_catalog.publish_handoff", {})
 
     def read_document(identity, *, byte_limit=16 * 1024 * 1024):
-        return read_artifact(run_root, identity, byte_limit=byte_limit,
-            before_read=lambda: observe_output(run_root, "job_target_catalog", "catalog_documents", identity))
+        # The shared reader admits the pinned reference and returns the bytes this attempt reads:
+        # the producer's document, or the attempt's development replacement snapshot.
+        source = input_file(run_root, "job_target_catalog", "catalog_documents", identity)
+        return read_bounded(source.path, source.identity, byte_limit=byte_limit)
 
     catalog = read_document(published.get("artifact", {}), byte_limit=32 * 1024 * 1024)
     if catalog.get("schema") != "appsec-review/target-catalog/1":

@@ -155,6 +155,17 @@ class JobRunner:
             from appsec_review.runtime.configuration import configuration_matches
             configuration_matches_current = configuration_matches(
                 self.config, run_root, claim["resolved_config_sha256"])
+        if not configuration_matches_current and not claim.get("reused"):
+            # An in-flight attempt keeps its claimed configuration and development snapshots when the
+            # operator changes only development overrides; the change applies to fresh attempts.
+            import hashlib
+            from appsec_review.config.development import development_only_change
+            from appsec_review.runtime.configuration import configuration_snapshot
+            if hashlib.sha256(self.config.resolved_json).hexdigest() != self.config.resolved_sha256:
+                raise ValueError("candidate configuration bytes do not match their identity")
+            configuration_matches_current = development_only_change(
+                configuration_snapshot(run_root, claim["resolved_config_sha256"]).document,
+                json.loads(self.config.resolved_json))
         if (claim.get("job_id") != job.job_id
                 or claim.get("repository_root") != str(self.config.runtime.repository_root)
                 or not configuration_matches_current):
@@ -225,6 +236,9 @@ class JobRunner:
             from appsec_review.runtime.configuration import configuration_snapshot
             effective = load_config(_snapshot=configuration_snapshot(run_root, claim["resolved_config_sha256"]))
         target = claim.get("target_root")
+        development_inputs = tuple(claim.get("development_input_overrides", ()))
+        if any(item.get("replacement", {}).get("root") != "run" for item in development_inputs):
+            raise ValueError("attempt development inputs must be run-owned snapshots")
         return JobContext(
             run_id=str(claim["run_id"]), attempt_id=str(claim["attempt_id"]),
             trigger=str(claim["trigger"]), repository_root=self.config.runtime.repository_root,
@@ -244,6 +258,7 @@ class JobRunner:
                                 if claim.get("input_manifest_path") else None,
             input_manifest_sha256=(str(claim["input_manifest_sha256"])
                                    if claim.get("input_manifest_sha256") else None),
+            development_inputs=development_inputs,
         )
 
     def _check_target_inputs(self, job: Job, target_root: Path | None, source_fingerprint: str) -> None:
@@ -392,6 +407,10 @@ class JobRunner:
                 admit_upstreams(context, claim["upstream_handoffs"])
                 from appsec_review.runtime.inputs import admit_inputs
                 claim["input_admission"] = admit_inputs(context, enabled_inputs)
+                # Development overrides are resolved and snapshotted once, for this fresh attempt only.
+                development_inputs = job.resolve_development_inputs(context)
+                if development_inputs:
+                    claim["development_input_overrides"] = [dict(item) for item in development_inputs]
                 input_manifest_path, input_manifest_sha = materialize_attempt_input_manifest(
                     run_root=run_root, attempt_root=attempt_root, run_id=str(run_id),
                     target_snapshot=source_fingerprint, target_root=target_root,
@@ -523,7 +542,7 @@ class JobRunner:
                 if contract is not None:
                     claim["orchestration"]["build_environment_contract"] = canonical_json(contract).decode()
                 for key in ("configuration", "evidence_target_snapshot", "input_manifest_path", "input_manifest_sha256",
-                            "external_input_selection", "optional_prior_handoffs"):
+                            "external_input_selection", "optional_prior_handoffs", "development_input_overrides"):
                     if key in original_claim:
                         claim[key] = original_claim[key]
                 if "review_policy" in original_claim:

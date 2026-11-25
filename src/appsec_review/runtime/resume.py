@@ -51,6 +51,8 @@ def job_config_sha256(config: AppConfig, job_id: str) -> str:
             for key, step in job.steps.items()
         },
     }
+    if job.development is not None:
+        value["development"] = job.development.view()
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
 
@@ -175,6 +177,8 @@ class ResumePlanner:
             claim = read_document(safe_path(self.run_root, handoff["resolving_paths"]["attempt"] + "/claim.json"))
             if claim.get("deployment_identity") != deployment_identity(self.config.runtime.repository_root):
                 reasons.append("deployment image/scripts identity changed")
+            reasons.extend(job.development_reuse_reasons(
+                self.config.job(job.job_id), self.config.runtime.repository_root, claim))
             if contract is not None:
                 from appsec_review.jobs.job_build_environment_analysis.job import optional_prior_environment_handoffs
                 if dict(claim.get("optional_prior_handoffs", {})) != optional_prior_environment_handoffs(contract):
