@@ -351,14 +351,14 @@ def _models(inputs: TelemetryInputs) -> Box:
         durations = [_number(call.get("duration_ms")) for call in members]
         rows.append((Cell(model, mono=True), Cell(role), Cell(fmt.count(len(members))), Cell(fmt.count(failed)),
                      *(Cell(_token_cell([_number(call.get(key)) for call in members]))
-                       for key in ("input_tokens", "output_tokens", "cache_tokens")),
+                       for key in ("input_tokens", "output_tokens", "cache_tokens", "cache_write_tokens")),
                      Cell(_token_cell(durations) if None in durations else fmt.duration(sum(durations)))))
     shown, omitted = _cap(rows, MODEL_LIMIT)
     errors = sorted({_short(call.get("error_class"), CELL_CHARS) for call in calls if call.get("error_class")})
     errors_shown, errors_omitted = _cap(errors, 6, "error classes")
-    items: list[Any] = [Table(("Model", "Role", "Calls", "Failed", "Input", "Output", "Cache", "Time"),
-                              tuple(shown), (0.26, 0.10, 0.08, 0.08, 0.13, 0.12, 0.11, 0.12), omitted),
-                        Para("Token counts a provider did not report are shown as n/a, never as zero; "
+    items: list[Any] = [Table(("Model", "Role", "Calls", "Failed", "Input", "Output", "Read", "Write", "Time"),
+                              tuple(shown), (0.22, 0.10, 0.07, 0.07, 0.12, 0.11, 0.10, 0.10, 0.11), omitted),
+                        Para("Read and Write are provider cache tokens. Unreported counts are n/a, never zero; "
                              "'partial' sums only the calls that reported usage.", muted=True)]
     if errors_shown:
         items.append(Bullets(tuple(f"Error class: {error}" for error in errors_shown), errors_omitted))

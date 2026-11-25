@@ -127,3 +127,41 @@ def test_expand_runs_typed_queries_for_the_kind_of_item() -> None:
     assert [params.get("mode") for _tool, params in plan[1:]] == ["callers", "callees", "sinks"]
     assert plan[1][1]["depth"] == 2
     assert expand_plan(GUARD, max_depth=2) == [("find", {"identity": GUARD})]
+
+
+def test_expand_logs_one_cell_query_and_attributes_find_and_trace(tmp_path):
+    import json
+    from appsec_review.retrieval import RetrievalCore
+    from tests.review.test_cells import ScriptedInfer, capability as cell_cap, final, retrieve, run, spec
+    from tests.test_retrieval_core import RUN_ID, _fixture
+
+    runs, ids = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    ref = ids["file"]
+    cap = cell_cap(manifest_sha256=core.manifest_sha256, tools=("expand", "find", "trace"),
+                   indexes=("source",), entities=(ref,))
+    infer = ScriptedInfer(retrieve({"tool": "expand", "parameters": {"ref": ref}}), final(ref))
+    outcome = run(tmp_path, infer, cell_spec=spec(manifest_sha256=core.manifest_sha256), cap=cap, core=core)
+    receipt = json.loads(outcome.receipt_paths[0].read_text())
+    [call] = receipt["turns"][0]["retrievals"]
+    assert call["status"] == "executed" and receipt["status"] == "succeeded"
+    events, _ = core.log.read()
+    cell = [e for e in events if e["details"].get("cell_id") == outcome.record.cell_id]
+    [parent] = [e["details"] for e in cell if e["event_type"] == "RETRIEVAL_QUERY"]
+    assert parent["mcp_tool"] == "expand" and parent["query_sha256"] == call["filter_sha256"]
+    assert parent["result_count"] == call["result_count"] and parent["caller_kind"] == "review_cell"
+    children = [e["details"] for e in cell if e["event_type"] == "RETRIEVAL_SUBOP_COMPLETED"]
+    assert {c["mcp_tool"] for c in children} == {"find", "trace"}
+    assert all(c["parent_tool"] == "expand" and c["parent_query_sha256"] == parent["query_sha256"]
+               for c in children)
+
+    # A subsequent job-level identity lookup has no stale cell/parent metadata; a cached answer emits no query.
+    from threading import Lock
+    from types import SimpleNamespace
+    from appsec_review.jobs.job_inference_security_review.teams import ReviewContext
+    ctx = SimpleNamespace(core=core, _resolves={}, _lock=Lock())
+    assert ReviewContext.resolves(ctx, ref) and ReviewContext.resolves(ctx, ref)
+    events, _ = core.log.read()
+    [lookup] = [event for event in events if event["details"].get("caller_kind") == "identity_resolution"]
+    assert lookup["event_type"] == "RETRIEVAL_QUERY" and lookup["job_id"] == "job_inference_security_review"
+    assert lookup["details"].get("cell_id") is None and lookup["details"].get("parent_tool") is None

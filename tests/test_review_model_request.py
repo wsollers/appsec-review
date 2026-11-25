@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 from pathlib import Path
 import stat
@@ -103,3 +104,57 @@ def test_anthropic_api_sends_guidance_as_system_and_turn_data_as_user(monkeypatc
     user = json.loads(body["messages"][0]["content"])
     assert "guidance" not in user and user["task_input"] == {"task": "hunt/sink_up"}
     assert user["transcript"][0]["from"] == "worker"
+
+
+@pytest.mark.parametrize("provider", ["claude-cli", "copilot-sdk", "anthropic-api"])
+def test_byte_breakdown_tracks_rendered_catalog_and_utf8_messages(provider):
+    from appsec_review.guidance.cards import review_tool_catalog
+    from appsec_review.inference.request import review_prompt, review_prompt_metrics, review_user_text
+    from appsec_review.inference.recording import request_key
+
+    task = {"capability": {"tools": ["find"]}, "source": "\u2603",
+            "turn_protocol": {"tool_catalog": review_tool_catalog(["find"])}}
+    req = replace(_request(provider), guidance_text="r\u00e8gles", task_input=task, transcript=())
+    digest = req.capability_artifact_card["catalog_sha256"]
+    previous = None
+    for prior, deduped in ((None, False), (digest, True), ("0" * 64, False)):
+        turn = replace(req, transcript=({"id": 1},) if prior is not None else (),
+                       task_input={**task, "artifact_admission": {"previous_catalog_sha256": prior}})
+        key = request_key(turn)
+        metrics = review_prompt_metrics(turn)
+        wire = review_user_text(turn)
+        prompt = review_prompt(turn, include_guidance=provider != "anthropic-api")
+        separate = provider == "anthropic-api"
+        separators = (",", ":") if provider == "copilot-sdk" else (", ", ": ")
+        def size(value):
+            return len(json.dumps(value, separators=separators, sort_keys=True).encode("utf-8"))
+        catalog = prompt["task_input"]["turn_protocol"]["tool_catalog"]
+        system = len(turn.guidance_text.encode("utf-8")) if separate else 0
+        assert json.loads(wire) == json.loads(json.dumps(prompt))
+        assert metrics == {"prompt_bytes": len(wire.encode("utf-8")) + system,
+                           "guidance_bytes": system if separate else size(turn.guidance_text),
+                           "tool_catalog_bytes": size(catalog), "task_input_bytes": size(prompt["task_input"]) - size(catalog),
+                           "capability_card_bytes": size(prompt["capability_artifact_card"]),
+                           "transcript_bytes": size(prompt["transcript"]), "catalog_deduped": deduped}
+        if deduped:
+            assert metrics["tool_catalog_bytes"] < previous
+        previous = metrics["tool_catalog_bytes"]
+        assert request_key(turn) == key
+
+
+def test_anthropic_wire_and_cache_write_are_observed_without_changing_input(monkeypatch):
+    from appsec_review.inference.request import review_prompt_metrics
+    captured = {}
+    def fake_open(request, timeout):
+        captured.update(json.loads(request.data))
+        return _Response({"content": [{"type": "text", "text": json.dumps(TURN)}],
+                          "usage": {"input_tokens": 9, "output_tokens": 4, "cache_read_input_tokens": 3,
+                                    "cache_creation_input_tokens": 82}})
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "fixture")
+    monkeypatch.setattr("appsec_review.inference.anthropic_api.urlopen", fake_open)
+    turn = replace(_request("anthropic-api"), guidance_text="\U0001f30d")
+    result = infer(turn, timeout_seconds=3)
+    assert (result.input_tokens, result.cache_tokens, result.cache_write_tokens) == (9, 3, 82)
+    metrics = review_prompt_metrics(turn)
+    assert metrics["guidance_bytes"] == 4
+    assert metrics["prompt_bytes"] == 4 + len(captured["messages"][0]["content"].encode("utf-8"))

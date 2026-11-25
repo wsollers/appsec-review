@@ -113,7 +113,7 @@ def _model_rows(calls: list[Mapping[str, Any]]) -> list[tuple[Cell, ...]]:
     rows = []
     for call in calls:
         error = call.get("error_class")
-        tokens = [count(call.get(key)) for key in ("input_tokens", "output_tokens", "cache_tokens")]
+        tokens = [count(call.get(key)) for key in ("input_tokens", "output_tokens", "cache_tokens", "cache_write_tokens")]
         rows.append((Cell(_label(call.get("invocation_id")), mono=True), Cell(_label(call.get("role"), 40)),
                      Cell(_label(call.get("model"), 60), mono=True), Cell(duration(call.get("duration_ms"))),
                      *(Cell(NA if value == UNAVAILABLE else value) for value in tokens),
@@ -255,8 +255,8 @@ def _attempt(inputs: TelemetryInputs, span: JobSpan, events: list[Event], level:
         blocks.append(Box(kind=BoxKind.RESPONSE, chip="MODEL", title="Model calls",
                           meta=f"{plural(len(calls), 'call')}, {count(failed)} not succeeded; n/a: not recorded",
                           items=(_rows_table(
-                              ("Invocation", "Role", "Model", "Duration", "In", "Out", "Cache", "Status", "Error"),
-                              (.15, .09, .13, .09, .08, .08, .08, .13, .17), _model_rows(calls)),)))
+                              ("Invocation", "Role", "Model", "Duration", "In", "Out", "Cache read", "Cache write", "Status", "Error"),
+                              (.14, .08, .12, .08, .07, .07, .08, .08, .12, .16), _model_rows(calls)),)))
     if tools:
         blocks.append(Box(kind=BoxKind.RESULT, chip="TOOLS", title="Tool invocations",
                           meta=plural(len(tools), "invocation"),

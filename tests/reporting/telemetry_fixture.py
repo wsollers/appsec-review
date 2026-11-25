@@ -47,7 +47,7 @@ class _Log:
 
 def _model(log: _Log, start: float, seconds: float, job: str, attempt: str, invocation: str, *,
            role: str, model: str = MODEL, tokens: tuple[int, int, int] | None = (1200, 300, 0),
-           status: str = "succeeded", error_class: str | None = None) -> None:
+           cache_write_tokens: int | None = None, status: str = "succeeded", error_class: str | None = None) -> None:
     log(start, "MODEL_CALL_STARTED", job=job, attempt=attempt, step="review", task=invocation,
         model_invocation_id=invocation, provider="anthropic", model=model, role=role)
     usage = (dict(zip(("input_tokens", "output_tokens", "cache_tokens"), tokens)) if tokens
@@ -55,7 +55,7 @@ def _model(log: _Log, start: float, seconds: float, job: str, attempt: str, invo
     log(start + seconds, "MODEL_CALL_COMPLETED", job=job, attempt=attempt, step="review", task=invocation,
         model_invocation_id=invocation, provider="anthropic", model=model, role=role,
         duration_ms=int(seconds * 1000), retry_count=0, terminal_status=status,
-        error_class=error_class, **usage)
+        error_class=error_class, cache_write_tokens=cache_write_tokens, **usage)
 
 
 def _tool(log: _Log, start: float, seconds: float, job: str, attempt: str, invocation: str, tool: str,
@@ -101,7 +101,7 @@ def build_telemetry_run(parent: Path, *, run_id: str = RUN_ID, outcome: str = "C
     review_end = 900 if outcome != "RUNNING" else None
     _job(log, 64, review_end or 0, review, "a1", None if outcome == "RUNNING" else "JOB_SUCCEEDED", 900)
     _model(log, 80, 12.5, review, "a1", "m-red-1", role="red")
-    _model(log, 95, 8.0, review, "a1", "m-blue-1", role="blue", tokens=(5400, 900, 4096),
+    _model(log, 95, 8.0, review, "a1", "m-blue-1", role="blue", tokens=(5400, 900, 4096), cache_write_tokens=700,
            status="ACCEPTED")
     _model(log, 110, 20.0, review, "a1", "m-verify-1", role="verifier", tokens=None)
     _model(log, 140, 3.0, review, "a1", "m-red-2", role="red", model=HOSTILE, tokens=(10, 0, 0),

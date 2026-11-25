@@ -63,7 +63,7 @@ def sdk(monkeypatch, tmp_path, fake_sdk_modules):
                             response=json.dumps(VALUE), served="claude-haiku-5.5",
                             policy="enabled", reasoning=["low"], delay=0, tools=None,
                             models=["claude-haiku-5.5"], input_tokens=10, output_tokens=20,
-                            cache_read_tokens=3, extra_usage=[], usage=True, failure=None,
+                            cache_read_tokens=3, write_usage={}, extra_usage=[], usage=True, failure=None,
                             abort_error=None, exit_error=None, exit_delay=0, abort_delay=0,
                             exit_started=False, client_closed=False, raw_prompt=None,
                             starts=0, stops=0, listings=0, session_count=0, sends=0, loops=[],
@@ -101,7 +101,7 @@ def sdk(monkeypatch, tmp_path, fake_sdk_modules):
                                *state.extra_usage]:
                     state.options["on_event"](SimpleNamespace(agent_id=None, data=AssistantUsageData(
                         model=state.served, input_tokens=counts[0], output_tokens=counts[1],
-                        cache_read_tokens=counts[2])))
+                        cache_read_tokens=counts[2], **(counts[3] if len(counts) > 3 else state.write_usage))))
             return SimpleNamespace(data=AssistantMessageData(
                 content=state.response, message_id="message", model=state.served,
                 tool_requests=state.tools))
@@ -674,3 +674,34 @@ def test_sdk_own_send_timeout_with_failed_abort_is_a_contract_failure(sdk, monke
         copilot_sdk.send(request(), timeout_seconds=5)
     assert sdk.aborted and sdk.closed and sdk.stops == 1 and sdk.sends == 1
     assert quarantined == ["copilot_teardown_unconfirmed"]
+
+
+@pytest.mark.parametrize(("reports", "expected"), [
+    ([{}, {}], None), ([{"cache_write_tokens": 0}, {"cacheWriteTokens": 0}], 0),
+    ([{"cache_write_tokens": 5}, {"cache_creation_input_tokens": 9}], 14),
+    ([{"cache_write_tokens": 5}, {}], None), ([{"cache_write_tokens": True}, {"cache_write_tokens": 1}], None),
+])
+def test_sdk_cache_writes_preserve_zero_missing_and_billing(sdk, reports, expected):
+    sdk.write_usage, second = reports
+    sdk.extra_usage = [(7, 1, 0, second)]
+    result = copilot_sdk.send(request(), timeout_seconds=5)
+    assert result.cache_write_tokens == expected
+    assert (result.input_tokens, result.output_tokens, result.cache_tokens) == (17, 21, 3)
+
+
+def test_sdk_reports_reuse_and_cold_time_only_for_this_call(sdk, monkeypatch):
+    # Use a clock dedicated to the instrumentation, not sleeps or the RPC deadline.
+    ticks = iter([10.0, 10.25, 50.0, 50.5])
+    monkeypatch.setattr(_copilot_worker, "_startup_clock", lambda: next(ticks))
+    with worker_scope():
+        cold = copilot_sdk.send(request(), timeout_seconds=5)
+        warm = copilot_sdk.send(request(), timeout_seconds=5)
+        assert (cold.client_reused, cold.client_cold_start_ms) == (False, 250)
+        assert (warm.client_reused, warm.client_cold_start_ms) == (True, 0)
+        sdk.ping_error = ConnectionResetError()
+        with pytest.raises(ProviderError) as failed:
+            copilot_sdk.send(request(), timeout_seconds=5)
+        assert (failed.value.client_reused, failed.value.client_cold_start_ms) == (True, 0)
+        sdk.ping_error = None
+        rotated = copilot_sdk.send(request(), timeout_seconds=5)
+        assert (rotated.client_reused, rotated.client_cold_start_ms) == (False, 500)

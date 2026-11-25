@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 import base64
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 import hashlib
 import hmac
 import json
@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, Mapping, Se
 from appsec_review.interchange import decode_handoff
 from appsec_review.observability import PipelineLog
 from appsec_review.observability.spans import count_work
+from appsec_review.retrieval._query_work import _QUERY, _QueryWork, connect_shard
 from appsec_review.retrieval.index import (
     INDEX_NAMES, MANIFEST_SCHEMA, IndexIdentity, IndexSelection, SelectedShardFacts, load_verified_manifest, write_manifest,
 )
@@ -45,10 +46,16 @@ _CALLER: ContextVar[Mapping[str, Any]] = ContextVar("appsec_retrieval_caller", d
 
 
 @contextmanager
-def retrieval_caller(*, job_id: str, cell_id: str, role: str, turn: int, caller_kind: str) -> Iterator[None]:
-    """Application-only audit context; never populated from query parameters."""
-    token = _CALLER.set({"job_id": job_id, "cell_id": cell_id, "role": role, "turn": turn,
-                         "caller_kind": caller_kind})
+def retrieval_caller(*, job_id: str, caller_kind: str, cell_id: str | None = None,
+                     role: str | None = None, turn: int | None = None, if_unset: bool = False) -> Iterator[None]:
+    """Application-only audit context; omitted cell coordinates inherit the enclosing coordinates."""
+    current = _CALLER.get()
+    if if_unset and (current or _ACTIVE_MCP.get() is not None):
+        yield
+        return
+    coordinates = {key: value for key, value in (("cell_id", cell_id), ("role", role), ("turn", turn))
+                   if value is not None}
+    token = _CALLER.set({**current, **coordinates, "job_id": job_id, "caller_kind": caller_kind})
     try:
         yield
     finally:
@@ -85,6 +92,20 @@ class ShardGroup(tuple):
                 raise TypeError("a logical index with multiple shards has no single mapping value")
             return tuple.__getitem__(self, 0)[key]
         return tuple.__getitem__(self, key)
+
+
+class _IndexGroups(dict[str, ShardGroup]):
+    """Observe the full candidate group at selection, before routing, producer filters or paging."""
+
+    def __getitem__(self, name):
+        group = super().__getitem__(name)
+        work = _QUERY.get()
+        if work is not None and work.indexes is self:
+            work.consider(name)
+        return group
+
+    def get(self, name, default=None):
+        return self[name] if name in self else default
 
 
 def _artifact_in_handoff(handoff: Mapping[str, Any], path: str, sha256: str) -> bool:
@@ -432,8 +453,8 @@ class RetrievalCore:
             if shard_filter is not None and not shard_filter(item):
                 continue
             grouped.setdefault(str(item["name"]), []).append(item)
-        self.indexes = {name: ShardGroup(sorted(items, key=lambda item: str(item.get("shard_id", "default"))))
-                        for name, items in grouped.items()}
+        self.indexes = _IndexGroups({name: ShardGroup(sorted(items, key=lambda item: str(item.get("shard_id", "default"))))
+                        for name, items in grouped.items()})
         self._routes = {name: _IndexRoutes() for name in self.indexes}
         self._shard_cache = {_shard_key(shard): _ShardCache() for group in self.indexes.values() for shard in group}
         view_identity = f"{run_id}:{self.view_identity}"
@@ -448,32 +469,45 @@ class RetrievalCore:
         self.mcp_session_id = hashlib.sha256(
             view_identity.encode()).hexdigest()
 
-    def begin_mcp_invocation(self, tool: str, parameters: Mapping[str, Any]) -> tuple[object, Mapping[str, str]]:
+    def begin_mcp_invocation(self, tool: str, parameters: Mapping[str, Any]) -> tuple[tuple[Token, Token], Mapping[str, str]]:
         invocation = {"mcp_session_id": self.mcp_session_id,
                       "mcp_invocation_id": uuid.uuid4().hex,
                       "mcp_tool": tool,
                       "request_sha256": self._request_hash(tool, parameters)}
-        token = _ACTIVE_MCP.set(invocation)
         self.log.write("MCP_TOOL_STARTED", run_id=self.run_id, job_id="retrieval", trigger="mcp",
                        orchestrator="retrieval", details={**invocation,
                        "manifest_sha256": self.manifest_sha256})
-        return token, invocation
+        work = _QueryWork(tool, invocation["request_sha256"], self.clock(), self.indexes)
+        return (_ACTIVE_MCP.set(invocation), _QUERY.set(work)), invocation
 
-    def complete_mcp_invocation(self, token: object, invocation: Mapping[str, str], *,
+    def complete_mcp_invocation(self, token: tuple[Token, Token], invocation: Mapping[str, str], *,
                                 response: Mapping[str, Any] | None = None,
                                 error: BaseException | None = None, duration_ms: int = 0) -> None:
-        details = {**invocation, "manifest_sha256": self.manifest_sha256,
+        invocation_token, work_token = token
+        work = _QUERY.get()
+        assert work is not None
+        details = {**invocation, **work.metrics(), "manifest_sha256": self.manifest_sha256,
                    "terminal_status": "FAILED" if error else "SUCCEEDED",
                    "error_class": type(error).__name__ if error else None,
                    "result_count": len(response.get("results", ())) if response else 0,
                    "gap_count": len(response.get("coverage_gaps", ())) if response else 0,
                    "truncated": bool(response.get("truncated")) if response else False,
+                   "gaps_truncated": bool(response and response.get("gaps_truncated")),
                    "duration_ms": duration_ms}
-        self.log.write("MCP_TOOL_COMPLETED", run_id=self.run_id, job_id="retrieval", trigger="mcp",
-                       orchestrator="retrieval", details=details)
-        _ACTIVE_MCP.reset(token)
+        try:
+            self.log.write("MCP_TOOL_COMPLETED", run_id=self.run_id, job_id="retrieval", trigger="mcp",
+                           orchestrator="retrieval", details=details)
+        finally:
+            _QUERY.reset(work_token)
+            _ACTIVE_MCP.reset(invocation_token)
+            if enclosing := _QUERY.get():
+                enclosing.include(work)
 
     def _database(self, identity: Mapping[str, Any], deadline: float, *, capture=None) -> sqlite3.Connection:
+        work = _QUERY.get()
+        if work is not None and work.indexes is self.indexes:
+            # A caller may already have a descriptor (e.g. a verified citation).
+            work.consider(identity["name"])
         if self.selection is not None:
             from appsec_review.retrieval.index import open_selected_shard
             try:
@@ -511,7 +545,7 @@ class RetrievalCore:
         path = self._verified_path(identity)
         name = identity["name"]
         uri = f"{path.as_uri()}?mode=ro&immutable=1"
-        database = sqlite3.connect(uri, uri=True, timeout=0.1)
+        database = connect_shard(uri, timeout=0.1)
         try:
             database.row_factory = sqlite3.Row
             database.execute("PRAGMA query_only=ON")
@@ -546,6 +580,12 @@ class RetrievalCore:
                 database = None
                 snapshot = cache.snapshot
                 build_counts = counts and (snapshot is None or snapshot.kind_counts is None)
+                work = _QUERY.get()
+                if work is not None:
+                    if snapshot is None or build_counts:
+                        work.snapshot_cache_misses += 1
+                    else:
+                        work.snapshot_cache_hits += 1
                 needs_database = snapshot is None or build_counts or read_rows
                 captured = {}
                 if self.selection is not None:
@@ -759,32 +799,81 @@ class RetrievalCore:
             response["indexes"] = []
         return response
 
-    def _audit(self, tool: str, request_hash: str, filters: Mapping[str, Any], response: Mapping[str, Any]) -> None:
+    @contextmanager
+    def _query_scope(self, tool: str, parameters: Mapping[str, Any], *, query_sha256: str | None = None,
+                     filters: Mapping[str, Any] | None = None, indexes: Iterable[str] = ()) -> Iterator[_QueryWork]:
+        parent = _QUERY.get()
+        started = self.clock()
+        work = _QueryWork(tool, query_sha256 or self._request_hash(tool, parameters), started, self.indexes)
+        # A bounded query can time out before it reaches the first shard in its declared index set.
+        for name in indexes:
+            work.consider(name)
+        if filters is None:
+            filters = {key: value for key, value in parameters.items() if key not in {"query", "cursor"}}
+        token = _QUERY.set(work)
+        try:
+            yield work
+            if work.response is None:
+                raise RuntimeError("retrieval query missing completion")
+        except Exception as exc:
+            timed_out = (isinstance(exc, RetrievalGap) and isinstance(exc.__cause__, sqlite3.OperationalError)
+                         and "interrupted" in str(exc.__cause__).lower())
+            self._audit(work, parent, filters, {"status": "timeout" if timed_out else "error",
+                        "truncated": timed_out, "coverage_gaps": [str(exc)] if timed_out else []})
+            raise
+        else:
+            self._audit(work, parent, filters, work.response, duration_ms=work.duration_ms,
+                        result_count=work.result_count)
+        finally:
+            _QUERY.reset(token)
+            if parent is not None:
+                parent.include(work)
+
+    @contextmanager
+    def application_query(self, tool: str, parameters: Mapping[str, Any], *, query_sha256: str | None = None
+                          ) -> Iterator[Callable[[Mapping[str, Any]], None]]:
+        """Enclose an application fan-out. Complete it once with its final (possibly bounded) response."""
+        with self._query_scope(tool, parameters, query_sha256=query_sha256) as work:
+            yield work.complete
+
+    def _audit(self, work: _QueryWork, parent: _QueryWork | None, filters: Mapping[str, Any],
+               response: Mapping[str, Any], *, duration_ms: int | None = None, result_count: int | None = None) -> None:
         invocation = _ACTIVE_MCP.get()
-        event = "RETRIEVAL_SUBOP_COMPLETED" if invocation else "RETRIEVAL_QUERY"
+        event = "RETRIEVAL_SUBOP_COMPLETED" if parent or invocation else "RETRIEVAL_QUERY"
+        if duration_ms is None:
+            duration_ms = max(0, int((self.clock() - work.started) * 1000))
         # The run-wide pipeline log is read by later jobs and by reporting; an audit record stays small.
         # The full gap list is in the response the caller received; here it is counted, hashed and sampled.
-        gaps = [str(item) for item in response["coverage_gaps"]]
+        gaps = [str(item) for item in response.get("coverage_gaps", ())]
         caller = _CALLER.get()
         self.log.write(event, run_id=self.run_id, job_id=caller.get("job_id", "retrieval"), trigger="mcp",
                        orchestrator="retrieval", details={
-                            **caller, "elapsed_ms": response["duration_ms"], "status": response["status"],
-                            "mcp_tool": tool, "manifest_sha256": self.manifest_sha256,
-                            "query_sha256": request_hash, "filters": filters,
-                            "result_count": len(response["results"]),
+                            **caller, **work.metrics(), "status": response.get("status", "ok"),
+                            "mcp_tool": work.tool, "manifest_sha256": self.manifest_sha256,
+                            "query_sha256": work.request_hash, "filters": filters,
+                            "result_count": len(response.get("results", ())) if result_count is None else result_count,
                             "gap_count": len(gaps),
                             "gaps_sha256": hashlib.sha256(canonical_json(gaps)).hexdigest(),
                             "gaps": [gap[:AUDIT_GAP_CHARS] for gap in gaps[:AUDIT_GAP_SAMPLE]],
-                            "truncated": response["truncated"], "duration_ms": response["duration_ms"],
+                            "truncated": bool(response.get("truncated")), "duration_ms": duration_ms,
+                            "gaps_truncated": bool(response.get("gaps_truncated")),
+                            "parent_tool": parent.tool if parent else None,
+                            "parent_query_sha256": parent.request_hash if parent else None,
                             "parent_invocation_id": invocation.get("mcp_invocation_id") if invocation else None,
                             "mcp_session_id": invocation.get("mcp_session_id") if invocation else self.mcp_session_id,
                        })
 
     def _execute(self, tool: str, parameters: Mapping[str, Any], operation: Callable[[float], tuple]) -> dict[str, Any]:
+        indexes = self.indexes if tool == "trace" else parameters.get("indexes", ())
+        with self._query_scope(tool, parameters, indexes=indexes or ()) as work:
+            response = self._execute_response(work, operation)
+            work.complete(response, duration_ms=response["duration_ms"])
+            return response
+
+    def _execute_response(self, work: _QueryWork, operation: Callable[[float], tuple]) -> dict[str, Any]:
         from appsec_review.storage.validation import validation_scope
 
-        started = self.clock()
-        request_hash = self._request_hash(tool, parameters)
+        started = work.started
         deadline = started + self.limits.timeout_ms / 1000
         page_cursors = None
         try:
@@ -805,13 +894,10 @@ class RetrievalCore:
                 raise
             results, gaps, has_more, offset, timed_out, operation_truncated = (
                 [], ["query execution-time budget exceeded"], False, 0, True, False)
-        response = self._envelope(tool=tool, results=results, gaps=gaps, started=started,
-                                  request_hash=request_hash, offset=offset, has_more=has_more,
-                                  truncated=timed_out or operation_truncated, page_cursors=page_cursors,
-                                  status="timeout" if timed_out else "ok")
-        filters = {key: value for key, value in parameters.items() if key not in {"query", "cursor"}}
-        self._audit(tool, request_hash, filters, response)
-        return response
+        return self._envelope(tool=work.tool, results=results, gaps=gaps, started=started,
+                              request_hash=work.request_hash, offset=offset, has_more=has_more,
+                              truncated=timed_out or operation_truncated, page_cursors=page_cursors,
+                              status="timeout" if timed_out else "ok")
 
     def search(self, *, query: str, indexes: Iterable[str] | None = None, kinds: Iterable[str] = (),
                limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
@@ -889,6 +975,9 @@ class RetrievalCore:
                     raise sqlite3.OperationalError("interrupted")
                 stack.callback(cache.lock.release)
                 routes = cache.by_identity
+            work = _QUERY.get()
+            if work is not None:
+                work.route(routes is not None)
             building, routed = {}, {}
             if routes is not None:
                 for eid in identities:
@@ -927,18 +1016,30 @@ class RetrievalCore:
     def resolve_identities(self, identities: Iterable[str], *, indexes: Iterable[str] | None = None
                            ) -> dict[str, dict[str, Any]]:
         """Run one batched lookup, retaining a normal, independently auditable find(limit=1) per ID."""
-        from appsec_review.storage.validation import validation_scope
-
         ids = tuple(dict.fromkeys(identities))
         names = self._names(indexes, empty_is_all=False)
         for eid in ids:
             LogicalIdentity.parse(eid)
-        if not ids:
-            return {}
-        started = self.clock()
+        filters = {"identity_count": len(ids), "indexes": names}
+        with self._query_scope("resolve_identities", {"identities": ids, "indexes": names}, filters=filters,
+                               indexes=names if ids else ()) as batch:
+            responses = self._batch_responses(batch, ids, names) if ids else {}
+            # Count physical work only on the batch. Per-ID finds are logical views of that one read.
+            batch.complete({
+                "status": "timeout" if any(r["status"] == "timeout" for r in responses.values()) else "ok",
+                "coverage_gaps": dict.fromkeys(g for r in responses.values() for g in r["coverage_gaps"]),
+                "truncated": any(r["truncated"] for r in responses.values()),
+                "gaps_truncated": any(r["gaps_truncated"] for r in responses.values()),
+            }, result_count=sum(len(r["results"]) for r in responses.values()))
+            return responses
+
+    def _batch_responses(self, batch: _QueryWork, ids: tuple[str, ...], names: tuple[str, ...]
+                         ) -> dict[str, dict[str, Any]]:
+        from appsec_review.storage.validation import validation_scope
+
         try:
             with validation_scope(self.run_root):
-                matches, gaps = self._exact_rows(frozenset(ids), names, started + self.limits.timeout_ms / 1000)
+                matches, gaps = self._exact_rows(frozenset(ids), names, batch.started + self.limits.timeout_ms / 1000)
             timed_out = False
         except sqlite3.OperationalError as exc:
             if "interrupted" not in str(exc).lower():
@@ -947,21 +1048,31 @@ class RetrievalCore:
         responses = {}
         for eid in ids:
             parameters = {"identity": eid, "kind": None, "name": None, "path": None, "indexes": names, "limit": 1}
-            request_hash = self._request_hash("find", parameters)
-            rows = matches.get(eid, [])
-            response = self._envelope(tool="find", results=rows[:1], gaps=gaps, started=started,
-                                      request_hash=request_hash, has_more=len(rows) > 1, truncated=timed_out,
-                                      status="timeout" if timed_out else "ok")
-            self._audit("find", request_hash, parameters, response)
-            responses[eid] = response
+            with self._query_scope("find", parameters) as synthetic:
+                rows = matches.get(eid, [])
+                response = self._envelope(tool="find", results=rows[:1], gaps=gaps, started=batch.started,
+                                          request_hash=synthetic.request_hash, has_more=len(rows) > 1,
+                                          truncated=timed_out, status="timeout" if timed_out else "ok")
+                synthetic.complete(response)
+                responses[eid] = response
         return responses
 
     def dataset_inventory(self, indexes: Iterable[str]) -> dict[str, list[dict[str, Any]]]:
         """Verified, view-local actual row counts; timeout never masquerades as an empty dataset."""
+        names = self._names(indexes, empty_is_all=False)
+        filters = {"indexes": names}
+        with self._query_scope("dataset_inventory", filters, indexes=names) as work:
+            inventory = self._dataset_inventory(names, work.started + self.limits.timeout_ms / 1000)
+            work.complete({
+                "coverage_gaps": dict.fromkeys(gap for rows in inventory.values() for row in rows
+                                               for gap in row["coverage_gaps"]),
+            }, result_count=sum(map(len, inventory.values())))
+            return inventory
+
+    def _dataset_inventory(self, names: tuple[str, ...], deadline: float) -> dict[str, list[dict[str, Any]]]:
         from appsec_review.storage.validation import validation_scope
 
-        deadline = self.clock() + self.limits.timeout_ms / 1000
-        inventory = {index: [] for index in self._names(indexes, empty_is_all=False)}
+        inventory = {index: [] for index in names}
         try:
             with validation_scope(self.run_root):
                 for index, records in inventory.items():

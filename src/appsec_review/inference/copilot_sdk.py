@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 import json
 import os
 from typing import Any, Sequence
 
 from .claude_cli import ModelOutputError, _plan_prompt, parse_model_payload
-from .request import ModelRequest, ModelResult, ReviewModelRequest, review_prompt
+from .request import ModelRequest, ModelResult, ReviewModelRequest, review_user_text
 from .errors import ProviderError
-from ._copilot_worker import _cleanup_failure, _connection, _managed, _private_directory, _run, auth_home
-from .usage import Usage, token_count, total_reported
+from ._copilot_worker import ConnectionObservation, _cleanup_failure, _connection, _managed, _private_directory, _run, auth_home
+from .usage import Usage, reported_cache_write, token_count, total_reported
 
 
 def _available(model: Any) -> bool:
@@ -45,27 +46,12 @@ def _prompt_text(request: ModelRequest | ReviewModelRequest) -> str:
     if not isinstance(request, ReviewModelRequest):
         return json.dumps(_plan_prompt(request), sort_keys=True)
 
-    prompt = review_prompt(request, include_guidance=True)
-    # Canonicalize nested objects too, without sorting mutable fields to the front of the wire payload.
-    first = {
-        (): ("guidance", "response_schema", "guidance_bundle_sha256", "role", "persona", "stack_profile",
-             "limits", "tool_catalog", "task_input", "capability_artifact_card", "transcript", "repair"),
-        ("task_input",): ("tool_catalog", "turn_protocol", "protocol", "output_schema", "task"),
-        ("task_input", "turn_protocol"): ("tool_catalog",),
-    }
-
-    def encode(value, path=()):
-        priority = first.get(path)
-        if priority is None or not isinstance(value, dict):
-            return json.dumps(value, separators=(",", ":"), sort_keys=True)
-        keys = [key for key in priority if key in value] + sorted(value.keys() - set(priority))
-        return "{" + ",".join(json.dumps(key) + ":" + encode(value[key], (*path, key)) for key in keys) + "}"
-
-    return encode(prompt)
+    return review_user_text(request)
 
 
-async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int) -> ModelResult:
-    client, catalog = await _connection()
+async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int,
+                observation: ConnectionObservation) -> ModelResult:
+    client, catalog = await _connection(observation)
     async with _managed(_private_directory("appsec-copilot-turn-"), "turn directory") as working:
         from copilot.session import (
             ModelCapabilitiesOverride, ModelLimitsOverride, PermissionDecisionUserNotAvailable,
@@ -135,22 +121,33 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
                 raise ModelOutputError(str(exc), raw_response=bounded[:2 * 1024 * 1024].decode("utf-8", "ignore"),
                                        rejected_output=bounded[:131072].decode("utf-8", "ignore")) from exc
 
-            def tokens(field: str) -> int | None:
-                return total_reported([token_count(getattr(item, field, None)) for item in usage])
+            def counts(item):
+                return {"input_tokens": getattr(item, "input_tokens", None),
+                        "output_tokens": getattr(item, "output_tokens", None),
+                        "cache_tokens": getattr(item, "cache_read_tokens", None),
+                        "cache_write_tokens": reported_cache_write(item)}
 
-            invalid_usage = any(getattr(item, name, None) is not None and
-                                token_count(getattr(item, name)) is None
-                                for item in usage
-                                for name in ("input_tokens", "output_tokens", "cache_read_tokens"))
-            result = ModelResult(proposal=proposal, input_tokens=tokens("input_tokens"),
-                               output_tokens=tokens("output_tokens"), cache_tokens=tokens("cache_read_tokens"),
-                               raw_response=raw, served_model=request.model, served_provider="copilot-sdk",
-                               usage_unavailable_reason="invalid_provider_usage" if invalid_usage else None)
+            reports = [counts(item) for item in usage]
+            totals = {name: total_reported([token_count(row[name]) for row in reports])
+                      for name in ("input_tokens", "output_tokens", "cache_tokens", "cache_write_tokens")}
+            invalid_usage = any(value is not None and token_count(value) is None
+                                for row in reports for value in row.values())
+            result = ModelResult(proposal=proposal, **totals, raw_response=raw, served_model=request.model,
+                                 served_provider="copilot-sdk",
+                                 usage_unavailable_reason="invalid_provider_usage" if invalid_usage else None)
             return Usage.from_result(result).normalize(result)
 
 
 def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
-    return _run(_send(request, timeout_seconds), timeout_seconds)
+    observation = ConnectionObservation()
+    try:
+        result = _run(_send(request, timeout_seconds, observation), timeout_seconds)
+    except BaseException as error:
+        error.client_reused = observation.client_reused
+        error.client_cold_start_ms = observation.client_cold_start_ms
+        raise
+    return replace(result, client_reused=observation.client_reused,
+                   client_cold_start_ms=observation.client_cold_start_ms)
 
 
 def models(names: Sequence[str], *, timeout_seconds: int) -> dict[str, Any]:

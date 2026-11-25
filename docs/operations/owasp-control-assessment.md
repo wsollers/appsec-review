@@ -286,3 +286,13 @@ Execution changes affect only new attempts. Coverage changes preserve accepted r
 | `steps.publication.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
 
 Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
+
+### Reading input-budget calibration
+
+`parts[].input_tokens_estimated` is the planning estimate for one part. Each dispatched
+attempt records its own `estimated_input_tokens` for the actual turn, including retries and
+the current transcript. Compare it with `input_tokens`: a positive `input_estimate_delta`
+means the estimator overestimated. `output_tokens` and `cache_tokens` are separate provider
+measurements, not deductions. Part and batch calibration totals cover new dispatches once,
+not once per row; a missing provider report makes the corresponding total and delta unknown.
+A reused receipt or an undispatched part has no new measured usage.

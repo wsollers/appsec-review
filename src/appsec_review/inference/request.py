@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+import json
+import threading
 from typing import Any, Literal, Mapping, Protocol
 
 
@@ -73,6 +76,9 @@ class ModelResult:
     served_provider: str | None = None
     usage_source: Literal["provider", "replay"] = "provider"
     usage_unavailable_reason: str | None = None
+    cache_write_tokens: int | None = None
+    client_reused: bool | None = None
+    client_cold_start_ms: int | None = None
 
 
 class Infer(Protocol):
@@ -184,3 +190,81 @@ def plan_prompt(request: ModelRequest, *, include_persona: bool = True) -> dict[
                             "instruction": ("Return only one corrected JSON object. Its top-level "
                                             f"schema must be exactly {request.schema}.")}
     return prompt
+
+
+# Keep Copilot's stable prefix while preserving the existing byte-for-byte provider formats.
+_COPILOT_ORDER = {
+    (): ("guidance", "response_schema", "guidance_bundle_sha256", "role", "persona", "stack_profile",
+         "limits", "tool_catalog", "task_input", "capability_artifact_card", "transcript", "repair"),
+    ("task_input",): ("tool_catalog", "turn_protocol", "protocol", "output_schema", "task"),
+    ("task_input", "turn_protocol"): ("tool_catalog",),
+}
+_SECTIONS = {
+    ("guidance",): "guidance_bytes",
+    ("task_input",): "task_input_bytes",
+    ("capability_artifact_card",): "capability_card_bytes",
+    ("transcript",): "transcript_bytes",
+    ("task_input", "tool_catalog"): "tool_catalog_bytes",
+    ("task_input", "turn_protocol", "tool_catalog"): "tool_catalog_bytes",
+}
+
+
+def _render_review(request: ReviewModelRequest) -> tuple[str, dict[str, int | bool]]:
+    separate_system = request.provider == "anthropic-api"
+    prompt = review_prompt(request, include_guidance=not separate_system)
+    compact = request.provider == "copilot-sdk"
+    comma, colon = (",", ":") if compact else (", ", ": ")
+    metrics = dict.fromkeys(_SECTIONS.values(), 0)
+
+    def encode(value, path=()):
+        if path in _COPILOT_ORDER and isinstance(value, dict):
+            first = _COPILOT_ORDER[path] if compact else ()
+            keys = [k for k in first if k in value] + sorted(value.keys() - set(first))
+            text = "{" + comma.join(json.dumps(k) + colon + encode(value[k], (*path, k)) for k in keys) + "}"
+        else:
+            text = json.dumps(value, separators=(comma, colon), sort_keys=True)
+        if path in _SECTIONS:
+            metrics[_SECTIONS[path]] += len(text.encode("utf-8"))
+        return text
+
+    user_text = encode(prompt)
+    system_bytes = len(request.guidance_text.encode("utf-8")) if separate_system else 0
+    metrics["guidance_bytes"] += system_bytes
+    metrics["prompt_bytes"] = len(user_text.encode("utf-8")) + system_bytes
+    metrics["task_input_bytes"] -= metrics["tool_catalog_bytes"]
+    protocol = prompt["task_input"].get("turn_protocol")
+    metrics["catalog_deduped"] = ("catalog_sha256" in prompt["capability_artifact_card"] and
+                                  isinstance(protocol, Mapping) and protocol.get("catalog_format") == "typed_signatures")
+    return user_text, metrics
+
+
+_dispatch = threading.local()
+
+
+def _review_wire(request: ReviewModelRequest) -> tuple[str, dict[str, int | bool]]:
+    bound = getattr(_dispatch, "review", None)
+    return bound[1] if bound is not None and bound[0] is request else _render_review(request)
+
+
+def review_user_text(request: ReviewModelRequest) -> str:
+    return _review_wire(request)[0]
+
+
+def review_prompt_metrics(request: ReviewModelRequest) -> dict[str, int | bool]:
+    """Wire UTF-8 bytes, excluding transport framing. JSON sections include value delimiters."""
+    return dict(_review_wire(request)[1])
+
+
+@contextmanager
+def prepared_prompt(request: ModelRequest | ReviewModelRequest):
+    """Share the exact render only within this synchronous dispatch, never in request identity."""
+    if not isinstance(request, ReviewModelRequest):
+        yield {}
+        return
+    previous = getattr(_dispatch, "review", None)
+    rendered = _render_review(request)
+    _dispatch.review = (request, rendered)
+    try:
+        yield rendered[1]
+    finally:
+        _dispatch.review = previous

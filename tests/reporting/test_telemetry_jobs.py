@@ -94,11 +94,11 @@ def _check_model_calls(blocks) -> None:
     review = _job(blocks, JOBS[2])
     calls = _table(review, "Model calls")
     assert [r[0].text for r in calls.rows] == ["m-red-1", "m-blue-1", "m-verify-1", "m-red-2"]
-    assert [c.text for c in _row(calls, "m-blue-1")[3:8]] == ["8.0 s", "5,400", "900", "4,096", "Accepted"]
-    assert [c.text for c in _row(calls, "m-verify-1")[4:7]] == ["n/a"] * 3
+    assert [c.text for c in _row(calls, "m-blue-1")[3:9]] == ["8.0 s", "5,400", "900", "4,096", "700", "Accepted"]
+    assert [c.text for c in _row(calls, "m-verify-1")[4:8]] == ["n/a"] * 4
     failed = _row(calls, "m-red-2")
-    assert (failed[7].badge, failed[7].badge_label, failed[7].text) == ("contradicted", "FAILED", "FAILED")
-    assert failed[8].text.startswith("\\input{/etc/passwd}") and len(failed[8].text) <= 120
+    assert (failed[8].badge, failed[8].badge_label, failed[8].text) == ("contradicted", "FAILED", "FAILED")
+    assert failed[9].text.startswith("\\input{/etc/passwd}") and len(failed[9].text) <= 120
     assert len(failed[2].text) <= 60
     stats = {s.label: s.value for s in next(b for b in review if isinstance(b, Stats)).items}
     assert stats["Model calls"] == "4" and stats["Tokens in+out"] == "7.8k (partial)"

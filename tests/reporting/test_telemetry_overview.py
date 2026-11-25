@@ -92,9 +92,9 @@ def test_operation_labels_name_run_and_job_level_operations() -> None:
 def test_model_usage_marks_missing_tokens_unavailable(tmp_path: Path) -> None:
     table = _box(_blocks(build_telemetry_run(tmp_path)), "Model usage").items[0]
     rows = {(row[0].text, row[1].text): [cell.text for cell in row[2:]] for row in table.rows}
-    assert rows[(MODEL, "verifier")] == ["1", "0", "n/a", "n/a", "n/a", "20.0 s"]
-    assert rows[(MODEL, "blue")] == ["1", "0", "5,400", "900", "4,096", "8.0 s"]
-    assert rows[(MODEL, "red")] == ["1", "0", "1,200", "300", "0", "12.5 s"]
+    assert rows[(MODEL, "verifier")] == ["1", "0", "n/a", "n/a", "n/a", "n/a", "20.0 s"]
+    assert rows[(MODEL, "blue")] == ["1", "0", "5,400", "900", "4,096", "700", "8.0 s"]
+    assert rows[(MODEL, "red")] == ["1", "0", "1,200", "300", "0", "n/a", "12.5 s"]
     hostile = next(key for key in rows if key[0] != MODEL)
     assert rows[hostile][:2] == ["1", "1"]                      # the failed call is counted
 

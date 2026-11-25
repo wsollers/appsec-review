@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
+from dataclasses import dataclass
 import math
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ from .errors import ExecutionContractError, FailureCategory, ModelTimeout, Provi
 _CLEANUP_SECONDS = 5
 _CATALOG_TTL_SECONDS = 300
 _catalog_clock = time.monotonic
+_startup_clock = time.monotonic
 _local = threading.local()
 
 
@@ -144,6 +146,12 @@ def _cancel_tasks(loop, tasks, deadline):
             raise _cleanup_failure("Copilot cancellation cleanup failed") from error
 
 
+@dataclass
+class ConnectionObservation:
+    client_reused: bool | None = None
+    client_cold_start_ms: int | None = None
+
+
 class _Worker:
     def __init__(self):
         self.loop = None
@@ -155,11 +163,16 @@ class _Worker:
         self.transport_tasks = set()
         self.poisoned = False
 
-    async def connection(self):
+    async def connection(self, observation: ConnectionObservation | None):
+        if observation is not None:
+            observation.client_reused = self.client is not None
+            if observation.client_reused:
+                observation.client_cold_start_ms = 0
         if self.client is not None:
             # A cached catalog must not make a dead connection look healthy.
             await self.client.ping()
         else:
+            started = _startup_clock()
             before = asyncio.all_tasks()
             self.home = auth_home()
             try:
@@ -168,6 +181,8 @@ class _Worker:
                 self.expires = _catalog_clock() + _CATALOG_TTL_SECONDS
             finally:
                 self.transport_tasks = asyncio.all_tasks() - before
+                if observation is not None:
+                    observation.client_cold_start_ms = int((_startup_clock() - started) * 1000)
         return self.client, self.catalog
 
     def close(self, deadline):
@@ -311,5 +326,5 @@ def _run(operation, timeout_seconds: int):
         return _local.worker.run(operation, timeout_seconds, one_shot=True)
 
 
-async def _connection():
-    return await _local.worker.connection()
+async def _connection(observation: ConnectionObservation | None = None):
+    return await _local.worker.connection(observation)

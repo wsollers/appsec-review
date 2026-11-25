@@ -9,7 +9,7 @@ import re
 from typing import Any, Mapping
 
 from appsec_review.config.owasp import OwaspSettings
-from appsec_review.retrieval.core import RetrievalCore
+from appsec_review.retrieval.core import RetrievalCore, retrieval_caller
 from appsec_review.retrieval.model import LogicalIdentity, normalize_relative_path
 from appsec_review.retrieval.source_resolution import read_source_bytes
 from appsec_review.review.dispositions import FIRST_PARTY
@@ -124,6 +124,7 @@ class EvidenceResolver:
                        if item["name"] in UPSTREAM_INDEXES
                        and item.get("producer", {}).get("job") in UPSTREAM_JOBS}
 
+    @retrieval_caller(job_id="job_owasp_control_assessment", caller_kind="owasp_evidence", if_unset=True)
     def query(self, method: str, **parameters: Any) -> Mapping[str, Any]:
         self.metrics["attempts"] += 1
         response = getattr(self.core, method)(**parameters)
@@ -132,6 +133,7 @@ class EvidenceResolver:
         self.metrics["missing"] += int(not response["results"])
         return response
 
+    @retrieval_caller(job_id="job_owasp_control_assessment", caller_kind="owasp_evidence", if_unset=True)
     def _entity(self, identity: str) -> Mapping[str, Any]:
         cached = self._entity_cache.get(identity)
         if cached is not None:

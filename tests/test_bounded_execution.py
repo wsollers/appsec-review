@@ -43,7 +43,8 @@ def test_hash_only_correlated_receipts_are_immutable_and_not_replaced(tmp_path):
     context = CallContext(tmp_path, "run-1", "job-1", "attempt-1", "step-1", "task-1")
     engine = Execution(timeout_seconds=20, max_calls=2, context=context)
     for retry in (0, 1):
-        engine.call(lambda *a, **kw: answer(served_model="reported", served_provider="provider"),
+        engine.call(lambda *a, **kw: answer(served_model="reported", served_provider="provider",
+                                            cache_write_tokens=0, client_reused=True, client_cold_start_ms=0),
                     request(), timeout_seconds=20, retry_count=retry,
                     retry_reason="provider" if retry else None)
     paths = sorted((tmp_path / "data" / "inference-executions").rglob("*.json"))
@@ -58,6 +59,11 @@ def test_hash_only_correlated_receipts_are_immutable_and_not_replaced(tmp_path):
     completed = records[-1]["details"]
     assert completed["retry_count"] == 1 and completed["retry_reason"] == "provider"
     assert completed["served_model"] == "reported"
+    assert completed["cache_write_tokens"] == 0 and completed["client_reused"] is True
+    assert completed["client_cold_start_ms"] == 0
+    metrics = engine.receipts[-1].prompt_metrics
+    assert metrics["prompt_bytes"] > metrics["guidance_bytes"] > 0
+    assert all(event["details"][k] == v for event in records for k, v in metrics.items())
     assert completed["input_tokens"] == 10 and completed["cache_tokens"] == 2
     assert records[-1]["attempt_id"] == "attempt-1"
     for payload in (json.dumps(records), first.decode()):
@@ -146,11 +152,13 @@ def test_invalid_or_missing_usage_is_unknown(value):
 def test_replayed_usage_is_retained_but_not_new_billing(tmp_path):
     engine = Execution(timeout_seconds=20, max_calls=1,
                        context=CallContext(tmp_path, "run", "job", "attempt"))
-    result = engine.call(lambda *a, **kw: answer(usage_source="replay"), request(), timeout_seconds=20)
+    result = engine.call(lambda *a, **kw: answer(usage_source="replay", cache_write_tokens=12, client_reused=True,
+                                             client_cold_start_ms=0), request(), timeout_seconds=20)
     assert result.input_tokens == 10 and result.usage_source == "replay"
     assert Usage.from_result(result).actual == dict.fromkeys(("input_tokens", "output_tokens", "cache_tokens"))
     rows, _ = PipelineLog(tmp_path).read()
-    assert rows[-1]["details"]["input_tokens"] is None
+    assert all(rows[-1]["details"][key] is None for key in ("input_tokens", "cache_write_tokens",
+                                                            "client_reused", "client_cold_start_ms"))
     assert rows[-1]["details"]["usage_unavailable_reason"] == "recorded_replay"
 
 

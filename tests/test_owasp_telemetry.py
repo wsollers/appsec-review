@@ -126,15 +126,34 @@ def test_owasp_retry_and_verified_reuse_count_only_new_calls(tmp_path, monkeypat
         calls.append(1)
         if len(calls) == 1:
             raise TimeoutError("provider timeout")
-        return ModelResult({"schema": assessment.TURN_SCHEMA, "action": "final", "results": []})
+        return ModelResult({"schema": assessment.TURN_SCHEMA, "action": "final", "results": []},
+                           input_tokens=31, output_tokens=7, cache_tokens=0)
     first = assessment.investigate(**args, infer=infer)
     assert first["status"] == "succeeded" and len(first["attempts"]) == 2
+    failed, completed = first["attempts"]
+    assert failed["input_estimate_delta"] is None
+    assert (completed["input_tokens"], completed["output_tokens"], completed["cache_tokens"]) == (31, 7, 0)
+    assert completed["input_estimate_delta"] == completed["estimated_input_tokens"] - 31
+    part, = first["parts"]
+    assert part["estimated_input_tokens"] == failed["estimated_input_tokens"] + completed["estimated_input_tokens"]
+    assert part["input_tokens"] is part["input_estimate_delta"] is None
     second = assessment.investigate(**args, infer=infer)
     assert second["status"] == "reused" and not second["attempts"]
+    assert second["parts"][0]["estimated_input_tokens"] is None
+    assert second["parts"][0]["input_estimate_delta"] is None
     assert len(calls) == 2
     metrics = aggregate_run_metrics(tmp_path)
     assert metrics["owasp"]["new_model_calls"] == 2
     assert metrics["owasp"]["verified_reuse_events"] == 1
+    assert metrics["model_tokens"] == {"input_tokens": 31, "output_tokens": 7, "cache_tokens": 0}
+    # A part can serve multiple rows. Batch calibration counts the dispatch once, not per row.
+    batch = assessment.run_batch(repository_root=tmp_path, run_root=tmp_path,
+        batch={"batch_id": "batch", "fingerprint": "key"}, packages=[], settings=args["settings"],
+        worker_profile=args["profile"], reviewer_profile=args["profile"], resolver=args["resolver"],
+        infer=infer, independent=False, worker_result={**first, "attempts": [completed]})
+    assert batch["metrics"]["estimated_input_tokens"] == completed["estimated_input_tokens"]
+    assert batch["metrics"]["input_estimate_delta"] == completed["input_estimate_delta"]
+    assert batch["metrics"]["input_tokens"] == 31
     assert [call["retry_count"] for call in metrics["model_invocations"]] == [0, 1]
 
 
@@ -158,6 +177,19 @@ def test_owasp_expansion_records_truncation_or_error_without_source_text(tmp_pat
     args["packages"] = [{"component": {"component_id": "component"}, "evidence_references": [
         {"reference": {"source_identity": "allowed"}}]}]
     def materialize(*args, **kwargs):
+        # Probe the real resolver's query boundary: its evidence default must preserve the
+        # assessment caller while inside the turn, then disappear after the dispatch.
+        from appsec_review.retrieval.core import _CALLER
+        from appsec_review.owasp_workbench.evidence import EvidenceResolver
+        seen = []
+        def find():
+            seen.append(dict(_CALLER.get()))
+            return {"results": []}
+        resolver = SimpleNamespace(core=SimpleNamespace(find=find),
+                                   metrics={"attempts": 0, "missing": 0, "truncations": 0})
+        EvidenceResolver.query(resolver, "find")
+        assert seen[0]["job_id"] == "job_owasp_control_assessment"
+        assert seen[0]["caller_kind"] == "owasp_assessment" and seen[0]["role"] == "control_assessor"
         if fails:
             raise ValueError("private source diagnostic")
         return {"truncated": True, "excerpt": "private source text"}
@@ -372,3 +404,16 @@ def test_publication_unit_emits_the_actual_resolving_metrics_receipt(tmp_path, m
     assert report["receipt"] == result["artifact"]
     assert report["coverage"]["reused_rows"] == 1 and report["coverage"]["dispatched_rows"] == 0
     assert report["input_retrieval"]["attempts"] == 2 and report["source_resolution"]["attempts"] == 3
+
+def test_retrieval_rollup_uses_parents_and_names_legacy_coverage(tmp_path):
+    log = PipelineLog(tmp_path)
+    for event, details in (
+        ("RETRIEVAL_SUBOP_COMPLETED", {"shards_opened": 3, "snapshot_cache_hits": 0, "route_cache_hit": True}),
+        ("RETRIEVAL_QUERY", {"shards_opened": 4, "snapshot_cache_hits": 0, "route_cache_hit": False}),
+        ("RETRIEVAL_QUERY", {}),  # legacy: no cache counters
+    ):
+        log.write(event, run_id="run", job_id="guidance_admission", details=details)
+    query = aggregate_run_metrics(tmp_path)["retrieval_queries"]
+    assert (query["count"], query["route_lookups"], query["route_hits"]) == (2, 1, 0)
+    assert (query["shards_opened"], query["shards_opened_measured_queries"]) == (4, 1)
+    assert query["snapshot_cache_hits"] == 0 and query["snapshot_cache_misses"] is None

@@ -19,7 +19,7 @@ from appsec_review.review.models import (
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from . import finding_paths
-from .teams import ReviewContext, _Cell
+from .teams import ReviewContext, _admission_summary, _Cell
 
 TASKS = {"composer": ("chain_composer", Role.ATTACK_CHAIN_ANALYST, "chain-composer-result"),
          "refuter": ("chain_refuter", Role.BLUE_TEAM_REFUTER, "chain-challenge-result"),
@@ -45,7 +45,7 @@ def _cell(ctx: ReviewContext, kind: str, inputs: Mapping[str, Any], entities: Se
     task, role, schema = TASKS[kind]
     profile, bounds = ctx.profile(role), ctx.settings.attack_chains
     package_sha = sha256_hex(inputs)
-    tools, population = ctx.review_grant(role, ctx.index_names)
+    candidates, tools, population = ctx.review_grant(role, ctx.index_names)
     capability = CellCapability.issue(
         run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=identity,
         package_sha256=package_sha, role=role, round=0,
@@ -67,7 +67,8 @@ def _cell(ctx: ReviewContext, kind: str, inputs: Mapping[str, Any], entities: Se
         max_input_tokens=profile.max_input_tokens,
         max_output_tokens=profile.max_output_tokens,
         timeout_seconds=profile.timeout_seconds, output_schema=f"appsec-review/{schema}/1",
-        validator_version=policy.POLICY)
+        validator_version=policy.POLICY,
+        admission=_admission_summary(candidates, capability, population, guidance["bundle"]))
     return _Cell(spec, capability, kind)
 
 

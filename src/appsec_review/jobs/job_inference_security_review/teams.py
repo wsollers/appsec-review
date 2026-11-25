@@ -48,7 +48,7 @@ from appsec_review.inference import ModelRequest, ModelResult, ReviewModelReques
 from appsec_review.inference.execution import CallContext
 from appsec_review.inference.recording import MODE_ENVIRONMENT
 from appsec_review.inference.usage import Usage
-from appsec_review.retrieval.core import RetrievalIntegrityError
+from appsec_review.retrieval.core import RetrievalIntegrityError, retrieval_caller
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.retrieval.model import EntityKind
 
@@ -211,11 +211,12 @@ class ReviewContext:
         return self.settings.profile_for(role)
 
     def review_grant(self, role: Role, indexes: Sequence[str], *, expand: bool = False):
-        population = review_population(self.core, indexes)
+        population = review_population(self.core, indexes, job_id="job_inference_security_review")
         candidates = set(self.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS
         if expand:
             candidates.add(EXPAND_TOOL)
-        return populated_review_tools(sorted(candidates), indexes, population), population
+        tools = populated_review_tools(sorted(candidates), indexes, population)
+        return candidates, tools, population
 
     def bundle(self, *, role: Role, persona: str, stack: str, task: str, lane: Lane,
                capability: CellCapability, population: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -225,7 +226,8 @@ class ReviewContext:
                    "max_queries": capability.max_queries,
                    "max_turns": capability.max_turns, "page_size": capability.page_size}
         if population is None:
-            population = review_population(getattr(self, "core", None), capability.indexes)
+            population = review_population(getattr(self, "core", None), capability.indexes,
+                                           job_id="job_inference_security_review")
         binary = BINARY_INDEX in capability.indexes and population["binary"]["known_row_count"] > 0
         query_sources = review_query_sources(capability.tools, population)
         receipt["query_sources"] = list(query_sources)
@@ -262,6 +264,7 @@ class ReviewContext:
                 cached = self._views.setdefault(work.package_id, cached)
         return cached
 
+    @retrieval_caller(job_id="job_inference_security_review", caller_kind="identity_resolution", if_unset=True)
     def resolves(self, identity: str) -> bool:
         with self._lock:
             if identity in self._resolves:
@@ -279,6 +282,7 @@ class ReviewContext:
             self._resolves[identity] = found
         return found
 
+    @retrieval_caller(job_id="job_inference_security_review", caller_kind="identity_resolution", if_unset=True)
     def enclosing_symbol(self, identity: str) -> str | None:
         """The accepted ``symbol`` enclosing a site identity (claim identity fold, R7), or ``None``.
 
@@ -316,6 +320,7 @@ class ReviewContext:
             self._symbols[identity] = symbol
         return symbol
 
+    @retrieval_caller(job_id="job_inference_security_review", caller_kind="identity_resolution", if_unset=True)
     def _symbol_at(self, path: Any, line: Any) -> str | None:
         if not isinstance(path, str) or not isinstance(line, int):
             return None
@@ -363,6 +368,7 @@ class ReviewContext:
         # best evidence of the enclosing function (packages.GraphContext.function_at makes the same choice).
         return preceding[1] if preceding and not extents else None
 
+    @retrieval_caller(job_id="job_inference_security_review", caller_kind="identity_resolution", if_unset=True)
     def entity_name(self, identity: str) -> str | None:
         with self._lock:
             if identity in self._names:
@@ -376,6 +382,7 @@ class ReviewContext:
             self._names[identity] = name
         return name
 
+    @retrieval_caller(job_id="job_inference_security_review", caller_kind="identity_resolution", if_unset=True)
     def location(self, identity: str) -> Mapping[str, Any] | None:
         """The accepted source location of ``identity`` (``None`` when it has none)."""
         with self._lock:
@@ -391,6 +398,7 @@ class ReviewContext:
             self._locations[identity] = location
         return location
 
+    @retrieval_caller(job_id="job_inference_security_review", caller_kind="identity_resolution", if_unset=True)
     def describe(self, identity: str, limit: int) -> str:
         """Bounded resolved content of one accepted identity, for a row re-presented to a judge (``J`` label)."""
         try:
@@ -540,6 +548,21 @@ def _routed(view: PackageView, routing: Mapping[str, Any], persona: str) -> dict
     return {**view.document, "persona": persona, "stack_profile": routing.get("stack")}
 
 
+def _admission_summary(candidates: set[str], capability: CellCapability, population: Mapping[str, Any],
+                       bundle: Mapping[str, Any]) -> dict[str, Any]:
+    """Project the actual selection and pinned guidance, without feeding metrics back into either."""
+    counts = dict.fromkeys(("available", "partial", "unavailable", "not_admitted"), 0)
+    for dataset in population.values():
+        counts[dataset["availability"]] += 1
+    sections = {section["name"]: section for section in bundle["sections"]}
+    receipt = sections["receipt"]["capability"]
+    return {"candidate_tool_count": len(candidates), "admitted_tool_count": len(capability.tools),
+            "omitted_unavailable_tools": sorted(candidates.difference(capability.tools)),
+            "dataset_availability_counts": counts, "query_sources": receipt["query_sources"],
+            "attached_skills": [item["id"] for item in sections["procedures"]["items"]],
+            "query_procedures": receipt["query_procedures"]}
+
+
 def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, role: Role, persona: str,
           task: str, kind: str, task_input: Mapping[str, Any], claim: Claim | None = None,
           strategy: str | None = None, view: PackageView | None = None,
@@ -562,7 +585,7 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
             compact, labels, claim_id=claim.claim_id, schema_errors=schema_errors)
     profile = ctx.profile(role)
     indexes = tuple(name for name in ctx.index_names if name in INDEX_NAMES)
-    tools, population = ctx.review_grant(role, indexes, expand=True)
+    candidates, tools, population = ctx.review_grant(role, indexes, expand=True)
     capability = CellCapability.issue(
         run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=work.package_id,
         package_sha256=work.sha256, role=role, round=work.round_index, tools=tools,
@@ -598,7 +621,8 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
         max_output_tokens=profile.max_output_tokens,
         timeout_seconds=profile.timeout_seconds, output_schema=OUTPUT_SCHEMAS[schema],
         validator_version=ctx.red_validator_version() if invocation else VALIDATOR_VERSION, reuse_basis=work.basis,
-        view=view if view is not None else ctx.package_view(work), expand=expand)
+        view=view if view is not None else ctx.package_view(work), expand=expand,
+        admission=_admission_summary(candidates, capability, population, guidance["bundle"]))
     return _Cell(spec, capability, kind, strategy, invocation)
 
 

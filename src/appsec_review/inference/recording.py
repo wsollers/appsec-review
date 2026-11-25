@@ -396,7 +396,8 @@ def _schema_diagnostics(error: Mapping[str, Any]) -> dict[str, Any]:
     stop_reason = error.get("stop_reason")
     _text(stop_reason, 256, optional=True)
     usage = error.get("usage")
-    if usage is not None and (type(usage) is not dict or set(usage) != _USAGE_FIELDS or any(
+    allowed_usage = (_USAGE_FIELDS, _USAGE_FIELDS | {"cache_write_tokens"})
+    if usage is not None and (type(usage) is not dict or set(usage) not in allowed_usage or any(
             value is not None and token_count(value) is None for value in usage.values())):
         raise ExecutionContractError("invalid recorded failure usage")
     truncated = error.get("raw_response_truncated", False)
@@ -410,9 +411,10 @@ def _result(value: Any, *, legacy: bool = False) -> ModelResult:
     required = {"proposal", "input_tokens", "output_tokens", "cache_tokens", "raw_response",
                 "served_model", "served_provider"}
     metadata = {"usage_source", "usage_unavailable_reason"}
-    if type(value) is not dict or not required <= set(value) or set(value) - required - metadata:
+    optional = {"cache_write_tokens", "client_reused", "client_cold_start_ms"}
+    if type(value) is not dict or not required <= set(value) or set(value) - required - metadata - optional:
         raise ExecutionContractError("invalid model recording result fields")
-    if not legacy and set(value) != required | metadata:
+    if not legacy and not metadata <= set(value):
         raise ExecutionContractError("incomplete model recording result")
     if type(value["proposal"]) is not dict:
         raise ExecutionContractError("model recording proposal must be an object")
@@ -420,6 +422,11 @@ def _result(value: Any, *, legacy: bool = False) -> ModelResult:
         for name in ("input_tokens", "output_tokens", "cache_tokens"):
             if value[name] is not None and token_count(value[name]) is None:
                 raise ExecutionContractError("invalid recorded usage")
+    for name in ("cache_write_tokens", "client_cold_start_ms"):
+        if value.get(name) is not None and token_count(value[name]) is None:
+            raise ExecutionContractError("invalid recorded usage or connection duration")
+    if value.get("client_reused") is not None and type(value["client_reused"]) is not bool:
+        raise ExecutionContractError("invalid recorded client reuse")
     _text(value["raw_response"], _RESPONSE_BYTES, optional=True)
     for name in ("served_model", "served_provider"):
         _text(value[name], 256, optional=True)
@@ -496,7 +503,8 @@ def _replay(scope: _Scope, path: Path, key: str, sequence: int, origin: str | No
             raise _recorded_error(document["error"])
     result = _result(document["result"], legacy=legacy)
     from dataclasses import replace
-    return replace(result, usage_source="replay", usage_unavailable_reason="recorded_replay")
+    return replace(result, usage_source="replay", usage_unavailable_reason="recorded_replay",
+                   client_reused=None, client_cold_start_ms=None)
 
 
 def recorded(infer: Infer) -> Infer:

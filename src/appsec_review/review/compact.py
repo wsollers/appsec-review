@@ -55,6 +55,9 @@ class Expansion:
     feedback: list[str] = field(default_factory=list)      # label drops and defaults; shown to the model/receipts
     errors: list[str] = field(default_factory=list)        # a compact answer that cannot be expanded
 
+    # Receipt metadata only; never included in a closed result document.
+    verifier_metrics: dict[str, int | bool] | None = None
+
     def note(self, message: str) -> None:
         if len(self.feedback) < MAX_FEEDBACK:
             self.feedback.append(message[:256])
@@ -245,8 +248,15 @@ def expand_verifier(compact: Mapping[str, Any], labels: LabelTable, *, claim_id:
     if disposition in required and (strongest != required[disposition] or gap_citations
                                     or any(item.requested for item in positions)):
         disposition = "insufficient_evidence"
+    citations = citations_of(positions)
+    expansion.verifier_metrics = {
+        "gap_citation_count": len(gap_citations),
+        "evidence_citation_count": sum(len(refs) for refs in citations.values()),
+        "disposition_downgraded_on_gap": (compact["disposition"] in {"supported", "confirmed", "contradicted"}
+                                          and disposition == "insufficient_evidence"),
+    }
     expansion.result = {
-        "schema": VERIFIER_SCHEMA, "claim_id": claim_id, "citations": citations_of(positions),
+        "schema": VERIFIER_SCHEMA, "claim_id": claim_id, "citations": citations,
         "proposed_relations": relations_of(positions), "evidence_requests": requests,
         "rationale": summary_why(compact, positions), "proposed_disposition": disposition,
         **({"gap_citations": gap_citations} if gap_citations else {})}

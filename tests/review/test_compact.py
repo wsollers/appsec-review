@@ -553,3 +553,31 @@ def test_path_topology_and_configured_output_limits_are_still_enforced() -> None
     valid_result = red({"claims": [claim(evidence_requests=[request(), request(question="Is the feature enabled?")])]}).result
     assert any("evidence_requests" in error for error in red_discovery.admission_errors(
         valid_result, invocation(), RedOutputLimits(max_evidence_requests=1)))
+
+
+@pytest.mark.parametrize(("declared", "stance", "add_gap", "downgrade"), [
+    ("supported", "supports", False, False), ("confirmed", "supports", True, True),
+    ("contradicted", "supports", False, True), ("insufficient_evidence", "unresolved", True, False),
+    ("not_reachable", "supports", True, False),
+])
+def test_verifier_receipt_counts_resolved_predicate_citations(tmp_path, declared, stance, add_gap, downgrade):
+    import json
+    from appsec_review.review.cells import run_cell
+    from tests.review.test_cells import FakeCore, ScriptedInfer, capability, spec, view_for
+
+    pred = {"affected_construct": {"stance": stance, "cites": ["K1", SINK]}}
+    if add_gap:
+        pred["security_impact"] = {"stance": "unresolved", "cites": ["X1", "X99", "K1"]}
+    view = view_for(labels={"K1": SINK}, packaged_refs=frozenset({SINK}), texts={"X1": "missing context"})
+    role = Role.INDEPENDENT_VERIFIER
+    outcome = run_cell(spec(role=role, view=view, expand=verifier, evidence_set=(SINK,)), core=FakeCore(),
+                       infer=ScriptedInfer({"action": "final", "result": {"disposition": declared,
+                                                                         "per_predicate": pred}}),
+                       receipts_root=tmp_path, capability=capability(role=role),
+                       validate_final=lambda result: SCHEMAS.errors("verifier-result", result))
+    receipt = json.loads(outcome.receipt_paths[0].read_text())
+    assert receipt["status"] == "succeeded", receipt["repair_errors"]
+    assert receipt["verifier_metrics"] == {"evidence_citation_count": 1 + int(add_gap),
+                                           "gap_citation_count": int(add_gap),
+                                           "disposition_downgraded_on_gap": downgrade}
+    assert "verifier_metrics" not in receipt["result"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from appsec_review.retrieval._query_work import connect_shard
 from appsec_review.storage.validation import validation_operation
 
 from collections import Counter
@@ -728,7 +729,7 @@ def _load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | N
             continue
         count_work("shard_validations")
         uri = f"file:{candidate.as_posix()}?mode=ro&immutable=1"
-        with closing(sqlite3.connect(uri, uri=True)) as database:
+        with closing(connect_shard(uri)) as database:
             shard_entities, shard_relations = _validate_payload_database(
                 run_root, database, identity, document, swift_enabled=swift_enabled)
             entity_ids.update(shard_entities)
@@ -857,7 +858,7 @@ def _preflight_payload(run_root: Path, raw: Mapping[str, Any], policy: _Selected
 def _selected_payload(run_root: Path, raw: Mapping[str, Any], policy: _SelectedReceiptPolicy):
     from appsec_review.observability.spans import count_work
     with _selected_publication(run_root, raw, policy) as (identity, path):
-        database = sqlite3.connect(f"{path.as_uri()}?mode=ro&immutable=1", uri=True, timeout=0.1)
+        database = connect_shard(f"{path.as_uri()}?mode=ro&immutable=1", timeout=0.1)
         try:
             database.row_factory = sqlite3.Row
             database.execute("PRAGMA query_only=ON")

@@ -476,3 +476,27 @@ bounded error classes and resolving hashes instead; existing key-based redaction
 to log arbitrary content under a different key. Metrics are operational accounting, not admissible
 security evidence or a public dossier payload. See [metrics operations](../operations/metrics.md)
 and the [dossier input inventory](dossier-data-inventory.md).
+
+### Measuring retrieval and model overhead
+
+For in-process lookups, use `RETRIEVAL_QUERY` for counts and inclusive `duration_ms`.
+`RETRIEVAL_SUBOP_COMPLETED` explains where that time went. `shards_candidate` describes
+the size of each queried index set (inclusive across nested lookups); `shards_opened`
+counts SQLite opens, including custody checks, not distinct shards.
+`route_cache_hit` is null for a scan, not a miss. `snapshot_cache_hits` and
+`snapshot_cache_misses` count shard snapshot decisions. The aggregate `retrieval_queries`
+includes a measured-query denominator for each shard subtotal: historical logs without
+the field are not zeroes. Use the caller's `job_id` and `caller_kind` to separate
+admission, evidence fulfillment, identity resolution, OWASP, and cell queries.
+
+Read prompt size from the turn receipt or model invocation, not both. `catalog_deduped`
+means the rendered prompt actually used typed signatures in place of repeated full schemas.
+`prompt_bytes` counts the UTF-8 user message and any separate system guidance, excluding
+transport framing. `guidance_bytes`, `capability_card_bytes`, `transcript_bytes`,
+`tool_catalog_bytes`, and `task_input_bytes` measure rendered values; task input excludes
+the catalog value. Other envelope fields and JSON delimiters mean the sections need not
+sum to the total. These are byte counts, not provider tokens. `cache_tokens` measures provider-reported
+cache reads; `cache_write_tokens` measures writes. Neither reduces `input_tokens`. Only
+new model completions contribute to the token subtotal, not OWASP attempt copies or replay.
+`client_reused` describes the SDK connection, not reuse of a model response; cold-start
+latency is measured for a new client and is zero on reuse. Missing measurements remain unknown.

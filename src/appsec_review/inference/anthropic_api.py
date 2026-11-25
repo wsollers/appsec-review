@@ -13,9 +13,9 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .claude_cli import ModelOutputError, parse_model_payload
-from .request import ModelRequest, ModelResult, ReviewModelRequest, review_prompt
+from .request import ModelRequest, ModelResult, ReviewModelRequest, review_user_text
 from .errors import ExecutionContractError, ModelTimeout, ProviderError
-from .usage import Usage
+from .usage import Usage, reported_cache_write
 
 
 _THINKING_BUDGETS = {"low": 1024, "medium": 2048, "high": 4096, "xhigh": 6144}
@@ -33,15 +33,15 @@ def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int,
     if isinstance(request, ReviewModelRequest):
         # Hash-pinned guidance is the trusted system channel; task input and the
         # application-mediated transcript are the untrusted user message.
-        prompt, system = review_prompt(request, include_guidance=False), request.guidance_text
+        prompt, system = review_user_text(request), request.guidance_text
     else:
-        prompt, system = _plan_prompt(request), "\n\n".join(
+        prompt, system = json.dumps(_plan_prompt(request), sort_keys=True), "\n\n".join(
             part for part in (request.persona, request.role) if part)
     budget = min(_THINKING_BUDGETS.get(request.reasoning, 2048),
                  max(1024, request.max_output_tokens - 1024))
     body: dict[str, Any] = {
         "model": request.model, "max_tokens": request.max_output_tokens,
-        "messages": [{"role": "user", "content": json.dumps(prompt, sort_keys=True)}],
+        "messages": [{"role": "user", "content": prompt}],
         "thinking": {"type": "enabled", "budget_tokens": budget},
     }
     if system:
@@ -92,7 +92,7 @@ def _post(body: Mapping[str, Any], schema: str, *, key: str, endpoint: str,
         raise ModelOutputError("Anthropic API returned an invalid model identity")
     result = ModelResult(proposal=proposal, input_tokens=usage.get("input_tokens"),
                        output_tokens=usage.get("output_tokens"),
-                       cache_tokens=usage.get("cache_read_input_tokens"),
+                       cache_tokens=usage.get("cache_read_input_tokens"), cache_write_tokens=reported_cache_write(usage),
                        raw_response=raw_text,
                        served_model=envelope.get("model"), served_provider="anthropic-api",
                        usage_unavailable_reason=("invalid_provider_usage"

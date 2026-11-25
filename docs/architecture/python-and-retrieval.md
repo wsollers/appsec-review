@@ -104,7 +104,11 @@ immutable.
 Every MCP transport call records exactly one `MCP_TOOL_STARTED`/`MCP_TOOL_COMPLETED` pair. Nested
 `find`/`trace` work used by `read_excerpt` and `resolve_evidence` is recorded as child
 `RETRIEVAL_SUBOP_COMPLETED` spans with the top-level invocation id, so tool-use metrics do not
-double-count. Direct core calls retain `RETRIEVAL_QUERY`. Events store hashes, filters, counts,
+double-count. For direct calls, `RETRIEVAL_QUERY` is the logical operation. `resolve_identities`
+counts once per batch, not once per identity; application `expand` counts once, not once per
+`find` or `trace`. Child events carry `parent_tool` and `parent_query_sha256`. Parent duration
+and shard/cache counters **include** nested work: never add the child measurements to them.
+Events store hashes, filters, counts,
 bounded gap summaries (`gap_count`, `gaps_sha256`, and at most five 160-character gap samples),
 truncation, and duration; they never store query or source text.
 

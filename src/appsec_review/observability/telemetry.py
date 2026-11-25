@@ -1591,6 +1591,12 @@ def _aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
     seen_invocations: dict[tuple[str, ...], Mapping[str, Any]] = {}
     duplicate_lifecycle_records = 0
     lifecycle_conflicts = []
+    retrieval_queries: dict[str, Any] = {"count": 0, "route_hits": 0, "route_lookups": 0}
+    # A null subtotal denotes no measurement, not zero opens on legacy events.
+    shard_metrics = ("shards_candidate", "shards_opened", "snapshot_cache_hits", "snapshot_cache_misses")
+    for key in shard_metrics:
+        retrieval_queries[key] = None
+        retrieval_queries[key + "_measured_queries"] = 0
     for record in records:
         details = record.get("details", {})
         invocation = (details.get("span_id") or details.get("model_invocation_id")
@@ -1691,7 +1697,10 @@ def _aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
                 "execution_category": execution_category(details),
                 **{name: details.get(name) for name in (
                     "role", "persona", "cell_id", "batch_id", "package_id", "lane",
-                    "terminal_status", "error_class", "served_provider", "served_model", "execution_mode")},
+                    "terminal_status", "error_class", "served_provider", "served_model", "execution_mode",
+                    "prompt_bytes", "guidance_bytes", "tool_catalog_bytes", "task_input_bytes",
+                    "capability_card_bytes", "transcript_bytes", "catalog_deduped", "client_reused",
+                    "client_cold_start_ms", "cache_write_tokens")},
                 "provider": details.get("provider"), "model": details.get("model"),
                 "duration_ms": details.get("duration_ms"), "retry_count": details.get("retry_count"),
                 "queue_delay_ms": details.get("queue_delay_ms"), "call_latency_ms": details.get("call_latency_ms"),
@@ -1710,22 +1719,34 @@ def _aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             dispositions[str(disposition)] += 1
         if record["event_type"] in {"TOOL_INVOCATION_COMPLETED", "MCP_TOOL_COMPLETED"}:
             tool_calls[str(details.get("tool_id") or details.get("mcp_tool") or "unknown")] += 1
+        if record["event_type"] == "RETRIEVAL_QUERY":
+            retrieval_queries["count"] += 1
+            if type(details.get("route_cache_hit")) is bool:
+                retrieval_queries["route_lookups"] += 1
+                retrieval_queries["route_hits"] += int(details["route_cache_hit"])
+            for key in shard_metrics:
+                if type(details.get(key)) is int:
+                    retrieval_queries[key] = (retrieval_queries[key] or 0) + details[key]
+                    retrieval_queries[key + "_measured_queries"] += 1
         if record["event_type"] == "FINDING_TRANSITION":
             finding_states[str(details.get("new_state"))] += 1
         if (type(details.get("duration_ms")) in (int, float)
                 and math.isfinite(details["duration_ms"]) and details["duration_ms"] >= 0):
             durations_ms[str(record["event_type"])] += details["duration_ms"]
             identity = _operation_identity(record)
-            operation_durations.setdefault(identity, []).append(details["duration_ms"])
+            if record["event_type"] != "RETRIEVAL_SUBOP_COMPLETED":
+                operation_durations.setdefault(identity, []).append(details["duration_ms"])
         if isinstance(details.get("queue_delay_ms"), int):
             queue_delays.append(max(0, details["queue_delay_ms"]))
         if record["event_type"].endswith("REUSED") or details.get("checkpoint_reused") is True:
             reuse["hits"] += 1
         elif "reuse" in details and details.get("reuse") is False:
             reuse["misses"] += 1
-        for key in ("input_tokens", "output_tokens", "cache_tokens"):
-            if isinstance(details.get(key), int):
-                tokens[key] += details[key]
+        if (record["event_type"] == "MODEL_CALL_COMPLETED" and details.get("execution_mode") != "replay"
+                and details.get("usage_source") != "replay" and execution_category(details) != "reused"):
+            for key in ("input_tokens", "output_tokens", "cache_tokens", "cache_write_tokens"):
+                if type(details.get(key)) is int:
+                    tokens[key] += details[key]
         for key in ("inspected_count", "check_count", "observation_count", "confirmed_count",
                     "refuted_count", "unvalidated_count", "gap_count", "truncated_count",
                     "resumption_count"):
@@ -1833,6 +1854,7 @@ def _aggregate_run_metrics(run_root: Path) -> Mapping[str, Any]:
             "avoided_platform_work_unavailable_reason": "excluded_trees_are_not_enumerated",
             "dispositions": dict(sorted(dispositions.items())),
             "tool_calls": dict(sorted(tool_calls.items())),
+            "retrieval_queries": retrieval_queries,
             "finding_states": dict(sorted(finding_states.items())),
             "duration_ms_by_event": dict(sorted(durations_ms.items())),
             "model_tokens": dict(sorted(tokens.items())),

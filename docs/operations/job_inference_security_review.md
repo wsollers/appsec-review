@@ -1831,3 +1831,18 @@ Exact personas and strategies are recorded in routing/cell receipts and selected
 [guidance procedures](../architecture/guidance-procedures.md#selection-and-provenance).
 The [worker contract](../architecture/worker-prompt-contracts.md#dispatch-inventory) and cell
 capability, not role prose, determine available evidence and permitted operations.
+
+### Reading cell receipts
+
+Use the admission summary to distinguish a tool the role never had from one removed for
+lack of populated data. Compare `candidate_tool_count`, `admitted_tool_count`, and sorted
+`omitted_unavailable_tools` with `dataset_availability_counts`, `query_sources`,
+`attached_skills`, and `query_procedures`. These describe the grant, not actual tool use.
+
+For a query call, distinguish a core timeout from an empty successful result. `gaps_truncated`
+means the gap list was bounded; `oversized_item` and `narrowing_hint_emitted` describe the
+result-size limit. Nonzero `capture_bytes_omitted` and `qualifiers_omitted` total the reported
+omissions on returned syntax rows. Durations and cache warmth do not identify evidence.
+Verifier attempts distinguish resolved evidence citations from gap citations (`X*`) and
+record whether a declared conclusion was downgraded to `insufficient_evidence`. Gap citations
+describe missing support, never positive evidence. The verifier result schema is unchanged.

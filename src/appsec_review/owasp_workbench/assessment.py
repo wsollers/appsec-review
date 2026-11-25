@@ -14,7 +14,9 @@ from appsec_review.inference import Infer, ModelResult, ReviewModelRequest
 from appsec_review.inference.errors import ExecutionLimit, ModelOutputError, ProviderError, failure_category
 from appsec_review.inference.execution import CallContext, Execution, RetryPolicy
 from appsec_review.inference.recording import recorded
+from appsec_review.inference.usage import total_reported
 from appsec_review.observability import PipelineLog
+from appsec_review.retrieval.core import retrieval_caller
 from appsec_review.storage import canonical_json, file_sha256
 from appsec_review.storage.shared import consume_named, publish_named, safe_path
 from .batching import REQUEST_RULE, Part, estimate_tokens, plan_parts
@@ -190,6 +192,7 @@ def _package_guidance(root: Path, run_root: Path, batch: Mapping[str, Any], role
     return guidance, text
 
 
+@retrieval_caller(job_id="job_owasp_control_assessment", caller_kind="owasp_assessment")
 def _rebind(proposal: Mapping[str, Any], resolver: EvidenceResolver,
             packages: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     value = json.loads(json.dumps(proposal))
@@ -242,6 +245,13 @@ def _request(view: Mapping[str, Any], *, batch: Mapping[str, Any], role: str, gu
         cell_id=f"owasp:{batch['batch_id']}:{role}:{turn}:{retry}" + (f":part{part}" if part is not None else ""))
 
 
+def _calibration(attempts: Sequence[Mapping[str, Any]]) -> dict[str, int | None]:
+    """Compare like-for-like dispatch totals; verified reuse and replay are not new provider work."""
+    dispatched = [a for a in attempts if a.get("dispatched") and a.get("usage_source") != "replay"]
+    return {key: total_reported([a.get(key) for a in dispatched]) for key in
+            ("estimated_input_tokens", "input_tokens", "output_tokens", "cache_tokens", "input_estimate_delta")}
+
+
 def _merge_status(parts: Sequence[Mapping[str, Any]]) -> str:
     statuses = [item["status"] for item in parts]
     if statuses and all(status == "reused" for status in statuses):
@@ -285,7 +295,9 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                        "estimate": part.estimate}
             log.write("OWASP_MODEL_ATTEMPT", **correlation, details={
                 "batch_id": batch["batch_id"], "role": role, "outcome": "input_budget", "dispatched": False,
-                "input_tokens_estimated": part.estimate, "max_input_tokens": budget, "part": number,
+                "input_tokens_estimated": part.estimate, "estimated_input_tokens": part.estimate,
+                "input_tokens": None, "output_tokens": None, "cache_tokens": None, "input_estimate_delta": None,
+                "max_input_tokens": budget, "part": number,
                 "row_ids": list(part.row_ids)})
         else:
             outcome = _investigate_part(part, number=number, parts=len(parts), run_root=run_root, batch=batch,
@@ -310,6 +322,7 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
         "guidance": guidance, "retrieval_requests": sum(outcome["retrieval_requests"] for outcome in outcomes),
         "receipt": receipts[0] if len(receipts) == 1 else None, "receipts": receipts,
         "parts": [{"row_ids": list(part.row_ids), "input_tokens_estimated": part.estimate,
+                   **_calibration(outcome["attempts"]),
                    "dispatch": part.dispatch, "trimmed": part.view.get("trimmed"), "status": outcome["status"]}
                   for part, outcome in zip(parts, outcomes, strict=True)],
         "row_status": row_status, "row_gaps": {key: sorted(set(item)) for key, item in row_gaps.items()},
@@ -426,6 +439,10 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
                                     "usage_unavailable_reason": call.usage.unavailable_reason,
                                     "dispatched": call.dispatched,
                                     **{key + "_reported": value for key, value in call.usage.actual.items()}})
+            measured = attempt["input_tokens_reported"]
+            attempt.update(estimated_input_tokens=estimate, input_tokens=measured,
+                           output_tokens=attempt["output_tokens_reported"], cache_tokens=attempt["cache_tokens_reported"],
+                           input_estimate_delta=estimate - measured if measured is not None else None)
             attempt["duration_ms"] = max(0, int((time.monotonic() - call_started) * 1000))
             attempts.append(attempt)
             log.write("OWASP_MODEL_ATTEMPT", **correlation, details={
@@ -476,9 +493,11 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
                     **retrieval, "terminal_status": "DENIED", "reason": "outside_batch_scope"})
                 continue
             try:
-                responses.append(resolver.materialize(query["source_identity"],
-                    component_id=allowed[query["source_identity"]], locator=query["locator"],
-                    max_lines=settings.max_source_lines))
+                with retrieval_caller(job_id="job_owasp_control_assessment", caller_kind="owasp_assessment",
+                                      cell_id=request.cell_id, role=role, turn=turn):
+                    responses.append(resolver.materialize(query["source_identity"],
+                        component_id=allowed[query["source_identity"]], locator=query["locator"],
+                        max_lines=settings.max_source_lines))
             except (ValueError, OSError, UnicodeError) as exc:
                 resolver.metrics["denials"] += 1
                 responses.append({"gap": f"{type(exc).__name__}: {exc}"})
@@ -493,6 +512,7 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
     return {"status": terminal, "proposal": None, "attempts": attempts, "retrieval_requests": queries}
 
 
+@retrieval_caller(job_id="job_owasp_control_assessment", caller_kind="owasp_assessment")
 def accept_obligations(package: Mapping[str, Any], proposal: Mapping[str, Any] | None,
                        resolver: EvidenceResolver | None) -> list[dict[str, Any]]:
     proposals = {item["obligation_id"]: item for item in proposal["obligations"]} if proposal else {}
@@ -691,7 +711,7 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
         if worker["proposal"] is not None or any(item.get("dispatched") for item in worker["attempts"])
         else "not_dispatched",
         "results": results, "worker": worker, "independent_review": reviewer,
-        "metrics": {"model_calls": sum(item.get("dispatched", True) for item in attempts), "attempts": attempts,
+        "metrics": {**_calibration(attempts), "model_calls": sum(item.get("dispatched", True) for item in attempts), "attempts": attempts,
                     "model_requested_retrievals": sum(
                         result.get("retrieval_requests", 0) for result in (worker, reviewer)),
                     "retrieval": retrieval, "cost_usd": None,

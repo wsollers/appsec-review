@@ -49,7 +49,11 @@ def accepted(tmp_path_factory):
 
 def test_card_projects_actual_accepted_producers_not_the_whole_run(accepted):
     fixture, core, cap = accepted
+    before = len(core.log.read()[0])
     admission = review_admission(core, cap)
+    audits = [r for r in core.log.read()[0][before:] if r["event_type"] == "RETRIEVAL_QUERY"]
+    assert audits and all(r["job_id"] == "guidance_admission" and
+                          r["details"]["caller_kind"] == "admission_population" for r in audits)
     card = review_request(cap, admission=admission).capability_artifact_card
     source = next(row for row in card["datasets"] if row["name"] == "source")
     assert source["producer"] == "job_target_catalog"
@@ -63,6 +67,20 @@ def test_card_projects_actual_accepted_producers_not_the_whole_run(accepted):
     assert fixture.ids["svc/api/handler.py"] not in encoded
     assert "job_source_history_analysis" not in encoded and "semgrep" not in encoded
     assert "strcpy" not in encoded and str(fixture.target) not in encoded
+
+
+def test_owasp_evidence_lookup_records_owning_job(accepted):
+    from appsec_review.owasp_workbench.evidence import EvidenceResolver
+    _, core, cap = accepted
+    scope = SimpleNamespace(run_id=core.run_id, run_root=core.run_root, manifest_sha256=core.manifest_sha256,
+                            view_identity=core.view_identity, target_snapshot=core.manifest["target_snapshot"],
+                            shards=core.manifest["indexes"])
+    resolver = EvidenceResolver(core, scope)
+    before = len(core.log.read()[0])
+    assert resolver.query("find", identity=next(iter(cap.entities)), indexes=cap.indexes)["results"]
+    audit, = [r for r in core.log.read()[0][before:] if r["event_type"] == "RETRIEVAL_QUERY"]
+    assert audit["job_id"] == "job_owasp_control_assessment"
+    assert audit["details"]["caller_kind"] == "owasp_evidence"
 
 
 def test_card_rejects_a_manifest_from_another_accepted_scope(accepted):

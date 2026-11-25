@@ -18,6 +18,7 @@ failure raises.
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
 import json
@@ -118,6 +119,8 @@ class CellSpec:
     # Expands the compact answer into the role\'s result document (``review.compact``); ``None`` accepts a
     # final result as is. Not part of the fingerprint: the output schema and validator version are.
     expand: Any = field(default=None, compare=False, repr=False)
+    # Observed grant and bundle selection, for receipts only (not a request or fingerprint input).
+    admission: Mapping[str, Any] | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +190,7 @@ class _Attempt:
     denied: dict[tuple[str, str], int] = field(default_factory=dict)
     repeated: str | None = None
     compact: Mapping[str, Any] | None = None
+    verifier_metrics: Mapping[str, int | bool] | None = None
     feedback: list[str] = field(default_factory=list)
     labels: LabelTable = field(default_factory=lambda: LabelTable({}))
     input_tokens: int | None = 0
@@ -439,7 +443,7 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
                           "tool_catalog": _tool_catalog(capability)},
     }
     from appsec_review.guidance.cards import review_admission
-    task_input["artifact_admission"] = review_admission(core, capability)
+    task_input["artifact_admission"] = review_admission(core, capability, job_id="job_inference_security_review")
     if view is not None:
         task_input["artifact_admission"]["material_gap_count"] = len(view.document.get("material_gaps", ()))
         task_input["artifact_admission"]["view_omitted"] = dict(view.document.get("omitted", {}))
@@ -498,6 +502,8 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
             if len(execution.receipts) > recorded_before:
                 receipt = execution.receipts[-1]
                 _usage(attempt, entry, receipt.usage, dispatched=receipt.dispatched)
+                entry.update(receipt.prompt_metrics, client_reused=receipt.client_reused,
+                             client_cold_start_ms=receipt.client_cold_start_ms)
                 entry["execution"] = {"version": receipt.execution_version,
                                       "failure_category": receipt.category,
                                       "retry_count": receipt.retry_count, "retry_reason": receipt.retry_reason}
@@ -528,6 +534,7 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
                 attempt.compact = final
                 expansion = spec.expand(final, attempt.labels)
                 attempt.feedback.extend(expansion.feedback)
+                attempt.verifier_metrics = expansion.verifier_metrics
                 if expansion.errors or expansion.result is None:
                     attempt.end(CellStatus.INVALID, GapClass.SCHEMA_ERROR, "final_result_rejected")
                     attempt.repair_errors = tuple(expansion.errors[:MAX_REPAIR_ERRORS]) or (
@@ -597,10 +604,16 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
                 "corrected": corrected_shape(request, decision.code, capability.tools),
                 "counted_as_query": decision.code != "query_cap_exceeded"}
     attempt.queries += 1
-    skipped: list[dict[str, str]] = []
     try:
         if decision.tool == EXPAND_TOOL:
-            response, skipped = _expand(spec, attempt, capability, core, decision)
+            scope = (core.application_query(EXPAND_TOOL, decision.parameters, query_sha256=decision.filter_sha256)
+                     if hasattr(core, "application_query") else nullcontext())
+            with scope as complete:
+                response, skipped = _expand(spec, attempt, capability, core, decision)
+                result = _query_result(decision, response, capability, attempt, view, call, index, notes, skipped)
+                if complete is not None:
+                    complete(result)
+                return result
         elif decision.tool == "query_cfg_function":
             # Only the application supplies the fit predicate. Charge the same JSON the
             # worker sees, including escaped Unicode, the citation label and wrapper.
@@ -638,6 +651,12 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
             safety.fail(f"retrieval failed: {type(exc).__name__}", action=f"review.{decision.tool}")
         return {"index": index, "status": "tool_error", "tool": decision.tool,
                 "error_class": type(exc).__name__}
+    return _query_result(decision, response, capability, attempt, view, call, index, notes, ())
+
+
+def _query_result(decision: Any, response: Mapping[str, Any], capability: CellCapability, attempt: _Attempt,
+                  view: Any, call: dict[str, Any], index: int, notes: Sequence[str], skipped: Sequence[Any]
+                  ) -> dict[str, Any]:
     if decision.line is not None:
         response = {**response, "results": [row for row in response.get("results", ())
                                             if _covers_line(row, decision.line)]}
@@ -658,17 +677,40 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
     for key in ("file", "count", "next_offset"):
         if key in response:
             bounded[key] = response[key]
-    call.update(status="executed", result_count=len(bounded["results"]), withheld_count=withheld,
+    call.update(status="timeout" if response.get("status") == "timeout" else "executed",
+                duration_ms=response.get("duration_ms"), gaps_truncated=bounded["gaps_truncated"],
+                oversized_item=bounded.get("oversized_item"), narrowing_hint_emitted="narrowing_hint" in bounded,
+                result_count=len(bounded["results"]), withheld_count=withheld,
                 gap_count=len(bounded["coverage_gaps"]), truncated=bounded["truncated"],
                 response_sha256=sha256_hex({key: value for key, value in _plain(response).items()
                                             if key not in _VOLATILE_RESPONSE_FIELDS}),
                 bytes=len(json.dumps(bounded, sort_keys=True, default=str).encode()))
+    call.update(_syntax_omissions(decision.tool, bounded["results"]))
     extra: dict[str, Any] = {}
     if notes:
         extra["adapted"] = notes
     if skipped:
         extra["skipped"] = skipped
     return {"index": index, "status": "ok", **extra, **bounded}
+
+
+def _syntax_omissions(tool: str, rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    # Only count the producer's syntax/CFG projections that actually survived cell scoping and byte caps.
+    if tool == "query_syntax":
+        projections = (payload.get("syntax") for row in rows if isinstance(payload := row.get("payload"), Mapping))
+    elif tool == "query_cfg_function":
+        projections = (node for row in rows if isinstance(nodes := row.get("nodes"), list) for node in nodes)
+    else:
+        return {}
+    totals: dict[str, int] = {}
+    for projection in projections:
+        if not isinstance(projection, Mapping):
+            continue
+        for key in ("capture_bytes_omitted", "qualifiers_omitted"):
+            value = projection.get(key)
+            if type(value) is int and value > 0:
+                totals[key] = totals.get(key, 0) + value
+    return totals
 
 
 def _failure_site(exc: BaseException, frames: int = 4) -> tuple[str, str]:
@@ -1033,7 +1075,7 @@ def _total(values: Iterator[int | None]) -> int | None:
 
 def _usage(attempt: _Attempt, entry: dict[str, Any], usage: Usage, *, dispatched: bool) -> None:
     entry.update(usage_source=usage.source, usage_unavailable_reason=usage.unavailable_reason,
-                 cache_tokens=usage.actual["cache_tokens"])
+                 cache_tokens=usage.actual["cache_tokens"], cache_write_tokens=usage.actual_cache_write_tokens)
     if usage.source == "replay":
         entry["replayed_usage"] = asdict(usage)
     for name in ("input_tokens", "output_tokens"):
@@ -1113,6 +1155,10 @@ def _write_receipt(cell_root: Path, spec: CellSpec, cell_id: str, capability: Ce
         "result": attempt.result,
         "result_sha256": sha256_hex(attempt.result) if attempt.result is not None else None,
     }
+    if spec.admission is not None:
+        document["admission"] = spec.admission
+    if attempt.verifier_metrics is not None:
+        document["verifier_metrics"] = attempt.verifier_metrics
     if reused_from is not None:
         # A memo reuse records the receipt whose result it carries; it ran no model turn of its own.
         document["reused_from"] = dict(reused_from)
@@ -1133,6 +1179,7 @@ _RECEIPT_KEYS = frozenset({"schema", "cell_id", "attempt", "attempt_id", "execut
                            "provider", "model", "status", "gap_class", "reason", "turns", "counts",
                            "gaps", "security_events", "seen_identities", "label_table", "compact_result",
                            "feedback", "repair_errors", "result", "result_sha256"})
+_OPTIONAL_RECEIPT_KEYS = frozenset({"reused_from", "admission", "verifier_metrics"})
 _REUSED_FROM_KEYS = frozenset({"cell_id", "attempt", "receipt_sha256", "memo_key"})
 
 
@@ -1142,7 +1189,7 @@ def _load_receipt(path: Path, cell_id: str, number: int) -> Mapping[str, Any]:
         receipt = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise IntegrityError(f"cell receipt is unreadable: {path.name}") from exc
-    if not isinstance(receipt, dict) or set(receipt) - {"reused_from"} != _RECEIPT_KEYS or \
+    if not isinstance(receipt, dict) or set(receipt) - _OPTIONAL_RECEIPT_KEYS != _RECEIPT_KEYS or \
             receipt["schema"] != RECEIPT_SCHEMA or receipt["cell_id"] != cell_id or \
             receipt["attempt"] != number:
         raise IntegrityError(f"cell receipt does not match its fingerprint: {path.name}")

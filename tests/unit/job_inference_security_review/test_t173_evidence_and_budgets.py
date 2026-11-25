@@ -121,6 +121,9 @@ def test_round2_requests_evidence_fulfillment_bounded_and_counted(evidence_core)
         unfulfilled_prior=1,
         max_requests=DEFAULT_MAX_EVIDENCE_REQUESTS,
     )
+    audits = [r for r in core.log.read()[0] if r["event_type"] == "RETRIEVAL_QUERY"]
+    assert audits and all(r["job_id"] == "job_inference_security_review" and
+                          r["details"]["caller_kind"] == "evidence_fulfillment" for r in audits)
     assert outcome.fulfilled_count == 2
     assert outcome.unfulfilled_count == 4
     assert len(outcome.fulfilled_items) == 2

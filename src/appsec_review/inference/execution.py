@@ -7,7 +7,7 @@ Infer implementations must honor their timeout and finish cancellation before re
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 import math
@@ -26,8 +26,8 @@ from .errors import (
     ExecutionContractError, ExecutionLimit, ModelTokenCapExceeded, FailureCategory, ModelOutputError, ProviderError,
     failure_category,
 )
-from .request import Infer, ModelRequest, ModelResult, ReviewModelRequest
-from .usage import Usage
+from .request import Infer, ModelRequest, ModelResult, ReviewModelRequest, prepared_prompt
+from .usage import Usage, token_count
 
 EXECUTION_VERSION = "bounded-model-execution/1"
 RECEIPT_SCHEMA = "appsec-review/model-execution-receipt/1"
@@ -178,6 +178,9 @@ class CallReceipt:
     accounting_error_class: str | None = None
     queue_delay_ms: int | None = None
     call_latency_ms: int | None = None
+    prompt_metrics: dict[str, int | bool] = field(default_factory=dict)
+    client_reused: bool | None = None
+    client_cold_start_ms: int | None = None
 
 
 class Execution:
@@ -269,6 +272,7 @@ class Execution:
         reservation: str | None = None
         queue_delay_ms: int | None = None
         call_latency_ms: int | None = None
+        prompt_metrics = {}
         from .recording import MODE_ENVIRONMENT
         usage = (Usage(source="replay", unavailable_reason="recorded_replay")
                  if os.environ.get(MODE_ENVIRONMENT) == "replay" else Usage.from_result(None))
@@ -286,15 +290,17 @@ class Execution:
                     reservation = self.accounting.reserve(request)
                 finally:
                     queue_delay_ms = max(0, int((self.deadline.clock() - queued) * 1000))
-            self.deadline.remaining()
-            self._emit("MODEL_CALL_STARTED", fields)
-            dispatched = True
-            self.calls += 1
-            call_started = self.deadline.clock()
-            try:
-                result = infer(request, timeout_seconds=timeout)
-            finally:
-                call_latency_ms = max(0, int((self.deadline.clock() - call_started) * 1000))
+            with prepared_prompt(request) as prompt_metrics:
+                self.deadline.remaining()
+                fields.update(prompt_metrics)
+                self._emit("MODEL_CALL_STARTED", fields)
+                dispatched = True
+                self.calls += 1
+                call_started = self.deadline.clock()
+                try:
+                    result = infer(request, timeout_seconds=timeout)
+                finally:
+                    call_latency_ms = max(0, int((self.deadline.clock() - call_started) * 1000))
             usage = Usage.from_result(result)
             result = usage.normalize(result)
             payload = _json(result.proposal, response=True)
@@ -325,7 +331,8 @@ class Execution:
             error = exc
             if isinstance(exc, ModelOutputError) and result is None and exc.usage is not None:
                 usage = Usage.from_result(ModelResult(
-                    {}, **{name: exc.usage.get(name) for name in ("input_tokens", "output_tokens", "cache_tokens")},
+                    {}, **{name: exc.usage.get(name) for name in ("input_tokens", "output_tokens", "cache_tokens",
+                                                                   "cache_write_tokens")},
                     usage_source=usage.source))
             safety.retain_failure("inference.execution", exc, request_sha256=request_hash,
                                   execution_id=self.execution_id)
@@ -353,6 +360,8 @@ class Execution:
                 and isinstance(result.served_provider, str) else None
             served_model = _identity(result.served_model) if isinstance(result, ModelResult) \
                 and isinstance(result.served_model, str) else None
+            connection = (result if isinstance(result, ModelResult) else error) if usage.source == "provider" else None
+            reused = getattr(connection, "client_reused", None)
             receipt = CallReceipt(
                 RECEIPT_SCHEMA, EXECUTION_VERSION, self.execution_id, invocation, len(self.receipts) + 1,
                 dispatched, request_hash, guidance_hash, response_hash,
@@ -361,7 +370,8 @@ class Execution:
                 max(0, int((self.deadline.clock() - started) * 1000)), usage,
                 _identity(request.provider), _identity(request.model), served_provider, served_model, failure_code,
                 type(accounting_error).__name__ if accounting_error is not None else None,
-                queue_delay_ms, call_latency_ms)
+                queue_delay_ms, call_latency_ms, prompt_metrics, reused if type(reused) is bool else None,
+                token_count(getattr(connection, "client_cold_start_ms", None)))
             self.receipts.append(receipt)
             if self.context is not None:
                 context = self.context
@@ -375,6 +385,8 @@ class Execution:
                 self._emit("MODEL_CALL_COMPLETED", fields, terminal_status=status,
                     duration_ms=receipt.elapsed_ms, error_class=receipt.error_class,
                     queue_delay_ms=receipt.queue_delay_ms, call_latency_ms=receipt.call_latency_ms,
+                    client_reused=receipt.client_reused, client_cold_start_ms=receipt.client_cold_start_ms,
+                    cache_write_tokens=usage.actual_cache_write_tokens,
                     queue_scope="accounting_reserve", latency_scope="infer_dispatch",
                     failure_category=receipt.category, served_provider=served_provider, served_model=served_model,
                     failure_code=receipt.failure_code,

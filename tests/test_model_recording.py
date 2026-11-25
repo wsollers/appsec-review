@@ -269,6 +269,9 @@ def test_a_recorded_error_is_retried_live_by_a_rerun_and_appended(tmp_path, monk
     lambda d: d["result"].update(input_tokens=True),
     lambda d: d["result"].update(output_tokens=-1),
     lambda d: d["result"].update(cache_tokens=1.1),
+    lambda d: d["result"].update(cache_write_tokens=True),
+    lambda d: d["result"].update(client_reused="yes"),
+    lambda d: d["result"].update(client_cold_start_ms=-1),
     lambda d: d["result"].update(raw_response=17),
     lambda d: d["result"].update(served_provider=[]),
     lambda d: d["result"].update(usage_source="cache"),
@@ -635,6 +638,8 @@ def test_a_schema_failure_recorded_before_the_diagnostics_existed_still_replays(
 @pytest.mark.parametrize("mutation", [
     {"failure_class": "surprise"},
     {"usage": {"input_tokens": 1}},
+    {"usage": {"input_tokens": 1, "cache_write_tokens": 0}},
+    {"usage": {"input_tokens": 1, "output_tokens": 2, "cache_tokens": None, "cache_write_tokens": False}},
     {"usage": {"input_tokens": -1, "output_tokens": None, "cache_tokens": None}},
     {"raw_response_truncated": "yes"},
     {"stop_reason": 7},
@@ -669,3 +674,28 @@ def test_an_over_cap_reply_is_recorded_as_the_result_the_provider_returned(tmp_p
     document = json.loads(kept.read_text(encoding="utf-8"))
     assert "error" not in document
     assert document["result"]["proposal"] == {"steps": [1]} and document["result"]["output_tokens"] == 9143
+
+
+def test_optional_recorded_counters_replay_without_live_connection_or_charge(tmp_path, monkeypatch):
+    source, path = _record_one(tmp_path, monkeypatch, result=ModelResult(
+        {}, input_tokens=7, cache_write_tokens=0, client_reused=False, client_cold_start_ms=13))
+    doc = json.loads(path.read_text())
+    assert doc["result"]["client_reused"] is False and doc["result"]["client_cold_start_ms"] == 13
+    replay = _replay_one(tmp_path, source, monkeypatch)
+    assert replay.client_reused is replay.client_cold_start_ms is None
+    assert replay.cache_write_tokens == 0 and Usage.from_result(replay).actual_cache_write_tokens is None
+    for key in ("cache_write_tokens", "client_reused", "client_cold_start_ms"):
+        del doc["result"][key]
+    path.write_text(json.dumps(doc))
+    old = _replay_one(tmp_path, source, monkeypatch)
+    assert old.input_tokens == 7 and old.cache_write_tokens is old.client_reused is old.client_cold_start_ms is None
+
+
+def test_failed_cli_cache_write_alias_replays_as_diagnostic_usage(tmp_path, monkeypatch):
+    from appsec_review.inference.claude_cli import contract_failure
+    raw = json.dumps({"result": "invalid", "usage": {"input_tokens": 3, "cache_creation_input_tokens": 0}})
+    error = contract_failure(ModelOutputError("bad reply"), raw, retained_bytes=1000)
+    source, _ = _record_one(tmp_path, monkeypatch, error=error)
+    with pytest.raises(ModelOutputError) as caught:
+        _replay_one(tmp_path, source, monkeypatch)
+    assert caught.value.usage == {"input_tokens": 3, "output_tokens": None, "cache_tokens": None, "cache_write_tokens": 0}

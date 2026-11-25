@@ -156,6 +156,11 @@ def _fixture(tmp_path: Path, *, duplicate_symbol=False) -> tuple[Path, dict[str,
     return runs, ids
 
 
+def _retrieval_log(core):
+    log = core.run_root / "data/logs/pipeline.jsonl"
+    return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+
+
 def _assert_connections_closed(connections):
     closed = []
     for database in connections:
@@ -224,8 +229,21 @@ def test_batch_routes_only_hits_but_preserves_all_gaps_and_read_receipts(tmp_pat
     symbol, ast, miss = ids["symbol"], ids["ast"], ids["file"]
     responses = core.resolve_identities((ast, miss, symbol, ast), indexes=selected)
     assert list(responses) == [ast, miss, symbol]
-    events = [json.loads(line) for line in (core.run_root / "data/logs/pipeline.jsonl").read_text().splitlines()]
-    audits = [event["details"] for event in events if event["event_type"] == "RETRIEVAL_QUERY"][-3:]
+    events = _retrieval_log(core)
+    parents = [event["details"] for event in events if event["event_type"] == "RETRIEVAL_QUERY"]
+    assert [p["mcp_tool"] for p in parents] == ["dataset_inventory", "find", "resolve_identities"]
+    inventory, cold, batch = parents
+    assert (inventory["shards_candidate"], inventory["shards_opened"], inventory["snapshot_cache_misses"]) == (2, 2, 2)
+    assert inventory["route_cache_hit"] is None
+    assert (cold["shards_candidate"], cold["shards_opened"], cold["snapshot_cache_hits"],
+            cold["snapshot_cache_misses"], cold["route_cache_hit"]) == (3, 3, 2, 1, False)
+    assert (batch["shards_candidate"], batch["shards_opened"], batch["snapshot_cache_hits"],
+            batch["snapshot_cache_misses"], batch["route_cache_hit"]) == (3, len(connections), 3, 0, True)
+    assert batch["result_count"] == 2
+    audits = [event["details"] for event in events if event["event_type"] == "RETRIEVAL_SUBOP_COMPLETED"]
+    assert all((a["parent_tool"], a["parent_query_sha256"]) == ("resolve_identities", batch["query_sha256"])
+               and not any(a[key] for key in ("shards_candidate", "shards_opened", "snapshot_cache_hits",
+                                              "snapshot_cache_misses")) and a["route_cache_hit"] is None for a in audits)
     assert [item["filters"]["identity"] for item in audits] == [ast, miss, symbol]
     assert [item["result_count"] for item in audits] == [1, 0, 1]
     assert {k: v for k, v in responses[symbol].items() if k != "duration_ms"} == {
@@ -242,6 +260,8 @@ def test_batch_routes_only_hits_but_preserves_all_gaps_and_read_receipts(tmp_pat
     _assert_connections_closed(connections)
     connections.clear()
     assert not core.find(identity=miss, indexes=selected)["results"] and not connections
+    negative = _retrieval_log(core)[-1]["details"]
+    assert (negative["shards_candidate"], negative["shards_opened"], negative["route_cache_hit"]) == (3, 0, True)
     assert not core.resolve_identities((symbol,), indexes=())[symbol]["results"] and not connections
     assert core.find(identity=symbol, indexes=selected, limit=1,
                      cursor=responses[symbol]["pagination"]["next_cursor"])["results"][0]["shard_id"] == "z-copy"
@@ -331,8 +351,21 @@ def test_selected_warm_negative_and_inventory_preflight_without_sqlite(tmp_path,
     value.context.contract = broad
     _, core = readers(value)
     missing = LogicalIdentity.derive(EntityKind.IR_ENTITY, "target-sha256:" + "1" * 64, {"absent": True}).value
+    connections = []
+    connect = sqlite3.connect
+
+    def counted(*args, **kwargs):
+        db = connect(*args, **kwargs)
+        connections.append(db)
+        return db
+
+    monkeypatch.setattr(sqlite3, "connect", counted)
     with input_read_scope(value.context):
         assert not core.resolve_identities([missing])[missing]["results"]
+        parent = _retrieval_log(core)[-1]
+        assert parent["event_type"] == "RETRIEVAL_QUERY"
+        assert parent["details"]["shards_opened"] == len(connections) > 0
+        _assert_connections_closed(connections)
         assert core.dataset_inventory(("precomputed",))["precomputed"][0]["entity_count"] == 1
     monkeypatch.setattr(sqlite3, "connect", lambda *a, **kw: pytest.fail("warm preflight opened SQLite"))
     with input_read_scope(value.context) as reads:
@@ -903,10 +936,92 @@ def test_resolution_audit_includes_nested_time_and_resets_caller(tmp_path):
     events = [json.loads(line) for line in (runs / RUN_ID / "data/logs/pipeline.jsonl").read_text().splitlines()]
     resolution = next(event for event in events if event.get("details", {}).get("mcp_tool") == "resolve_evidence")
     audit = resolution["details"]
-    assert audit["elapsed_ms"] == response["duration_ms"] and audit["elapsed_ms"] > 2
+    assert audit["duration_ms"] == response["duration_ms"] and audit["duration_ms"] > 2
+    assert "elapsed_ms" not in audit
     assert (resolution["job_id"], audit["cell_id"], audit["role"], audit["turn"], audit["caller_kind"]) == (
         "job_inference_security_review", "cell-a", "independent_verifier", 2, "review_cell")
     assert events[-1]["job_id"] == "retrieval" and "cell_id" not in events[-1]["details"]
+
+
+@pytest.mark.parametrize(("tool", "id_key", "child_tools"), [
+    ("read_excerpt", "symbol", ["find"]), ("resolve_evidence", "observation", ["find", "trace"]),
+], ids=["excerpt", "evidence"])
+def test_nested_lookup_counters_match_closed_connections(tmp_path, monkeypatch, tool, id_key, child_tools):
+    runs, ids = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    connect = sqlite3.connect
+    connections = []
+
+    def counted(*args, **kwargs):
+        db = connect(*args, **kwargs)
+        connections.append(db)
+        return db
+
+    monkeypatch.setattr(sqlite3, "connect", counted)
+    response = getattr(core, tool)(identity=ids[id_key])
+    _assert_connections_closed(connections)
+    records = _retrieval_log(core)
+    parent, = [e["details"] for e in records if e["event_type"] == "RETRIEVAL_QUERY"]
+    children = [e["details"] for e in records if e["event_type"] == "RETRIEVAL_SUBOP_COMPLETED"]
+    assert [c["mcp_tool"] for c in children] == child_tools
+    assert all((c["parent_tool"], c["parent_query_sha256"]) == (tool, parent["query_sha256"]) for c in children)
+    assert parent["mcp_tool"] == tool and parent["gaps_truncated"] is response["gaps_truncated"]
+    assert parent["shards_opened"] == len(connections) == sum(c["shards_opened"] for c in children)
+    candidates = sum(map(len, core.indexes.values()))
+    assert parent["shards_candidate"] == candidates * len(children)
+    assert parent["snapshot_cache_misses"] == candidates and parent["route_cache_hit"] is False
+    if len(children) > 1:
+        assert children[1]["route_cache_hit"] is None  # trace is a scan, not a point route
+
+
+def test_application_query_links_fanout_and_resets_after_failure(tmp_path):
+    from appsec_review.retrieval.core import retrieval_caller
+
+    runs, ids = _fixture(tmp_path)
+    clock = [0.0]
+    core = RetrievalCore(runs, RUN_ID, clock=lambda: clock[0])
+    with retrieval_caller(job_id="review", cell_id="cell-a", role="reviewer", turn=0, caller_kind="cell"):
+        with core.application_query("expand", {"ref": ids["symbol"]}, query_sha256="a" * 64) as complete:
+            with retrieval_caller(job_id="review", caller_kind="identity_resolution"):
+                with retrieval_caller(job_id="other", caller_kind="fallback", if_unset=True):
+                    response = core.find(identity=ids["symbol"], indexes=["analysis"])
+            clock[0] += 0.25
+            complete({**response, "gaps_truncated": True})
+    with pytest.raises(LookupError):
+        with core.application_query("expand", {"files": "missing"}):
+            raise LookupError("missing")
+    core.coverage(indexes=["observations"], limit=1)
+    child, success, failure, following = _retrieval_log(core)[-4:]
+    assert child["event_type"] == "RETRIEVAL_SUBOP_COMPLETED"
+    child = child["details"]
+    assert (child["parent_tool"], child["parent_query_sha256"], child["caller_kind"], child["job_id"],
+            child["role"], child["cell_id"], child["turn"]) == (
+        "expand", "a" * 64, "identity_resolution", "review", "reviewer", "cell-a", 0)
+    assert success["event_type"] == failure["event_type"] == following["event_type"] == "RETRIEVAL_QUERY"
+    details = success["details"]
+    assert (details["duration_ms"], details["gaps_truncated"], details["shards_opened"],
+            details["route_cache_hit"], details["caller_kind"]) == (250, True, 1, False, "cell")
+    assert failure["details"]["status"] == "error" and failure["details"]["shards_opened"] == 0
+    assert following["details"]["parent_tool"] is None and "cell_id" not in following["details"]
+    assert (following["details"]["shards_candidate"], following["details"]["shards_opened"]) == (3, 1)
+
+
+def test_mcp_lookup_correlates_nested_work_without_application_query(tmp_path):
+    runs, ids = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    RetrievalMcpAdapter(core).call("read_excerpt", {"identity": ids["symbol"]})
+    start, find, excerpt, finish = _retrieval_log(core)[-4:]
+    assert [e["event_type"] for e in (start, find, excerpt, finish)] == [
+        "MCP_TOOL_STARTED", "RETRIEVAL_SUBOP_COMPLETED", "RETRIEVAL_SUBOP_COMPLETED", "MCP_TOOL_COMPLETED"]
+    parent = finish["details"]
+    for event, expected_hash in ((find, excerpt["details"]["query_sha256"]), (excerpt, parent["request_sha256"])):
+        details = event["details"]
+        assert (details["parent_invocation_id"], details["mcp_session_id"], details["parent_query_sha256"]) == (
+            parent["mcp_invocation_id"], parent["mcp_session_id"], expected_hash)
+        assert details["shards_opened"] == parent["shards_opened"] > 0
+    core.find(identity=ids["symbol"])
+    following = _retrieval_log(core)[-1]
+    assert following["event_type"] == "RETRIEVAL_QUERY" and following["details"]["parent_invocation_id"] is None
 
 
 def test_inner_lookup_timeout_is_not_absence_and_is_not_cached(tmp_path):
@@ -921,6 +1036,10 @@ def test_inner_lookup_timeout_is_not_absence_and_is_not_cached(tmp_path):
     assert response["status"] == "timeout" and response["results"] == []
     assert not any("not found" in gap for gap in response["coverage_gaps"])
     assert any("execution-time" in gap for gap in response["coverage_gaps"])
+    child, parent = _retrieval_log(core)[-2:]
+    assert child["event_type"] == "RETRIEVAL_SUBOP_COMPLETED" and parent["event_type"] == "RETRIEVAL_QUERY"
+    assert child["details"]["status"] == parent["details"]["status"] == "timeout"
+    assert parent["details"]["shards_candidate"] == sum(map(len, core.indexes.values()))
 
     ticks = iter((0.0, 3.0))
     ctx = SimpleNamespace(core=core, _lock=threading.Lock(), _resolves={})
@@ -928,6 +1047,9 @@ def test_inner_lookup_timeout_is_not_absence_and_is_not_cached(tmp_path):
     assert ctx._resolves == {}
     assert ReviewContext.resolves(ctx, ids["file"])
     assert ctx._resolves == {ids["file"]: True}
+    for record in _retrieval_log(core)[-2:]:
+        assert (record["job_id"], record["details"]["caller_kind"]) == (
+            "job_inference_security_review", "identity_resolution")
 
 
 def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Path) -> None:

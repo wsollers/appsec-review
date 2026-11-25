@@ -9,6 +9,7 @@ from typing import Any, Mapping, Sequence
 from appsec_review.guidance.compose import bundle_sha256, section_sha256, verify_bundle
 from appsec_review.guidance.fragments import GuidanceError
 from appsec_review.guidance.skills import REVIEW_QUERY_SKILL as EVIDENCE_QUERYING_SKILL_ID, load_runtime_skill
+from appsec_review.retrieval.core import retrieval_caller
 from appsec_review.review.fact_summary import summarize_fact
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import IntegrityError, Role
@@ -167,7 +168,8 @@ def fulfill_evidence_requests(
         # Each identity keeps its own shard binding, truncation and gaps. No combined
         # envelope may be attributed to a citation from a different lookup.
         identities = sorted(allowed)
-        responses = core.resolve_identities(identities)
+        with retrieval_caller(job_id="job_inference_security_review", caller_kind="evidence_fulfillment"):
+            responses = core.resolve_identities(identities)
         for eid in identities:
             response = responses[eid]
             if response.get("status") != "ok":

@@ -233,10 +233,12 @@ def catalog_digest(catalog: Sequence[Mapping[str, Any]]) -> str:
     return _digest(catalog)
 
 
-def review_population(core: Any, indexes: Sequence[str]) -> dict[str, dict[str, Any]]:
+def review_population(core: Any, indexes: Sequence[str], *, job_id: str = "guidance_admission") -> dict[str, dict[str, Any]]:
     """Verified run-local backing populations. A missing measurement is not a zero count."""
     admitted = set(indexes)
-    inventory = core.dataset_inventory(sorted(admitted)) if admitted and hasattr(core, "dataset_inventory") else {}
+    from appsec_review.retrieval.core import retrieval_caller
+    with retrieval_caller(job_id=job_id, caller_kind="admission_population"):
+        inventory = core.dataset_inventory(sorted(admitted)) if admitted and hasattr(core, "dataset_inventory") else {}
     populations = {}
     for name, selectors in {**_DATASETS, "indexed_entities": tuple(_Source(i) for i in sorted(admitted))}.items():
         sources = [s for s in selectors if s.index in admitted]
@@ -284,17 +286,19 @@ def review_query_sources(tools: Sequence[str], population: Mapping[str, Any]) ->
                          and population[source]["known_row_count"] > 0}))
 
 
-def review_admission(core: Any, capability: Any) -> dict[str, Any]:
+def review_admission(core: Any, capability: Any, *, job_id: str = "guidance_admission") -> dict[str, Any]:
     capability.verify()
     if core.manifest_sha256 != capability.manifest_sha256:
         raise GuidanceError("card manifest differs from the issued capability")
-    population = review_population(core, capability.indexes)
+    population = review_population(core, capability.indexes, job_id=job_id)
     # This is an attribution lookup, not the availability decision. A miss cannot certify
     # the absence of a dataset. Retain each checked response's own qualification in the hash.
     seeds = sorted(capability.entities)[:MAX_ITEMS]
     receipts = {}
     if seeds and capability.indexes and hasattr(core, "resolve_identities"):
-        resolved = core.resolve_identities(seeds, indexes=capability.indexes)
+        from appsec_review.retrieval.core import retrieval_caller
+        with retrieval_caller(job_id=job_id, caller_kind="admission_population"):
+            resolved = core.resolve_identities(seeds, indexes=capability.indexes)
         for eid in seeds:
             response = resolved[eid]
             rows = response["results"]

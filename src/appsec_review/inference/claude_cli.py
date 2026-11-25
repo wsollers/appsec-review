@@ -11,11 +11,11 @@ import sys
 import time
 from typing import Any, Mapping, Sequence
 
-from .request import ModelRequest, ModelResult, ReviewModelRequest, review_prompt
+from .request import ModelRequest, ModelResult, ReviewModelRequest, review_user_text
 from .errors import (
     ExecutionContractError, FailureCategory, ModelOutputError, ModelTimeout, ProviderError, failure_category,
 )
-from .usage import Usage, token_count
+from .usage import Usage, reported_cache_write, token_count
 
 
 def _text_from_envelope(value: Any) -> str:
@@ -118,9 +118,12 @@ def _envelope(raw: str) -> Mapping[str, Any] | None:
 def _usage(envelope: Mapping[str, Any] | None) -> dict[str, int | None]:
     usage = envelope.get("usage") if envelope is not None else None
     usage = usage if isinstance(usage, Mapping) else {}
-    return {"input_tokens": token_count(usage.get("input_tokens")),
-            "output_tokens": token_count(usage.get("output_tokens")),
-            "cache_tokens": token_count(usage.get("cache_read_input_tokens"))}
+    counts = {"input_tokens": token_count(usage.get("input_tokens")),
+              "output_tokens": token_count(usage.get("output_tokens")),
+              "cache_tokens": token_count(usage.get("cache_read_input_tokens"))}
+    if (value := reported_cache_write(usage)) is not None:
+        counts["cache_write_tokens"] = token_count(value)
+    return counts
 
 
 def _stop_reason(envelope: Mapping[str, Any] | None) -> str | None:
@@ -172,8 +175,8 @@ def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int, bi
     executable = shutil.which(binary)
     if executable is None:
         raise ProviderError("configured Claude CLI is unavailable", code="cli_unavailable")
-    prompt = (review_prompt(request, include_guidance=True)
-              if isinstance(request, ReviewModelRequest) else _plan_prompt(request))
+    prompt = (review_user_text(request)
+              if isinstance(request, ReviewModelRequest) else json.dumps(_plan_prompt(request), sort_keys=True))
     return _run(executable, prompt, request.schema, model=request.model, reasoning=request.reasoning,
                 timeout_seconds=timeout_seconds, auth_mode=auth_mode,
                 retained_bytes=retained_reply_bytes(request.max_output_tokens))
@@ -196,13 +199,13 @@ def _worker_environment(auth_mode: str) -> dict[str, str]:
     return environment
 
 
-def _run(executable: str, prompt: Mapping[str, Any], schema: str, *, model: str, reasoning: str,
+def _run(executable: str, prompt: str, schema: str, *, model: str, reasoning: str,
          timeout_seconds: int, auth_mode: str, retained_bytes: int = _RESPONSE_BYTES) -> ModelResult:
     environment = _worker_environment(auth_mode)
     argv = [executable, "-p", "--output-format", "json", "--no-session-persistence",
             "--safe-mode", "--tools", "", "--allowedTools", "",
             "--model", model, "--effort", reasoning]
-    completed = _invoke(argv, input=json.dumps(prompt, sort_keys=True), environment=environment,
+    completed = _invoke(argv, input=prompt, environment=environment,
                         timeout_seconds=timeout_seconds)
     if completed.returncode != 0:
         raise ProviderError("Claude CLI exited with a nonzero status", code="cli_exit")
@@ -230,7 +233,8 @@ def _run(executable: str, prompt: Mapping[str, Any], schema: str, *, model: str,
     result = ModelResult(
         proposal=proposal,
         input_tokens=usage.get("input_tokens"), output_tokens=usage.get("output_tokens"),
-        cache_tokens=usage.get("cache_read_input_tokens"), raw_response=completed.stdout,
+        cache_tokens=usage.get("cache_read_input_tokens"), cache_write_tokens=reported_cache_write(usage),
+        raw_response=completed.stdout,
         served_model=served_model, served_provider="claude-cli",
         usage_unavailable_reason="invalid_provider_usage" if invalid_usage else None,
     )
