@@ -187,7 +187,8 @@ def _generate(unit: UnitContext, scope: IndexScope, executor_factory: Any,
         return _not_applicable(unit, scope)
     limits = _settings(unit)
     limit = limits["max_cpg_bytes"]
-    root = unit.job.run_root / "data" / "code-index" / "joern" / scope.scope_id
+    root = (unit.job.run_root / "data" / "code-index" / "joern" / scope.scope_id /
+            "attempts" / unit.job.attempt_id)
     values: dict[str, Any] = {
         "schema": SCHEMA, "adapter": ADAPTER, "manifest_schema": CPG_MANIFEST_SCHEMA, "argv": list(ARGV),
         "scope": scope.as_dict(), "gap": JOERN_GAP,

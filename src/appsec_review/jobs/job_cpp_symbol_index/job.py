@@ -465,7 +465,8 @@ def _execution_artifacts(run_root: Path, execution: Mapping[str, Any]) -> dict[s
 def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) -> dict[str, Any]:
     limits = _settings(unit)
     dispositions = job_dispositions(unit.job.config.settings)
-    root = unit.job.run_root / "data" / "code-index" / "clangd" / scope.scope_id
+    root = (unit.job.run_root / "data" / "code-index" / "clangd" / scope.scope_id /
+            "attempts" / unit.job.attempt_id)
     identity = checkpoint_identity({
         "schema": SCHEMA, "scope": scope.as_dict(), "normalizer": NORMALIZER,
         "tool": tool_identity(unit.job.repository_root, TOOL_ID) if executor_factory is None

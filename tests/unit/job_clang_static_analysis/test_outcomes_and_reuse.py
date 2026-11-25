@@ -45,7 +45,7 @@ def test_missing_or_invalid_unit_evidence_is_incomplete_and_never_checkpointed(t
     counts = result["seeded"]["status_counts"]
     assert counts.get("unresolved", 0) >= 1
     assert any("outcome" in gap for gap in result["gaps"])
-    assert not (staged.run_root / "data/clang-static/cpp-scope-seeded/checkpoint.json").exists()
+    assert not (staged.run_root / "data/clang-static/cpp-scope-seeded/attempts/attempt_0001/checkpoint.json").exists()
     if kind == "missing":
         assert counts == {"unresolved": 2} and _coverage(staged, result) == "unavailable"
     if kind in {"omitted", "malformed"}:
@@ -134,7 +134,7 @@ def test_real_wrapper_outcomes_bind_same_file_compile_variants(monkeypatch, tmp_
 
     executor = Executor(staged.run_root)
     result, _ = _run(staged, executor)
-    checkpoint = staged.run_root / "data/clang-static/cpp-scope-seeded/checkpoint.json"
+    checkpoint = staged.run_root / "data/clang-static/cpp-scope-seeded/attempts/attempt_0001/checkpoint.json"
     assert result["observation_count"] > 0
     if outcomes in {"valid", "reordered", "valid-distinct-cwd"}:
         assert result["seeded"]["status_counts"] == {"resolved": 2}

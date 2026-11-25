@@ -20,6 +20,21 @@ class OperationalSetting:
 
 OPERATIONAL_SETTINGS = (
     OperationalSetting("job_openvex_export", ("settings", "timeout_seconds")),
+    OperationalSetting("job_model_connectivity", ("settings", "timeout_seconds")),
+    OperationalSetting("job_review_intake", ("settings", "model_preflight", "timeout_seconds")),
+    OperationalSetting("job_source_history_analysis", ("settings", "github", "timeout_seconds")),
+    OperationalSetting("job_review_prioritization", ("settings", "syntax_metrics_reservation", "cpu")),
+    OperationalSetting("job_review_prioritization", ("settings", "syntax_metrics_reservation", "memory_mb")),
+    OperationalSetting("job_review_prioritization",
+                       ("settings", "syntax_metrics_reservation", "admission_timeout_seconds")),
+    OperationalSetting("job_threat_model_generation", ("settings", "reservation", "cpu")),
+    OperationalSetting("job_threat_model_generation", ("settings", "reservation", "memory_mb")),
+    OperationalSetting("job_threat_model_generation", ("settings", "reservation", "admission_timeout_seconds")),
+    OperationalSetting("job_sanitizer_build", ("settings", "workers")),
+    OperationalSetting("job_sanitizer_build", ("settings", "command_timeout_seconds")),
+    OperationalSetting("job_debug_symbol_indexing", ("settings", "reader", "timeout_seconds")),
+    OperationalSetting("job_dossier_publication", ("settings", "render_timeout_seconds")),
+    OperationalSetting("job_build_environment_analysis", ("settings", "deadline_seconds"), category="coverage"),
 )
 
 

@@ -743,7 +743,8 @@ def test_checkpoint_rechecks_receipt_streams_without_rerunning(
     first = _index_scope(unit, scope, lambda _u: executor)
     receipt = run_root / first["execution"]["receipt"]["path"]
     receipt_bytes = receipt.read_bytes()
-    checkpoint = run_root / "data" / "code-index" / "clangd" / scope.scope_id / "checkpoint.json"
+    checkpoint = (run_root / "data" / "code-index" / "clangd" / scope.scope_id /
+                  "attempts" / unit.job.attempt_id / "checkpoint.json")
     cached = json.loads(checkpoint.read_bytes())
     cached["result"]["execution"].pop("raw_artifacts", None)
     checkpoint.write_text(json.dumps(cached), encoding="utf-8")

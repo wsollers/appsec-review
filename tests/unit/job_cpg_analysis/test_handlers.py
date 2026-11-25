@@ -259,7 +259,8 @@ def test_generate_unlinks_symlinked_cpg_and_reuses_checkpoint_plus_detects_manif
     reused_ok = _generate(unit2, scope2, lambda _u: object())
     assert reused_ok["checkpoint_reused"] is True
 
-    root2 = run_root2 / "data" / "code-index" / "joern" / scope2.scope_id
+    root2 = (run_root2 / "data" / "code-index" / "joern" / scope2.scope_id /
+             "attempts" / unit2.job.attempt_id)
     ckpt_doc = json.loads((root2 / "checkpoint.json").read_text(encoding="utf-8"))
     identity = ckpt_doc["identity"]
 

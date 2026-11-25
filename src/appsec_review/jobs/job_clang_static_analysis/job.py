@@ -390,7 +390,8 @@ def _source_of(container_path: str) -> str:
 def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
                    run: seeded.Run | None = None) -> dict[str, Any]:
     settings = _settings(unit)
-    root = unit.job.run_root / "data" / "clang-static" / scope.scope_id
+    root = (unit.job.run_root / "data" / "clang-static" / scope.scope_id /
+            "attempts" / unit.job.attempt_id)
     values: dict[str, Any] = {
         "schema": CLANG_STATIC_HANDOFF_SCHEMA, "adapter": ADAPTER, "scope": scope.as_dict(),
         "settings": settings, "tool": tool_identity(unit.job.repository_root, TOOL_ID)
