@@ -41,39 +41,92 @@ def _region(physical: Mapping[str, Any]) -> tuple[int, int, int, int]:
     return start_line, end_line, start_column, end_column
 
 
-def _based_path(artifact: Mapping[str, Any], bases: object) -> str | None:
-    """Resolve only the referenced base chain; cycles are bounded by the supplied base inventory."""
-    def decode(uri: object) -> str | None:
-        if not isinstance(uri, str):
-            return None
-        try:
-            parsed = urlparse(uri)
-        except ValueError:
-            return None
-        path = unquote(parsed.path).replace("\\", "/")
-        if (parsed.scheme not in {"", "file"} or parsed.netloc or parsed.query or parsed.fragment
-                or ".." in PurePosixPath(path).parts or path.startswith("//")):
-            return None
-        return path
+_CODEQL_SOURCE_ROOT_BASE_IDS = frozenset({"%SRCROOT%", "SRCROOT"})
+_CONTAINER_SYSTEM_PREFIXES = (
+    "/usr/include/",
+    "/usr/local/include/",
+    "/usr/lib/",
+    "/lib/",
+    "/lib64/",
+)
 
-    path, base_id = decode(artifact["uri"]), artifact.get("uriBaseId")
+
+def _decode_sarif_uri(uri: object) -> str | None:
+    if not isinstance(uri, str):
+        return None
+    try:
+        parsed = urlparse(uri)
+    except ValueError:
+        return None
+    path = unquote(parsed.path).replace("\\", "/")
+    if (parsed.scheme not in {"", "file"} or parsed.netloc or parsed.query or parsed.fragment
+            or ".." in PurePosixPath(path).parts or path.startswith("//")):
+        return None
+    return path
+
+
+def _implicit_source_root(root: str) -> str | None:
+    clean = root.replace("\\", "/").strip("/")
+    if clean in {"", "."}:
+        return "/scratch/workspace/"
+    if PurePosixPath(clean).is_absolute():
+        return None
+    parts = PurePosixPath(clean).parts
+    if ".." in parts:
+        return None
+    joined = "/".join(part for part in parts if part not in {"", "."})
+    return f"/scratch/workspace/{joined}/" if joined else "/scratch/workspace/"
+
+
+def _based_path(artifact: Mapping[str, Any], bases: object, *, root: str = ".") -> str | None:
+    """Resolve only the referenced base chain; cycles are bounded by the supplied base inventory."""
+    path, base_id = _decode_sarif_uri(artifact["uri"]), artifact.get("uriBaseId")
     if path is None:
         return None
     visited: set[str] = set()
     while not PurePosixPath(path).is_absolute():
-        if (not isinstance(base_id, str) or base_id in visited or not isinstance(bases, Mapping)
-                or not isinstance(bases.get(base_id), Mapping)):
+        if not isinstance(base_id, str) or base_id in visited:
             return None
         visited.add(base_id)
-        base = bases[base_id]
-        prefix = decode(base.get("uri", ""))
-        if prefix is None:
+        if isinstance(bases, Mapping) and base_id in bases:
+            base = bases[base_id]
+            if not isinstance(base, Mapping):
+                return None
+            if "uri" not in base and "uriBaseId" not in base and base_id in _CODEQL_SOURCE_ROOT_BASE_IDS:
+                prefix = _implicit_source_root(root)
+                next_base_id = None
+            else:
+                prefix = _decode_sarif_uri(base.get("uri", ""))
+                next_base_id = base.get("uriBaseId")
+            if prefix is None:
+                return None
+        elif base_id in _CODEQL_SOURCE_ROOT_BASE_IDS:
+            prefix = _implicit_source_root(root)
+            if prefix is None:
+                return None
+            next_base_id = None
+        else:
             return None
-        # Decode once before interpreting directory separators; never join first and lose a base directory.
-        directory = PurePosixPath(prefix) if prefix.endswith("/") else PurePosixPath(prefix).parent
+        # Decode once before interpreting directory separators; every originalUriBaseIds entry
+        # names a base directory even when the producer omits a trailing slash.
+        directory = PurePosixPath(prefix)
         path = (directory / path).as_posix() if path else prefix
-        base_id = base.get("uriBaseId")
+        base_id = next_base_id
     return path
+
+
+def _is_system_header_location(physical: Mapping[str, Any], mapped: MappedLocation) -> bool:
+    if mapped.path is not None or mapped.ambiguous:
+        return False
+    artifact = physical.get("artifactLocation")
+    uri = artifact.get("uri") if isinstance(artifact, Mapping) else None
+    if not isinstance(artifact, Mapping) or "uriBaseId" in artifact or not isinstance(uri, str) or "\\" in uri:
+        return False
+    decoded = _decode_sarif_uri(uri)
+    if decoded is None or not PurePosixPath(decoded).is_absolute():
+        return False
+    normalized = PurePosixPath(decoded).as_posix()
+    return any(normalized.startswith(prefix) for prefix in _CONTAINER_SYSTEM_PREFIXES)
 
 
 def map_location(physical: Mapping[str, Any], *, files: Sequence[Mapping[str, Any]],
@@ -95,7 +148,7 @@ def map_location(physical: Mapping[str, Any], *, files: Sequence[Mapping[str, An
         return MappedLocation(None, None, *region, 0.0, False, (), producer)
     accepted = {str(item["path"]): str(item["sha256"]) for item in files}
     if "uriBaseId" in artifact and not PurePosixPath(raw).is_absolute():
-        resolved_path = _based_path(artifact, uri_bases) or ""
+        resolved_path = _based_path(artifact, uri_bases, root=root) or ""
         for prefix in ("/scratch/workspace/", "/workspace/"):
             if resolved_path.startswith(prefix):
                 candidate = PurePosixPath(resolved_path[len(prefix):]).as_posix()
@@ -254,7 +307,7 @@ def normalize_sarif(document: Mapping[str, Any], *, files: Sequence[Mapping[str,
                             },
                             "supporting": True,
                         })
-                        if mapped.path is None:
+                        if mapped.path is None and not _is_system_header_location(physical, mapped):
                             gaps.append(f"CodeQL flow step for {run_index}:{result_index} was unmapped or ambiguous")
             mapped_locations = [
                 item.__dict__ if hasattr(item, "__dict__") else {name: getattr(item, name) for name in item.__slots__}

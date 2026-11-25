@@ -603,13 +603,18 @@ files are restricted to that scope, but nested names can still collide (`project
 remain ambiguous rather than choosing one hash.
 
 For relative artifact locations with `uriBaseId`, primary and flow normalization resolve the
-referenced `run.originalUriBaseIds` chain, including a declared `%SRCROOT%`, into a known absolute
-workspace root and then require an exact accepted source identity. Missing IDs, cycles, malformed,
-foreign or traversal-containing bases remain unmapped gaps; `%SRCROOT%` is not guessed when its
-mapping is absent. Only the referenced chain is followed, bounded by its finite supplied inventory.
-An unresolved base never falls back to an unrelated bare path or suffix match. Native actual-URI
-acceptance remains unverified without version-attributed native SARIF evidence; offline fixtures
-exercise these semantics but are not native captures.
+referenced `run.originalUriBaseIds` directory chain into a known absolute workspace root
+(`/scratch/workspace/` or `/workspace/`, whether or not the declared base URI carries a trailing
+slash) and then require an exact accepted source identity. When CodeQL emits `uriBaseId` as
+`%SRCROOT%` or `SRCROOT` with `originalUriBaseIds` omitted, unmapped for that symbol, or declared as
+an abstract SARIF root without `uri`/`uriBaseId`, normalization resolves it against the database
+source root `/scratch/workspace[/<scope-root>]`; an explicit malformed, cyclic, foreign, or
+traversal-containing `%SRCROOT%` entry still fails closed. Other missing base IDs, cycles,
+malformed, foreign, or traversal-containing bases remain unmapped gaps, and an unresolved base never
+falls back to an unrelated bare path or suffix match. Unbased container system-header transit steps
+in `codeFlows` (for example `file:///usr/include/...`) remain unmapped (`path = null`) without
+emitting false unmapped-source gaps, while primary result locations outside accepted sources still
+record a location gap.
 
 Use the `query_codeql` MCP tool to filter accepted observations by language, original source
 language, scope, build unit, rule, severity, path, or CodeQL shard.
