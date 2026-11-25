@@ -102,7 +102,9 @@ Polling delays are reported using actual observation times, not a claimed punctu
 
 ## Job-completion verification
 
-The monitoring chat creates one separate verification chat after concrete run identity exists.
+The kickoff/coordinator chat creates both the initial monitoring chat and one separate verification
+chat as direct sibling children after concrete run identity exists (never nesting the verifier inside
+the monitor).
 That chat follows newly terminal jobs in the exact dispatch and audits accepted publications,
 not files still being written. Failed/rejected attempts may supply diagnostic evidence, not
 accepted output. Discover completions at least every five minutes; process each new
@@ -198,14 +200,21 @@ of silently launching a fresh full graph. For several independent failed jobs, u
 
 After a restarted job's dispatch is admitted and has real start/claim progress:
 
-- Create a **new monitoring chat** with complete exact app/dispatch/parent IDs, effective
-  config/source/target identities, selection/retention proof, repair/timing records, expected-gap
-  decisions, outstanding defects, and the verification chat's ID/cursor.
+- Spawn a **new sibling monitoring chat** - never nested under the retiring monitor - with complete
+  exact app/dispatch/parent IDs, effective config/source/target identities, selection/retention
+  proof, repair/timing records, expected-gap decisions, outstanding defects, and the verification
+  chat's ID/cursor. Because `create_session` nests non-detached children under whichever session
+  calls it, a child monitor must not call `create_session` with default nesting: instead, send the
+  complete successor kickoff and recovery record to the parent kickoff/coordinator chat so that
+  parent calls `create_session(session_kind="chat", ...)` to create `Monitor ... (epoch N)` as a
+  flat sibling alongside prior epoch monitors and the verifier (or, if no parent coordinator chat
+  exists, pass `detached=true` so the successor is created as a top-level sibling).
 - Reuse the existing verification chat and retarget it explicitly; do not start duplicate auditors
   on every rotation. Preserve old attempt reports; a retry never retrospectively clears them.
-- Have the successor confirm its identity and five-minute session automation before the old
-  monitor clears its own automation and ends. Transfer the single derived-monitor checkpoint
-  without deleting/resetting it. Do not let old/new monitor processes poll it concurrently.
+- Confirm the successor's identity and five-minute session automation (via the parent coordinator
+  or successor handshake) before the old monitor clears its own automation and ends. Transfer the
+  single derived-monitor checkpoint without deleting/resetting it. Do not let old/new monitor
+  processes poll it concurrently.
 - Ending means clear the old schedule and finish the conversation turn. Do not delete the chat,
   kill unrelated processes, archive the verifier, or claim the restarted fault is fixed merely
   because the successor is `STARTED`. The successor checks passage of the original fault.
@@ -266,10 +275,12 @@ Verify the returned application ID, native dispatch UUID, no-parent identity, ac
 graph and first admitted claim/progress. Record CLI entry and native STARTED separately.
 An ambiguous launch response is a reconciliation task, not permission to submit twice.
 
-Create a dedicated monitoring chat with this full assignment, the exact run identity and
-docs/monitoring_report.md. Have it create ONE separate job-completion verification chat.
-Use create_session with session_kind="chat" and a complete kickoff for each chat, not a new
-worktree, workflow fleet, or fictional chat name. Each uses get_session_automation first and
+From this kickoff/coordinator chat, create ONE separate job-completion verification chat and ONE
+dedicated epoch-1 monitoring chat as direct sibling children (do not have the monitor spawn the
+verifier underneath itself). Pass each chat the other's exact session ID, this coordinator's
+session ID, this full assignment, the exact run identity, and docs/monitoring_report.md.
+Use create_session with session_kind="chat" and a complete kickoff (mode="autopilot") for each
+chat, not a new worktree, workflow fleet, or fictional chat name. Each uses get_session_automation first and
 a five-minute save_session_automation schedule in that same chat; never use an app-wide schedule,
 a shell loop or a permanent daemon. Schedules contain complete standalone instructions and exact
 IDs so they survive context loss. Report honestly if session scheduling is unavailable.
@@ -312,11 +323,17 @@ unresolved scope/expected-gap/policy decisions rather than silently accepting ba
 Keep technical worker-stop, signing and admission requirements intact without inventing extra
 workflow freezes. No unrelated tests, broad redesigns or new budget/bypass decisions.
 
-Once the corrected job has genuinely restarted, create a NEW monitoring chat with the exact
-successor identity, repair and timing evidence. Reuse/retarget the existing verification chat.
-Confirm the new monitor and its five-minute schedule are active, then clear the old monitor's
-schedule and end that old conversation's work. Retain all handoff/report history. Never let
-two monitors write the same checkpoint at once or end before the successor accepts responsibility.
+Once the corrected job has genuinely restarted, rotate to a NEW sibling monitoring chat with the
+exact successor identity, repair and timing evidence - never nested under the retiring monitor.
+Because create_session nests non-detached children under its caller, a child monitor must NOT call
+create_session with default nesting: instead, send the complete successor kickoff and recovery
+evidence to the parent kickoff/coordinator chat so the parent calls create_session(session_kind="chat", ...)
+to spawn Monitor <run-id> (epoch N) as a flat sibling alongside Monitor <run-id> (epoch 1) and the
+verifier (or pass detached=true only when no parent coordinator chat exists). Reuse/retarget the
+existing verification chat. Confirm the new monitor and its five-minute schedule are active before
+clearing the old monitor's schedule and ending that old conversation's work. Retain all
+handoff/report history. Never let two monitors write the same checkpoint at once or end before
+the successor accepts responsibility.
 
 At completion, give native execution status AND the verifier's output-quality status, unresolved
 gaps, meaningful findings and actual report/PDF/OpenVEX dispositions/counts/references. A successful
