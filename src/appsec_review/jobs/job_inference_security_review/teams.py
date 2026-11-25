@@ -38,6 +38,9 @@ from uuid import uuid4
 
 from appsec_review.config.inference_review import InferenceSecurityReviewSettings, ModelProfileSettings, TeamPackageBudget
 from appsec_review.guidance import compose_bundle, hunt_panel, pin_bundle, render_prompt, route_persona, route_stack
+from appsec_review.guidance.compose import load_registry
+from appsec_review.guidance.skills import select_querying_attachment
+from appsec_review.guidance.cards import populated_review_tools, review_population, review_query_sources
 from appsec_review.guidance.routing import unit_sources
 from appsec_review.guidance.routing import rank_personas
 from appsec_review.jobs.job_security_tagging.taxonomy import FACET_NAMESPACES
@@ -207,14 +210,28 @@ class ReviewContext:
     def profile(self, role: Role) -> ModelProfileSettings:
         return self.settings.profile_for(role)
 
+    def review_grant(self, role: Role, indexes: Sequence[str], *, expand: bool = False):
+        population = review_population(self.core, indexes)
+        candidates = set(self.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS
+        if expand:
+            candidates.add(EXPAND_TOOL)
+        return populated_review_tools(sorted(candidates), indexes, population), population
+
     def bundle(self, *, role: Role, persona: str, stack: str, task: str, lane: Lane,
-               capability: CellCapability) -> dict[str, Any]:
+               capability: CellCapability, population: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """Compose (once) and pin a hash-pinned guidance bundle; conflicting guidance raises."""
         # ``expand`` is application navigation, not a registry tool: the role allowlist and the receipt omit it.
         receipt = {"granted_tools": [name for name in capability.tools if name != EXPAND_TOOL],
                    "max_queries": capability.max_queries,
                    "max_turns": capability.max_turns, "page_size": capability.page_size}
-        binary = BINARY_INDEX in capability.indexes
+        if population is None:
+            population = review_population(getattr(self, "core", None), capability.indexes)
+        binary = BINARY_INDEX in capability.indexes and population["binary"]["known_row_count"] > 0
+        query_sources = review_query_sources(capability.tools, population)
+        receipt["query_sources"] = list(query_sources)
+        selected = (select_querying_attachment(load_registry(self.repository_root), role.value, query_sources)
+                    if query_sources and capability.max_queries > 0 else {})
+        receipt["query_procedures"] = selected
         key = sha256_hex({"role": role.value, "persona": persona, "stack": stack, "task": task,
                           "lane": lane.value, "receipt": receipt, "binary_evidence": binary})
         with self._lock:
@@ -223,7 +240,8 @@ class ReviewContext:
             cached = compose_bundle(self.repository_root, role=role.value, persona=persona, stack=stack, task=task,
                                     task_input={"lane": lane.value}, capability=receipt,
                                     vocabulary=self.vocabulary, crosswalk=self.crosswalk, binary_evidence=binary)
-            cached = attach_querying_skill_to_bundle(self.repository_root, cached, role=role, task=task)
+            if selected:
+                cached = attach_querying_skill_to_bundle(self.repository_root, cached, role=role, task=task)
             cached = {"bundle": cached, "text": render_prompt(cached)}
             with self._lock:
                 self._bundles[key] = cached
@@ -543,12 +561,16 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
         expand = lambda compact, labels: expand_verifier(  # noqa: E731
             compact, labels, claim_id=claim.claim_id, schema_errors=schema_errors)
     profile = ctx.profile(role)
-    tools = tuple(sorted((set(ctx.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS) | {EXPAND_TOOL}))
     indexes = tuple(name for name in ctx.index_names if name in INDEX_NAMES)
+    tools, population = ctx.review_grant(role, indexes, expand=True)
     capability = CellCapability.issue(
         run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=work.package_id,
         package_sha256=work.sha256, role=role, round=work.round_index, tools=tools,
         indexes=indexes,
+        read_view_sha256=(getattr(ctx.core, "read_view_sha256", None)
+                          if role in {Role.BLUE_TEAM_REFUTER, Role.INDEPENDENT_VERIFIER, Role.ADJUDICATION_JUDGE}
+                          or (work.lane == Lane.LEAD and role in RED_ROLES)
+                          else None),
         entities=(*work.entities, *extra_entities),
         # Configured binaries are review inputs as a whole, so their decompiled entities are granted by kind.
         entity_prefixes=BINARY_ENTITY_PREFIXES if BINARY_INDEX in indexes else (),
@@ -556,7 +578,8 @@ def _cell(ctx: ReviewContext, work: PackageWork, routing: Mapping[str, Any], *, 
         max_queries=profile.max_queries, max_turns=profile.max_turns,
         page_size=min(100, ctx.max_page_size), max_depth=min(8, ctx.max_depth), max_result_bytes=MAX_RESULT_BYTES)
     stack = str(routing["stack"])
-    guidance = ctx.bundle(role=role, persona=persona, stack=stack, task=task, lane=work.lane, capability=capability)
+    guidance = ctx.bundle(role=role, persona=persona, stack=stack, task=task, lane=work.lane,
+                          capability=capability, population=population)
     schema = RESULT_SCHEMAS[role]
     spec = CellSpec(
         manifest_sha256=ctx.core.manifest_sha256, lane=work.lane, package_id=work.package_id,

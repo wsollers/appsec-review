@@ -82,6 +82,47 @@ class Infer(Protocol):
                  timeout_seconds: int) -> ModelResult: ...
 
 
+def _parameter_type(schema: Mapping[str, Any]) -> str:
+    """Compact rendering of the closed retrieval schema vocabulary (not used for validation)."""
+    if "oneOf" in schema or "anyOf" in schema:
+        return " | ".join(_parameter_type(option) for option in schema.get("oneOf", schema.get("anyOf")))
+    kind = schema.get("type", "string")
+    if kind == "object":
+        return "{" + ", ".join(f"{k}{'' if k in schema.get('required', ()) else '?'}:{_parameter_type(v)}"
+                                for k, v in schema["properties"].items()) + "}"
+    if kind == "array":
+        return f"[{_parameter_type(schema['items'])}]"
+    if "enum" in schema:
+        return kind + "(" + "|".join(map(str, schema["enum"])) + ")"
+    if "pattern" in schema:
+        return f"{kind}/{schema['pattern']}/"
+    if "minimum" in schema or "maximum" in schema:
+        return f"{kind}[{schema.get('minimum', '')}..{schema.get('maximum', '')}]"
+    return str(kind)
+
+
+# Some application-enforced alternatives are not expressible as ordinary required properties.
+_SELECTORS = {
+    "expand": "exactly one of label, ref, files; offset pages files",
+    "query_codeql_neighborhood": "database plus exactly one of seed, symbol, observation",
+    "query_debug_symbols": "exact subject or artifact_identity; coverage and address require artifact_identity",
+    "query_cfg_function": "subject, function_name or locator",
+    "query_guard_dominators": "subject, locator or node_id; line identifies a site",
+    "query_cpg_slice": "criterion_node_id, locator, line or function_name",
+}
+
+
+def _signature(operation: Mapping[str, Any]) -> dict[str, Any]:
+    from appsec_review.review.capability import FORBIDDEN_PARAMETERS
+    schema = operation["parameters"]
+    signature = {"name": operation["name"], "required": schema.get("required", []),
+                 "fields": {name: _parameter_type(prop) for name, prop in schema["properties"].items()
+                            if name not in FORBIDDEN_PARAMETERS}}
+    if alternatives := _SELECTORS.get(operation["name"]):
+        signature["selectors"] = alternatives
+    return signature
+
+
 def review_prompt(request: ReviewModelRequest, *, include_guidance: bool) -> dict[str, Any]:
     """The review-turn message every transport sends: task input, transcript, and limits.
 
@@ -98,6 +139,22 @@ def review_prompt(request: ReviewModelRequest, *, include_guidance: bool) -> dic
         "limits": {"max_input_tokens": request.max_input_tokens,
                    "max_output_tokens": request.max_output_tokens},
     }
+    card = prompt["capability_artifact_card"]
+    if "catalog_sha256" in card:
+        from appsec_review.guidance.cards import catalog_digest
+        from appsec_review.guidance.fragments import GuidanceError
+        task = prompt["task_input"]
+        protocol = dict(task.get("turn_protocol", {}))
+        catalog = protocol.get("tool_catalog", ())
+        if catalog_digest(catalog) != card["catalog_sha256"]:
+            raise GuidanceError("review catalog changed after admission")
+        previous = request.task_input.get("artifact_admission", {}).get("previous_catalog_sha256")
+        if request.transcript and previous == card["catalog_sha256"]:
+            protocol["tool_catalog"] = [_signature(op) for op in catalog]
+            protocol["catalog_format"] = "typed_signatures"
+        else:
+            protocol["catalog_format"] = "full_schemas"
+        task["turn_protocol"] = protocol
     if include_guidance:
         prompt["guidance"] = request.guidance_text
     if request.repair_errors:

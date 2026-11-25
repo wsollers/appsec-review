@@ -8,12 +8,11 @@ from typing import Any, Mapping, Sequence
 
 from appsec_review.guidance.compose import bundle_sha256, section_sha256, verify_bundle
 from appsec_review.guidance.fragments import GuidanceError
-from appsec_review.guidance.skills import load_runtime_skill
+from appsec_review.guidance.skills import REVIEW_QUERY_SKILL as EVIDENCE_QUERYING_SKILL_ID, load_runtime_skill
 from appsec_review.review.fact_summary import summarize_fact
 from appsec_review.review.identity import sha256_hex
 from appsec_review.review.models import IntegrityError, Role
 
-EVIDENCE_QUERYING_SKILL_ID = "evidence-and-graph-querying"
 DEFAULT_MAX_EVIDENCE_REQUESTS = 4
 MAX_CITATIONS_PER_REQUEST = 3
 
@@ -164,9 +163,13 @@ def fulfill_evidence_requests(
 
     records_by_id: dict[str, Mapping[str, Any]] = {}
     responses_by_id: dict[str, Mapping[str, Any]] = {}
-    if admitted and allowed and hasattr(core, "find"):
-        for eid in sorted(allowed):
-            response = core.find(identity=eid, limit=1)
+    if admitted and allowed:
+        # Each identity keeps its own shard binding, truncation and gaps. No combined
+        # envelope may be attributed to a citation from a different lookup.
+        identities = sorted(allowed)
+        responses = core.resolve_identities(identities)
+        for eid in identities:
+            response = responses[eid]
             if response.get("status") != "ok":
                 continue
             found = response["results"]

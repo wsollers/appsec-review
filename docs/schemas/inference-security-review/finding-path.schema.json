@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://appsec-review.local/schemas/inference-security-review/finding-path.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "claim_id",
+    "adjudication_id",
+    "manifest_sha256",
+    "target_snapshot",
+    "citation",
+    "shard_sha256",
+    "status",
+    "steps",
+    "controls",
+    "limitations",
+    "counter_relations"
+  ],
+  "properties": {
+    "claim_id": {
+      "type": "string",
+      "pattern": "^claim-[0-9a-f]{64}$"
+    },
+    "adjudication_id": {
+      "type": "string",
+      "pattern": "^adjudication-[0-9a-f]{64}$"
+    },
+    "manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "target_snapshot": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relation_id",
+        "entity_id",
+        "content_sha256",
+        "shard_id",
+        "retrieval_receipt_sha256"
+      ],
+      "properties": {
+        "relation_id": {
+          "type": "string",
+          "pattern": "^evrel-[0-9a-f]{64}$"
+        },
+        "entity_id": {
+          "type": "string",
+          "pattern": "^asr:dataflow_path:[0-9a-f]{64}$"
+        },
+        "content_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "shard_id": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "retrieval_receipt_sha256": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "shard_sha256": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "status": {
+      "enum": [
+        "statically_supported",
+        "statically_contradicted",
+        "unverified"
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ordinal",
+          "role",
+          "symbol_id",
+          "symbol",
+          "span",
+          "gap_before"
+        ],
+        "properties": {
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "role": {
+            "enum": [
+              "source",
+              "step",
+              "call",
+              "return",
+              "sink"
+            ]
+          },
+          "symbol_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^asr:symbol:[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "symbol": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 4096
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "span": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/span"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gap_before": {
+            "type": "boolean"
+          },
+          "incoming_edge": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "kind",
+              "tier"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "kind": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "tier": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "site": {
+                "$ref": "#/$defs/span"
+              }
+            }
+          }
+        }
+      }
+    },
+    "controls": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "description",
+          "reference"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "maxLength": 8192
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 256
+          }
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "type": "string",
+        "maxLength": 4096
+      }
+    },
+    "counter_relations": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "type": "string",
+        "pattern": "^evrel-[0-9a-f]{64}$"
+      }
+    }
+  },
+  "$defs": {
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "start_line",
+        "end_line",
+        "file_sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "file_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

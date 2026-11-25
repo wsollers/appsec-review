@@ -232,12 +232,16 @@ TOOLS: tuple[dict[str, Any], ...] = (
      }}},
     QUERY_TOOL_SCHEMA,
     {"name": "query_cfg_function",
-     "description": "List Tree-sitter CFG functions, cyclomatic complexity, and branch guard counts.",
+     "description": "Read indexed intra-procedural CFGs. Either item limit selects compact pages of one function "
+                    "with block, branch, call, exit and edge summaries. Follow next_cursor with the same filters "
+                    "and limits; the other item limit defaults to limit. Review cells always use compact pages.",
      "inputSchema": {"type": "object", "additionalProperties": False, "properties": {
          "subject": {"type": "string", "pattern": "^asr:(source_file|ast_node):[0-9a-f]{64}$"},
          "function_name": {"type": "string", "minLength": 1, "maxLength": 256},
          "path": {"type": "string", "maxLength": 4096},
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "block_limit": {"type": "integer", "minimum": 1, "maximum": 100},
+         "edge_limit": {"type": "integer", "minimum": 1, "maximum": 100},
          "cursor": {"type": "string", "maxLength": 4096},
      }}},
     {"name": "query_guard_dominators",

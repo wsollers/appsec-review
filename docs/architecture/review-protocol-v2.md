@@ -213,9 +213,11 @@ typed tools remain and `expand` uses them internally.
 ### 5.4 Locator by path and line
 
 `find`, `query_observations` and `query_codeql` accept `{"path": "src/log.cpp", "line": 16}` as a
-**locator**. The application resolves it, against the package scope, to identities and runs the
-query on those. A locator outside the package scope is `entity_out_of_scope`. `path` still never
-reaches a filesystem, a query language or a regular expression.
+**locator**. For a package-scoped cell, an outside locator is `entity_out_of_scope`. A cell
+verifying a reported finding can instead carry a `read_view_sha256` pin for the run's accepted
+source/index view. Its locator can match a caller or control in a different package in the
+same snapshot. The application queries accepted rows, not the host filesystem. An index or
+view pin is not a citation: reports cite only retrieved evidence. A flat `path` is still forbidden.
 
 ### 5.5 Denial policy
 
@@ -486,7 +488,7 @@ Where this document left a choice open, the implementation took these. None of t
    returns each row with its label. `IN_PROCESS_TOOLS` therefore differs from the published catalog by exactly
    `expand`, and `tests/review/test_capability.py` states that.
 6. **Locator.** `locator: {path, line}` is a parameter of `find`, `query_observations` and `query_codeql`; the path must
-   be a path the package view names. A flat `path` stays a forbidden parameter.
+   be relative to the granted package or accepted run view. A flat `path` stays a forbidden parameter.
 7. **Denial policy.** A denied request costs one query, is returned with a corrected shape, and is a security event but
    not a gap. The second identical denial in a cell ends it `invalid` with one `authority_error` gap.
 8. **Forgiving `query_code_graph`.** A `depth` or class filter the mode ignores is dropped; a call site, sink, entry

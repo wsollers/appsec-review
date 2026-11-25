@@ -132,7 +132,7 @@ def test_round2_requests_evidence_fulfillment_bounded_and_counted(evidence_core)
 def test_round2_zero_requests_does_not_read(evidence_core, monkeypatch):
     core, ids = evidence_core
     pending = _pending([("Check parse_token", [ids["parse_token"]])], ids["parse_token"])
-    monkeypatch.setattr(core, "find", lambda **kw: pytest.fail("zero requests must not retrieve"))
+    monkeypatch.setattr(core, "resolve_identities", lambda *a, **kw: pytest.fail("zero requests must not retrieve"))
     outcome = fulfill_evidence_requests(core, list(ids.values()), pending, max_requests=0)
     assert (outcome.fulfilled_count, outcome.unfulfilled_count) == (0, 1)
     assert outcome.fulfilled_items == outcome.extra_entities == ()
@@ -181,7 +181,7 @@ def test_failed_lookup_cannot_fulfill_request_even_with_a_returned_row(evidence_
     entity = ids["parse_token"]
     response = core.find(identity=entity, limit=1)
     assert response["results"]
-    monkeypatch.setattr(core, "find", lambda **_: {**response, "status": status})
+    monkeypatch.setattr(core, "resolve_identities", lambda ids: {eid: {**response, "status": status} for eid in ids})
     outcome = fulfill_evidence_requests(core, [entity], _pending([("Check parse_token", [entity])], entity))
     assert (outcome.fulfilled_count, outcome.unfulfilled_count) == (0, 1)
     assert not outcome.fulfilled_items and not outcome.extra_entities
@@ -194,7 +194,7 @@ def test_round2_rejects_citation_without_accepted_shard_identity(evidence_core, 
     entity_id = ids["parse_token"]
     response = core.find(identity=entity_id, limit=1)
     response["indexes"] = []
-    monkeypatch.setattr(core, "find", lambda **kw: response)
+    monkeypatch.setattr(core, "resolve_identities", lambda ids: {eid: response for eid in ids})
     pending = _pending([("Check parse_token", [entity_id])], entity_id)
     with pytest.raises(IntegrityError, match="not bound to one accepted shard"):
         fulfill_evidence_requests(core, [entity_id], pending)
@@ -208,7 +208,7 @@ def test_round2_retains_retrieval_qualifications(evidence_core, monkeypatch, del
     response.update(coverage_gaps=["query execution-time budget exceeded"], truncated=True)
     if not delivered:
         response["results"] = []
-    monkeypatch.setattr(core, "find", lambda **kw: response)
+    monkeypatch.setattr(core, "resolve_identities", lambda ids: {eid: response for eid in ids})
     pending = _pending([("Check parse_token", [entity_id])], entity_id)
     outcome = fulfill_evidence_requests(core, [entity_id], pending)
     assert (outcome.fulfilled_count, outcome.unfulfilled_count) == (int(delivered), int(not delivered))

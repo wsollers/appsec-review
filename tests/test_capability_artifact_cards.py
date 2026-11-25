@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict, replace
+from types import SimpleNamespace
 import json
 
 import pytest
 
 from appsec_review.guidance.cards import (
-    MAX_CARD_BYTES, dataset, request_card, review_admission, review_tool_catalog, seal_card, verify_card,
+    MAX_CARD_BYTES, catalog_digest, populated_review_tools, request_card, review_admission, review_population,
+    review_query_sources, review_tool_catalog, seal_card, verify_card,
 )
 from appsec_review.guidance.fragments import GuidanceError
 from appsec_review.inference import ModelRequest, ReviewModelRequest
@@ -54,9 +56,9 @@ def test_card_projects_actual_accepted_producers_not_the_whole_run(accepted):
     assert source["accepted_sha256"] in {row["sha256"] for row in core.manifest["indexes"] if row["name"] == "source"}
     assert source["evidence_authority"] == "direct"
     missing = next(row for row in card["datasets"] if row["name"] == "build_security")
-    assert missing["availability"] == "not_supplied" and missing["accepted_sha256"] is None
+    assert missing["row_count"] == 0 and missing["availability"] == "unavailable" and missing["accepted_sha256"] is None
     assert card["scope"]["manifest_sha256"] == core.manifest_sha256
-    assert card["scope"]["identities"] == [fixture.ids["native/src/parse.c"]]
+    assert card["scope"]["entities_count"] == 1 and fixture.ids["native/src/parse.c"] not in json.dumps(card)
     encoded = json.dumps(card)
     assert fixture.ids["svc/api/handler.py"] not in encoded
     assert "job_source_history_analysis" not in encoded and "semgrep" not in encoded
@@ -77,9 +79,10 @@ def test_card_order_hash_and_exact_schema_are_deterministic():
     second = review_request(capability(tools=("find", "search", "read_excerpt"))).capability_artifact_card
     assert canonical_json(first) == canonical_json(second)
     assert verify_card(first) == first
-    assert first["operations"] == review_tool_catalog(cap.tools)
+    assert first["operations"] == sorted(cap.tools)
+    assert first["catalog_sha256"] == catalog_digest(review_tool_catalog(cap.tools))
     assert len(canonical_json(first)) <= MAX_CARD_BYTES
-    assert all("parameters" in item for item in first["operations"])
+    assert "parameters" not in json.dumps(first)
 
 
 def test_largest_existing_catalog_fits_the_measured_card_byte_limit():
@@ -96,20 +99,19 @@ def test_card_byte_bound_never_silently_drops_an_operation_schema():
     with pytest.raises(GuidanceError, match="byte bound"):
         seal_card(card, max_bytes=size - 1)
     bad = deepcopy(card)
-    bad["operations"][0]["parameters"] = {}
+    bad["operations"].pop()
     with pytest.raises(GuidanceError, match="identity"):
         verify_card(bad)
 
 
 def test_large_identity_inventory_is_bounded_without_changing_capability_or_tool_schemas():
     cap = capability(tools=IN_PROCESS_TOOLS, entities=tuple(f"asr:source_span:{i:064x}" for i in range(64)))
-    admission = {"datasets": [dataset("source", available=True, authority="direct",
-        producer="job_target_catalog", accepted_sha256=f"{i:064x}") for i in range(64)]}
-    request = review_request(cap, admission=admission)
+    request = review_request(cap)
     card = request.capability_artifact_card
-    assert len(canonical_json(card)) <= MAX_CARD_BYTES
-    assert card["coverage"]["omitted_card_items"] > 0
-    assert card["operations"] == review_tool_catalog(cap.tools)
+    assert len(canonical_json(card)) < len(canonical_json(review_tool_catalog(cap.tools)))
+    assert card["scope"]["entities_count"] == len(cap.entities)
+    assert not any(eid in json.dumps(card) for eid in cap.entities)
+    assert card["operations"] == sorted(cap.tools)
     assert request.task_input["capability"]["entities"] == list(cap.entities)
     assert request_card(request) == card
 
@@ -168,7 +170,8 @@ def test_raw_protected_artifacts_private_reasoning_and_untrusted_text_are_not_ca
 def test_card_does_not_grant_out_of_scope_references_or_raw_artifact_access():
     cap = capability()
     card = review_request(cap).capability_artifact_card
-    assert SPAN in card["scope"]["identities"] and OUTSIDE not in card["scope"]["identities"]
+    assert card["scope"]["entities_count"] == len(cap.entities)
+    assert SPAN not in json.dumps(card) and OUTSIDE not in json.dumps(card)
     for request in ({"tool": "read_excerpt", "parameters": {"identity": OUTSIDE}},
                     {"tool": "read_excerpt", "parameters": {"path": "raw/private.json"}}):
         assert isinstance(cap.authorize(request), AuthorityDenied)
@@ -215,3 +218,39 @@ def test_only_relevant_explicit_artifact_bindings_reach_specialized_cards():
     bound["datasets"][0]["name"] = "unrelated_private_results"
     with pytest.raises(GuidanceError, match="unrelated"):
         replace(request, summary={**request.summary, "artifact_admission": bound})
+
+
+def test_admission_uses_population_not_generic_index_or_another_graph_producer():
+    def row(shard, sha, n, kinds, job, *, gaps=(), **extra):
+        return {"shard_id": shard, "producer": {"job": job}, "sha256": sha * 64,
+                "entity_count": n, "kind_counts": kinds, "coverage_gaps": gaps, **extra}
+
+    inventory = {"source": [row("src", "1", 4, {"source_file": 4}, "job_target_catalog")],
+                 "analysis": [row("cpp", "2", 1800, {"ast_node": 1800}, "job_cpp_compiled_analysis")],
+                 "graph": [row("other", "3", 9, {"symbol": 9}, "job_other")]}
+    indexes = sorted(inventory)
+    core = SimpleNamespace(dataset_inventory=lambda names: {k: inventory[k] for k in names})
+    cap = capability(role="independent_verifier", tools=("read_excerpt", "query_cpg_slice", "query_syntax",
+                     "query_code_graph", "list_codeql_databases", "query_cfg_function"), indexes=indexes)
+    def projection():
+        facts = review_population(core, indexes)
+        return facts, populated_review_tools(cap.tools, indexes, facts)
+
+    facts, tools = projection()
+    assert tools == ("read_excerpt",)
+    assert facts["codeql_databases"]["availability"] == facts["alternate_cpg"]["availability"] == "unavailable"
+    assert facts["binary"]["availability"] == "not_admitted" and facts["binary"]["row_count"] is None
+    inventory["analysis"] += [row("alternate-cpg", "4", 7, {"symbol": 7}, "job_code_graph_index", gaps=["limited"]),
+                             row("ts", "5", 300, {"ast_node": 300}, "job_tree_sitter_ast",
+                                 projection_counts={"syntax": 12})]
+    facts, tools = projection()
+    assert tools == ("query_cpg_slice", "query_syntax", "read_excerpt")
+    assert facts["cfg"]["row_count"] is None and facts["cfg"]["gap"] == "population_unknown"
+    assert facts["alternate_cpg"]["row_count"] == 7 and facts["alternate_cpg"]["availability"] == "partial"
+    assert facts["alternate_cpg"]["coverage_gap_count"] == 1
+    card = review_request(capability(role="independent_verifier", tools=tools, indexes=indexes),
+                          admission={"datasets": list(facts.values())}).capability_artifact_card
+    assert card["fallback_tools"] == ["query_cpg_slice", "query_syntax", "read_excerpt"]
+    assert review_query_sources(tools, facts) == ("alternate_cpg", "syntax")
+    inventory["analysis"][1]["entity_count"] = 0
+    assert "query_cpg_slice" not in projection()[1]

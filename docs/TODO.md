@@ -502,9 +502,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5268 | [Admit shared-artifact retry fixtures through verified stop state](#t-5268-admit-shared-artifact-retry-fixtures-through-verified-stop-state) | testing | open |
 | T-5269 | [Establish the smoke-target evaluator isolation boundary](#t-5269-establish-the-smoke-target-evaluator-isolation-boundary) | testing | open |
 | T-5270 | [Align shipped profile notices and inherited model bindings](#t-5270-align-shipped-profile-notices-and-inherited-model-bindings) | pipeline | open |
-| T-5271 | [Align Alternate CPG transport directions with the core](#t-5271-align-alternate-cpg-transport-directions-with-the-core) | graph | done (2026-11-25, T-5271 entry) |
+| T-5271 | [Align Alternate CPG transport directions with the core](#t-5271-align-alternate-cpg-transport-directions-with-the-core) | graph | done (2026-11-25, c8dd1350 + follow-up) |
 | T-5272 | [Carry authenticated attack paths and standard scores into report inputs](#t-5272-carry-authenticated-attack-paths-and-standard-scores-into-report-inputs) | review | open |
-| T-5273 | [Complete whole-job-safe operational tuning declarations](#t-5273-complete-whole-job-safe-operational-tuning-declarations) | pipeline | done |
+| T-5273 | [Complete whole-job-safe operational tuning declarations](#t-5273-complete-whole-job-safe-operational-tuning-declarations) | pipeline | done (2026-11-25, all-job tuning implementation and canonical documentation) |
 
 ## Active entries
 
@@ -6663,7 +6663,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5271 — Align Alternate CPG transport directions with the core
 
-- **State:** done (2026-11-25, T-5271 entry)
+- **State:** done (2026-11-25, c8dd1350 + follow-up)
 - **Area:** graph
 - **Why:** The MCP and generated worker-turn contracts advertise `query_cpg_slice.direction`
   value `both`, while the core accepts only `backward` or `forward`. An advertised request
@@ -6700,7 +6700,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   `src/appsec_review/jobs/job_dossier_publication/job.py`,
   `docs/operations/final-report.md`; approved report design and production integration, 2026-11-22.
 
-### T-5273 ? Complete whole-job-safe operational tuning declarations
+### T-5273 — Complete whole-job-safe operational tuning declarations
 
 - **State:** done (2026-11-25, all-job tuning implementation and canonical documentation)
 - **Area:** pipeline

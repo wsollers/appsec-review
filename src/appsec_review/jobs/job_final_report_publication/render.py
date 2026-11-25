@@ -257,8 +257,8 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
         if card:
             lines.append(
                 f"  - composed severity {code(card['composed_severity'])}; "
-                f"trust boundary crossed {code(card['trust_boundary_crossed'])}; "
-                f"steps: " + " -> ".join(f"{s['role']}:{code(s['claim_id'])}" for s in card["steps"])
+                f"source-resolved boundary {code(card['trust_boundary_crossed'])}; "
+                "component claims (not path order): " + ", ".join(code(s["claim_id"]) for s in card["steps"])
             )
     lines += [""]
     lines += ["## Proof-of-trigger outcomes", "",

@@ -204,6 +204,8 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
                 run_id=root.name, kind=kind, finding=finding, claim=claims[finding["claim_id"]],
                 relations=relations, excerpts=sources, poc=poc, poc_source=poc_source,
                 remediation=_remediation(root, document, key, settings),
+                finding_paths=[path for path in (document.get("chains") or {}).get("finding_paths", ())
+                               if path["claim_id"] == finding["claim_id"]],
                 chains=_chains(root, document, finding, settings), gaps=source_gaps, limits=limits, decision_audit=audit,
                 provenance={**document["upstream"], "finding_artifact": {"path": finding["path"], "sha256": finding["sha256"]},
                             "projection": verified["inputs"]["projection"],

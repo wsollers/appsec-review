@@ -96,6 +96,39 @@ def runtime_skill_records(registry: Mapping[str, Any]) -> dict[str, dict[str, An
     return result
 
 
+REVIEW_QUERY_SKILL = "evidence-and-graph-querying"
+REVIEW_QUERY_DATASETS = frozenset({"alternate_cpg", "cfg", "code_graph", "codeql_databases",
+                                   "codeql_observations", "syntax"})
+_QUERY_REVIEWERS = frozenset({"adjudication_judge", "blue_team_refuter", "independent_verifier"})
+
+
+def review_query_policy(registry: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Closed selection policy for the existing review attachment, not another skill/job allowlist."""
+    table = registry.get("review_procedure_selection")
+    if not isinstance(table, Mapping) or set(table) != {REVIEW_QUERY_SKILL}:
+        raise GuidanceError("invalid review_procedure_selection: expected the existing querying procedure")
+    rule = table[REVIEW_QUERY_SKILL]
+    if not isinstance(rule, Mapping) or set(rule) != {"roles", "any_dataset"}:
+        raise GuidanceError("invalid review procedure selection fields")
+    for key, allowed in (("roles", _QUERY_REVIEWERS), ("any_dataset", REVIEW_QUERY_DATASETS)):
+        values = rule[key]
+        if (not isinstance(values, list) or not values or not all(isinstance(v, str) and v in allowed for v in values)
+                or len(set(values)) != len(values)):
+            raise GuidanceError(f"invalid review procedure selection {key}")
+    record = runtime_skill_records(registry).get(REVIEW_QUERY_SKILL)
+    if record is None:
+        raise GuidanceError(f"runtime skill is not registered: {REVIEW_QUERY_SKILL}")
+    if "job_inference_security_review" not in record["jobs"]:
+        raise GuidanceError(f"runtime skill {REVIEW_QUERY_SKILL} is not allowed for job_inference_security_review")
+    return rule
+
+
+def select_querying_attachment(registry: Mapping[str, Any], role: str, sources: tuple[str, ...]) -> dict[str, list[str]]:
+    rule = review_query_policy(registry)
+    matched = sorted(set(sources).intersection(rule["any_dataset"]))
+    return {REVIEW_QUERY_SKILL: matched} if matched and role in rule["roles"] else {}
+
+
 def _resolve(root: Path, relative: str) -> Path | None:
     base = (root / RUNTIME_SKILLS_DIRECTORY).resolve()
     candidate = root / relative

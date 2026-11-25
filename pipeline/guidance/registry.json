@@ -670,6 +670,12 @@
     "api_web": "network_api_surface",
     "deployment_operations": "cloud_container_deployment"
   },
+  "review_procedure_selection": {
+    "evidence-and-graph-querying": {
+      "roles": ["adjudication_judge", "blue_team_refuter", "independent_verifier"],
+      "any_dataset": ["alternate_cpg", "cfg", "code_graph", "codeql_databases", "codeql_observations", "syntax"]
+    }
+  },
   "runtime_skills": {
     "stateful-invariant-analysis": {
       "path": "pipeline/skills/stateful-invariant-analysis/SKILL.md",

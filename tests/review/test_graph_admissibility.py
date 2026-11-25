@@ -218,7 +218,7 @@ def _location(source: Path, needle: str) -> SourceLocation:
                           column, end_column, {}, "codeql-location-exact", 1.0)
 
 
-def accepted_graph_run(tmp_path: Path, extra: Any = None) -> tuple[Path, dict[str, str]]:
+def accepted_graph_run(tmp_path: Path, extra: Any = None, *, family: Family | None = None) -> tuple[Path, dict[str, str]]:
     """A minimal accepted index set whose ``graph`` shard holds eligible and ineligible facts.
 
     ``extra(ids, add, condition, sink_span, call)`` may add further entities through ``add(key, entity)``.
@@ -288,7 +288,8 @@ def accepted_graph_run(tmp_path: Path, extra: Any = None) -> tuple[Path, dict[st
     digest = builder.build()
     identity = IndexIdentity("graph", "appsec-review/retrieval-index/2", digest, fingerprint,
                              shard_path.relative_to(run_root).as_posix(),
-                             {"job": "job_code_graph_index", "build_unit_id": "native-main"}, (), "cpp-native")
+                             {"job": "job_code_graph_index", "build_unit_id": "native-main",
+                              **({"family": family.value} if family else {})}, (), "cpp-native")
     manifest = run_root / "data" / "indices" / "manifests" / "fixture.json"
     write_manifest(manifest, run_id=RUN_ID, target_snapshot=SNAPSHOT, target_root=target, indexes=[identity])
     attempt = run_root / "data" / "jobs" / "fixture" / "attempts" / "attempt_0001"

@@ -13,6 +13,60 @@ from tests.review.test_cells import (
 from tests.test_bounded_execution import Clock
 
 
+def test_alternate_cpg_uses_analysis_and_admits_only_scoped_rows():
+    from appsec_review.review.capability import Authorized
+    from appsec_review.review.cells import _bound
+
+    tools = ("query_call_paths", "query_cpg_slice")
+    cap = capability(tools=tools, indexes=("analysis",))
+    for tool, args in ((tools[0], {"source": "parse"}), (tools[1], {"function_name": "parse"})):
+        assert isinstance(cap.authorize({"tool": tool, "parameters": args}), Authorized)
+        graph_only = capability(tools=tools, indexes=("graph",))
+        assert graph_only.authorize({"tool": tool, "parameters": args}).code == "index_not_granted"
+    packages = {"io/parse.py"}
+    node = {"record_type": "cpg_node", "path": "io/parse.py"}
+    path = {"record_type": "cpg_path", "hops": [{"path": "io/parse.py"}]}
+    outside = {"record_type": "cpg_path", "hops": [*path["hops"], {"path": "other.py"}]}
+    for tool, allowed, denied in ((tools[0], path, outside), (tools[1], node, {**node, "path": "other.py"})):
+        result, withheld = _bound(tool, {"results": [allowed, denied]}, cap, locator_paths=packages)
+        assert (result["results"], withheld) == ([allowed], 1)
+
+
+def test_accepted_view_permits_cross_package_evidence_not_citations_from_target_text():
+    from appsec_review.review.capability import Authorized
+    from appsec_review.review.cells import _bind, _bound
+    from tests.review.test_cells import OUTSIDE, SINK
+
+    core = FakeCore()
+    core.run_id = "2026-10-12-0001"
+    core.read_view_sha256 = "4" * 64
+    cap = capability(read_view_sha256=core.read_view_sha256, entities=(LEAD,))
+    _bind(spec(), cap, core)
+    locator = {"tool": "find", "parameters": {"locator": {"path": "another/pkg.py", "line": 7}}}
+    assert isinstance(cap.authorize(locator), Authorized)
+    assert capability().authorize(locator).code == "entity_out_of_scope"
+    assert isinstance(cap.authorize({"tool": "read_excerpt", "parameters": {"identity": OUTSIDE}}), Authorized)
+    row = {"index": "source", "kind": "source_span", "identity": OUTSIDE,
+           "payload": {"untrusted_comment": SINK}}
+    granted = set()
+    result, withheld = _bound("find", {"results": [row]}, cap, granted=granted)
+    assert result["results"] == [row] and not withheld
+    assert granted == {OUTSIDE}
+    assert not cap.entity_in_scope(SINK)
+    relation = {"index": "source", "source_id": OUTSIDE, "target_id": SINK}
+    foreign = {**relation, "index": "binary"}
+    response = {"results": [{"entity": row, "relationships": [relation, foreign]}]}
+    resolved, withheld = _bound("resolve_evidence", response, cap)
+    assert withheld == 1
+    assert resolved["results"] == [{"entity": row, "relationships": [relation]}]
+    for field, other in (("read_view_sha256", "5" * 64), ("run_id", "other-run")):
+        original = getattr(core, field)
+        setattr(core, field, other)
+        with pytest.raises(IntegrityError, match="different accepted run or read view"):
+            _bind(spec(), cap, core)
+        setattr(core, field, original)
+
+
 def test_oversized_first_scoped_row_is_diagnosed_without_leaking_its_bytes():
     from appsec_review.review.cells import _bound
     row = {"identity": LEAD, "name": "private-row-value" * 500}

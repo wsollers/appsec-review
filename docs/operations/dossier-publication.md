@@ -87,11 +87,18 @@ protected route. No raw conversation or new worker/MCP grant is added.
 
 ### Evidence-grounded presentation
 
-The accepted claim/finding projections do not contain an ordered taint path or a guard-analysis
-narrative. Dossiers therefore show path/guard analysis as unrecorded; source excerpts and
-citations are unordered context, including separately attributed opposing and qualifying audit
-relations. Confirmation, citation position, entity kinds and shard names are not path, guard or
-scanner-corroboration evidence. The verifier headline copies only an explicit accepted finding
+For T-5272's ordered-path slice the inference chain stage verifies only an existing finding's
+cited `dataflow_path` in its pinned graph shard or stored `analysis/alternate-cpg` path.
+Alternate paths retain ledger attribution as noncounted context, including exact node spans,
+ordered incoming edges, resolution tiers and branch conditions. A missing or inexact endpoint
+never licenses path enumeration. It does not search for paths between claims.
+The optional `finding_paths` field in the accepted chain manifest carries separate static paths,
+ledger relation and retrieval pins, mapped symbols/spans, controls and limitations. Dossiers
+join by claim, adjudication, finding citation and accepted source manifest. The executive and
+dossier renderers use the same protected path rows. Neither claims runtime reachability. No
+current graph field attests that a call is inconsequential: no supported call is elided. Missing
+or ambiguous links are marked `[unverified link]`; historical chain membership, legacy timelines,
+source excerpts and unordered citations never establish a transition. The verifier headline copies only an explicit accepted finding
 independence result (`independence_passed` / `independence_failed`); absence is `not_recorded`.
 Recorded protected verification checks keep their original values and absence reasons.
 

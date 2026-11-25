@@ -21,6 +21,11 @@
     "gaps": {
       "$ref": "chain-records.schema.json#/$defs/texts"
     },
+    "finding_paths": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {"$ref": "finding-path.schema.json"}
+    },
     "items": {
       "type": "array",
       "maxItems": 50,

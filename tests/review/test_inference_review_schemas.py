@@ -23,7 +23,7 @@ NAMES = ("common", "ledger-event", "claim", "evidence-relation", "cell-record", 
          "red-discovery-result", "blue-result", "verifier-result", "adjudication", "score-package", "finding-package", "handoff",
          "red-compact", "blue-compact", "verifier-compact", "judge-result-compact", "judge-result",
          "lead-triage-result", "hunting-campaign-plan", "compact-investigation", "chain-records", "chain-composer-result",
-         "chain-challenge-result", "chain-continuity-fact", "attack-chain", "attack-chain-manifest")
+         "chain-challenge-result", "chain-continuity-fact", "attack-chain", "attack-chain-manifest", "finding-path")
 SCHEMAS = {name: json.loads((ROOT / f"{name}.schema.json").read_text()) for name in NAMES}
 REGISTRY = Registry().with_resources(
     (schema["$id"], Resource.from_contents(schema)) for schema in SCHEMAS.values())
@@ -698,3 +698,17 @@ def test_the_handoff_lists_poc_candidates_and_counts_judge_verdicts(tmp_path: Pa
                            {**handoff["accounting"], "judge_verdicts": {"by_outcome": {}, "model_distinct": 0,
                                                                          "not_model_distinct": 0}}):
         assert not valid("handoff", {**handoff, "accounting": accounting_bad})
+
+
+def test_compact_cfg_item_limits_match_mcp_and_do_not_expose_byte_authority():
+    from appsec_review.mcp.schema import TOOLS
+
+    tool = "query_cfg_function"
+    mcp = Draft202012Validator(next(t["inputSchema"] for t in TOOLS if t["name"] == tool))
+    turn = validator("worker-turn")
+    for extra, expected in (({"block_limit": 1, "edge_limit": 100}, True), ({"block_limit": 0}, False),
+                            ({"edge_limit": 101}, False), ({"max_result_bytes": 10**8}, False),
+                            ({"_cell_fits": True}, False)):
+        params = {"function_name": "example", **extra}
+        assert mcp.is_valid(params) == expected
+        assert turn.is_valid({"action": "retrieve", "requests": [{"tool": tool, "parameters": params}]}) == expected

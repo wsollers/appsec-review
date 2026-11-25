@@ -26,7 +26,7 @@ from appsec_review.retrieval.core import materialize_attempt_input_manifest
 RUN_ID = "2026-10-08-0001"
 
 
-def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+def _fixture(tmp_path: Path, *, duplicate_symbol=False) -> tuple[Path, dict[str, str]]:
     runs = tmp_path / "runs"
     run_root = runs / RUN_ID
     (run_root / "data" / "jobs" / "fixture" / "attempts" / "attempt_0001").mkdir(parents=True)
@@ -59,7 +59,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     index_values: list[IndexIdentity] = []
 
     def build(name: str, entities: list[EntityRecord], relations: list[RelationRecord],
-              gap: str | None = None, shard_id: str = "default", query_set: str | None = None):
+              gap: str | None = None, shard_id: str = "default", query_set: str | None = None, job: str | None = None):
         fingerprint = index_fingerprint(
             name=name, target_snapshot=snapshot, producer_artifacts=[{"sha256": "a" * 64}],
             tool_identity={"tool": "fixture", "name": name}, parser_identity="fixture-parser/1",
@@ -76,7 +76,8 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         sha = builder.build()
         index_values.append(IndexIdentity(name, "appsec-review/retrieval-index/2", sha, fingerprint,
                                           path.relative_to(run_root).as_posix(),
-                                          {"fixture": name, **({"query_set": query_set} if query_set else {})},
+                                          {"fixture": name, **({"query_set": query_set} if query_set else {}),
+                                           **({"job": job} if job else {})},
                                           (gap,) if gap else (), shard_id))
 
     build("source", [EntityRecord(LogicalIdentity.parse(ids["file"]), "src/auth.c", "src/auth.c",
@@ -93,6 +94,12 @@ def _fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         RelationRecord(RelationKind.REFERENCES, ids["fact"], ids["symbol"], False, 0.6,
                        "debug mapping yielded two same-name candidates"),
     ])
+    if duplicate_symbol:
+        from appsec_review.retrieval.syntax_contract import SCHEMA
+        build("analysis", [EntityRecord(LogicalIdentity.parse(ids["symbol"]), "other", "copy", "copy", {}),
+                           EntityRecord(LogicalIdentity.parse(ids["ast"]), "typed", "typed", "", {
+                               "syntax": {"schema": SCHEMA, "source_identity": ids["file"]}}, location)],
+              [], "duplicate scope is partial", shard_id="z-copy", job="job_tree_sitter_ast")
     build("build", [
         EntityRecord(LogicalIdentity.parse(ids["compile"]), "cc:1", "compile auth.c", "cc -c auth.c", {}),
         EntityRecord(LogicalIdentity.parse(ids["object"]), "auth.o", "auth.o", "object auth", {}),
@@ -193,6 +200,155 @@ def test_query_connections_close_after_success_or_error(tmp_path, monkeypatch, q
             assert getattr(core, query)(**parameters)["results"]
     finally:
         _assert_connections_closed(connections)
+
+
+def test_batch_routes_only_hits_but_preserves_all_gaps_and_read_receipts(tmp_path, monkeypatch):
+    from appsec_review.runtime import inputs
+
+    runs, ids = _fixture(tmp_path, duplicate_symbol=True)
+    core = RetrievalCore(runs, RUN_ID)
+    selected = ("analysis", "build", "links")
+    assert core.dataset_inventory(("analysis",))["analysis"][1]["projection_counts"] == {"cfg_function": 0, "syntax": 1}
+    first = core.find(identity=ids["symbol"], indexes=selected, limit=1)
+    observed, statements, connections = [], [], []
+    original_open = core._database
+
+    def opened(shard, deadline):
+        db = original_open(shard, deadline)
+        db.set_trace_callback(statements.append)
+        connections.append(db)
+        return db
+
+    monkeypatch.setattr(core, "_database", opened)
+    monkeypatch.setattr(inputs, "observe_shard", lambda root, shard: observed.append((shard["name"], shard["shard_id"])))
+    symbol, ast, miss = ids["symbol"], ids["ast"], ids["file"]
+    responses = core.resolve_identities((ast, miss, symbol, ast), indexes=selected)
+    assert list(responses) == [ast, miss, symbol]
+    events = [json.loads(line) for line in (core.run_root / "data/logs/pipeline.jsonl").read_text().splitlines()]
+    audits = [event["details"] for event in events if event["event_type"] == "RETRIEVAL_QUERY"][-3:]
+    assert [item["filters"]["identity"] for item in audits] == [ast, miss, symbol]
+    assert [item["result_count"] for item in audits] == [1, 0, 1]
+    assert {k: v for k, v in responses[symbol].items() if k != "duration_ms"} == {
+        k: v for k, v in first.items() if k != "duration_ms"}
+    assert first["results"][0]["shard_id"] == "default"
+    assert responses[ast]["results"][0]["identity"] == ast
+    assert responses[miss]["results"] == []
+    assert responses[miss]["coverage_gaps"] == ["analysis/z-copy: duplicate scope is partial",
+                                              "build/default: link map was unavailable", "links index is unavailable"]
+    assert observed == [("analysis", "default"), ("analysis", "z-copy"), ("build", "default")]
+    payload_reads = [sql for sql in statements if "FROM entities e LEFT JOIN locations" in sql]
+    assert len(payload_reads) == len(connections) == 2
+    assert ast in payload_reads[0] and symbol in payload_reads[0]
+    _assert_connections_closed(connections)
+    connections.clear()
+    assert not core.find(identity=miss, indexes=selected)["results"] and not connections
+    assert not core.resolve_identities((symbol,), indexes=())[symbol]["results"] and not connections
+    assert core.find(identity=symbol, indexes=selected, limit=1,
+                     cursor=responses[symbol]["pagination"]["next_cursor"])["results"][0]["shard_id"] == "z-copy"
+    _assert_connections_closed(connections)
+    assert not core.find(identity=symbol, indexes=selected, name="wrong")["results"]
+
+
+def test_cached_inventory_coverage_and_miss_revalidate_nonmatching_bytes(tmp_path, monkeypatch):
+    from appsec_review.retrieval.core import RetrievalIntegrityError
+    from appsec_review.storage.validation import validation_scope
+
+    runs, ids = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    with validation_scope(core.run_root):
+        inventory = core.dataset_inventory(("links", "observations"))
+        assert inventory["links"] == []
+        codeql, empty, semgrep = inventory["observations"]
+        assert empty["entity_count"] == 0 and empty["coverage_gaps"] == ["gitleaks scanner was unavailable"]
+        assert codeql["entity_count"] == 1 and semgrep["kind_counts"] == {"evidence_artifact": 1, "tool_observation": 1}
+        assert semgrep["sha256"] == core.indexes["observations"][-1]["sha256"]
+        assert semgrep["producer"] == {"fixture": "observations"}
+        empty["coverage_gaps"].clear()
+        semgrep["kind_counts"].clear()
+        assert core.find(identity=ids["file"], indexes=("observations",))["results"] == []
+        monkeypatch.setattr(core, "_database", lambda *_: pytest.fail("warm non-payload read opened SQLite"))
+        assert core.dataset_inventory(("observations",))["observations"][-1]["kind_counts"]["tool_observation"] == 1
+        assert core.coverage(indexes=("observations",))["coverage_gaps"] == [
+            "observations/gitleaks: gitleaks scanner was unavailable"]
+        path = core.run_root / core.indexes["observations"][1]["relative_path"]
+        old = path.stat()
+        with path.open("r+b") as stream:
+            stream.write(b"X")
+        os.utime(path, ns=(old.st_atime_ns, old.st_mtime_ns))
+        with pytest.raises(RetrievalIntegrityError, match="integrity"):
+            core.resolve_identities((ids["file"],), indexes=("observations",))
+        with pytest.raises(RetrievalIntegrityError, match="integrity"):
+            core.dataset_inventory(("observations",))
+        with pytest.raises(RetrievalIntegrityError, match="integrity"):
+            core.coverage(indexes=("observations",))
+
+
+def test_concurrent_route_build_and_interrupted_retry(tmp_path, monkeypatch):
+    runs, ids = _fixture(tmp_path)
+    clock = [0.0]
+    core = RetrievalCore(runs, RUN_ID, clock=lambda: clock[0])
+    scans, connections = [], []
+    original = core._database
+
+    def opened(shard, deadline):
+        db = original(shard, deadline)
+
+        def trace(sql):
+            if sql == "SELECT identity FROM entities":
+                scans.append(sql)
+                if len(scans) == 1:
+                    clock[0] = deadline + 1
+
+        db.set_trace_callback(trace)
+        if not scans:
+            connections.append(db)
+        return db
+
+    monkeypatch.setattr(core, "_database", opened)
+    ids_to_find = (ids["symbol"], ids["file"])
+    timed = core.resolve_identities(ids_to_find, indexes=("analysis",))
+    assert all(entry["status"] == "timeout" and entry["truncated"] and not entry["results"] for entry in timed.values())
+    _assert_connections_closed(connections)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda _: core.resolve_identities(ids_to_find, indexes=("analysis",)), range(8)))
+    assert all(item[ids["symbol"]]["results"][0]["name"] == "authenticate" and not item[ids["file"]]["results"]
+               for item in results)
+    assert len(scans) == 2  # interrupted build + one complete build shared by the readers
+
+
+def test_selected_warm_negative_and_inventory_preflight_without_sqlite(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from appsec_review.retrieval.index import IndexSelection
+    from appsec_review.runtime.contracts import EvidenceAuthority, InputRequirement
+    from appsec_review.runtime.inputs import input_read_scope
+    from tests.unit.retrieval.test_selected_publication import JOB, fixture, readers
+
+    value = fixture(tmp_path, "shared", dependency=True)
+    value.selection = IndexSelection(value.selection.producer_indexes, ((JOB, "cross_domain_links"),))
+    narrow = value.context.contract
+    broad = replace(narrow, inputs=(*narrow.inputs, InputRequirement(
+        JOB, "cross_domain_links", "appsec-review/retrieval-index/2", authority=EvidenceAuthority.PRODUCER_EVIDENCE)))
+    value.context.contract = broad
+    _, core = readers(value)
+    missing = LogicalIdentity.derive(EntityKind.IR_ENTITY, "target-sha256:" + "1" * 64, {"absent": True}).value
+    with input_read_scope(value.context):
+        assert not core.resolve_identities([missing])[missing]["results"]
+        assert core.dataset_inventory(("precomputed",))["precomputed"][0]["entity_count"] == 1
+    monkeypatch.setattr(sqlite3, "connect", lambda *a, **kw: pytest.fail("warm preflight opened SQLite"))
+    with input_read_scope(value.context) as reads:
+        assert not core.resolve_identities([missing])[missing]["results"]
+        assert {row["output_kind"] for row in reads.document()["reads"]} == {
+            "precomputed_products", "cross_domain_links", "handoff"}
+    assert set(core.indexes) == {"precomputed"}  # custody-only dependency never enters the route map
+    value.context.contract = narrow
+    with pytest.raises(ValueError, match="undeclared consumption"), input_read_scope(value.context):
+        core.resolve_identities([missing])
+    value.context.contract = broad
+    (value.root / value.receipt["path"]).write_bytes(b"changed after warmup")
+    with input_read_scope(value.context), pytest.raises(ValueError):
+        core.resolve_identities([missing])
+    with input_read_scope(value.context), pytest.raises(ValueError):
+        core.dataset_inventory(("precomputed",))
 
 
 def test_manifest_verification_connections_close(tmp_path, monkeypatch):
