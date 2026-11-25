@@ -504,6 +504,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5270 | [Align shipped profile notices and inherited model bindings](#t-5270-align-shipped-profile-notices-and-inherited-model-bindings) | pipeline | open |
 | T-5271 | [Align Alternate CPG transport directions with the core](#t-5271-align-alternate-cpg-transport-directions-with-the-core) | graph | open |
 | T-5272 | [Carry authenticated attack paths and standard scores into report inputs](#t-5272-carry-authenticated-attack-paths-and-standard-scores-into-report-inputs) | review | open |
+| T-5273 | [Complete whole-job-safe operational tuning declarations](#t-5273-complete-whole-job-safe-operational-tuning-declarations) | pipeline | open |
 
 ## Active entries
 
@@ -6698,6 +6699,20 @@ explicit context/deferred dispositions rather than silently dropping them or sch
   `src/appsec_review/reporting/executive_report.py`,
   `src/appsec_review/jobs/job_dossier_publication/job.py`,
   `docs/operations/final-report.md`; approved report design and production integration, 2026-11-22.
+
+### T-5273 — Complete whole-job-safe operational tuning declarations
+
+- **State:** open
+- **Area:** pipeline
+- **Why:** The first reviewed tuning declarations preserve accepted configuration provenance,
+  but other candidates still cross shared checkpoint or original-only configuration readers.
+- **Scope:** Complete attempt-safe CodeQL, Tree-sitter and graph outputs, build-iteration
+  revision propagation, analyzer pool-value regressions and reviewed non-integer/global
+  support before declaring those exact fields operationally compatible.
+- **Done when:** Focused regressions prove effective settings reach real consumers, accepted
+  originals retain bytes/limits/gaps, whole-job retries do not salvage prior cells, and material
+  or invalid changes remain refused without weakening validators or admission.
+- **Refs:** `docs/operations/job-tuning.md`, `docs/operations/analyzer-attempt-scopes.md`.
 
 ## Legacy backlog
 
