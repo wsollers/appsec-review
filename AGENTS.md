@@ -20,14 +20,42 @@ agents that inspect or change the repository. It is not a prompt for review work
 3. A security claim requires resolving source lines or a run-owned tool artifact. Missing, skipped,
    or failed coverage is a named gap, never evidence that a target is clean.
 
+## Owner-directed development workflow
+
+- This is a single-owner, speculative development product, not a production change-control
+  environment. The user owns the code, assigns jobs to avoid collisions, and uses source control
+  to roll back problems. Do the requested work directly and quickly; do not invent extra process.
+- Do not impose agent-managed source locks, source freezes, exclusive editing windows, serialized
+  commit queues, ownership leases or peer-release approvals. Concurrent edits and commits are
+  expected. Let Git detect real conflicts or reject an update; resolve an actual conflict when it
+  occurs instead of blocking work preemptively.
+- Preserve other work. Do not overwrite or revert unrelated changes, rewrite history or force-push
+  without explicit instruction. A dirty checkout or another active agent is not itself a blocker.
+- When the user requests a commit, merge or push, perform it promptly in the assigned checkout.
+  Do not repeatedly request permission already given or add test, freeze or coordination gates.
+  Raise only a concrete conflict, failed command, destructive ambiguity or missing authorization.
+- Do not run regression suites automatically, including focused unit, documentation, integration
+  or acceptance suites. Run them only when the user explicitly requests them, and stop when told.
+  A request to implement, commit, merge or push does not implicitly request regression testing.
+- User-requested re-runs and re-starts are the normal development feedback loop. Fix observed
+  problems and continue that requested cycle without inserting unrelated verification campaigns.
+  Do not claim an unrun test passed or expand a requested restart into unrelated live operations.
+- Ordinary source edits and Git operations do not wait for services to stop, a review to finish,
+  container/worker polling or another agent's sign-off. Keep actual runtime admission, signing
+  enforcement and immutable evidence/provenance intact; these technical guarantees are not
+  permission to create an agent workflow freeze.
+- This workflow takes precedence over conflicting process in development skills and runbooks.
+  Use those documents for relevant implementation details, not to reintroduce approval queues,
+  source freezes or automatic regression gates.
+
 ## Primary goal and iteration loop
 
 - The primary goal is meaningful review results that we can verify, not accumulating passing
   infrastructure checks. First get a review all the way through a run; then assess the findings,
   supporting evidence, coverage gaps, and usefulness of the results.
 - The working lifecycle is: launch a user-requested review, observe breakage, fix its root cause,
-  add a quick focused regression test, run the affected unit tests, integrate the fix, and repeat
-  the requested review cycle until the run completes. Minimize the fix-test-restart interval;
+  integrate the fix, and repeat the requested review cycle until the run completes. Add a focused
+  regression where useful, but execute tests only when requested. Minimize the fix-restart interval;
   a long review does not justify a long repair loop.
 - **Job is the atomic recovery boundary.** Keep successful jobs' accepted outputs. Rerun failed
   jobs as a whole and invalidate affected downstream outputs. Do not salvage individual cells
@@ -115,8 +143,9 @@ agents that inspect or change the repository. It is not a prompt for review work
   inference. Every retrieved result retains source identity and resolving evidence.
 - Add tests for behavior that survives the refactor. Do not restore archived tests merely to retain
   old coverage counts.
-- Preserve unrelated new work. Commit coherent changes on the assigned branch and integrate
-  completed work into local `main` through its designated owner; do not push unless the user asks.
+- Preserve unrelated new work. When requested, commit coherent changes on the assigned branch,
+  integrate into local `main`, and push without waiting for a designated integration owner.
+  Do not push unless the user asks.
 - Pushing to the remote (`origin/main`, `https://github.com/wsollers/appsec-review.git`) is done
   from the WSL checkout on host `WSOLLERS1`, as user `wsollers`, from `~/projects/appsec-review`
   on `main`, with a plain `git push` (the branch tracks `origin/main`; no `-u`, no force):
@@ -135,11 +164,9 @@ agents that inspect or change the repository. It is not a prompt for review work
   branch; they are informational, not a push failure, and are not permission to land Dependabot
   pull requests. Agents on other machines (for example a Windows checkout under `F:\repos`) hand
   ready commits to that WSL checkout rather than pushing from their own clone.
-- Do not leave completed work stranded in a worktree. Immediately hand the integration owner
-  the exact ready commit, focused unit-test results, and any remaining blocker. Prefer
-  completion-triggered, serialized local integration over periodic merge polling. Conflicts,
-  dirty integration checkouts, and active-run source freezes require explicit resolution, not
-  blind merges or automatic conflict resolution.
+- Do not leave completed work stranded in a worktree. Complete the requested integration and
+  report the exact commit and any concrete blocker. Report tests only as actually run or not run.
+  Handle actual Git conflicts without imposing serialization or source-freeze gates.
 - Container images are tooling only. The Dagster application image holds the interpreter, pinned
   dependencies, the Docker client, provider CLIs and the signing verifier; the repository checkout
   (`src`, configuration, schemas, guidance, rules, scripts, tool assets) is bind-mounted read-only
@@ -149,26 +176,29 @@ agents that inspect or change the repository. It is not a prompt for review work
   After an application-code change, deploy with `lifecycle.py reload` (which re-signs the mounted
   sources and recreates the image services); never rebuild the image for a code change, and never
   copy application code into an image. Rebuild an image only when its dependencies, tools, or the
-  verifier changed; do not rebuild unrelated tooling. Keep mounted code fixed for an active review:
-  the signed envelope fails closed on edited modules until the next reload, and attempts pin their
-  own copy of the measured source identity, recorded separately from the image identity. Do not
-  describe a deployment behaviour as implemented without verifying it against `deploy/`.
-- Other agent sessions work on this repository at the same time. Follow
-  `.claude/skills/multi-session-coordination/SKILL.md` before starting a change, before building or
-  testing on a shared host, and when handing work to another session.
-- Keep the docs true to the code: after a batch of merged PRs, follow
-  `.claude/skills/docs-sync/SKILL.md` to reconcile them with the delta since `docs/docs-sync.json`.
+  verifier changed; do not rebuild unrelated tooling. The signed envelope can reject edited
+  modules until the next authorized reload, and attempts pin their own measured source identity
+  separately from the image identity. Preserve those checks and provenance, but do not freeze
+  development edits or commits while a review is active. Do not describe a deployment behaviour
+  as implemented without verifying it against `deploy/`.
+- Other agent sessions work concurrently. Coordinate only concrete overlapping edits or useful
+  handoffs; do not wait for a source lock or peer approval before ordinary work. Relevant details
+  in `.claude/skills/multi-session-coordination/SKILL.md` are subject to the owner-directed
+  development workflow above.
+- Keep directly related docs true to the code. For a requested cumulative documentation refresh,
+  use `.claude/skills/docs-sync/SKILL.md`; do not add a broad documentation campaign to a small fix.
 - After a CodeQL image or release change, or any change to graph-export or custom QL, recompile
   with `scripts/compile-codeql-queries.sh` (Windows: `scripts/compile-codeql-queries.ps1`, which
   runs it in WSL) before starting review runs; never warm the precompiled standard query suites.
 - Do not merge, auto-merge, rebase, or otherwise land a Dependabot pull request unless the user
   specifically instructs you to merge that pull request.
 
-## Verification
+## Requested verification
 
-- Verify code changes with fast, accurate, efficient unit regressions for the changed area and
-  directly affected behavior. Exercise the real behavior and root cause; fake external boundaries
-  only where appropriate, never the behavior under test. Preserve meaningful assertions.
+- Run regression checks only at the user's explicit request, never as automatic implementation,
+  commit, merge or completion gates. When requested, use fast, accurate unit regressions for the
+  changed area and directly affected behavior. Exercise the real behavior and root cause; fake
+  external boundaries only where appropriate, never the behavior under test.
 - Unit tests must run independently, with no coupling to other unit tests: no shared mutable
   state, ordering assumptions, or reliance on another test's files, fixtures, or side effects.
   Each must pass alone, in any order, and in parallel (`-n <workers>`, `--shuffle-seed=<seed>`).
@@ -185,16 +215,16 @@ agents that inspect or change the repository. It is not a prompt for review work
   runs first in every session and fails on production profile, overlay, native, Dagster-home or
   acceptance bindings; fix the environment, never the guard. Skips name what is missing and are
   coverage gaps, never passes; do not use `xfail` to hide a failure.
-- Use a bounded worker count (`-n 8` or similar) on shared hosts, never `-n auto`. Before
-  integrating, run the affected files shuffled and in parallel; a failure that passes alone is a
-  test-isolation defect to fix.
+- For requested parallel unit runs, use a bounded worker count (`-n 8` or similar), never
+  `-n auto`, and shuffle the affected files. A failure that passes alone is a test-isolation
+  defect to fix. This is not a requirement to run tests before integration.
 - Integration, acceptance, and live tests follow the same isolation, deterministic-id, and
   named-skip rules, and each case carries an explicit declared time budget that is never raised
   to make a slow case pass. Integration (300 s) and live (1800 s) defaults are configured in
   `pyproject.toml`; a longer need is declared with `pytest.mark.time_budget(seconds, reason=...)`.
-- Follow the [unit-to-live testing and recovery workflow](docs/architecture/testing.md#working-loop)
-  for exact selector/count guards, baseline attribution, ready-commit handoff, per-job content
-  acceptance and safe recovery. The same document defines the test tiers and harness; the
+- For requested testing, use the [unit-to-live testing and recovery workflow](docs/architecture/testing.md#working-loop)
+  for selector/count guards and baseline attribution, not extra commit or source-release gates.
+  The same document defines the test tiers and harness; the
   [recovery runbook](docs/operations/recovery-repair.md) supplies the detailed admission procedure.
 - A job-by-job walk of a review follows the [walk charter](docs/processes/walk-charter.md) and
   that walk's terms and state under `docs/walks/`, which are per-host local files: walk terms,
@@ -205,22 +235,23 @@ agents that inspect or change the repository. It is not a prompt for review work
   its state and the last job record, and write the record and state before a session ends. A
   rule or decision that is not in those documents is not decided; a summarised conversation is
   never its source.
-- Use the smallest relevant set of unit-test files or cases; do not run the full test suite by
-  default. Apply the same scope after merging changes from another branch.
+- When tests are requested, use the smallest relevant set of files or cases. Neither the full
+  suite nor focused regressions run automatically, including after merging another branch.
 - Required collection behavior: exclude known integration/live paths from implicit default
   collection (`pytest` or pathless `pytest -k ...`), while preserving explicit on-demand paths.
   Focused unit selectors remain preferred; explicit selection does not authorize heavyweight
   execution.
-- Documentation-only changes need documentation checks, not automatic test execution.
+- For documentation-only changes, reread the changed text. Run documentation test suites only
+  when explicitly requested.
 - Integration tests, acceptance tests, and live tests/review runs (including Dagster) are manual
   validation owned by the user and execute only at the user's explicit request. Do not run them
   as automatic repair, merge, or completion gates. A request to fix code, add tests, merge work, or
   proceed is not by itself permission to execute these validations. An explicitly requested
   review/restart cycle authorizes that cycle, not unrelated integration or acceptance suites.
-- Record each focused unit-test command, elapsed time, and result, including failures and coverage
-  gaps. Identify any integration, acceptance, or live Dagster validation still needed; passing
-  unit tests does not establish that those checks passed.
-- Long runs (over about a minute, multi-file sets, the full-suite differential sweep) go through
+- For tests actually requested and run, record the command, elapsed time and result, including
+  failures and coverage gaps. Do not turn unrun checks into extra work or an integration gate;
+  do not claim they passed.
+- Requested long runs (over about a minute, multi-file sets, the full-suite differential sweep) go through
   `scripts/run-tests.sh` (`.ps1`), which owns the base temp, the bounded worker count and the junit
   file and prints the fixed report: counts, elapsed, tests over 10 s, every `FAILED`/`ERROR` node
   id verbatim with its `E` lines, the log/junit/timings paths and, with `--baseline FILE`, the
@@ -244,7 +275,7 @@ agents that inspect or change the repository. It is not a prompt for review work
 - Use the bounded one-shot monitor documented in `docs/operations/run-monitor.md`; preserve unknowns,
   lower bounds, graph/attempt/reuse denominators, telemetry/receipt gaps and observation timestamps.
   On confirmed terminal status, post the final summary and clear that monitor's session schedule.
-  Monitoring authorizes no restart, retry, target execution, policy change or source-freeze change,
+  Monitoring authorizes no restart, retry, target execution, policy change or deployment change,
   and progress/usage are not security findings or quality assurance.
 
 ## Signing policy
@@ -275,8 +306,8 @@ agents that inspect or change the repository. It is not a prompt for review work
 - A task doc under `docs/tasks/` that works an item names the id in its first paragraph. A `TODO`
   comment in code names an id or is not written. Agents that discover deferred work during a change
   add the entry in the same change.
-- `tests/test_todo_registry.py` enforces the single file, unique sequential ids, required fields,
-  and index/entry agreement. It is a merge gate.
+- `tests/test_todo_registry.py` checks the single file, unique sequential ids, required fields
+  and index/entry agreement when requested. It is not an automatic commit or merge gate.
 
 ## Workspace hygiene
 
