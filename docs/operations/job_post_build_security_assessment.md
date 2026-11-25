@@ -30,13 +30,13 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `deterministic` | `deterministic.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L351) |
-| `index` | `index.native_units` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L351) |
-| `inference` | `inference.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L351) |
-| `inspection` | `inspection.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L351) |
-| `load` | `load.accepted_cpp_build` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L318) |
-| `provenance` | `provenance.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L351) |
-| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L986) |
+| `deterministic` | `deterministic.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L612) |
+| `index` | `index.native_units` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L612) |
+| `inference` | `inference.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L612) |
+| `inspection` | `inspection.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L612) |
+| `load` | `load.accepted_cpp_build` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L579) |
+| `provenance` | `provenance.native_units` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L612) |
+| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py#L1385) |
 
 ### Accepted input declarations
 

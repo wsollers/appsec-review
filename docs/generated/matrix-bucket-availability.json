@@ -309,10 +309,8 @@
       },
       "review_roles": {
         "basis": "union of detailed declaration rows",
-        "gaps": [
-          "T-157"
-        ],
-        "state": "partial",
+        "gaps": [],
+        "state": "declared",
         "values": [
           "adjudication_judge",
           "attack_chain_analyst",
@@ -3165,11 +3163,16 @@
       },
       "review_roles": {
         "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
-        "gaps": [
-          "T-157"
-        ],
-        "state": "gap",
-        "values": []
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "adjudication_judge",
+          "attack_chain_analyst",
+          "blue_team_refuter",
+          "hypothesis_hunter",
+          "independent_verifier",
+          "red_team_analyst"
+        ]
       },
       "schema": "appsec-review/alternate-cpg/1",
       "sensitivity": "internal",

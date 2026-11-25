@@ -30,15 +30,15 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `cve_bin_tool_db_build` | `cve_bin_tool_db_build.build` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L233) |
-| `cve_bin_tool_db_build` | `cve_bin_tool_db_build.publish` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L237) |
-| `cve_bin_tool_db_build` | `cve_bin_tool_db_build.resolve_nvd_snapshot` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L229) |
+| `cve_bin_tool_db_build` | `cve_bin_tool_db_build.build` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L234) |
+| `cve_bin_tool_db_build` | `cve_bin_tool_db_build.publish` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L238) |
+| `cve_bin_tool_db_build` | `cve_bin_tool_db_build.resolve_nvd_snapshot` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L230) |
 | `epss_sync` | `epss_sync.fetch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L178) |
 | `epss_sync` | `epss_sync.normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L181) |
 | `epss_sync` | `epss_sync.publish` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L184) |
 | `grype_db_sync` | `grype_db_sync.fetch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L200) |
 | `grype_db_sync` | `grype_db_sync.import` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L204) |
-| `grype_db_sync` | `grype_db_sync.publish` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L215) |
+| `grype_db_sync` | `grype_db_sync.publish` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L216) |
 | `kev_sync` | `kev_sync.fetch` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L178) |
 | `kev_sync` | `kev_sync.normalize` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L181) |
 | `kev_sync` | `kev_sync.publish` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_third_party_data_sync/job.py#L184) |

@@ -97,6 +97,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `job_language_build` | `jvm_build_actions` | `appsec-review/retrieval-index/2` | handoff | optional | gap |
 | `job_language_build` | `language_build_receipts` | `appsec-review/language-build-handoff/2` | handoff | required | reject |
 | `job_language_build` | `build_workspaces` | `application/octet-stream` | handoff | optional | gap |
+| `job_third_party_data_sync` | `feed_snapshot` | `appsec-review/public-feed-use/1` | external | optional | gap |
 
 ### Published dataset declarations
 
@@ -188,6 +189,11 @@ flowchart LR
   input_schema10["application/octet-stream"]
   producer10 --> input10 --> job
   input10 -. schema .-> input_schema10
+  producer11["job_third_party_data_sync"]
+  input11["feed_snapshot"]
+  input_schema11["appsec-review/public-feed-use/1"]
+  producer11 --> input11 --> job
+  input11 -. schema .-> input_schema11
   output0["artifact_scanner_io"]
   output_schema0["appsec-review/container-execution/1"]
   job --> output0
