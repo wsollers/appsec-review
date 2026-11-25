@@ -609,7 +609,7 @@ def _index(unit: Any, receipt: Mapping[str, Any]) -> dict[str, Any]:
     fingerprint = _index_fingerprint(unit, receipt)
     gaps = [gap_text(gap) for gap in receipt["gaps"]]
     shard = "jvm-" + str(receipt["build_unit_id"])
-    path = unit.job.run_root / "data" / "indices" / "build" / f"{fingerprint}-{shard}.sqlite"
+    path = unit.job.run_root / "data" / "indices" / "build" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}-{shard}.sqlite"
     reused = path.is_file()
     if not reused:
         builder = IndexBuilder(path, name="build", fingerprint=fingerprint,

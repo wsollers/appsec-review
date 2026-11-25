@@ -1816,7 +1816,7 @@ def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -
         producer_artifacts=producer, tool_identity={"executor": EXECUTOR_IDENTITY},
         parser_identity="language-build-command-artifact/1", normalizer_identity="sanitized-build-evidence/1",
         mapping_identity="workspace-artifact/1", upstream_manifests=(prior_sha,))
-    path = unit.job.run_root / "data" / "indices" / "build" / f"language-build-{unit.job.attempt_id}-{fingerprint}.sqlite"
+    path = unit.job.run_root / "data" / "indices" / "build" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"language-build-{unit.job.attempt_id}-{fingerprint}.sqlite"
     builder = IndexBuilder(path, name="build", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id="language-build")
     for receipt in receipts:
@@ -1954,7 +1954,7 @@ def iteration_controller(unit: UnitContext):
         configuration=configuration, releases=unit.job.review_policy.releases.view(),
         execution_identity=EXECUTOR_IDENTITY, output_policy_identity=_build_output_policy(unit).identity,
         validate_receipt=lambda receipt: _validate_checkpoint_artifacts(unit.job.run_root, receipt),
-        product_overrides=overrides,
+        product_overrides=overrides, attempt_id=unit.job.attempt_id,
         omitted_receipts={item["build_unit_id"]: item for item in skipped})
     return controller, accepted, skipped
 

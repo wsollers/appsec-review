@@ -482,6 +482,7 @@ def _probe_cache(unit: UnitContext, recipe_identity: str,
                     if unit.job.config.build_capture is not None else "required")
     identity = hashlib.sha256(canonical_json({
         "run_scope": str(unit.job.run_root.resolve()),
+        "attempt_id": unit.job.attempt_id,
         "target_snapshot": unit.job.source_fingerprint,
         "assurance_mode": unit.job.review_policy.mode.value,
         "component_releases": {key: unit.job.review_policy.releases.values.get(key)

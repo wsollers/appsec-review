@@ -1251,3 +1251,84 @@ protected argv or stream bytes. The hash-bearing record is
 
 Historical verification records apply only to the revisions and graph shapes they identify. A
 canceled, partial, historical, or standalone WASM run is not acceptance for the integrated graph.
+
+
+## Tuning and whole-job recovery: `job_build_iteration`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+No independent mutable job setting: the immutable transaction request defines its inputs and authority. It executes the parent language-build transaction with that parent?s admitted command/evidence settings.
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_build_iteration/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Build-workspace transaction admission and immutable prior products remain enforced; new whole-job language attempts rerun selected nodes rather than recycling their old receipts. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.execute.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.execute.tasks.node.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
+
+
+## Tuning and whole-job recovery: `job_language_build`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.artifact_count_limit` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.command_timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.go.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.jvm.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.jvm.provenance_count_limit` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.jvm.trace_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.node.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.output_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.php.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.python.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.rust.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.wasm.workspace_file_limit` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_language_build/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Build-workspace transaction admission and immutable prior products remain enforced; new whole-job language attempts rerun selected nodes rather than recycling their old receipts. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.build_capture.event_count_limit` | Capture/trace limit is part of required kernel evidence and secret-handling custody; changing it can alter protected trace completeness/retention. |
+| `settings.build_capture.retain_raw_traces` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.build_capture.raw_trace_bytes_limit` | Capture/trace limit is part of required kernel evidence and secret-handling custody; changing it can alter protected trace completeness/retention. |
+| `settings.go.offline` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.go.package_catalog` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.go.inspect_build_id` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.python.require_locked_dependencies` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.python.offline` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.python.capture_native_tools` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.dotnet.require_locked_restore` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.dotnet.capture_msbuild_diagnostics` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.dotnet.generated_sources` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.dotnet.allow_publish` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.dotnet.allow_pack` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.dotnet.allow_aot` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.rust.locked` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.rust.offline` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.rust.capture_linker` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.php.require_lockfile` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.node.require_lockfile` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.node.capture_source_maps` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `steps.iterations.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.iterations.tasks.dispatch.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.execute.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acceptance.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
