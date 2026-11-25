@@ -8,6 +8,7 @@ from dataclasses import replace
 import json
 import os
 from pathlib import Path
+import shutil
 from typing import Any, Sequence
 
 from .claude_cli import ModelOutputError, _plan_prompt, parse_model_payload
@@ -34,12 +35,35 @@ async def _models(names: Sequence[str]) -> dict[str, Any]:
     }
 
 
-def _ephemeral_session_persisted(session_id: str, working: str) -> bool:
-    for root in (auth_home(), Path(working)):
-        state_dir = root / "session-state"
-        if (state_dir / session_id).exists() or (state_dir / f"{session_id}.jsonl").exists():
-            return True
-    return False
+def _ephemeral_session_persisted(session_id: str) -> bool:
+    state_dir = auth_home() / "session-state"
+    return (state_dir / session_id).exists() or (state_dir / f"{session_id}.jsonl").exists()
+
+
+def _cleanup_ephemeral_turn_session(client, session_id: str, working: str) -> bool:
+    if _ephemeral_session_persisted(session_id):
+        return False
+    turn_state = Path(working) / "session-state"
+    turn_dir = turn_state / session_id
+    if turn_dir.is_dir():
+        if any(turn_dir.glob("inuse.*")):
+            return False
+        shutil.rmtree(turn_dir)
+    elif turn_dir.exists():
+        turn_dir.unlink()
+    (turn_state / f"{session_id}.jsonl").unlink(missing_ok=True)
+    (turn_state / ".session-operation-locks" / f"{session_id}.lock").unlink(missing_ok=True)
+    if turn_dir.exists() or (turn_state / f"{session_id}.jsonl").exists():
+        return False
+    sessions = getattr(client, "_sessions", None)
+    if isinstance(sessions, dict):
+        lock = getattr(client, "_sessions_lock", None)
+        if lock is not None:
+            with lock:
+                sessions.pop(session_id, None)
+        else:
+            sessions.pop(session_id, None)
+    return True
 
 
 @asynccontextmanager
@@ -54,9 +78,10 @@ async def _session_scope(session, state: dict[str, bool]):
 
 @asynccontextmanager
 async def _delete_after_use(client, session_id: str, working: str, state: dict[str, bool]):
-    # SDK disconnect releases handlers; ephemeral sessions (enable_session_store=False,
-    # infinite_sessions disabled) never write a session-state file on disk, so Copilot CLI
-    # 1.0.25+ reports "Session file not found" on delete_session after clean disconnect.
+    # CopilotClient runs with base_directory=auth_home(), whereas each turn isolates
+    # config_directory=working. On delete_session, Copilot CLI 1.0.25+ checks base_directory
+    # and raises "Session file not found"; accept that exact error only after clean disconnect
+    # when auth_home() has no session-state residue and per-turn scratch state is unheld and removed.
     try:
         yield
     finally:
@@ -65,7 +90,7 @@ async def _delete_after_use(client, session_id: str, working: str, state: dict[s
         except RuntimeError as exc:
             expected = f"Failed to delete session {session_id}: Session file not found for {session_id}"
             if not (state["disconnected"] and str(exc) == expected
-                    and not _ephemeral_session_persisted(session_id, working)):
+                    and _cleanup_ephemeral_turn_session(client, session_id, working)):
                 raise
 
 

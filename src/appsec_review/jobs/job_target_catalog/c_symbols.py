@@ -394,6 +394,17 @@ def _find_function_before_brace(stmt: list[_Tok], *, in_type_scope: bool) -> _To
         if not _looks_like_post_params_before_body(stmt, open_k, close_k):
             continue
         name_idx = open_k - 1
+        prefix_end = -1
+        if name_idx >= 0 and stmt[name_idx].val == ")":
+            wrapped = next(((op, cl) for op, cl in top_parens if cl == name_idx), None)
+            if wrapped is not None:
+                op, cl = wrapped
+                inner = stmt[op + 1:cl]
+                if (len(inner) == 1 and inner[0].kind == "IDENT"
+                        and not (op >= 1 and stmt[op - 1].kind == "IDENT"
+                                 and stmt[op - 1].val in _NON_FUNCTION_NAMES)):
+                    name_idx = op + 1
+                    prefix_end = op
         if name_idx >= 0 and stmt[name_idx].val == ">":
             depth = 0
             for p in range(name_idx, -1, -1):
@@ -411,7 +422,7 @@ def _find_function_before_brace(stmt: list[_Tok], *, in_type_scope: bool) -> _To
             continue
         if name_tok.val in {"__attribute__", "__attribute", "__declspec", "alignas", "noexcept", "throw"}:
             continue
-        prefix = stmt[:name_idx]
+        prefix = stmt[:name_idx if prefix_end == -1 else prefix_end]
         if prefix and prefix[-1].val == "~":
             prefix = prefix[:-1]
         is_qualified = bool(prefix and prefix[-1].val == "::")
@@ -419,6 +430,50 @@ def _find_function_before_brace(stmt: list[_Tok], *, in_type_scope: bool) -> _To
             continue
         return name_tok
     return None
+
+
+_TYPEDEF_SKIP_CLAUSES = frozenset({
+    "__attribute__", "__attribute", "__declspec", "alignas", "_Alignas",
+})
+_TYPEDEF_SKIP_QUALIFIERS = frozenset({
+    "const", "volatile", "restrict", "__restrict", "__restrict__", "_Atomic",
+    "FAR", "NEAR", "ZEXPORT", "ZEXTERN",
+})
+
+
+def _typedef_names_after_brace(stmt: list[_Tok]) -> list[_Tok]:
+    names: list[_Tok] = []
+    seg_start = 0
+    depth = 0
+    segments: list[list[_Tok]] = []
+    for idx, tok in enumerate(stmt):
+        if tok.val in {"(", "["}:
+            depth += 1
+        elif tok.val in {")", "]"}:
+            depth = max(0, depth - 1)
+        elif depth == 0 and tok.val == ",":
+            segments.append(stmt[seg_start:idx])
+            seg_start = idx + 1
+    segments.append(stmt[seg_start:])
+    for seg in segments:
+        j = 0
+        while j < len(seg):
+            cand = seg[j]
+            if cand.kind == "IDENT" and cand.val in _TYPEDEF_SKIP_CLAUSES:
+                j += 1
+                if j < len(seg) and seg[j].val == "(":
+                    end_p = _match_close(seg, j, "(", ")")
+                    j = len(seg) if end_p == -1 else end_p + 1
+                continue
+            if cand.val == "[":
+                end_b = _match_close(seg, j, "[", "]")
+                j = len(seg) if end_b == -1 else end_b + 1
+                continue
+            if cand.kind == "IDENT" and cand.val not in _TYPEDEF_SKIP_QUALIFIERS:
+                names.append(cand)
+                break
+            j += 1
+    return names
 
 
 def extract_c_family_symbols(text: str, *, limit: int = 50_000) -> list[CSymbolSpan]:
@@ -513,12 +568,8 @@ def extract_c_family_symbols(text: str, *, limit: int = 50_000) -> list[CSymbolS
                 i += 1
                 continue
             if after_typedef_brace and stmt:
-                for cand in stmt:
-                    if cand.val == ",":
-                        break
-                    if cand.kind == "IDENT" and cand.val not in {"const", "volatile", "FAR", "ZEXPORT"}:
-                        emit(cand, "typedef")
-                        break
+                for cand in _typedef_names_after_brace(stmt):
+                    emit(cand, "typedef")
             elif stmt and stmt[0].kind == "IDENT" and stmt[0].val == "using":
                 if len(stmt) >= 4 and stmt[1].kind == "IDENT" and stmt[2].val == "=":
                     emit(stmt[1], "typedef")

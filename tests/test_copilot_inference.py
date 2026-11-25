@@ -710,10 +710,47 @@ def test_sdk_reports_reuse_and_cold_time_only_for_this_call(sdk, monkeypatch):
 def test_sdk_ephemeral_session_not_found_on_delete_succeeds_only_when_unpersisted_and_disconnected(
     sdk, monkeypatch, tmp_path
 ):
+    import copilot
     from appsec_review.runtime import resources
 
     quarantined = []
     monkeypatch.setattr(resources, "quarantine_resources", quarantined.append)
+
+    # Simulate Copilot CLI 1.0.25 writing scratch events/locks under per-turn config_directory
+    # and releasing inuse.* locks on session.__aexit__ while client._sessions still tracks the ID.
+    orig_client_cls = copilot.CopilotClient
+    hold_inuse = [False]
+    observed_sessions_maps = []
+
+    class RealisticClient(orig_client_cls):
+        def __init__(self, **options):
+            super().__init__(**options)
+            self._sessions = {}
+
+        async def create_session(self, **options):
+            sess = await super().create_session(**options)
+            self._sessions[sess.session_id] = sess
+            observed_sessions_maps.append(self._sessions)
+            turn_state = Path(options["config_directory"]) / "session-state"
+            sdir = turn_state / sess.session_id
+            sdir.mkdir(parents=True, exist_ok=True)
+            (sdir / "events.jsonl").write_text("{}", encoding="utf-8")
+            inuse = sdir / "inuse.7461.lock"
+            inuse.write_text("", encoding="utf-8")
+            locks = turn_state / ".session-operation-locks"
+            locks.mkdir(parents=True, exist_ok=True)
+            (locks / f"{sess.session_id}.lock").write_text("", encoding="utf-8")
+            orig_aexit = sess.__aexit__
+
+            async def aexit_release(*args):
+                if not hold_inuse[0]:
+                    inuse.unlink(missing_ok=True)
+                return await orig_aexit(*args)
+
+            sess.__aexit__ = aexit_release
+            return sess
+
+    monkeypatch.setattr(copilot, "CopilotClient", RealisticClient)
 
     sdk.delete_error = RuntimeError(
         "Failed to delete session test-session-1: Session file not found for test-session-1"
@@ -721,11 +758,23 @@ def test_sdk_ephemeral_session_not_found_on_delete_succeeds_only_when_unpersiste
     result = copilot_sdk.send(request(), timeout_seconds=5)
     assert result.proposal == VALUE
     assert quarantined == []
+    assert observed_sessions_maps[-1] == {}
 
-    # Persisted session-state residue must still fail closed.
-    (tmp_path / "session-state" / "test-session-2").mkdir(parents=True)
+    # Unreleased inuse.* lock inside per-turn session-state must fail closed.
+    hold_inuse[0] = True
     sdk.delete_error = RuntimeError(
         "Failed to delete session test-session-2: Session file not found for test-session-2"
+    )
+    with pytest.raises(ExecutionContractError, match="session deletion teardown failed"):
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert quarantined == ["copilot_teardown_unconfirmed"]
+    hold_inuse[0] = False
+
+    # Persisted auth_home() session-state residue must still fail closed.
+    quarantined.clear()
+    (tmp_path / "session-state" / "test-session-3").mkdir(parents=True)
+    sdk.delete_error = RuntimeError(
+        "Failed to delete session test-session-3: Session file not found for test-session-3"
     )
     with pytest.raises(ExecutionContractError, match="session deletion teardown failed"):
         copilot_sdk.send(request(), timeout_seconds=5)
@@ -735,7 +784,7 @@ def test_sdk_ephemeral_session_not_found_on_delete_succeeds_only_when_unpersiste
     quarantined.clear()
     sdk.exit_error = RuntimeError("disconnect failed")
     sdk.delete_error = RuntimeError(
-        "Failed to delete session test-session-3: Session file not found for test-session-3"
+        "Failed to delete session test-session-4: Session file not found for test-session-4"
     )
     with pytest.raises(ExecutionContractError, match="session deletion teardown failed"):
         copilot_sdk.send(request(), timeout_seconds=5)
