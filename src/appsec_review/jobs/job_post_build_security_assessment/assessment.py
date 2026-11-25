@@ -53,6 +53,13 @@ _SECRET = re.compile(
 )
 _HOST_PATH = re.compile(r"^(?:[A-Za-z]:[\\/]|/home/|/Users/|/var/|/tmp/|\\\\)")
 _SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".c++", ".m", ".mm", ".s", ".asm"}
+_FORTIFIABLE_ELF_IMPORTS = frozenset({
+    "memcpy", "memmove", "memset", "bcopy", "bzero", "strcpy", "stpcpy", "strncpy",
+    "strcat", "strncat", "sprintf", "snprintf", "vsprintf", "vsnprintf", "printf",
+    "fprintf", "vprintf", "vfprintf", "gets", "fgets", "fread", "read", "pread",
+    "readlink", "realpath", "getcwd", "getwd", "recv", "recvfrom", "poll", "ppoll",
+    "confstr", "ttyname_r",
+})
 _OBJECT_SUFFIXES = {".o", ".obj", ".lo", ".bc"}
 _LIBRARY_SUFFIXES = {".a", ".lib", ".so", ".dylib", ".dll"}
 
@@ -142,22 +149,33 @@ def classify_action(argv: Iterable[str]) -> str:
         return "unknown"
     executable = PurePosixPath(values[0].replace("\\", "/")).name.lower()
     flags = {item.lower() for item in values[1:]}
-    if executable in {"ar", "llvm-ar", "gcc-ar", "ranlib", "llvm-ranlib"}:
+    if re.fullmatch(r"(?:[\w]+-)*(?:ar|llvm-ar|gcc-ar)(?:-\d+(?:\.\d+)*)?(?:\.exe)?", executable):
         return "archiver"
-    if executable in {"lib", "lib.exe", "llvm-lib", "llvm-lib.exe"}:
+    if executable in {"lib", "lib.exe"} or re.fullmatch(r"llvm-lib(?:-\d+(?:\.\d+)*)?(?:\.exe)?", executable):
         return "librarian"
-    if executable in {"rc", "rc.exe", "windres", "llvm-rc", "llvm-rc.exe"}:
+    if executable in {"rc", "rc.exe"} or re.fullmatch(
+        r"(?:[\w]+-)*(?:windres|llvm-rc)(?:-\d+(?:\.\d+)*)?(?:\.exe)?", executable
+    ):
         return "resource_compiler"
-    if executable in {"as", "llvm-as", "ml", "ml64", "ml.exe", "ml64.exe"}:
+    if executable in {"ml", "ml64", "ml.exe", "ml64.exe"} or re.fullmatch(
+        r"(?:[\w]+-)*(?:as|llvm-as)(?:-\d+(?:\.\d+)*)?(?:\.exe)?", executable
+    ):
         return "assembler"
-    if executable in {"ld", "ld.lld", "lld", "lld-link", "lld-link.exe", "link", "link.exe"}:
+    if executable in {"link", "link.exe"} or re.fullmatch(
+        r"(?:[\w]+-)*(?:ld|ld\.bfd|ld\.gold|ld\.lld|lld|lld-link)(?:-\d+(?:\.\d+)*)?(?:\.exe)?", executable
+    ):
         return "linker"
-    if executable in {"strip", "llvm-strip", "objcopy", "llvm-objcopy", "install_name_tool", "codesign", "signtool"}:
+    if executable in {"install_name_tool", "codesign", "signtool"} or re.fullmatch(
+        r"(?:[\w]+-)*(?:strip|llvm-strip|objcopy|llvm-objcopy|ranlib|llvm-ranlib|gcc-ranlib)(?:-\d+(?:\.\d+)*)?(?:\.exe)?",
+        executable,
+    ):
         return "post_link"
     compiler = bool(re.fullmatch(
         r"(?:(?:[\w]+-)*)(?:cc|c\+\+|gcc|g\+\+|clang|clang\+\+|clang-cl|cl)(?:-\d+(?:\.\d+)*)?(?:\.exe)?",
         executable))
     if compiler:
+        if {"-cc1", "-cc1as", "-e", "/e", "/ep", "/p", "-m", "-mm", "-fsyntax-only"} & flags:
+            return "unknown"
         if {"-c", "/c"} & flags:
             return "compiler"
         if any(item.lower().startswith(("-o", "/out:")) for item in values[1:]) or not ({"-e", "-m"} & flags):
@@ -167,6 +185,8 @@ def classify_action(argv: Iterable[str]) -> str:
 
 def _split_command(value: Mapping[str, Any]) -> list[str]:
     raw = value.get("arguments")
+    if not isinstance(raw, list):
+        raw = value.get("argv")
     if isinstance(raw, list):
         return [str(item) for item in raw]
     command = value.get("command")
@@ -283,8 +303,17 @@ def normalize_action(
 ) -> dict[str, Any]:
     argv = _split_command(row)
     normalized = redact_argv(argv, roots=roots)
-    directory = _safe_path(str(row.get("directory") or "<unknown-working-directory>"), roots=roots)
+    raw_directory = row.get("directory") if row.get("directory") is not None else row.get("working_directory")
+    directory = _safe_path(str(raw_directory or "<unknown-working-directory>"), roots=roots)
     inputs, outputs = discover_io(normalized, working_directory=directory)
+    classification = classify_action(argv)
+    source_file = row.get("file")
+    if source_file is None and isinstance(row.get("inputs"), list):
+        for item in row["inputs"]:
+            if isinstance(item, Mapping) and isinstance(item.get("workspace_path"), str):
+                if PurePosixPath(item["workspace_path"].replace("\\", "/")).suffix.lower() in _SOURCE_SUFFIXES:
+                    source_file = item["workspace_path"]
+                    break
     return {
         "schema": PROVENANCE_SCHEMA,
         "run_id": run_id,
@@ -293,9 +322,9 @@ def normalize_action(
         "build_root": build_root,
         "configuration": configuration,
         "build_action_id": action_id,
-        "compile_unit_id": _sha({"action": action_id, "source": row.get("file")}) if classify_action(argv) == "compiler" else None,
+        "compile_unit_id": _sha({"action": action_id, "source": source_file}) if classification == "compiler" else None,
         "linked_artifact_ids": [],
-        "classification": classify_action(argv),
+        "classification": classification,
         "toolchain": dict(toolchain),
         "argv": normalized,
         "argv_sha256": _sha(argv),
@@ -327,6 +356,50 @@ def _bounded_c_string(data: bytes, offset: int, limit: int = 8192) -> str:
     if offset < 0 or offset >= len(data):
         return ""
     return data[offset:offset + limit].split(b"\0", 1)[0].decode("utf-8", "replace")
+
+
+def _elf_gnu_property_control_flow(
+    data: bytes, endian: str, bits: int, machine_id: int, sections: list[dict[str, Any]],
+) -> bool | None:
+    if machine_id not in {3, 62, 183}:
+        return None
+    prop_sections = [item for item in sections if item["name"] == ".note.gnu.property"]
+    if not prop_sections:
+        return None
+    prop_align = 8 if bits == 64 else 4
+    target_prop = 0xC0000000 if machine_id == 183 else 0xC0000002
+    parsed_gnu_property = False
+    for section in prop_sections:
+        sec_start = int(section["offset"])
+        sec_end = sec_start + int(section["size"])
+        if sec_start < 0 or sec_end > len(data) or sec_start >= sec_end:
+            return None
+        cursor = sec_start
+        while cursor + 12 <= sec_end:
+            namesz, descsz, note_type = struct.unpack_from(endian + "III", data, cursor)
+            name_start = cursor + 12
+            desc_offset = (12 + namesz + prop_align - 1) & ~(prop_align - 1)
+            desc_start = cursor + desc_offset
+            desc_end = desc_start + descsz
+            next_note = cursor + ((desc_offset + descsz + prop_align - 1) & ~(prop_align - 1))
+            if name_start + namesz > desc_start or desc_end > sec_end or next_note <= cursor:
+                return None
+            if note_type == 5 and data[name_start:name_start + namesz] == b"GNU\x00":
+                parsed_gnu_property = True
+                pcur = desc_start
+                while pcur + 8 <= desc_end:
+                    pr_type, pr_datasz = struct.unpack_from(endian + "II", data, pcur)
+                    pdata_start = pcur + 8
+                    pdata_end = pdata_start + pr_datasz
+                    if pdata_end > desc_end:
+                        return None
+                    if pr_type == target_prop and pr_datasz >= 4:
+                        features = struct.unpack_from(endian + "I", data, pdata_start)[0]
+                        if features & 0x3:
+                            return True
+                    pcur += (8 + pr_datasz + prop_align - 1) & ~(prop_align - 1)
+            cursor = min(sec_end, next_note)
+    return False if parsed_gnu_property else None
 
 
 def _elf(path: Path, data: bytes) -> dict[str, Any]:
@@ -469,10 +542,30 @@ def _elf(path: Path, data: bytes) -> dict[str, Any]:
         if note_type == 3 and desc_offset + descsz <= len(data):
             build_id = data[desc_offset:desc_offset + descsz].hex()
     stack_header = next((item for item in program_headers if item["type"] == 0x6474E551), None)
+    note_gnu_stack = next((item for item in sections if item["name"] == ".note.GNU-stack"), None)
     artifact_kind = ("pie_executable" if interpreter else "shared_library" if programs_complete else "unknown") if e_type == 3 else {
         1: "object", 2: "executable", 4: "core"}.get(e_type, "unknown")
-    if any(item["type"] == 2 for item in program_headers) and not dynamic_strings:
+    dynstr_missing = any(item["type"] == 2 for item in program_headers) and not dynamic_strings
+    if dynstr_missing:
         gaps.append("ELF dynamic string table could not be resolved")
+    import_set = sorted(set(imports))[:100000]
+    import_bases = {name.split("@", 1)[0] for name in import_set}
+    linked_elf = artifact_kind in {"executable", "pie_executable", "shared_library"}
+    nx_stack = (
+        not bool(stack_header["flags"] & 1) if stack_header is not None else
+        not bool(note_gnu_stack["flags"] & 0x4) if artifact_kind == "object" and note_gnu_stack is not None else
+        None
+    )
+    stack_canary = (
+        True if bool(import_bases & {"__stack_chk_fail", "__stack_chk_fail_local", "__stack_smash_handler"}) else
+        False if linked_elf and bool(import_bases) and not dynstr_missing else
+        None
+    )
+    fortify = (
+        True if any(base.endswith("_chk") for base in import_bases) else
+        False if linked_elf and bool(import_bases & _FORTIFIABLE_ELF_IMPORTS) and not dynstr_missing else
+        None
+    )
     return {
         "format": "ELF", "kind": artifact_kind,
         "architecture": machine, "bits": bits,
@@ -480,7 +573,7 @@ def _elf(path: Path, data: bytes) -> dict[str, Any]:
         "sections": sections[:4096], "symbols": {"present": True if ".symtab" in names else False if names_complete else None,
                                                      "stripped": False if ".symtab" in names else True if names_complete else None,
                                                      "names": sorted(set(symbols))[:100000]},
-        "imports": sorted(set(imports))[:100000], "exports": sorted(set(exports))[:100000],
+        "imports": import_set, "exports": sorted(set(exports))[:100000],
         "relocations": [item["name"] for item in sections if item["name"].startswith((".rel", ".rela"))],
         "interpreter": interpreter, "rpath": rpath, "runpath": runpath,
         "dependencies": dependencies, "archive_members": [],
@@ -492,10 +585,10 @@ def _elf(path: Path, data: bytes) -> dict[str, Any]:
             "relro": True if any(item["type"] == 0x6474E552 for item in program_headers) else
                      False if programs_complete else None,
             "now": True if now else False if dynamic and dynamic_complete else None,
-            "nx_stack": None if stack_header is None else not bool(stack_header["flags"] & 1),
-            "control_flow": None,
-            "stack_canary": True if any(name == "__stack_chk_fail" for name in imports) else None,
-            "fortify": True if any(name.endswith("_chk") or "_chk@" in name for name in imports) else None,
+            "nx_stack": nx_stack,
+            "control_flow": _elf_gnu_property_control_flow(data, endian, bits, machine, sections) if linked_elf else None,
+            "stack_canary": stack_canary,
+            "fortify": fortify,
         },
         "gaps": gaps,
     }
@@ -811,14 +904,23 @@ def _expected(table: FamilyExpectations | None, check_id: str, scope: str, evide
     return value
 
 
+def _action_compiles_source(action: Mapping[str, Any]) -> bool:
+    if action.get("classification") == "compiler" or bool(action.get("compile_unit_id")):
+        return True
+    candidates = (*action.get("declared_inputs", ()), *_driver_argv(action.get("argv", ()))[1:])
+    return any(PurePosixPath(str(item).replace("\\", "/")).suffix.lower() in _SOURCE_SUFFIXES for item in candidates)
+
+
 def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterable[Mapping[str, Any]],
                          *, family: str = "native") -> list[dict[str, Any]]:
     actions, artifacts = list(actions), list(artifacts)
     checks: list[dict[str, Any]] = []
     compile_actions = [item for item in actions if item.get("classification") in {"compiler", "linker_driver"}]
+    tu_actions = [item for item in compile_actions if _action_compiles_source(item)]
     table = family_expectations(family, bool(compile_actions))
     for action in compile_actions:
         options = _effective_options(action.get("argv", ()))
+        compiles_source = _action_compiles_source(action)
 
         def posture(key: str) -> str:
             return "PASS" if options.get(key) is True else "FAIL" if options.get(key) is False else "UNKNOWN"
@@ -829,27 +931,31 @@ def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterab
         executable = PurePosixPath(driver[0].replace("\\", "/")).name.lower() if driver else ""
         windows = executable in {"cl", "cl.exe", "clang-cl", "clang-cl.exe"}
         if windows:
-            checks.extend([
-                _check("msvc.gs", posture("gs"), scope, evidence, "/GS compile protection"),
-                _check("msvc.guard_cf.requested", posture("guard_cf"), scope, evidence, "Control Flow Guard compile request"),
-                _check("msvc.sdl", posture("sdl"), scope, evidence, "SDL checks"),
-            ])
+            if compiles_source:
+                checks.extend([
+                    _check("msvc.gs", posture("gs"), scope, evidence, "/GS compile protection"),
+                    _check("msvc.guard_cf.requested", posture("guard_cf"), scope, evidence, "Control Flow Guard compile request"),
+                    _check("msvc.sdl", posture("sdl"), scope, evidence, "SDL checks"),
+                ])
         else:
-            fortify = ("FAIL" if options.get("fortify") is False else
-                       "PASS" if options.get("fortify") is True and options.get("optimized") is True else
-                       "FAIL" if options.get("fortify") is True else "UNKNOWN")
             insecure = ("UNKNOWN" if options.get("uncertain") else
                         "FAIL" if any(options.get(key) is False for key in
                                       ("stack", "pie", "pic", "relro", "now", "nx_stack")) else "PASS")
-            checks.extend([
-                _check("gnu.stack_protector", posture("stack"), scope, evidence, "stack protector compile posture"),
-                _check("gnu.fortify", fortify, scope, evidence, "fortified libc compile posture"),
-                _check("gnu.control_flow", posture("control_flow"), scope, evidence, "compiler control-flow protection"),
-                _check("gnu.visibility", "PASS" if options.get("visibility") is True else "UNKNOWN",
-                       scope, evidence, "default symbol visibility"),
+            if compiles_source:
+                fortify = ("FAIL" if options.get("fortify") is False else
+                           "PASS" if options.get("fortify") is True and options.get("optimized") is True else
+                           "FAIL" if options.get("fortify") is True else "UNKNOWN")
+                checks.extend([
+                    _check("gnu.stack_protector", posture("stack"), scope, evidence, "stack protector compile posture"),
+                    _check("gnu.fortify", fortify, scope, evidence, "fortified libc compile posture"),
+                    _check("gnu.control_flow", posture("control_flow"), scope, evidence, "compiler control-flow protection"),
+                    _check("gnu.visibility", "PASS" if options.get("visibility") is True else "UNKNOWN",
+                           scope, evidence, "default symbol visibility"),
+                ])
+            checks.append(
                 _check("gnu.insecure_override", insecure, scope, evidence,
-                       "explicit insecure compile/link overrides"),
-            ])
+                       "explicit insecure compile/link overrides")
+            )
     for artifact in artifacts:
         scope = str(artifact.get("artifact_id") or artifact.get("sha256"))
         evidence = [str(artifact.get("sha256"))]
@@ -860,7 +966,9 @@ def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterab
             for check_id, key in (("elf.pie", "pie"), ("elf.relro", "relro"), ("elf.now", "now"),
                                   ("elf.nx_stack", "nx_stack"), ("elf.control_flow", "control_flow"),
                                   ("elf.stack_canary", "stack_canary"), ("elf.fortify", "fortify")):
-                linked_protection = check_id in {"elf.pie", "elf.relro", "elf.now"}
+                linked_protection = check_id in {
+                    "elf.pie", "elf.relro", "elf.now", "elf.control_flow", "elf.stack_canary", "elf.fortify",
+                }
                 if linked_protection and not executable and kind not in {"object", "core"}:
                     checks.append(_check(check_id, "UNKNOWN", scope, evidence,
                                          "ELF linked-image applicability is unknown because artifact classification is unavailable"))
@@ -913,7 +1021,7 @@ def deterministic_checks(actions: Iterable[Mapping[str, Any]], artifacts: Iterab
                     checks.append(_check(f"command_binary.{property_name}_mismatch", "FAIL", scope, evidence,
                                          f"{flag} was requested but absent from the PE image"))
     groups: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for action in compile_actions:
+    for action in tu_actions:
         groups[str(action.get("project"))].append(action)
     for project, values in sorted(groups.items()):
         postures = {(check["check_id"], check["status"]) for check in checks
