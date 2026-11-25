@@ -507,7 +507,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         maybe_fail(unit)
         partition_out = unit.output("repository_discovery.partition_repository")
         fingerprint = _fingerprint(unit, "source", [partition_out["artifact"]])
-        path = unit.job.run_root / "data" / "indices" / "source" / f"{fingerprint}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "source" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
         builder = IndexBuilder(path, name="source", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint)
         gap_records: list[dict[str, Any]] = list(
@@ -558,7 +558,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
             path_gap_records(unit.unit_id, _inventory_gap_items(partition_out))
         )
         fingerprint = _fingerprint(unit, "analysis", [partition_out["artifact"]])
-        path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "analysis" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
         builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint)
         pattern = re.compile(r"^\s*(?:def|class|function|func|interface|struct|enum)\s+([A-Za-z_$][\w$]*)")
@@ -640,7 +640,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
         items = unit.output("component_discovery.catalog_components")["components"]
         artifact = unit.output("component_discovery.catalog_components")["artifact"]
         fingerprint = _fingerprint(unit, "components", [artifact])
-        path = unit.job.run_root / "data" / "indices" / "components" / f"{fingerprint}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "components" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
         builder = IndexBuilder(path, name="components", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint)
         for item in items:
@@ -672,7 +672,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
             parser_identity=f"{PARSER_IDENTITY}:{unit.job.review_policy.releases.values.get('target_documents', 'undeclared')}",
             normalizer_identity="retrieval-normalizer/1", mapping_identity="source-line-exact/1",
         )
-        path = unit.job.run_root / "data" / "indices" / "documents" / f"{fingerprint}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "documents" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
         result = collect_target_documents(
             _target(unit), unit.job.source_fingerprint, entries,
             max_files=settings.max_files, max_file_bytes=settings.max_file_bytes,
@@ -810,7 +810,7 @@ def build_job(*, fail_task: str | None = None) -> Job:
                         unit.output("build_discovery.discover_compile_commands")["artifact"],
                         unit.output("build_discovery.catalog_build_targets")["artifact"]]
         build_fingerprint = _fingerprint(unit, "build", build_inputs)
-        build_path = unit.job.run_root / "data" / "indices" / "build" / f"{build_fingerprint}.sqlite"
+        build_path = unit.job.run_root / "data" / "indices" / "build" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{build_fingerprint}.sqlite"
         build_index = IndexBuilder(build_path, name="build", fingerprint=build_fingerprint,
                                    target_snapshot=unit.job.source_fingerprint)
         targets_out = unit.output("build_discovery.catalog_build_targets")

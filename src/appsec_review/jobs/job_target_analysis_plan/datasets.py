@@ -14,7 +14,7 @@ DATASETS = (
     protected("planning_feedback_cache", "analysis_decisions", "analysis_plan",
               "appsec-review/target-analysis-proposal/3",
               "Validated complete bounded feedback and exact additive evidence.",
-              artifacts=("data/planning-feedback/*.json",),
+              artifacts=("data/planning-feedback/*.json", "data/planning-feedback/*/*.json",),
               reason="immutable source/environment/profile/prompt/model keyed cache; not a retrieval endpoint"),
     indexed("analysis_plan", "plan_acceptance", "analysis_plan", "appsec-review/retrieval-index/2",
             "Accepted components, scanner selections and planned build actions.",

@@ -286,3 +286,83 @@ not managed/family exemptions. Missing static compiler metadata alone is not a n
 refusal; current native output acceptance requires captured invocation proof and measured image
 compiler profiles. See
 [the current source contract](../architecture/build-topology-and-iterations.md#current-graph2-source-contract).
+
+
+## Tuning and whole-job recovery: `job_target_analysis_plan`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.feedback.deadline_seconds` | `300` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.feedback.max_calls` | `4` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.feedback.max_document_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.feedback.max_documents` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.feedback.max_evidence_bytes` | `262144` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.feedback.max_evidence_rounds` | `3` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.feedback.max_request_bytes` | `131072` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.feedback.max_response_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.feedback.max_scopes` | `512` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.feedback.units_per_scope` | `16` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.max_input_tokens` | `32000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.max_output_tokens` | `32000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.retries` | `3` | coverage | integer >=0; exact parser/cross-field bounds? |
+| `settings.model.timeout_seconds` | `300` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.workers` | `6` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.summary_max_bytes` | `524288` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.summary_max_items` | `2000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.summary_sample_per_prefix` | `20` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_target_analysis_plan/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.model.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.model.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.model.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.model.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `steps.catalog_summary.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.analysis_decisions.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.plan_acceptance.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
+
+
+## Tuning and whole-job recovery: `job_target_catalog`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `[global] inventory.max_file_bytes` | `12582912` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_document_chunk_bytes` | `4096` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_document_chunk_lines` | `80` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_document_file_bytes` | `256000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_document_files` | `128` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_document_parse_depth` | `64` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_document_parse_nodes` | `200000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_document_records` | `2000` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/config/loader.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.repository_discovery.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.build_discovery.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.component_discovery.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.retrieval_indexes.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publish_catalog.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

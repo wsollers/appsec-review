@@ -397,7 +397,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             from appsec_review.inference.execution import CallContext
             return bounded_feedback(infer, request, catalog=group_catalog, limits=limits,
                 read_document=read_document,
-                cache_root=unit.job.run_root / "data" / "planning-feedback",
+                cache_root=unit.job.run_root / "data" / "planning-feedback" / unit.job.attempt_id,
                 identity=request_identity,
                 guidance_sha256=guidance_sha,
                 context=CallContext(unit.job.run_root, unit.job.run_id, "job_target_analysis_plan",
@@ -461,7 +461,7 @@ def build_job(*, infer: Infer | None = None, fail_task: str | None = None) -> Jo
             producer_artifacts=[accepted["artifact"]], tool_identity={"producer": "job_target_analysis_plan"},
             parser_identity="analysis-plan-parser/2", normalizer_identity="analysis-plan-normalizer/2",
             mapping_identity="catalog-identity/1")
-        path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}-target-analysis-plan.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "analysis" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}-target-analysis-plan.sqlite"
         reused = path.exists()
         if not reused:
             builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
