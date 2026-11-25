@@ -673,3 +673,110 @@ def test_normalization_preserves_legacy_coalescing_without_overwriting_native_ca
                                        supported_hosts=("github.com",), max_dependencies=100)
     assert canonical_json(first) == canonical_json(second)
     assert len(first) == 1 and len(first[0]["native_candidates"]) == 2
+
+
+def test_linker_runtime_libs_dynamic_linker_and_relative_build_outputs_are_excluded():
+    link_cmd = command(
+        [
+            "c++",
+            "-Wl,-dynamic-linker,/lib64/ld-linux-x86-64.so.2",
+            "-Wl,-rpath,/opt/sdk/lib",
+            "-Wl,-soname,libapp.so.1",
+            "-dynamic-linker",
+            "/lib64/ld-linux-x86-64.so.2",
+            "libsmoke_lz4.a",
+            "-lc",
+            "-lm",
+            "-lpthread",
+            "-ldl",
+            "-lrt",
+            "-lgcc",
+            "-lgcc_s",
+            "-lstdc++",
+            "-lssl",
+            "-o",
+            "smoke_server",
+        ],
+        domain="workspace",
+        root_id="u1",
+        directory="build",
+        build_outputs=("build/libsmoke_lz4.a", "build/smoke_server"),
+    )
+    server_bin = artifact(
+        "build/smoke_server",
+        domain="workspace",
+        root_id="u1",
+        build_output=True,
+        build_outputs=("build/libsmoke_lz4.a", "build/smoke_server"),
+        loader_soname="libsmoke_server.so.1",
+        loader_dependencies=[
+            "libc.so.6",
+            "libm.so.6",
+            "libstdc++.so.6",
+            "libgcc_s.so.1",
+            "ld-linux-x86-64.so.2",
+            "libcrypto.so.3",
+        ],
+    )
+    result, _ = discover(invocations=[link_cmd], artifacts=[server_bin])
+    assert sorted(c["native_name"] for c in result["candidates"]) == ["crypto", "ssl"]
+
+
+def test_workspace_include_under_unmodified_target_locality_resolves_to_target_domain():
+    contents = {"third_party/zlib/zlib.h": '#define ZLIB_VERSION "1.2.11"\n'}
+    argv = [
+        "/usr/bin/cc",
+        "-I/workspace/third_party/zlib",
+        "-c",
+        "/workspace/third_party/zlib/adler32.c",
+        "-o",
+        "CMakeFiles/smoke_zlib.dir/third_party/zlib/adler32.c.o",
+    ]
+    ws_cmd = {
+        "domain": "workspace",
+        "root_id": "build-unit-1",
+        "directory": "build",
+        "argv": argv,
+        "argv_sha256": hashlib.sha256(canonical_json(argv)).hexdigest(),
+        "command_id": "cmd-ws-1",
+        "path_mappings": {
+            "/workspace": {"domain": "workspace", "root_id": "build-unit-1", "path": "."},
+            "/target": {"domain": "target", "root_id": "target", "path": "."},
+        },
+        "evidence_source": {"artifact": dict(REF), "json_pointer": "/rows/0"},
+    }
+    result, _ = discover(contents, invocations=[ws_cmd])
+    assert [c["native_name"] for c in result["candidates"]] == ["zlib"]
+    zlib = result["candidates"][0]
+    assert zlib["root_id"] == "target"
+    assert zlib["package_root"] == "third_party/zlib"
+    assert zlib["release"]["value"] == "1.2.11"
+    assert "unmapped_path" not in kinds(result)
+
+
+def test_normalization_coalesces_multi_command_link_flags_within_same_root():
+    cmd_a = command(
+        ["cc", "-lssl", "-o", "app_a"],
+        command_id="cmd-a",
+        evidence_source={"artifact": dict(REF), "json_pointer": "/rows/0"},
+    )
+    cmd_b = command(
+        ["cc", "-lssl", "-o", "app_b"],
+        command_id="cmd-b",
+        evidence_source={"artifact": dict(REF), "json_pointer": "/rows/1"},
+    )
+    cmd_other = command(
+        ["cc", "-lssl", "-o", "app_c"],
+        command_id="cmd-c",
+        root_id="unit-2",
+        evidence_source={"artifact": dict(REF), "json_pointer": "/rows/2"},
+    )
+    result, _ = discover(invocations=[cmd_a, cmd_b, cmd_other])
+    assert len(result["candidates"]) == 3
+    dependencies, gaps = normalize_dependencies(
+        [], [], result["candidates"], supported_hosts=("github.com",), max_dependencies=100,
+    )
+    assert gaps == []
+    assert len(dependencies) == 2
+    counts = sorted(len(dep["native_candidates"]) for dep in dependencies)
+    assert counts == [1, 2]

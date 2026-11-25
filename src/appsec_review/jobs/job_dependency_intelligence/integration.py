@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
 import hashlib
@@ -19,6 +19,7 @@ from appsec_review.runtime import UnitContext
 from appsec_review.storage import atomic_bytes, atomic_json, canonical_json, protected_json
 from appsec_review.storage.shared import put_bytes, reference, safe_path, verify_reference
 
+from .discovery import _locality
 from .native_sbom_contracts import (
     DISCOVERY_IDENTITY, GAP_KINDS, MERGE_IDENTITY, METRIC_COUNTERS, METRICS_SCHEMA,
     NativeBounds, NativeFile, NativeInputIntegrityError, SbomBounds, SpdxBaseline,
@@ -92,6 +93,90 @@ def accepted_framework(run_root: Path, job_id: str, limit: int) -> tuple[dict[st
     return dict(accepted.handoff), identity
 
 
+_CMAKE_PROBE_PARTS = frozenset({"CMakeScratch", "CMakeTmp"})
+_CMAKE_PROBE_PREFIXES = (
+    "CompilerId", "CMakeCCompilerId", "CMakeCXXCompilerId",
+    "CMakeDetermineCompilerABI", "CMakeCompilerABI",
+)
+_CAPABILITY_PROBE_FLAGS = frozenset({
+    "--help", "-help", "-Wl,--help", "--version", "-dumpversion", "-dumpmachine", "-print-search-dirs",
+})
+_INTERMEDIATE_OBJECT_SUFFIXES = frozenset({".o", ".obj", ".d"})
+_COMMAND_TOOL_KINDS = frozenset({"compiler", "linker-driver", "linker"})
+
+
+def _normalize_workspace_rel(value: Any) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    normalized = value.replace("\\", "/").strip("/")
+    if not normalized or ":" in normalized:
+        return None
+    parts = PurePosixPath(normalized).parts
+    if any(part in {"", ".", ".."} for part in parts):
+        return None
+    return "/".join(parts)
+
+
+def _is_internal_build_metadata(path: str) -> bool:
+    return any(part in {"CMakeFiles", ".cmake"} for part in PurePosixPath(path).parts)
+
+
+def _is_cmake_or_capability_probe(directory: str, argv: Sequence[Any]) -> bool:
+    for token in (directory, *(arg for arg in argv[1:] if isinstance(arg, str))):
+        if token in _CAPABILITY_PROBE_FLAGS:
+            return True
+        normalized = token.replace("\\", "/")
+        parts = [part for part in normalized.split("/") if part and part != "."]
+        if any(part in _CMAKE_PROBE_PARTS for part in parts):
+            return True
+        if "CMakeFiles" in parts and any(
+            part.startswith(_CMAKE_PROBE_PREFIXES) or "TryCompile" in part for part in parts
+        ):
+            return True
+        if parts and parts[-1].startswith(_CMAKE_PROBE_PREFIXES):
+            return True
+    return False
+
+
+def _command_tool_kind(row: Mapping[str, Any], exe: str, argv: Sequence[Any]) -> str | None:
+    explicit = row.get("tool_kind")
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    return native_tool_kind(exe, [str(value) for value in argv])
+
+
+def _row_output_paths(row: Mapping[str, Any], *, include_objects: bool = True) -> set[str]:
+    paths: set[str] = set()
+    for output in row.get("outputs", ()) or ():
+        if not isinstance(output, Mapping):
+            continue
+        rel = _normalize_workspace_rel(output.get("workspace_path"))
+        if rel is None:
+            continue
+        if not include_objects and PurePosixPath(rel).suffix.lower() in _INTERMEDIATE_OBJECT_SUFFIXES:
+            continue
+        paths.add(rel)
+    return paths
+
+
+def _receipt_build_outputs(
+    receipt: Mapping[str, Any], command_rows: Sequence[Mapping[str, Any]],
+) -> set[str]:
+    outputs: set[str] = set()
+    for item in receipt.get("artifacts", ()) or ():
+        if not isinstance(item, Mapping) or item.get("artifact_origin") != "build-output":
+            continue
+        if item.get("kind") in {"object", "compile-database"}:
+            continue
+        rel = _normalize_workspace_rel(item.get("workspace_path"))
+        if rel is not None:
+            outputs.add(rel)
+    for row in command_rows:
+        if isinstance(row, Mapping):
+            outputs.update(_row_output_paths(row, include_objects=False))
+    return outputs
+
+
 def collect_inputs(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict[str, Any]:
     run_root, settings = unit.job.run_root, unit.job.config.settings
     limit = int(settings["sbom_input_bytes"])
@@ -117,11 +202,13 @@ def collect_inputs(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict
             or partition.get("source_fingerprint") != snapshot):
         raise NativeInputIntegrityError("native source partition schema/snapshot differs")
     inputs.extend((catalog_ref, partition_ref))
+    partition_files = partition.get("files", ())
+    target_digests = {item["path"]: item["sha256"] for item in partition_files}
     files = [{
         "domain": "target", "root_id": "target", "path": item["path"],
         "sha256": item["sha256"], "size_bytes": item["size_bytes"],
         "upstream": partition_ref, "backing": None,
-    } for item in partition.get("files", ())]
+    } for item in partition_files]
     inherited = [gap("upstream_partial", "target-catalog", str(item))
                  for item in partition.get("gaps", ())]
     exclusions = partition.get("configured_exclusions", [])
@@ -145,22 +232,65 @@ def collect_inputs(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict
             workspace_roots[root_id] = str(workspace)
             safe_path(run_root, str(workspace))
         protected = receipt.get("protected_compile_commands")
+        raw_rows: Sequence[Any] = ()
+        protected_ref: Mapping[str, Any] | None = None
         if isinstance(protected, Mapping):
             protected_ref = member(language_handoff, protected)
             document = read_json(run_root, protected_ref, limit)
             if document.get("schema") != "appsec-review/protected-compile-commands/1":
                 raise ValueError("native protected command schema is unsupported")
             inputs.append(protected_ref)
-            for index, row in enumerate(document.get("rows", ())):
+            raw_rows = document.get("rows", ())
+        unit_build_outputs = _receipt_build_outputs(
+            receipt, [row for row in raw_rows if isinstance(row, Mapping)],
+        )
+        driver_link_outputs: set[str] = set()
+        for row in raw_rows:
+            if not isinstance(row, Mapping):
+                continue
+            argv = row.get("argv")
+            if not isinstance(argv, list) or not argv:
+                continue
+            exe = str(argv[0]).replace("\\", "/")
+            if exe.startswith("/capture/"):
+                continue
+            raw_dir = (row.get("working_directory")
+                       if row.get("working_directory") is not None else row.get("directory", "."))
+            probe_dir = str(raw_dir or ".").replace("\\", "/")
+            if _is_cmake_or_capability_probe(probe_dir, argv):
+                continue
+            if _command_tool_kind(row, exe, argv) == "linker-driver":
+                driver_link_outputs.update(_row_output_paths(row))
+        if protected_ref is not None:
+            for index, row in enumerate(raw_rows):
                 argv = row.get("argv")
                 if not isinstance(argv, list) or not argv:
                     if receipt.get("family") == "native":
                         inherited.append(gap("unsupported_metadata", root_id,
                                              "accepted native command has no retained argument vector"))
                     continue
-                if receipt.get("family") != "native" and native_tool_kind(str(argv[0]), argv) is None:
+                exe = str(argv[0]).replace("\\", "/")
+                if exe.startswith("/capture/"):
                     continue
-                directory = str(row.get("directory", ".")).replace("\\", "/")
+                exe_name = PurePosixPath(exe).name.lower()
+                if exe_name in {"cc1", "cc1plus"} or (
+                    len(argv) > 1 and str(argv[1]) in {"-cc1", "-cc1as"}
+                ):
+                    continue
+                kind = _command_tool_kind(row, exe, argv)
+                if kind not in _COMMAND_TOOL_KINDS:
+                    continue
+                raw_dir = (row.get("working_directory")
+                           if row.get("working_directory") is not None else row.get("directory", "."))
+                directory = str(raw_dir or ".").replace("\\", "/")
+                if directory not in {".", "/"}:
+                    directory = directory.rstrip("/") or ("/" if directory.startswith("/") else ".")
+                if _is_cmake_or_capability_probe(directory, argv):
+                    continue
+                if kind == "linker":
+                    row_outputs = _row_output_paths(row)
+                    if row_outputs and row_outputs <= driver_link_outputs:
+                        continue
                 command_domain, command_root = "workspace", root_id
                 for prefix in ("/workspace", "/target"):
                     if directory == prefix or directory.startswith(prefix + "/"):
@@ -174,6 +304,8 @@ def collect_inputs(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict
                     continue
                 commands.append({
                     **row, "root_id": command_root, "domain": command_domain, "directory": directory,
+                    **({"build_outputs": sorted(unit_build_outputs)}
+                       if command_domain == "workspace" and unit_build_outputs else {}),
                     "path_mappings": {
                         "/workspace": {"domain": "workspace", "root_id": root_id, "path": "."},
                         "/target": {"domain": "target", "root_id": "target", "path": "."},
@@ -186,7 +318,19 @@ def collect_inputs(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict
             manifest = read_json(run_root, manifest_ref, limit)
             inputs.append(manifest_ref)
             workspace_root = safe_path(run_root, str(workspace))
-            for relative, digest in sorted(manifest.get("files", {}).items()):
+            manifest_files = {
+                relative: digest
+                for relative, digest in sorted(manifest.get("files", {}).items())
+                if not _is_internal_build_metadata(relative) and relative not in unit_build_outputs
+            }
+            modified_localities = {
+                _locality(relative)
+                for relative, digest in manifest_files.items()
+                if target_digests.get(relative) != digest
+            }
+            for relative, digest in sorted(manifest_files.items()):
+                if _locality(relative) not in modified_localities:
+                    continue
                 path = safe_path(workspace_root, relative)
                 files.append({
                     "domain": "workspace", "root_id": root_id, "path": relative, "sha256": digest,
@@ -194,9 +338,18 @@ def collect_inputs(unit: UnitContext, receipts: list[Mapping[str, Any]]) -> dict
                     "upstream": manifest_ref, "backing": None,
                 })
         for index, item in enumerate(receipt.get("artifacts", ())):
+            if item.get("kind") in {"object", "compile-database"} or (
+                item.get("scope_role") == "intermediate_evidence"
+            ):
+                continue
+            is_build_output = item.get("artifact_origin") == "build-output"
+            if is_build_output and not item.get("loader_dependencies"):
+                continue
             artifacts.append({
                 **item, "path": item.get("workspace_path") or item.get("path", ""),
                 "root_id": root_id, "domain": "workspace",
+                **({"build_output": True, "build_outputs": sorted(unit_build_outputs)}
+                   if is_build_output else {}),
                 "evidence_source": {
                     "artifact": language_ref, "json_pointer": f"/receipts/{ordinal}/artifacts/{index}",
                 },

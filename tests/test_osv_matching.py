@@ -607,3 +607,70 @@ def test_without_the_setting_the_published_facts_carry_no_version_matching(tmp_p
         assert payload["result"]["applicability_verified"] is False
         assert "version_matches" not in payload["result"]
         assert any("does not evaluate whether the observed version" in gap for gap in payload["gaps"])
+
+
+def test_match_package_uses_manifest_ecosystems_when_sqlite_metadata_omits_ecosystems(tmp_path: Path) -> None:
+    db_path = _build_index(
+        tmp_path,
+        {
+            "PyPI": [
+                _advisory(
+                    "GHSA-manifest-eco",
+                    "PyPI",
+                    "demo",
+                    ranges=[("SEMVER", _events(("introduced", "1.0.0"), ("fixed", "2.0.0")))],
+                    versions=["1.1.0"],
+                )
+            ]
+        },
+    )
+    with sqlite3.connect(db_path) as rw_conn:
+        rw_conn.execute("DELETE FROM metadata WHERE key = 'ecosystems'")
+        rw_conn.commit()
+
+    with _open(db_path) as conn:
+        assert osv_matching.indexed_ecosystems(conn) is None
+
+        without_fallback = match_package(conn, ecosystem="PyPI", name="unlisted", version="1.0.0")
+        assert without_fallback["status"] == "partial"
+        assert without_fallback["gaps"] == ["snapshot_ecosystems_unrecorded"]
+
+        clean_with_fallback = match_package(
+            conn,
+            ecosystem="PyPI",
+            name="unlisted",
+            version="1.0.0",
+            manifest_ecosystems=("PyPI",),
+        )
+        assert clean_with_fallback["status"] == "complete"
+        assert clean_with_fallback["matches"] == []
+        assert clean_with_fallback["gaps"] == []
+
+        affected_with_fallback = match_package(
+            conn,
+            ecosystem="PyPI",
+            name="demo",
+            version="1.1.0",
+            manifest_ecosystems=("PyPI",),
+        )
+        assert affected_with_fallback["status"] == "complete"
+        assert affected_with_fallback["gaps"] == []
+        assert [row["advisory_id"] for row in affected_with_fallback["matches"]] == ["GHSA-manifest-eco"]
+
+        batch = match_packages(
+            conn,
+            [("PyPI", "demo", "1.1.0"), ("PyPI", "unlisted", "1.0.0")],
+            manifest_ecosystems=("PyPI",),
+        )
+        assert batch["status"] == "complete"
+        assert [len(item["matches"]) for item in batch["results"]] == [1, 0]
+
+        unindexed = match_package(
+            conn,
+            ecosystem="crates.io",
+            name="serde",
+            version="1.0.0",
+            manifest_ecosystems=("PyPI",),
+        )
+        assert unindexed["status"] == "partial"
+        assert unindexed["gaps"] == ["ecosystem_not_in_snapshot:crates.io"]

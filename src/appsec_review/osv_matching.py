@@ -331,8 +331,22 @@ def ecosystem_gap(ecosystem: str, indexed: Sequence[str] | None) -> str | None:
     return f"ecosystem_not_in_snapshot:{ecosystem}"
 
 
+def _effective_ecosystems(
+    connection: sqlite3.Connection, manifest_ecosystems: Sequence[str] | None,
+) -> tuple[str, ...] | None:
+    recorded = indexed_ecosystems(connection)
+    if recorded is not None or manifest_ecosystems is None:
+        return recorded
+    if (isinstance(manifest_ecosystems, (str, bytes))
+            or not isinstance(manifest_ecosystems, Sequence)
+            or not all(isinstance(item, str) and item for item in manifest_ecosystems)):
+        raise ValueError("OSV manifest 'ecosystems' is not a list of names")
+    return tuple(sorted(set(manifest_ecosystems)))
+
+
 def match_package(connection: sqlite3.Connection, ecosystem: str, name: str, version: str, *,
-                  bounds: Bounds = DEFAULT_BOUNDS) -> dict[str, Any]:
+                  bounds: Bounds = DEFAULT_BOUNDS,
+                  manifest_ecosystems: Sequence[str] | None = None) -> dict[str, Any]:
     """Every indexed advisory of ``(ecosystem, name)`` decided for ``version``.
 
     ``status`` is ``complete`` only when the index holds the ecosystem's whole archive and every
@@ -340,7 +354,8 @@ def match_package(connection: sqlite3.Connection, ecosystem: str, name: str, ver
     evidence, ``undetermined`` the advisories that stay unverified leads with their named gaps.
     """
     require_index(connection)
-    return _match(connection, indexed_ecosystems(connection), ecosystem, name, version, bounds)
+    indexed = _effective_ecosystems(connection, manifest_ecosystems)
+    return _match(connection, indexed, ecosystem, name, version, bounds)
 
 
 def _match(connection: sqlite3.Connection, indexed: Sequence[str] | None, ecosystem: str, name: str,
@@ -380,13 +395,14 @@ def _match(connection: sqlite3.Connection, indexed: Sequence[str] | None, ecosys
 
 
 def match_packages(connection: sqlite3.Connection, packages: Iterable[Sequence[str]], *,
-                   bounds: Bounds = DEFAULT_BOUNDS) -> dict[str, Any]:
+                   bounds: Bounds = DEFAULT_BOUNDS,
+                   manifest_ecosystems: Sequence[str] | None = None) -> dict[str, Any]:
     """Match distinct ``(ecosystem, name, version)`` triples in sorted order, for any input order.
 
     Triples beyond ``max_packages`` are not matched and are counted in a named gap.
     """
     require_index(connection)
-    indexed = indexed_ecosystems(connection)
+    indexed = _effective_ecosystems(connection, manifest_ecosystems)
     wanted = sorted({(str(item[0]), str(item[1]), str(item[2])) for item in packages})
     selected = wanted[:bounds.max_packages]
     results = [_match(connection, indexed, *item, bounds) for item in selected]

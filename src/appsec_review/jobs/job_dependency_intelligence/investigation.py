@@ -89,6 +89,33 @@ def _catalog_order(file: NativeFile) -> tuple[int, str]:
     return (0 if priority else 1), path
 
 
+def _split_curated_group(
+    candidates: list[NativeCandidate],
+) -> list[tuple[list[NativeCandidate], set[str] | None]]:
+    by_name: dict[str, list[NativeCandidate]] = defaultdict(list)
+    for item in candidates:
+        by_name[_normalized_name(item["native_name"])].append(item)
+    if len(by_name) <= 1:
+        return [(candidates, None)]
+    scoped: list[tuple[list[NativeCandidate], set[str]]] = []
+    for _, members in sorted(by_name.items()):
+        paths: set[str] = set()
+        for item in members:
+            curation = item.get("metadata", {}).get("curation")
+            if not isinstance(curation, Mapping) or curation.get("conservative") is not False:
+                return [(candidates, None)]
+            raw_paths = curation.get("supporting_paths")
+            if not isinstance(raw_paths, list) or not raw_paths or not all(
+                isinstance(path, str) and bool(path) for path in raw_paths
+            ):
+                return [(candidates, None)]
+            paths.update(raw_paths)
+        scoped.append((members, paths))
+    if sum(len(paths) for _, paths in scoped) != len(set().union(*(paths for _, paths in scoped))):
+        return [(candidates, None)]
+    return scoped
+
+
 def _owner(root: str, name: str) -> str:
     parts = root.split("/")
     frameworks = [index for index, part in enumerate(parts) if part.casefold().endswith(".framework")]
@@ -526,7 +553,13 @@ class _Investigation:
             return None
         return path, first, last, self.file_evidence(read, first, last)
 
-    def root(self, candidates: list[NativeCandidate], domain: str) -> None:
+    def root(
+        self,
+        candidates: list[NativeCandidate],
+        domain: str,
+        *,
+        allowed_paths: set[str] | None = None,
+    ) -> None:
         candidate = candidates[0]
         scope, root, name = (candidate["candidate_id"], candidate["package_root"], candidate["native_name"])
         if len({_normalized_name(item["native_name"]) for item in candidates}) != 1:
@@ -539,7 +572,8 @@ class _Investigation:
                        and self.domains.get(id(item)) == domain}
         catalog = [file for (file_domain, root_id, path), file in sorted(self.files.items())
                    if file_domain == domain and root_id == candidate["root_id"]
-                   and _local(path, owner, root, other_roots) and _eligible(path)]
+                   and _local(path, owner, root, other_roots) and _eligible(path)
+                   and (allowed_paths is None or path in allowed_paths)]
         catalog.sort(key=_catalog_order)
         if not catalog:
             self.gap("input_missing", scope, "no in-scope metadata in the authenticated catalog")
@@ -841,12 +875,18 @@ class _Investigation:
             if domain is not None:
                 self.domains[id(candidate)] = domain
                 groups[domain, candidate["root_id"], candidate["package_root"]].append(candidate)
-        for index, ((domain, _, _), group) in enumerate(sorted(groups.items())):
+        work_items: list[tuple[str, list[NativeCandidate], set[str] | None]] = []
+        for (domain, _, _), group in sorted(groups.items()):
+            work_items.extend(
+                (domain, sub_group, allowed_paths)
+                for sub_group, allowed_paths in _split_curated_group(group)
+            )
+        for index, (domain, group, allowed_paths) in enumerate(work_items):
             if index >= self.bounds.component_limit:
                 self.metrics["omitted_candidates"] += len(group)
                 self.gap("bounds", group[0]["candidate_id"], "component_limit: investigation omitted")
             else:
-                self.root(group, domain)
+                self.root(group, domain, allowed_paths=allowed_paths)
         for candidate in candidates:
             purl = candidate.get("purl")
             if purl is None:

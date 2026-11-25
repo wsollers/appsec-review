@@ -1215,3 +1215,151 @@ def test_remaining_module_branch_thresholds(tmp_path: Path, monkeypatch: pytest.
         )
         with pytest.raises(exc_cls):
             integ_mod.collect_inputs(dummy_unit, call_receipts)  # type: ignore[arg-type]
+
+
+def test_collect_inputs_honors_working_directory_and_filters_cmake_probes_wrappers_and_unmodified_copies(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "target"
+    ctx, run_root, _ = _make_job_context(tmp_path, target_root=target)
+    zlib_bytes = b'#define ZLIB_VERSION "1.2.11"\n'
+    ws_dir = run_root / "data/workspaces/u1"
+    (ws_dir / "third_party/zlib").mkdir(parents=True, exist_ok=True)
+    (ws_dir / "third_party/zlib/zlib.h").write_bytes(zlib_bytes)
+    (ws_dir / "build/CMakeFiles").mkdir(parents=True, exist_ok=True)
+    (ws_dir / "build/CMakeFiles/TargetDirectories.txt").write_bytes(b"internal\n")
+    (ws_dir / "build/generated").mkdir(parents=True, exist_ok=True)
+    gen_bytes = b"#define GEN_CFG 1\n"
+    (ws_dir / "build/generated/config.h").write_bytes(gen_bytes)
+    (ws_dir / "build/libsmoke_zlib.a").write_bytes(b"!<arch>\n")
+    (ws_dir / "build/smoke_server").write_bytes(b"\x7fELF")
+
+    ws_manifest = _write(
+        run_root,
+        "ws-manifest.json",
+        {
+            "schema": "appsec-review/workspace-manifest/1",
+            "files": {
+                "third_party/zlib/zlib.h": file_sha256(ws_dir / "third_party/zlib/zlib.h"),
+                "build/CMakeFiles/TargetDirectories.txt": file_sha256(
+                    ws_dir / "build/CMakeFiles/TargetDirectories.txt"
+                ),
+                "build/generated/config.h": file_sha256(ws_dir / "build/generated/config.h"),
+                "build/libsmoke_zlib.a": file_sha256(ws_dir / "build/libsmoke_zlib.a"),
+            },
+        },
+    )
+    protected = _write(
+        run_root,
+        "protected-commands.json",
+        {
+            "schema": "appsec-review/protected-compile-commands/1",
+            "rows": [
+                {
+                    "working_directory": "build",
+                    "tool_kind": "build-driver",
+                    "argv": ["/usr/bin/cmake", "-S", "/workspace", "-B", "/workspace/build"],
+                },
+                {
+                    "working_directory": "build/CMakeFiles/CMakeScratch/TryCompile-abc",
+                    "tool_kind": "compiler",
+                    "argv": ["/usr/bin/cc", "-c", "testCCompiler.c", "-o", "testCCompiler.c.o"],
+                },
+                {
+                    "working_directory": "build",
+                    "tool_kind": "compiler",
+                    "argv": ["/usr/bin/cc", "-dumpmachine"],
+                },
+                {
+                    "working_directory": "build",
+                    "tool_kind": "compiler",
+                    "argv": ["/capture/wrappers/cc", "-I/workspace/third_party/zlib", "-c", "adler32.c"],
+                },
+                {
+                    "working_directory": "build",
+                    "tool_kind": "compiler",
+                    "argv": ["/usr/lib/gcc/x86_64-linux-gnu/13/cc1", "-quiet", "adler32.c"],
+                },
+                {
+                    "working_directory": "build",
+                    "tool_kind": "compiler",
+                    "argv": [
+                        "/usr/bin/cc",
+                        "-I/workspace/third_party/zlib",
+                        "-c",
+                        "/workspace/third_party/zlib/adler32.c",
+                        "-o",
+                        "CMakeFiles/smoke_zlib.dir/third_party/zlib/adler32.c.o",
+                    ],
+                    "outputs": [{"workspace_path": "build/CMakeFiles/smoke_zlib.dir/third_party/zlib/adler32.c.o"}],
+                },
+                {
+                    "working_directory": "build",
+                    "tool_kind": "archiver",
+                    "argv": ["/usr/bin/ar", "qc", "libsmoke_zlib.a", "adler32.c.o"],
+                    "outputs": [{"workspace_path": "build/libsmoke_zlib.a"}],
+                },
+                {
+                    "working_directory": "build",
+                    "tool_kind": "linker-driver",
+                    "argv": ["/usr/bin/c++", "main.cpp.o", "libsmoke_zlib.a", "-o", "smoke_server"],
+                    "outputs": [{"workspace_path": "build/smoke_server"}],
+                },
+                {
+                    "working_directory": "build",
+                    "tool_kind": "linker",
+                    "argv": ["/usr/bin/ld", "-dynamic-linker", "/lib64/ld-linux-x86-64.so.2", "-o", "smoke_server"],
+                    "outputs": [{"workspace_path": "build/smoke_server"}],
+                },
+            ],
+        },
+    )
+    receipts = [
+        {
+            "family": "native",
+            "build_unit_id": "u1",
+            "workspace": ws_dir.relative_to(run_root).as_posix(),
+            "workspace_manifest": ws_manifest,
+            "protected_compile_commands": protected,
+            "artifacts": [
+                {
+                    "path": (ws_dir / "build/libsmoke_zlib.a").relative_to(run_root).as_posix(),
+                    "workspace_path": "build/libsmoke_zlib.a",
+                    "sha256": file_sha256(ws_dir / "build/libsmoke_zlib.a"),
+                    "kind": "static-library",
+                    "artifact_origin": "build-output",
+                },
+                {
+                    "path": (ws_dir / "build/smoke_server").relative_to(run_root).as_posix(),
+                    "workspace_path": "build/smoke_server",
+                    "sha256": file_sha256(ws_dir / "build/smoke_server"),
+                    "kind": "executable",
+                    "artifact_origin": "build-output",
+                    "loader_dependencies": ["libc.so.6", "libcrypto.so.3"],
+                },
+            ],
+        }
+    ]
+    _seed_upstreams(
+        run_root,
+        target,
+        files={"third_party/zlib/zlib.h": zlib_bytes},
+        receipts=receipts,
+        receipt_extra_artifacts=[ws_manifest, protected],
+    )
+    unit = SimpleNamespace(job=ctx, unit_root=ctx.attempt_root / "scratch")
+    unit.unit_root.mkdir(parents=True, exist_ok=True)
+    collected = collect_inputs(unit, receipts)  # type: ignore[arg-type]
+
+    invocations = collected["native_invocations"]
+    assert len(invocations) == 2
+    assert [row["tool_kind"] for row in invocations] == ["compiler", "linker-driver"]
+    assert all(row["directory"] == "build" for row in invocations)
+    assert all("build/libsmoke_zlib.a" in row.get("build_outputs", ()) for row in invocations)
+
+    ws_files = [f["path"] for f in collected["native_files"] if f["domain"] == "workspace"]
+    assert ws_files == ["build/generated/config.h"]
+
+    ws_artifacts = [a for a in collected["native_artifacts"] if a["root_id"] == "u1"]
+    assert [a["path"] for a in ws_artifacts] == ["build/smoke_server"]
+    assert ws_artifacts[0]["build_output"] is True

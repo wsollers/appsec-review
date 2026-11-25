@@ -1004,3 +1004,89 @@ def test_header_corroborated_release_reaches_spdx_version_info_generic_purl_and_
     assert gaps == []
     assert [(row["name"], row["version"], row["purl"]) for row in rows] == [
         ("cjson", "1.7.17", "pkg:generic/cjson@1.7.17")]
+
+
+def test_curated_disjoint_subcomponents_sharing_package_root_investigate_independently():
+    from appsec_review.jobs.job_dependency_intelligence.curation import curate_native_components
+    from appsec_review.jobs.job_dependency_intelligence.native_inference_contracts import CURATION_SCHEMA
+
+    lz4_header = (
+        "#define LZ4_VERSION_MAJOR 1\n"
+        "#define LZ4_VERSION_MINOR 9\n"
+        "#define LZ4_VERSION_RELEASE 1\n"
+    )
+    xxh_header = "/* xxhash embedded header */\nint XXH32(const void* input, int len);\n"
+    discovery, files, read, calls = inputs(
+        {
+            "third_party/lz4/lib/lz4.h": lz4_header,
+            "third_party/lz4/lib/xxhash.h": xxh_header,
+        },
+        name="lz4",
+        root="third_party/lz4",
+    )
+    cid = discovery["candidates"][0]["candidate_id"]
+
+    def curate_propose(_stage, payload):
+        return {
+            "schema": CURATION_SCHEMA,
+            "input_records": len(payload["candidates"]),
+            "libraries": [
+                {
+                    "name": "lz4",
+                    "kind": "library",
+                    "candidate_ids": [cid],
+                    "supporting_paths": ["third_party/lz4/lib/lz4.h"],
+                    "basis": "vendored lz4",
+                },
+                {
+                    "name": "xxhash",
+                    "kind": "library",
+                    "candidate_ids": [cid],
+                    "supporting_paths": ["third_party/lz4/lib/xxhash.h"],
+                    "basis": "vendored xxhash",
+                },
+            ],
+            "sdk_groups": [],
+            "rejected_candidate_ids": [],
+            "uncertain_candidate_ids": [],
+        }
+
+    curated = curate_native_components(discovery, files, propose=curate_propose, bounds=BOUNDS)
+    seen_available: list[list[str]] = []
+
+    def inv_claims(payload):
+        seen_available.append([item["path"] for item in payload["files"]])
+        return []
+
+    model = Model(inv_claims)
+    result = investigate_native_metadata(
+        curated["discovery"], files, read_file=read, propose=model, bounds=BOUNDS,
+    )
+    assert "ambiguous_root" not in kinds(result)
+    by_name = {c["native_name"]: c for c in result["discovery"]["candidates"]}
+    assert by_name["lz4"]["release"]["status"] == "corroborated"
+    assert by_name["lz4"]["release"]["value"] == "1.9.1"
+    assert by_name["lz4"]["purl"] == "pkg:generic/lz4@1.9.1"
+    assert sorted(seen_available) == [
+        ["third_party/lz4/lib/lz4.h"],
+        ["third_party/lz4/lib/xxhash.h"],
+    ]
+
+    # Overlapping curated supporting_paths at the same physical root remain ambiguous and fail closed.
+    overlapping = deepcopy(curated["discovery"])
+    for cand in overlapping["candidates"]:
+        cand["metadata"]["curation"]["supporting_paths"] = [
+            "third_party/lz4/lib/lz4.h",
+            "third_party/lz4/lib/xxhash.h",
+        ]
+    overlap_calls: list[tuple[str, int]] = []
+    overlap_model = Model(lambda _payload: [])
+    overlap_res = investigate_native_metadata(
+        overlapping,
+        files,
+        read_file=lambda rec, lim: (overlap_calls.append((rec["path"], lim)) or b""),
+        propose=overlap_model,
+        bounds=BOUNDS,
+    )
+    assert "ambiguous_root" in kinds(overlap_res)
+    assert not overlap_calls and not overlap_model.calls

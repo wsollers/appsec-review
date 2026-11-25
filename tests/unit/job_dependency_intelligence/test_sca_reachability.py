@@ -732,3 +732,137 @@ def test_incomplete_dependency_evidence_never_fabricates_symbol_binding(tmp_path
         [] if defect == "missing-instance-id" else ["old"])
     assert doc["advisories"][0]["reachability"] == (
         REACHABILITY_UNKNOWN if defect == "missing-instance-id" else REACHABILITY_IMPORTED)
+
+
+def test_osv_indexed_matching_skips_native_dependencies_and_uses_verified_manifest_ecosystems(
+    tmp_path: Path,
+) -> None:
+    db_src = tmp_path / "raw" / "osv.sqlite"
+    _build_osv_sqlite(
+        db_src,
+        [
+            {
+                "id": "GHSA-pypi-demo",
+                "aliases": ["CVE-2026-4242"],
+                "affected": [
+                    {
+                        "package": {"ecosystem": "PyPI", "name": "demo"},
+                        "versions": ["1.1.0"],
+                    }
+                ],
+            }
+        ],
+    )
+    with sqlite3.connect(db_src) as rw_conn:
+        rw_conn.execute("DELETE FROM metadata WHERE key = 'ecosystems'")
+        rw_conn.commit()
+
+    feed_root = tmp_path / "feeds" / "osv"
+    published = publish_snapshot(
+        feed_root,
+        feed_id="osv",
+        schema="appsec-review/osv-snapshot/1",
+        files={"index/osv.sqlite": db_src},
+        manifest_fields={"ecosystems": ["PyPI"]},
+    )
+    snap_dir = feed_root / "snapshots" / published["snapshot_id"]
+    pinned = {
+        "feed_id": "osv",
+        "snapshot_id": published["snapshot_id"],
+        "manifest_sha256": published["manifest_sha256"],
+        "directory": str(snap_dir),
+    }
+
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "app.py").write_text("import demo\nimport requests\n", encoding="utf-8")
+    deps = [
+        {
+            "dependency_id": "dep-zlib",
+            "name": "zlib",
+            "version": "1.2.11",
+            "purl": "pkg:generic/zlib@1.2.11",
+            "native_candidates": [{"candidate_id": "nat-zlib"}],
+        },
+        {
+            "dependency_id": "dep-xxhash",
+            "name": "xxhash",
+            "version": None,
+            "purl": None,
+            "native_candidates": [{"candidate_id": "nat-xxhash"}],
+        },
+        {
+            "dependency_id": "dep-demo",
+            "name": "demo",
+            "package_manager": "pypi",
+            "version": "1.1.0",
+            "purl": "pkg:pypi/demo@1.1.0",
+        },
+        {
+            "dependency_id": "dep-clean",
+            "name": "requests",
+            "package_manager": "pypi",
+            "version": "2.32.0",
+            "purl": "pkg:pypi/requests@2.32.0",
+        },
+    ]
+    doc = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT,
+        repository_root=ROOT,
+        run_root=tmp_path / "run",
+        target_root=target,
+        partition_files=_files(target, ["app.py"]),
+        dependencies=deps,
+        scanner_advisories=[],
+        osv_snapshot=pinned,
+        settings=DependencyIntelligenceSettings(osv_version_matching="index"),
+    )
+    assert [adv["advisory_id"] for adv in doc["advisories"]] == ["GHSA-pypi-demo"]
+    assert not any("snapshot_ecosystems_unrecorded" in g for g in doc["gaps"])
+    assert not any("osv_dependency_identity_incomplete" in g for g in doc["gaps"])
+
+    # When neither SQLite metadata nor snapshot manifest records ecosystems, fail closed with gap.
+    feed_unrecorded = tmp_path / "feeds" / "osv-unrecorded"
+    pub_unrecorded = publish_snapshot(
+        feed_unrecorded,
+        feed_id="osv",
+        schema="appsec-review/osv-snapshot/1",
+        files={"index/osv.sqlite": db_src},
+        manifest_fields={},
+    )
+    pinned_unrecorded = {
+        "feed_id": "osv",
+        "snapshot_id": pub_unrecorded["snapshot_id"],
+        "manifest_sha256": pub_unrecorded["manifest_sha256"],
+        "directory": str(feed_unrecorded / "snapshots" / pub_unrecorded["snapshot_id"]),
+    }
+    doc_unrecorded = evaluate_sca_reachability(
+        source_fingerprint=SNAPSHOT,
+        repository_root=ROOT,
+        run_root=tmp_path / "run-unrecorded",
+        target_root=target,
+        partition_files=_files(target, ["app.py"]),
+        dependencies=[deps[3]],
+        scanner_advisories=[],
+        osv_snapshot=pinned_unrecorded,
+        settings=DependencyIntelligenceSettings(osv_version_matching="index"),
+    )
+    assert "osv:dep-clean:snapshot_ecosystems_unrecorded" in doc_unrecorded["gaps"]
+
+    # Tampering with manifest.json fails closed via SHA-256 verification.
+    snap_manifest = snap_dir / "manifest.json"
+    tampered = json.loads(snap_manifest.read_text(encoding="utf-8"))
+    tampered["ecosystems"] = ["PyPI", "crates.io"]
+    snap_manifest.write_text(json.dumps(tampered), encoding="utf-8")
+    with pytest.raises(ValueError, match="manifest hash mismatch"):
+        evaluate_sca_reachability(
+            source_fingerprint=SNAPSHOT,
+            repository_root=ROOT,
+            run_root=tmp_path / "run-tampered",
+            target_root=target,
+            partition_files=_files(target, ["app.py"]),
+            dependencies=[deps[3]],
+            scanner_advisories=[],
+            osv_snapshot=pinned,
+            settings=DependencyIntelligenceSettings(osv_version_matching="index"),
+        )

@@ -681,11 +681,47 @@ def _is_direct_dependency(dep: Mapping[str, Any]) -> bool:
     return True
 
 
+def _is_native_dependency(dep: Mapping[str, Any]) -> bool:
+    declared = str(dep.get("ecosystem") or "").strip().casefold()
+    if declared == "native":
+        return True
+    if declared:
+        return False
+    purl = str(dep.get("purl") or "").strip()
+    if purl.startswith("pkg:generic/"):
+        return True
+    if purl:
+        return False
+    return bool(dep.get("native_candidates") or dep.get("native_candidate"))
+
+
+def _verified_manifest_ecosystems(
+    sqlite_path: Path, snapshot_identity: Mapping[str, Any] | None,
+) -> tuple[str, ...] | None:
+    if not isinstance(snapshot_identity, Mapping):
+        return None
+    manifest_sha = snapshot_identity.get("manifest_sha256")
+    if not isinstance(manifest_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", manifest_sha):
+        return None
+    manifest_path = sqlite_path.parent.parent / "manifest.json"
+    if not manifest_path.is_file():
+        return None
+    raw = manifest_path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != manifest_sha:
+        raise ValueError("OSV snapshot manifest hash mismatch")
+    manifest = json.loads(raw)
+    ecosystems = manifest.get("ecosystems") if isinstance(manifest, Mapping) else None
+    if isinstance(ecosystems, list) and all(isinstance(item, str) and item for item in ecosystems):
+        return tuple(sorted(set(ecosystems)))
+    return None
+
+
 def _match_osv_indexed(
     sqlite_path: Path,
     dependencies: Sequence[Mapping[str, Any]],
     max_advisories: int,
     *, max_candidates_per_package: int, exact: bool = False,
+    manifest_ecosystems: Sequence[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     matched: list[dict[str, Any]] = []
     gaps: list[str] = []
@@ -694,13 +730,18 @@ def _match_osv_indexed(
     with closing(sqlite3.connect(uri, uri=True)) as conn:
         osv_matching.require_index(conn)
         for dep in dependencies:
+            if _is_native_dependency(dep):
+                continue
             eco, pkg_name, version, purl = _dependency_ecosystem_and_name(dep)
             if not eco or not pkg_name or not version:
                 gaps.append(f"osv_dependency_identity_incomplete:{dep.get('dependency_id', pkg_name)}")
                 continue
             dep_id = str(dep.get("dependency_id") or pkg_name)
             direct = _is_direct_dependency(dep)
-            result = osv_matching.match_package(conn, eco, pkg_name, version, bounds=bounds)
+            result = osv_matching.match_package(
+                conn, eco, pkg_name, version, bounds=bounds,
+                manifest_ecosystems=manifest_ecosystems,
+            )
             gaps.extend(f"osv:{dep_id}:{gap}" for gap in result["gaps"])
             for match in result["matches"]:
                 if exact and match["evidence"]["kind"] != "versions":
@@ -862,10 +903,12 @@ def evaluate_sca_reachability(
         sqlite_path, snapshot_identity, reason = _resolve_osv_source(
             repository_root, run_root, osv_snapshot, external_input_selection)
         if sqlite_path is not None:
+            manifest_ecosystems = _verified_manifest_ecosystems(sqlite_path, snapshot_identity)
             osv_candidates, osv_gaps = _match_osv_indexed(
                 sqlite_path, dependencies, cfg.max_advisories,
                 max_candidates_per_package=cfg.max_osv_candidates_per_package,
-                exact=configured_mode == "exact")
+                exact=configured_mode == "exact",
+                manifest_ecosystems=manifest_ecosystems)
             gaps.extend(osv_gaps)
         else:
             fallback_reason = reason or "osv_index_unavailable"
