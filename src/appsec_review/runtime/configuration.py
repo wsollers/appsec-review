@@ -38,6 +38,9 @@ class ConfigurationSnapshot:
         if (self.directory / "host-pins.toml").is_file():
             names.append("host-pins.toml")
         result = [reference(run_root, self.directory / name) for name in names]
+        for layer in self.manifest.get("source_layers", ()):
+            result.append(reference(run_root, safe_path(run_root,
+                (self.directory / layer["file"]).relative_to(run_root).as_posix())))
         if self.manifest.get("schema") == REVISION_SCHEMA:
             result.extend(configuration_snapshot(run_root).artifacts(run_root))
         return result
@@ -102,6 +105,17 @@ def configuration_snapshot(run_root: Path, expected_sha256: str | None = None) -
             or file_sha256(source_path) != manifest.get("source_sha256")):
         raise ValueError("configuration snapshot hash mismatch")
     document = _document(resolved_path)
+    for layer in manifest.get("source_layers", ()):
+        filename = layer.get("file")
+        if filename not in ("profile.toml", "overlay.toml"):
+            raise ValueError("unsupported immutable configuration source layer")
+        if file_sha256(safe_path(run_root, relative + "/" + filename)) != layer.get("sha256"):
+            raise ValueError("configuration source-layer hash mismatch")
+        import tomllib
+        key = "configuration_" + filename.removesuffix(".toml")
+        source_document = tomllib.loads(safe_path(run_root, relative + "/" + filename).read_text(encoding="utf-8"))
+        if source_document != document.get(key, {}).get("document"):
+            raise ValueError("source layer differs from its recorded resolved provenance")
     host_pins = document.get("configuration_host_pins")
     if host_pins is not None and file_sha256(
             safe_path(run_root, relative + "/host-pins.toml")) != host_pins["sha256"]:
@@ -180,7 +194,19 @@ def persist_configuration_revision(config: AppConfig, run_root: Path) -> Configu
     immutable_bytes(run_root, relative + "/resolved.json", config.resolved_json)
     if config.host_pins is not None:
         immutable_bytes(run_root, relative + "/host-pins.toml", config.host_pins.content)
+    source_layers = []
+    for name, path, expected in (("profile", config.profile_path, config.profile_sha256),
+                                 ("overlay", config.overlay_path, config.overlay_sha256)):
+        if path is None:
+            continue
+        content = path.read_bytes()
+        if hashlib.sha256(content).hexdigest() != expected:
+            raise ValueError("configuration source layer changed before admission")
+        filename = name + ".toml"
+        immutable_bytes(run_root, relative + "/" + filename, content)
+        source_layers.append({"file": filename, "sha256": expected})
     manifest = {
+        "source_layers": source_layers,
         "schema": REVISION_SCHEMA, "base_resolved_sha256": base_sha,
         "source_sha256": config.source_sha256, "resolved_sha256": config.resolved_sha256,
         "resolved": {"path": "resolved.json", "sha256": config.resolved_sha256},

@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import json
 import math
+import re
 from typing import Any
 
 
@@ -71,6 +72,10 @@ OPERATIONAL_SETTINGS = (
     OperationalSetting(None, ('orchestration', 'dagster', 'pools', 'ci_linter'), category='execution', value_type='positive_integer'),
     OperationalSetting(None, ('orchestration', 'dagster', 'pools', 'inference_teams'), category='execution', value_type='positive_integer'),
     OperationalSetting(None, ('orchestration', 'dagster', 'pools', 'inference_score'), category='execution', value_type='positive_integer'),
+    OperationalSetting(None, ('review_policy', 'resources', 'cpu'), category='execution', value_type='positive_integer'),
+    OperationalSetting(None, ('review_policy', 'resources', 'io_slots'), category='execution', value_type='positive_integer'),
+    OperationalSetting(None, ('review_policy', 'resources', 'memory_mb'), category='execution', value_type='positive_integer'),
+    OperationalSetting(None, ('review_policy', 'resources', 'staging_memory_mb'), category='execution', value_type='positive_integer'),
 )
 
 
@@ -94,9 +99,50 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
     def compare(left: Any, right: Any, path: tuple[str, ...]) -> None:
         if _canonical(left) == _canonical(right):
             return
+        if path in (("configuration_profile",), ("configuration_overlay",)):
+            if not isinstance(left, Mapping) or not isinstance(right, Mapping):
+                material.append(".".join(path))
+                return
+            identity_keys = set(left) | set(right)
+            identity_keys -= {"sha256", "document", "keys", "name", "path", "layer"}
+            if any(_canonical(left.get(key)) != _canonical(right.get(key)) for key in identity_keys):
+                material.append(".".join(path))
+                return
+            def flattened(value: Mapping[str, Any], prefix: tuple[str, ...] = ()) -> dict[tuple[str, ...], Any]:
+                result = {}
+                for key, child in value.items():
+                    if isinstance(child, Mapping):
+                        result.update(flattened(child, (*prefix, key)))
+                    else:
+                        result[(*prefix, key)] = child
+                return result
+            first = flattened(left.get("document", {}))
+            second = flattened(right.get("document", {}))
+            for key in sorted(set(first) | set(second)):
+                if key in first and key in second and _canonical(first[key]) == _canonical(second[key]):
+                    continue
+                if key not in declarations:
+                    material.append(".".join((*path, "document", *key)))
+            # Source-layer digests are provenance, not authority. Effective leaf values are
+            # validated below and the immutable layer bytes are verified by configuration_snapshot.
+            for value in (left, right):
+                digest = value.get("sha256")
+                if digest is not None and (not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)):
+                    material.append(".".join((*path, "sha256")))
+            changes.append({"job_id": None, "path": list(path), "category": "provenance",
+                            "before": left, "after": right})
+            return
         setting = declarations.get(path)
         if setting is not None:
             def valid(value: Any) -> bool:
+                if setting.value_type == "memory":
+                    return isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*[mg]", value) is not None
+                if setting.value_type == "boolean":
+                    return type(value) is bool
+                if setting.value_type == "backoff":
+                    return (isinstance(value, (list, tuple)) and len(value) <= 16 and
+                            all(type(item) is int and 0 <= item <= 3600 for item in value) and
+                            list(value) == sorted(value))
                 integral = setting.value_type.endswith("integer")
                 numeric = type(value) is int if integral else type(value) in (int, float)
                 return numeric and (type(value) is int or math.isfinite(value)) and (
@@ -111,7 +157,10 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
         if isinstance(left, Mapping) and isinstance(right, Mapping):
             for key in sorted(set(left) | set(right)):
                 if key not in left or key not in right:
-                    material.append(".".join((*path, key)))
+                    if not path and key in ("configuration_profile", "configuration_overlay"):
+                        compare(left.get(key, {}), right.get(key, {}), (key,))
+                    else:
+                        material.append(".".join((*path, key)))
                 else:
                     compare(left[key], right[key], (*path, key))
             return

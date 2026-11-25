@@ -133,6 +133,16 @@ NAMED_LAYOUTS = {
 }
 
 
+def _named_layout(namespace: str, relative: str) -> bool:
+    if relative.startswith(NAMED_LAYOUTS[namespace]):
+        return True
+    if namespace not in {"review-cell", "cell-check"}:
+        return False
+    return re.fullmatch(
+        r"data/jobs/job_inference_security_review/attempts/attempt_[0-9]{4}/cells/[^/]+/"
+        r"(?:independence-)?attempt-[1-9][0-9]*\.json", relative) is not None
+
+
 def _hash(value: str) -> str:
     if not isinstance(value, str) or not _HASH.fullmatch(value):
         raise ValueError("invalid shared content/fingerprint hash")
@@ -362,7 +372,7 @@ def verify_binding(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
     value = _read(root, ref)
     namespace, obj = value["namespace"], value["object"]
     if (value.get("schema") != "appsec-review/shared-named/1"
-            or namespace not in NAMED_LAYOUTS or not obj["path"].startswith(NAMED_LAYOUTS[namespace])
+            or namespace not in NAMED_LAYOUTS or not _named_layout(namespace, obj["path"])
             or ref["path"] != _binding_path(namespace, obj)):
         raise ValueError("invalid named immutable binding")
     policy = _read_policy(root)
@@ -450,7 +460,7 @@ def _verify_receipt(root: Path, ref: Mapping[str, Any], *,
         if producer is not None or value["legacy"] is not None:
             raise ValueError("computed receipt cannot invent an earlier producer")
         if value.get("layout") == "named-immutable":
-            if namespace not in NAMED_LAYOUTS or not value["object"]["path"].startswith(NAMED_LAYOUTS[namespace]):
+            if namespace not in NAMED_LAYOUTS or not _named_layout(namespace, value["object"]["path"]):
                 raise ValueError("shared named object is outside its registered immutable layout")
             if (len(value["dependencies"]) != 1
                     or value["dependencies"][0]["path"] != f"{OBJECTS}/{value['object']['sha256']}"
@@ -670,7 +680,7 @@ class SharedArtifacts:
                     admission.verify(self.run_root, value)
                 return dict(cached)
         obj = reference(self.run_root, path, expected_sha256=expected_sha256)
-        if namespace not in NAMED_LAYOUTS or not obj["path"].startswith(NAMED_LAYOUTS[namespace]):
+        if namespace not in NAMED_LAYOUTS or not _named_layout(namespace, obj["path"]):
             raise ValueError("unregistered named immutable publication")
         fingerprint = hashlib.sha256(canonical_json(
             {"namespace": namespace, "path": obj["path"], "sha256": obj["sha256"]})).hexdigest()
@@ -903,7 +913,7 @@ def publish_named(root: Path, path: Path, payload: bytes, *, namespace: str,
         raise ValueError("unregistered named immutable publication")
     owner = shared or current()
     if owner is not None:
-        if owner.run_root != root or not relative.startswith(NAMED_LAYOUTS[namespace]):
+        if owner.run_root != root or not _named_layout(namespace, relative):
             raise ValueError("immutable publication belongs to another run")
         content = put_bytes(root, payload)
         obj = _link(root, verify_reference(root, content), relative, content["sha256"])
