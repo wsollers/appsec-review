@@ -50,7 +50,7 @@ def _project_key(root: PurePosixPath) -> str:
 
 
 def _case_root(unit: UnitContext, case_id: str) -> Path:
-    return unit.job.run_root / "data" / "cpp" / "projects" / case_id
+    return unit.job.run_root / "data" / "cpp" / "attempts" / unit.job.attempt_id / "projects" / case_id
 
 
 def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
@@ -542,7 +542,7 @@ def _new_builder(unit: UnitContext, name: str, case_id: str, branch: str,
         normalizer_identity=f"cpp-{branch}-normalizer/4", mapping_identity="cpp-source-mapping/4")
     shard = f"cpp-{case_id}-{branch}"
     physical_shard = hashlib.sha256(shard.encode()).hexdigest()[:16]
-    path = unit.job.run_root / "data" / "indices" / name / f"{fingerprint}-{physical_shard}.sqlite"
+    path = unit.job.run_root / "data" / "indices" / name / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}-{physical_shard}.sqlite"
     builder = IndexBuilder(path, name=name, fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     builder.cpp_evidence = evidence

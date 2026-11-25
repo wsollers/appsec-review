@@ -402,7 +402,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
     settings = _settings(unit)
     supported, _ = partition_compile_commands(scope.compile_commands)
     plan = plan_modules(supported, link_commands, max_modules=settings["max_modules_per_scope"])
-    root = unit.job.run_root / "data" / "svf" / scope.scope_id
+    root = unit.job.run_root / "data" / "svf" / "attempts" / unit.job.attempt_id / scope.scope_id
     identity = checkpoint_identity({
         "schema": SVF_ALIAS_HANDOFF_SCHEMA, "adapter": ADAPTER, "scope": scope.as_dict(),
         "link_commands": link_commands, "settings": settings,
@@ -557,7 +557,7 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, link_commands: list[Map
         tool_identity={"tool": TOOL_ID, "image": execution.get("image_digest"), "tool_version": tool_version},
         parser_identity=ADAPTER, normalizer_identity=ADAPTER, mapping_identity=MAPPING_METHOD + "/1",
     )
-    path = unit.job.run_root / "data" / "indices" / "analysis" / \
+    path = unit.job.run_root / "data" / "indices" / "analysis" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / \
         f"{fingerprint}-{hashlib.sha256(shard.encode()).hexdigest()[:16]}.sqlite"
     builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
