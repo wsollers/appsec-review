@@ -499,3 +499,44 @@ Each step unit runs in a `unit.execute` operation span. Every shard built throug
 reports their combined phase times; nested phases are inclusive and not additive. Units running
 longer than the progress interval write `OPERATION_PROGRESS`. See
 [metrics operations](metrics.md#diagnosing-a-slow-or-stuck-step) for reading them.
+
+
+## Tuning and whole-job recovery: `job_review_data_indexing`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.fts_max_input_bytes` | `16777216` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.fts_max_records` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.fts_max_text_bytes` | `131072` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_build_exec_events` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_commands_per_action` | `64` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_facts_per_product` | `200000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_links_per_rule` | `200000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_run_files` | `500000` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_review_data_indexing/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.menu_partition_size` | Feed age sets freshness acceptance; menu_partition_size defines stable consumer menu identities, not execution parallelism. |
+| `settings.feed_max_age_days` | Feed age sets freshness acceptance; menu_partition_size defines stable consumer menu identities, not execution parallelism. |
+| `settings.feed_max_age_days_overrides.kev` | Feed age sets freshness acceptance; menu_partition_size defines stable consumer menu identities, not execution parallelism. |
+| `settings.feed_max_age_days_overrides.epss` | Feed age sets freshness acceptance; menu_partition_size defines stable consumer menu identities, not execution parallelism. |
+| `settings.feed_max_age_days_overrides.mitre` | Feed age sets freshness acceptance; menu_partition_size defines stable consumer menu identities, not execution parallelism. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.links.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.precompute.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.fts.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.audit.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.matrix.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
