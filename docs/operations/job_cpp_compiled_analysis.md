@@ -29,15 +29,15 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1796) |
-| `ast` | `ast.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1679) |
-| `binary` | `binary.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1679) |
-| `catalog` | `catalog.projects` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1598) |
-| `compiled` | `compiled.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1679) |
-| `infer` | `infer.projects` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1679) |
-| `ir` | `ir.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1679) |
-| `plan` | `plan.accepted_cpp_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1460) |
-| `prepare` | `prepare.projects` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1485) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L2012) |
+| `ast` | `ast.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1895) |
+| `binary` | `binary.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1895) |
+| `catalog` | `catalog.projects` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1814) |
+| `compiled` | `compiled.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1895) |
+| `infer` | `infer.projects` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1895) |
+| `ir` | `ir.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1895) |
+| `plan` | `plan.accepted_cpp_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1676) |
+| `prepare` | `prepare.projects` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1701) |
 
 ### Accepted input declarations
 
@@ -374,11 +374,17 @@ or skip filename-state advancement: accepted descendants can still use the detai
 
 ### `infer`
 
-1. For a usable project, invoke `tool-infer` using the accepted normalized compile database, not
-   a new build plan. Retain execution, compile database, report and bounded logs.
-2. Parse bounded report JSON; preserve timeout/OOM/exit/malformed-report reasons. Compare Infer's
-   logged captured-source count with unique accepted compile sources; missing or unequal counts
-   prevents complete coverage.
+1. For a usable project, invoke single-worker `tool-infer` (`--jobs 1`, `memory="4g"`,
+   `OCAMLRUNPARAM="o=40"`) using the accepted normalized compile database with per-procedure bounds
+   (`--pulse-max-heap 201326592`, `--timeout 60`, `--compaction-if-heap-greater-equal-to-GB 1`). If
+   `infer run` exits before writing `report.json` while `.infer_runstate.json` and `results.db`
+   exist, run fallback `infer report --quiet` to salvage completed procedure observations while
+   preserving the primary failure receipt. Retain execution, compile database, report, bounded logs
+   and `stats.jsonl`.
+2. Parse bounded report JSON; preserve timeout/OOM/exit/malformed-report reasons, incomplete
+   per-file progress, and per-procedure `--pulse-max-heap` / `--timeout` / `--pulse-max-cfg-size`
+   bounds as explicit gaps. Compare Infer's logged captured-source count with unique accepted
+   compile sources; missing or unequal counts prevent complete coverage.
 3. Retain only diagnostics mapping to accepted source hashes, with bounded traces and scanner
    severity/category. Unresolved diagnostic paths are gaps; changed mapped source bytes raises.
 

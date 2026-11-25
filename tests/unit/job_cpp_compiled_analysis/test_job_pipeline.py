@@ -1300,3 +1300,202 @@ def test_infer_runs_single_worker_within_4g_and_classifies_worker_signal_kills(
         sig_cov_row = db.execute("select status from coverage where area = 'infer'").fetchone()
     assert sig_cov_row == ("unavailable",)
     assert any("Infer worker subprocess died after signal -11" in gap for gap in proj_sig["gaps"])
+
+
+def test_infer_bounds_pathological_procedures_and_records_explicit_gaps(
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    unit, base_handlers = _prepared_catalog_inputs(tmp_path)
+    unit._store["catalog.projects"] = base_handlers["catalog.projects"](unit)
+    cid = next(iter(unit._store["catalog.projects"]["projects"]))
+    croot = cpp_job._case_root(unit, cid)
+    seen_requests: list[Any] = []
+    state = {"mode": "heap_bounded"}
+
+    report_payload = json.dumps([
+        {
+            "file": "/target/source/main.cpp",
+            "line": 1,
+            "column": 5,
+            "bug_type": "NULL_DEREFERENCE",
+            "qualifier": "pointer p could be null",
+            "severity": "ERROR",
+            "category": "Memory",
+            "procedure": "main",
+            "key": "k-main",
+            "bug_trace": [{"line_number": 1, "column_number": 5, "description": "null assigned"}],
+        }
+    ])
+
+    class BoundedInferExecutor:
+        def execute(self, req: Any) -> ExecutionResult:
+            seen_requests.append(req)
+            infer_out = req.scratch_root / "infer-out"
+            infer_out.mkdir(parents=True, exist_ok=True)
+            (infer_out / "report.json").write_text(report_payload, encoding="utf-8")
+            if state["mode"] == "heap_bounded":
+                (infer_out / "logs").write_text(
+                    "Found 2 source files to analyze in /scratch/infer-out\n"
+                    "[10][   progress] source/main.cpp starting\n"
+                    "[10][   progress] source/main.cpp DONE\n"
+                    "[10][   progress] source/helper.cpp starting\n"
+                    "[10][intern err] OOM danger: heap size is 209715200 words, more than the "
+                    "specified threshold of 201326592 words. Aborting the analysis of the procedure "
+                    "inflateBack to avoid running out of memory.\n"
+                    "[10][      debug] Skipped large procedure (inflate_table, size:9001) in pulse.\n"
+                    "[10][   progress] source/helper.cpp DONE\n",
+                    encoding="utf-8",
+                )
+            else:
+                (infer_out / "logs").write_text(
+                    "Found 2 source files to analyze in /scratch/infer-out\n"
+                    "[10][   progress] source/main.cpp starting\n"
+                    "[10][   progress] source/main.cpp DONE\n"
+                    "[10][   progress] source/helper.cpp starting\n"
+                    "[10][intern err] TIMEOUT in pulse after 60.012345s of CPU time analyzing "
+                    "source/helper.cpp:inflateBack\n"
+                    "[10][   progress] source/helper.cpp DONE\n",
+                    encoding="utf-8",
+                )
+            return _exec_result(unit.job.run_root, req.scratch_root, req.tool_id, exit_code=0, oom_killed=False)
+
+    job_inst = cpp_job.build_job(executor_factory=lambda _u: BoundedInferExecutor())
+    handlers = {item.unit_id: item.handler for item in job_inst.units}
+
+    bounded_out = handlers["infer.projects"](unit)
+    assert len(seen_requests) == 1
+    req = seen_requests[0]
+    argv = list(req.argv)
+    assert argv[argv.index("--jobs") + 1] == "1"
+    assert argv[argv.index("--pulse-max-heap") + 1] == str(cpp_job.INFER_PULSE_MAX_HEAP_WORDS)
+    assert argv[argv.index("--timeout") + 1] == "60"
+    assert argv[argv.index("--compaction-if-heap-greater-equal-to-GB") + 1] == "1"
+    assert "--keep-going" not in argv
+    assert req.memory == "4g"
+    assert dict(req.environment) == {"OCAMLRUNPARAM": "o=40"}
+
+    proj = bounded_out["projects"][cid]
+    assert proj["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert proj["observation_count"] == 1
+    assert proj["bounded_procedures"] == 1
+    assert proj["cfg_skipped_procedures"] == 1
+    assert proj["timed_out_procedures"] == 0
+    assert proj["checkpointable"] is True
+    assert (croot / "checkpoints" / "branch-infer.json").is_file()
+    assert any(
+        "infer_procedure_heap_bounded: source/helper.cpp:inflateBack exceeded --pulse-max-heap "
+        "201326592 words (209715200 words)" == gap
+        for gap in proj["gaps"]
+    )
+    assert any(
+        "infer_procedure_cfg_skipped: source/helper.cpp:inflate_table skipped in pulse (cfg size 9001)" == gap
+        for gap in proj["gaps"]
+    )
+    with sqlite3.connect(unit.job.run_root / proj["artifact"]["path"]) as db:
+        assert db.execute("select status from coverage where area = 'infer'").fetchone() == ("partial",)
+
+    # Non-deterministic CPU timeout records an explicit gap and suppresses reusable checkpointing.
+    (croot / "checkpoints" / "branch-infer.json").unlink()
+    seen_requests.clear()
+    state["mode"] = "cpu_timeout"
+    timeout_out = handlers["infer.projects"](unit)
+    proj_timeout = timeout_out["projects"][cid]
+    assert proj_timeout["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert proj_timeout["observation_count"] == 1
+    assert proj_timeout["timed_out_procedures"] == 1
+    assert proj_timeout["checkpointable"] is False
+    assert not (croot / "checkpoints" / "branch-infer.json").exists()
+    assert any(
+        "infer_procedure_timed_out: source/helper.cpp:inflateBack timed out in pulse after 60.012345s CPU time" == gap
+        for gap in proj_timeout["gaps"]
+    )
+
+
+def test_infer_recovers_partial_report_from_results_db_after_incomplete_run(
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    unit, base_handlers = _prepared_catalog_inputs(tmp_path)
+    unit._store["catalog.projects"] = base_handlers["catalog.projects"](unit)
+    cid = next(iter(unit._store["catalog.projects"]["projects"]))
+    croot = cpp_job._case_root(unit, cid)
+    seen_requests: list[Any] = []
+
+    recovered_report = json.dumps([
+        {
+            "file": "/target/source/main.cpp",
+            "line": 1,
+            "column": 5,
+            "bug_type": "BUFFER_OVERRUN_L1",
+            "qualifier": "offset out of bounds",
+            "severity": "ERROR",
+            "category": "Memory",
+            "procedure": "main",
+            "key": "k-recovered",
+            "bug_trace": [{"line_number": 1, "column_number": 5, "description": "access"}],
+        }
+    ])
+
+    class RecoveringInferExecutor:
+        def execute(self, req: Any) -> ExecutionResult:
+            seen_requests.append(req)
+            infer_out = req.scratch_root / "infer-out"
+            infer_out.mkdir(parents=True, exist_ok=True)
+            if req.argv[1] == "run":
+                (infer_out / ".infer_runstate.json").write_text("{}", encoding="utf-8")
+                (infer_out / "results.db").write_bytes(b"SQLite format 3\x00")
+                (infer_out / "logs").write_text(
+                    "Found 2 source files to analyze in /scratch/infer-out\n"
+                    "[11][   progress] source/main.cpp starting\n"
+                    "[11][   progress] source/main.cpp DONE\n"
+                    "[11][   progress] source/helper.cpp starting\n",
+                    encoding="utf-8",
+                )
+                res = _exec_result(
+                    unit.job.run_root, req.scratch_root, req.tool_id, exit_code=137, oom_killed=True,
+                )
+                (req.scratch_root / "execution.json").write_text(
+                    json.dumps({"exit_code": 137, "oom_killed": True}), encoding="utf-8",
+                )
+                return res
+            assert tuple(req.argv) == (
+                "/opt/infer/bin/infer", "report", "--quiet", "--results-dir", "/scratch/infer-out",
+            )
+            assert req.memory == "2g"
+            (infer_out / "report.json").write_text(recovered_report, encoding="utf-8")
+            with (infer_out / "logs").open("a", encoding="utf-8") as fh:
+                fh.write("[19][environment] Arguments: report --quiet --results-dir /scratch/infer-out\n")
+            res = _exec_result(
+                unit.job.run_root, req.scratch_root, req.tool_id, exit_code=0, oom_killed=False,
+            )
+            (req.scratch_root / "execution.json").write_text(
+                json.dumps({"exit_code": 0, "oom_killed": False}), encoding="utf-8",
+            )
+            return res
+
+    job_inst = cpp_job.build_job(executor_factory=lambda _u: RecoveringInferExecutor())
+    handlers = {item.unit_id: item.handler for item in job_inst.units}
+
+    out = handlers["infer.projects"](unit)
+    assert len(seen_requests) == 2
+    proj = out["projects"][cid]
+    assert proj["oom_killed"] is True
+    assert proj["report_recovered"] is True
+    assert proj["observation_count"] == 1
+    assert proj["checkpointable"] is False
+    assert not (croot / "checkpoints" / "branch-infer.json").exists()
+    assert any("OOM-killed" in gap for gap in proj["gaps"])
+    assert any("infer_report_recovered:" in gap for gap in proj["gaps"])
+    assert any(
+        "Infer completed 1 of 2 captured source files (unfinished: source/helper.cpp)" == gap
+        for gap in proj["gaps"]
+    )
+    primary_exec = json.loads((unit.unit_root / f"{cid}-infer-execution.json").read_text(encoding="utf-8"))
+    report_exec = json.loads((unit.unit_root / f"{cid}-infer-report-execution.json").read_text(encoding="utf-8"))
+    assert primary_exec["exit_code"] == 137 and primary_exec["oom_killed"] is True
+    assert report_exec["exit_code"] == 0 and report_exec["oom_killed"] is False
+    with sqlite3.connect(unit.job.run_root / proj["artifact"]["path"]) as db:
+        assert db.execute("select status from coverage where area = 'infer'").fetchone() == ("partial",)

@@ -42,8 +42,15 @@ AST_ENTITY_KINDS = AST_CALLABLE_KINDS | {"VarDecl", "RecordDecl", "CallExpr", "D
                                         "FieldDecl", "ParmVarDecl", "TypedefDecl"}
 BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/4", "ast": "clang-ast/7",
                    "ir": "llvm-ir/4",
-                   "infer": "infer-cpp-adapter/2",
+                   "infer": "infer-cpp-adapter/3",
                    "binary": "elf-symbols/3"}
+INFER_MEMORY_LIMIT = "4g"
+# 192 Mi words * 8 bytes/word = 1.5 GiB on 64-bit Linux, leaving 2.5 GiB inside the 4g cgroup
+# for single-instruction allocation spikes, SQLite WAL, OCaml runtime pools, and Clang capture.
+INFER_PULSE_MAX_HEAP_WORDS = 192 * 1024 * 1024
+INFER_PROCEDURE_TIMEOUT_SECONDS = "60"
+INFER_COMPACTION_HEAP_GB = "1"
+INFER_OCAMLRUNPARAM = "o=40"
 
 
 def _project_key(root: PurePosixPath) -> str:
@@ -207,6 +214,24 @@ _INFER_SUBPROCESS_SIGNAL_RE = re.compile(
 )
 # OCaml Stdlib.Sys encodes SIGKILL as -7; POSIX wait/signal logs use 9 or -9.
 _INFER_SIGKILL_NUMBERS = frozenset({-7, -9, 9})
+_INFER_FILE_START_RE = re.compile(r"^\[\d+\]\[\s*progress\]\s+(.+?)\s+starting\s*$")
+_INFER_FILE_DONE_RE = re.compile(r"^\[\d+\]\[\s*progress\]\s+(.+?)\s+DONE\s*$")
+_INFER_HEAP_ABORT_RE = re.compile(
+    r"OOM danger: heap size is (\d+) words, more than the specified threshold of (\d+) words\. "
+    r"Aborting the analysis of the procedure (.+?) to avoid running out of memory\."
+)
+_INFER_CFG_SKIP_RE = re.compile(
+    r"Skipped large procedure \((.+), size:(\d+)\) in ([^.\r\n]+)\."
+)
+_INFER_CHECKER_TIMEOUT_RE = re.compile(
+    r"TIMEOUT in (\S+) after ([0-9.]+)s of CPU time analyzing ([^\r\n]+)"
+)
+_INFER_PREANAL_TIMEOUT_RE = re.compile(
+    r"TIMEOUT after ([0-9.]+)s of CPU time analyzing ([^\r\n]+?), outside of any checkers"
+)
+_INFER_CAPTURED_TIMEOUT_RE = re.compile(
+    r"TIMEOUT in ComputeCapturedInfo\.process after ([0-9.]+)s of CPU time"
+)
 
 
 def _infer_subprocess_signal(infer_run_root: Path) -> int | None:
@@ -228,6 +253,114 @@ def _infer_subprocess_signal(infer_run_root: Path) -> int | None:
     return None
 
 
+def _parse_infer_analysis_diagnostics(log_text: str, stats_text: str = "") -> dict[str, Any]:
+    active_file: str | None = None
+    started_files: list[str] = []
+    started_seen: set[str] = set()
+    done_files: set[str] = set()
+    heap_bounded: list[str] = []
+    cfg_skipped: list[str] = []
+    timed_out_procs: list[str] = []
+
+    for line in log_text.splitlines():
+        start_match = _INFER_FILE_START_RE.match(line)
+        if start_match is not None:
+            active_file = start_match.group(1)
+            if active_file not in started_seen:
+                started_seen.add(active_file)
+                started_files.append(active_file)
+            continue
+        done_match = _INFER_FILE_DONE_RE.match(line)
+        if done_match is not None:
+            finished = done_match.group(1)
+            done_files.add(finished)
+            if active_file == finished:
+                active_file = None
+            continue
+        heap_match = _INFER_HEAP_ABORT_RE.search(line)
+        if heap_match is not None:
+            actual_words, threshold_words, proc = heap_match.groups()
+            target = f"{active_file}:{proc}" if active_file else proc
+            heap_bounded.append(
+                f"infer_procedure_heap_bounded: {target} exceeded --pulse-max-heap "
+                f"{threshold_words} words ({actual_words} words)"
+            )
+            continue
+        cfg_match = _INFER_CFG_SKIP_RE.search(line)
+        if cfg_match is not None:
+            proc, size, checker = cfg_match.groups()
+            target = f"{active_file}:{proc}" if active_file else proc
+            cfg_skipped.append(
+                f"infer_procedure_cfg_skipped: {target} skipped in {checker} (cfg size {size})"
+            )
+            continue
+        timeout_match = _INFER_CHECKER_TIMEOUT_RE.search(line)
+        if timeout_match is not None:
+            checker, secs, file_proc = timeout_match.groups()
+            timed_out_procs.append(
+                f"infer_procedure_timed_out: {file_proc} timed out in {checker} after {secs}s CPU time"
+            )
+            continue
+        preanal_match = _INFER_PREANAL_TIMEOUT_RE.search(line)
+        if preanal_match is not None:
+            secs, file_proc = preanal_match.groups()
+            timed_out_procs.append(
+                f"infer_procedure_timed_out: {file_proc} timed out in pre-analysis after {secs}s CPU time"
+            )
+            continue
+        captured_timeout = _INFER_CAPTURED_TIMEOUT_RE.search(line)
+        if captured_timeout is not None:
+            secs = captured_timeout.group(1)
+            scope = active_file or "ComputeCapturedInfo.process"
+            timed_out_procs.append(
+                f"infer_procedure_timed_out: {scope} timed out in ComputeCapturedInfo.process after {secs}s CPU time"
+            )
+
+    stats_timeouts = 0
+    for raw_line in stats_text.splitlines():
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+        entry: Any = None
+        try:
+            entry = json.loads(raw_line)
+        except json.JSONDecodeError:
+            pass
+        candidate_text = (str(entry.get("message", "")) if isinstance(entry, Mapping) and "message" in entry
+                          else raw_line)
+        heap_match = _INFER_HEAP_ABORT_RE.search(candidate_text)
+        if heap_match is not None:
+            actual_words, threshold_words, proc = heap_match.groups()
+            if not any(proc in item for item in heap_bounded):
+                heap_bounded.append(
+                    f"infer_procedure_heap_bounded: {proc} exceeded --pulse-max-heap "
+                    f"{threshold_words} words ({actual_words} words)"
+                )
+        if isinstance(entry, Mapping):
+            if (entry.get("event") == "count.backend_stats.timeouts"
+                    or entry.get("name") == "count.backend_stats.timeouts"):
+                val = entry.get("value")
+                if isinstance(val, int) and val > stats_timeouts:
+                    stats_timeouts = val
+            elif isinstance(entry.get("count.backend_stats.timeouts"), int):
+                stats_timeouts = max(stats_timeouts, int(entry["count.backend_stats.timeouts"]))
+
+    timed_out_procs = list(dict.fromkeys(timed_out_procs))
+    if stats_timeouts > len(timed_out_procs):
+        timed_out_procs.append(
+            f"infer_procedure_timed_out: Infer backend_stats recorded {stats_timeouts} procedure timeout(s)"
+        )
+    unfinished_files = [item for item in started_files if item not in done_files]
+    return {
+        "started_files": started_files,
+        "done_files": done_files,
+        "unfinished_files": unfinished_files,
+        "heap_bounded": list(dict.fromkeys(heap_bounded)),
+        "cfg_skipped": list(dict.fromkeys(cfg_skipped)),
+        "timed_out_procs": timed_out_procs,
+    }
+
+
 def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
                executor_factory=None) -> Mapping[str, Any]:
     case_root = _case_root(unit, case_id)
@@ -243,16 +376,33 @@ def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
                 ContainerExecutor(tool_catalog, unit.job.run_root))
     result = executor.execute(ExecutionRequest(
         tool_id="tool-infer",
-        argv=("/opt/infer/bin/infer", "run", "--no-progress-bar", "--jobs", "1", "--results-dir",
-              "/scratch/infer-out", "--compilation-database", "/scratch/compile_commands.json"),
-        target_root=case_root, scratch_root=scratch, memory="4g",
+        argv=(
+            "/opt/infer/bin/infer", "run", "--no-progress-bar",
+            "--jobs", "1",
+            "--pulse-max-heap", str(INFER_PULSE_MAX_HEAP_WORDS),
+            "--timeout", INFER_PROCEDURE_TIMEOUT_SECONDS,
+            "--compaction-if-heap-greater-equal-to-GB", INFER_COMPACTION_HEAP_GB,
+            "--results-dir", "/scratch/infer-out",
+            "--compilation-database", "/scratch/compile_commands.json",
+        ),
+        environment={"OCAMLRUNPARAM": INFER_OCAMLRUNPARAM},
+        target_root=case_root, scratch_root=scratch, memory=INFER_MEMORY_LIMIT,
     ))
     retained = unit.unit_root / f"{case_id}-infer-execution.json"
     retained.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(scratch / "execution.json", retained)
     subprocess_signal = _infer_subprocess_signal(scratch)
     oom_killed = bool(result.oom_killed or subprocess_signal in _INFER_SIGKILL_NUMBERS)
-    report_path = scratch / "infer-out" / "report.json"
+    stderr_path = scratch / "raw" / "stderr.bin"
+    retained_stderr: Path | None = None
+    if stderr_path.is_file() and not stderr_path.is_symlink() and stderr_path.stat().st_size > 0:
+        retained_stderr = unit.unit_root / f"{case_id}-infer-stderr.bin"
+        shutil.copyfile(stderr_path, retained_stderr)
+
+    infer_out = scratch / "infer-out"
+    report_path = infer_out / "report.json"
+    results_db = infer_out / "results.db"
+    runstate_path = infer_out / ".infer_runstate.json"
     value: dict[str, Any] = {
         "execution": _artifact(unit.job.run_root, retained),
         "compile_database": _artifact(unit.job.run_root, compile_database),
@@ -263,11 +413,28 @@ def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
     }
     if subprocess_signal is not None:
         value["subprocess_signal"] = subprocess_signal
-    stderr_path = scratch / "raw" / "stderr.bin"
-    if stderr_path.is_file() and not stderr_path.is_symlink() and stderr_path.stat().st_size > 0:
-        retained_stderr = unit.unit_root / f"{case_id}-infer-stderr.bin"
-        shutil.copyfile(stderr_path, retained_stderr)
+    if retained_stderr is not None:
         value["stderr"] = _artifact(unit.job.run_root, retained_stderr)
+    if (not report_path.is_file() and results_db.is_file() and not results_db.is_symlink()
+            and runstate_path.is_file() and not runstate_path.is_symlink()):
+        report_result = executor.execute(ExecutionRequest(
+            tool_id="tool-infer",
+            argv=("/opt/infer/bin/infer", "report", "--quiet",
+                  "--results-dir", "/scratch/infer-out"),
+            environment={"OCAMLRUNPARAM": INFER_OCAMLRUNPARAM},
+            target_root=case_root, scratch_root=scratch, memory="2g",
+        ))
+        retained_report_exec = unit.unit_root / f"{case_id}-infer-report-execution.json"
+        shutil.copyfile(scratch / "execution.json", retained_report_exec)
+        shutil.copyfile(retained, scratch / "execution.json")
+        if retained_stderr is not None:
+            shutil.copyfile(retained_stderr, stderr_path)
+        value["report_execution"] = _artifact(unit.job.run_root, retained_report_exec)
+        value["report_recovered"] = bool(
+            report_result.exit_code == 0 and not report_result.timed_out
+            and not report_result.oom_killed and report_path.is_file()
+            and not report_path.is_symlink()
+        )
     if report_path.is_file() and not report_path.is_symlink():
         value["report"] = _artifact(unit.job.run_root, report_path)
     return value
@@ -1178,30 +1345,61 @@ def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
         records = []
         gaps.append(f"Infer report unavailable or invalid: {exc}")
 
+    report_recovered = bool(execution.get("report_recovered"))
+    if report_recovered and report_valid:
+        gaps.append(
+            "infer_report_recovered: extracted partial observations from results.db after incomplete Infer run"
+        )
+
     captured_count = None
+    log_text = ""
     if log_path.is_file() and not log_path.is_symlink() and log_path.stat().st_size <= 16 * 1024 * 1024:
         log_text = log_path.read_text(encoding="utf-8", errors="replace")
         matches = re.findall(r"Found ([0-9]+) source files? to analyze", log_text)
         if matches:
             captured_count = int(matches[-1])
+    stats_path = root / "analysis" / "infer-run" / "infer-out" / "stats" / "stats.jsonl"
+    stats_text = ""
+    if stats_path.is_file() and not stats_path.is_symlink() and stats_path.stat().st_size <= 4 * 1024 * 1024:
+        stats_text = stats_path.read_text(encoding="utf-8", errors="replace")
+    diagnostics = _parse_infer_analysis_diagnostics(log_text, stats_text)
+
     expected_count = len({str(item["target_path"]) for item in catalog["compile_commands"]})
+    has_progress = bool(diagnostics["started_files"] or diagnostics["done_files"])
+    incomplete_progress = False
     if captured_count is None:
         gaps.append("Infer capture count was unavailable")
     elif captured_count != expected_count:
         gaps.append(f"Infer captured {captured_count} of {expected_count} source files")
+    elif has_progress and len(diagnostics["done_files"]) != captured_count:
+        incomplete_progress = True
+        unfinished = diagnostics["unfinished_files"]
+        suffix = f" (unfinished: {', '.join(unfinished[:5])})" if unfinished else ""
+        gaps.append(
+            f"Infer completed {len(diagnostics['done_files'])} of {captured_count} captured source files{suffix}"
+        )
+    gaps.extend(diagnostics["heap_bounded"])
+    gaps.extend(diagnostics["timed_out_procs"])
+    gaps.extend(diagnostics["cfg_skipped"])
 
     artifacts = [execution["execution"], execution["compile_database"], catalog["compile_database"]]
+    if isinstance(execution.get("report_execution"), Mapping):
+        artifacts.append(execution["report_execution"])
     if isinstance(execution.get("report"), Mapping):
         artifacts.append(execution["report"])
     if isinstance(execution.get("stderr"), Mapping):
         artifacts.append(execution["stderr"])
     if log_path.is_file() and not log_path.is_symlink():
         artifacts.append(_artifact(unit.job.run_root, log_path))
+    if stats_path.is_file() and not stats_path.is_symlink() and stats_path.stat().st_size > 0:
+        artifacts.append(_artifact(unit.job.run_root, stats_path))
     builder, path, fingerprint, shard = _new_builder(
         unit, "observations", case_id, "infer", artifacts, gaps,
         {"tool": "infer", "version": execution["tool_version"], "adapter": BRANCH_IDENTITY["infer"],
-         "image": execution["image_id"],
-         "image_digest": execution["image_digest"]}, catalog["mapping"]["case_snapshot"])
+         "image": execution["image_id"], "image_digest": execution["image_digest"],
+         "pulse_max_heap_words": INFER_PULSE_MAX_HEAP_WORDS,
+         "procedure_timeout_seconds": int(INFER_PROCEDURE_TIMEOUT_SECONDS)},
+        catalog["mapping"]["case_snapshot"])
 
     by_relative = {
         str(item["scratch_path"])[len("source/"):]: item
@@ -1209,12 +1407,14 @@ def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
         if str(item.get("scratch_path", "")).startswith("source/")
     }
     count = 0
+    unresolved_observations = 0
     for ordinal, record in enumerate(records):
         raw_path = str(record.get("file", "")).replace("\\", "/")
         relative = raw_path.removeprefix("/target/")
         relative = relative[len("source/"):] if relative.startswith("source/") else ""
         source = by_relative.get(relative)
         if source is None:
+            unresolved_observations += 1
             gaps.append(f"Infer observation path did not resolve to accepted source: {raw_path[:512]}")
             continue
         target_path = str(source["target_path"])
@@ -1253,12 +1453,28 @@ def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
                          "; ".join(bounded_gap_messages(unique_gaps, 10)) or None)
     result = dict(_finish_index(unit, builder, path, fingerprint, shard,
                                 "observations", "infer", unique_gaps))
-    result.update(observation_count=count, expected_source_files=expected_count,
-                  captured_source_files=captured_count, oom_killed=oom_killed)
+    non_checkpointable = (
+        infer_failed
+        or execution.get("exit_code") not in (None, 0)
+        or captured_count != expected_count
+        or incomplete_progress
+        or unresolved_observations > 0
+        or bool(diagnostics["timed_out_procs"])
+    )
+    result.update(
+        observation_count=count,
+        expected_source_files=expected_count,
+        captured_source_files=captured_count,
+        oom_killed=oom_killed,
+        bounded_procedures=len(diagnostics["heap_bounded"]),
+        timed_out_procedures=len(diagnostics["timed_out_procs"]),
+        cfg_skipped_procedures=len(diagnostics["cfg_skipped"]),
+        checkpointable=not non_checkpointable,
+    )
+    if report_recovered:
+        result["report_recovered"] = True
     if subprocess_signal is not None:
         result["subprocess_signal"] = subprocess_signal
-    if infer_failed or execution.get("exit_code") not in (None, 0):
-        result["checkpointable"] = False
     return result
 
 
