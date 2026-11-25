@@ -728,7 +728,7 @@ def _index(unit: UnitContext, spec: ToolSpec, normalize_id: str) -> Mapping[str,
         mapping_identity="ci-static-source-span/1",
     )
     shard_id = f"ci_{spec.key}"
-    path = unit.job.run_root / "data" / "indices" / "observations" / shard_id / f"{fingerprint}.sqlite"
+    path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / shard_id / f"{fingerprint}.sqlite"
     builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
     for record in records:
@@ -801,7 +801,7 @@ def _correlate(unit: UnitContext, index_ids: tuple[str, ...]) -> Mapping[str, An
         parser_identity="canonical-ci-findings/1", normalizer_identity="ci-normalizer/1",
         mapping_identity="ci-static-source-span/1",
     )
-    path = unit.job.run_root / "data" / "indices" / "evidence" / "ci_findings" / f"{fingerprint}.sqlite"
+    path = unit.job.run_root / "data" / "indices" / "evidence" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / "ci_findings" / f"{fingerprint}.sqlite"
     builder = IndexBuilder(path, name="evidence", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id="ci_findings")
     for finding in findings:
