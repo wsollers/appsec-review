@@ -151,8 +151,19 @@ def _make_job_context(
     attempt_root.mkdir(parents=True, exist_ok=True)
     config_dir = run_root / "data" / "configuration"
     config_dir.mkdir(parents=True, exist_ok=True)
-    (config_dir / "resolved.json").write_bytes(_BASE_CONFIG.resolved_json)
-    atomic_json(config_dir / "manifest.json", {"resolved_sha256": _BASE_CONFIG.resolved_sha256})
+    if repository_root is None:
+        resolved_doc = json.loads(_BASE_CONFIG.resolved_json)
+        sync_steps = resolved_doc.get("jobs", {}).get("job_third_party_data_sync", {}).get("steps", {})
+        if "cve_bin_tool_db_build" in sync_steps:
+            sync_steps["cve_bin_tool_db_build"]["settings"]["feed_root"] = (
+                (tmp_path / "cve-bin-tool-feed").relative_to(repo).as_posix()
+            )
+        atomic_json(config_dir / "resolved.json", resolved_doc)
+        resolved_sha = file_sha256(config_dir / "resolved.json")
+    else:
+        (config_dir / "resolved.json").write_bytes(_BASE_CONFIG.resolved_json)
+        resolved_sha = _BASE_CONFIG.resolved_sha256
+    atomic_json(config_dir / "manifest.json", {"resolved_sha256": resolved_sha})
     atomic_json(
         attempt_root / "claim.json",
         {
@@ -161,7 +172,7 @@ def _make_job_context(
             "attempt_id": attempt_id,
             "attempt_path": attempt_root.relative_to(run_root).as_posix(),
             "repository_root": str(repo),
-            "resolved_config_sha256": _BASE_CONFIG.resolved_sha256,
+            "resolved_config_sha256": resolved_sha,
             "orchestration": {"system": "cli"},
             "dataset_contract": dataset_contract(
                 JOB_ID, sorted({d.step for d in DATASETS}), DATASETS, job_contract=CONTRACT.document()

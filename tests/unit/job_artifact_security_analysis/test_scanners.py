@@ -565,7 +565,10 @@ def test_cve_bin_tool_feed_consumption_contract_when_sync_absent_or_seeded(
 
     repo = tmp_path / "repo"
     repo.mkdir()
-    shutil.copytree(ROOT / "containers", repo / "containers")
+    for src_toml in (ROOT / "containers").rglob("*.toml"):
+        dst_toml = repo / src_toml.relative_to(ROOT)
+        dst_toml.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_toml, dst_toml)
     shutil.copytree(ROOT / "tools", repo / "tools")
     job = build_job()
     assert job.external_input_identity is feed_input_identity
