@@ -254,3 +254,38 @@ this job, indexing and the inference review). Both use recordings
 (`tests/fixtures/graph/codeql_export/`); the C/C++ native recording is copied from a live export.
 The live tier `tests/live/test_code_graph_live.py` needs the pinned CodeQL image, which builds from
 this repository on any Linux Docker host (`containers/tools/codeql/README.md`).
+
+
+## Tuning and whole-job recovery: `job_code_graph_index`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.graph.export_timeout_seconds` | `1800` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.graph.max_export_bytes` | `268435456` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.graph.max_facts_per_family_per_scope` | `200000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.workers` | `2` | execution | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/graph/contract.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.graph.max_call_depth` | Changes graph traversal/path/guard semantics presented to consumers, not export capacity. |
+| `settings.graph.max_neighbors_per_function` | Changes graph traversal/path/guard semantics presented to consumers, not export capacity. |
+| `settings.graph.max_paths_per_sink` | Changes graph traversal/path/guard semantics presented to consumers, not export capacity. |
+| `settings.graph.max_path_steps` | Changes graph traversal/path/guard semantics presented to consumers, not export capacity. |
+| `settings.graph.max_guards_per_sink` | Changes graph traversal/path/guard semantics presented to consumers, not export capacity. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.normalize.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.crosscheck.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.correlate.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acceptance.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
