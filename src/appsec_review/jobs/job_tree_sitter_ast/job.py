@@ -220,7 +220,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
             "schema": SCHEMA, "attempt_id": unit.job.attempt_id,
             "target_snapshot": unit.job.source_fingerprint, "dispositions": parsed["dispositions"],
         }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-        coverage_path = (unit.job.run_root / "data" / "indices" / "analysis" /
+        coverage_path = (unit.job.run_root / "data" / "indices" / "analysis" / "attempts" / unit.job.config.job_id / unit.job.attempt_id /
                          f"tree-sitter-coverage-{unit.job.attempt_id}.sqlite")
         coverage = IndexBuilder(coverage_path, name="analysis", fingerprint=coverage_fingerprint,
                                 target_snapshot=unit.job.source_fingerprint,

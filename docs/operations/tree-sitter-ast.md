@@ -3,7 +3,7 @@ title: "Tree-sitter AST operations"
 kind: "operations"
 subsystem: "code intelligence"
 status: "current"
-jobs: []
+jobs: ["job_tree_sitter_ast"]
 last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Tree-sitter AST operations
@@ -77,3 +77,35 @@ atomic request readable by the effective application/container UID. Current prod
 completed request to `0644` before starting the network-disabled container. Keeping the owner-write
 bit avoids Docker Desktop input/output errors caused by Windows read-only file attributes while the
 container user still has read-only access.
+
+
+## Tuning and whole-job recovery: `job_tree_sitter_ast`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.max_file_bytes` | `2097152` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_files_per_scope` | `128` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_nodes_per_file` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_nodes_per_scope` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_source_bytes_per_scope` | `16777216` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.workers` | `8` | coverage | 1..32 |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_tree_sitter_ast/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.plan.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.parse.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.parse.tasks.dynamic_scopes.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acceptance.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
