@@ -374,7 +374,7 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         "parser": PARSER_IDENTITY, "normalizer": NORMALIZER_IDENTITY,
         **({"scanner_input": presented} if presented is not None else {}),
         "configuration": {key: settings[key] for key in sorted(settings) if key != "scanner_identities"}})).hexdigest()
-    checkpoint = unit.job.run_root / "data" / "artifact-security" / "checkpoints" / capability / (fingerprint + ".json")
+    checkpoint = unit.job.run_root / "data" / "artifact-security" / "attempts" / unit.job.attempt_id / "checkpoints" / capability / (fingerprint + ".json")
     if not reusable:
         unit.job.events.write("CHECKPOINT_MISSED", artifact_id=artifact["artifact_id"],
                               action=capability, reason=reuse_reason)
@@ -765,7 +765,7 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
             producer_artifacts=producer, tool_identity={"job": "job_artifact_security_analysis"},
             parser_identity=PARSER_IDENTITY, normalizer_identity=INDEX_NORMALIZER_IDENTITY,
             mapping_identity="exact-run-artifact/1", upstream_manifests=[loaded["artifact_index"]["sha256"]])
-        path = unit.job.run_root / "data" / "indices" / "observations" / f"artifact-security-{fingerprint}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"artifact-security-{fingerprint}.sqlite"
         if not path.is_file():
             builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                                    target_snapshot=unit.job.source_fingerprint, shard_id="artifact-security")
