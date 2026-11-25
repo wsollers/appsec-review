@@ -243,3 +243,34 @@ See [operations](../operations/debug-symbol-indexing.md) for managed reader
 environments, supported formats and normal launch commands. Implementation
 status and host-dependent validation limitations are recorded in the
 [implementation report](../reviews/debug-symbol-indexing-implementation.md).
+
+
+## Tuning and whole-job recovery: `job_debug_symbol_indexing`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.max_artifacts` | `128` | coverage | 1..4096 |
+| `settings.reader.max_depth` | `128` | coverage | 1..256; cross-field checks apply |
+| `settings.reader.max_input_bytes` | `536870912` | coverage | 1..4294967296; cross-field checks apply |
+| `settings.reader.max_output_bytes` | `16777216` | coverage | 1..268435456; cross-field checks apply |
+| `settings.reader.max_records` | `100000` | coverage | 1..1000000; cross-field checks apply |
+| `settings.reader.timeout_seconds` | `120` | execution | >0..1800 seconds (fractional permitted) |
+
+? The [executing job/parser](../../src/appsec_review/config/debug_symbols.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `steps.decide.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.extract.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acceptance.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

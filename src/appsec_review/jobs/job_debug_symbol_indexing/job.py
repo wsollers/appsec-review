@@ -533,7 +533,7 @@ def _extract(unit: UnitContext, lane: str, reader_identity: str, extractor,
                            "lane": lane, "reader_identity": reader_identity,
                            "probes": [item["probe"] for item in probes]})
     shard_id = f"symbols-{lane}"
-    path = unit.job.run_root / "data" / "indices" / INDEX_NAME / f"{fingerprint}.sqlite"
+    path = unit.job.run_root / "data" / "indices" / INDEX_NAME / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
     builder = IndexBuilder(path, name=INDEX_NAME, fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
     all_gaps = list(decision["gaps"])
