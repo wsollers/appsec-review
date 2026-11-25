@@ -200,6 +200,8 @@ OPERATIONAL_SETTINGS = (
     OperationalSetting('job_dependency_intelligence', ('settings', 'scorecard', 'max_response_bytes'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_dependency_intelligence', ('settings', 'scorecard', 'retries'), category='execution', value_type='nonnegative_integer'),
     OperationalSetting('job_dependency_intelligence', ('settings', 'scorecard', 'timeout_seconds'), category='execution', value_type='positive_integer'),
+    OperationalSetting('job_document_issue_analysis', ('settings', 'max_source_file_bytes'), category='coverage', value_type='positive_integer'),
+    OperationalSetting('job_document_issue_analysis', ('settings', 'max_source_files'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_inference_security_review', ('settings', 'attack_chains', 'max_candidates_per_composition'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_inference_security_review', ('settings', 'attack_chains', 'max_challenge_cells'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_inference_security_review', ('settings', 'attack_chains', 'max_evidence_per_obligation'), category='coverage', value_type='positive_integer'),
