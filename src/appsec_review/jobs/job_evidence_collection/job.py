@@ -1181,12 +1181,13 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
             return reused
     builder = IndexBuilder(index_path, name="observations", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
+    indexed_artifact = output["normalized_artifact"]
     artifact_id = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, unit.job.source_fingerprint,
-                                         {"path": output["artifact"]["path"],
-                                          "sha256": output["artifact"]["sha256"]})
-    builder.add_entity(EntityRecord(artifact_id, output["artifact"]["sha256"],
+                                         {"path": indexed_artifact["path"],
+                                          "sha256": indexed_artifact["sha256"]})
+    builder.add_entity(EntityRecord(artifact_id, indexed_artifact["sha256"],
                                     producer + " evidence", producer,
-                                    {"artifact": output["artifact"], "tool_id": producer}))
+                                    {"artifact": indexed_artifact, "tool_id": producer}))
     for record in evidence.get("records", []):
         observation_id = LogicalIdentity.derive(
             EntityKind.TOOL_OBSERVATION, unit.job.source_fingerprint,

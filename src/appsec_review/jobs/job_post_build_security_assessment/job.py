@@ -16,6 +16,7 @@ import zipfile
 
 from appsec_review.jobs.cpp_index_scopes import load_accepted_cpp
 from appsec_review.jobs.job_language_build import load_accepted_language_build
+from appsec_review.jobs.build_bookkeeping import bookkeeping_reason
 from appsec_review.jobs.build_outcome import build_succeeded
 from appsec_review.jobs.job_project_build.enforcement import gap_text
 from appsec_review.inference import Infer, ModelRequest
@@ -317,6 +318,77 @@ def _validate_config(context, _result) -> None:
         raise ValueError("post-build model retries must be between zero and five")
 
 
+def _compact_inference_request(request: Mapping[str, Any], budget_bytes: int) -> tuple[dict[str, Any], bytes]:
+    compacted = dict(request)
+    compacted["coverage_gaps"] = list(request.get("coverage_gaps", ()))[:40]
+    compact_records = []
+    for item in request.get("artifacts", ()):
+        entry = {key: item.get(key) for key in (
+            "artifact_id", "sha256", "format", "kind", "architecture", "bits",
+            "interpreter", "rpath", "runpath", "dependencies", "build_id",
+            "debug", "hardening", "gaps",
+        ) if item.get(key) is not None}
+        if item.get("kind") != "object":
+            for extra in ("imports", "exports"):
+                vals = item.get(extra)
+                if isinstance(vals, list) and vals:
+                    entry[extra] = vals[:32]
+        compact_records.append(entry)
+    compacted["artifacts"] = compact_records
+
+    raw_actions = list(request.get("actions", ()))
+    classified = [a for a in raw_actions if a.get("classification") not in {None, "unknown"}]
+    chosen_actions = classified if classified else raw_actions
+    compact_actions = []
+    for act in chosen_actions:
+        tc = act.get("toolchain") if isinstance(act.get("toolchain"), Mapping) else {}
+        entry = {
+            "build_action_id": act.get("build_action_id"),
+            "classification": act.get("classification"),
+            "toolchain": {"executable": tc.get("executable")} if tc.get("executable") else {},
+            "argv": list(act.get("argv") or ())[:32],
+            "outputs": list(act.get("outputs") or act.get("resolved_outputs") or ())[:8],
+        }
+        if act.get("compile_unit_id"):
+            entry["compile_unit_id"] = act["compile_unit_id"]
+        if act.get("linked_artifact_ids"):
+            entry["linked_artifact_ids"] = list(act["linked_artifact_ids"])[:16]
+        compact_actions.append(entry)
+    compacted["actions"] = compact_actions
+
+    checks = [
+        {"check_id": c.get("check_id"), "scope": c.get("scope"),
+         "status": c.get("status"), "evidence": list(c.get("evidence") or ())[:4]}
+        for c in request.get("deterministic_results", ())
+        if c.get("status") != "NOT_APPLICABLE"
+    ]
+    target_bytes = min(budget_bytes, 40_000) if budget_bytes < 12_288 else min(budget_bytes // 3, 40_000)
+    compacted["deterministic_results"] = checks
+    encoded = canonical_json(compacted)
+    if len(encoded) <= target_bytes:
+        return compacted, encoded
+
+    priority = {"FAIL": 0, "UNKNOWN": 1, "PASS": 2}
+    checks.sort(key=lambda c: (priority.get(str(c.get("status")), 3), str(c.get("check_id")), str(c.get("scope"))))
+    lo, hi = 0, len(checks)
+    best = {**compacted, "deterministic_results": []}
+    best_encoded = canonical_json(best)
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        candidate = {**compacted, "deterministic_results": checks[:mid]}
+        cand_encoded = canonical_json(candidate)
+        if len(cand_encoded) <= target_bytes:
+            best, best_encoded = candidate, cand_encoded
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    if len(best_encoded) > target_bytes and len(compact_actions) > 24:
+        fail_checks = [c for c in checks if c.get("status") in {"FAIL", "UNKNOWN"}][:64]
+        trimmed = {**best, "actions": compact_actions[:24], "deterministic_results": fail_checks}
+        best, best_encoded = trimmed, canonical_json(trimmed)
+    return best, best_encoded
+
+
 def build_job(*, infer: Infer | None = None) -> Job:
     def load(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_cpp(unit.job.run_root)
@@ -515,6 +587,8 @@ def build_job(*, infer: Infer | None = None) -> Job:
                     continue
                 if candidate.resolve() in cataloged_paths:
                     continue
+                if bookkeeping_reason(candidate.relative_to(root).as_posix()) is not None:
+                    continue
                 with candidate.open("rb") as stream:
                     prefix = stream.read(8)
                 supported_magic = prefix.startswith((b"\x7fELF", b"MZ", b"!<arch>\n", b"!<thin>\n", b"BC\xc0\xde")) or prefix[:4] in {
@@ -698,6 +772,10 @@ def build_job(*, infer: Infer | None = None) -> Job:
                            *provenance_value.get("gaps", ()), *inspection_value.get("gaps", ()),
                            *deterministic_value.get("gaps", ())]))}
             encoded = canonical_json(request)
+            budget_bytes = int(settings["max_input_tokens"]) * 4
+            safe_json_bytes = budget_bytes if budget_bytes < 12_288 else min(budget_bytes // 3, 40_000)
+            if budget_bytes >= 4096 and len(encoded) > safe_json_bytes:
+                request, encoded = _compact_inference_request(request, budget_bytes)
             gaps: list[str] = []
             if not actions and not records:
                 # Nothing was built for this case (the upstream gaps are already in the request's

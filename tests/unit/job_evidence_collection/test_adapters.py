@@ -437,8 +437,22 @@ def test_syft_osv_grype_hadolint_checkov_trivy_and_blint_adapters(tmp_path: Path
         },
     ]).encode()
     assert checkov_unreported_inputs(ckv_report, planned.files) == ["CMakePresets.json"]
+    empty_ckv = json.dumps({
+        "passed": 0, "failed": 0, "skipped": 0,
+        "parsing_errors": 0, "resource_count": 0, "checkov_version": "3.3.19",
+    }).encode()
+    assert ckv_adapter.parse(empty_ckv) == []
+    assert checkov_unreported_inputs(empty_ckv, planned.files) == list(planned.files)
     with pytest.raises(ValueError, match="requires results"):
         checkov_unreported_inputs(b'{"passed":0}', planned.files)
+    nonzero_summary = json.dumps({
+        "passed": 1, "failed": 0, "skipped": 0,
+        "parsing_errors": 0, "resource_count": 1, "checkov_version": "3.3.19",
+    }).encode()
+    with pytest.raises(ValueError, match="requires results"):
+        checkov_unreported_inputs(nonzero_summary, planned.files)
+    with pytest.raises(ValueError, match="output parser failed"):
+        ckv_adapter.parse(nonzero_summary)
     ckv_parsed = ckv_adapter.parse(ckv_report)
     assert len(ckv_parsed) == 1 and ckv_parsed[0]["rule_id"] == "CKV_3"
 

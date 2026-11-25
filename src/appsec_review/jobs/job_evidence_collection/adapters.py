@@ -358,7 +358,11 @@ def _validate_report(tool_id: str, payload: bytes) -> list[dict[str, Any]]:
             raise ValueError("native result must be an object")
     elif tool_id == "tool-checkov":
         documents = document if isinstance(document, list) else [document]
+        if not documents:
+            raise ValueError("Checkov report requires check collections")
         for item in documents:
+            if _is_checkov_empty_summary(item):
+                continue
             results = _collection(item, "results", dict)
             if not any(key in results for key in ("failed_checks", "passed_checks", "skipped_checks")) and not results.get("parsing_errors"):
                 raise ValueError("Checkov report requires check collections")
@@ -896,11 +900,27 @@ def _gosec_parser(payload: bytes) -> list[dict[str, Any]]:
     return records
 
 
+_CHECKOV_ZERO_COUNT_KEYS = ("passed", "failed", "skipped", "parsing_errors", "resource_count")
+
+
+def _is_checkov_empty_summary(item: Any) -> bool:
+    """Recognize Checkov's zero-resource summary object emitted when no IaC framework matches."""
+    return (
+        isinstance(item, Mapping)
+        and "results" not in item
+        and isinstance(item.get("checkov_version"), str)
+        and bool(item["checkov_version"].strip())
+        and all(type(item.get(key)) is int and item[key] == 0 for key in _CHECKOV_ZERO_COUNT_KEYS)
+    )
+
+
 def _checkov_parser(payload: bytes) -> list[dict[str, Any]]:
     value = _json(payload)
     documents = value if isinstance(value, list) else [value]
     result = []
     for document_index, document in enumerate(documents):
+        if _is_checkov_empty_summary(document):
+            continue
         prefix = (document_index,) if isinstance(value, list) else ()
         for index, item in enumerate(document.get("results", {}).get("failed_checks", [])):
             result.append({**_record(item, rule=("check_id",), message=("check_name",),
@@ -913,6 +933,8 @@ def _checkov_parser(payload: bytes) -> list[dict[str, Any]]:
             item["start_line"] = lines[0] if lines else 1
             item["end_line"] = lines[-1] if lines else 1
     for document_index, document in enumerate(documents):
+        if _is_checkov_empty_summary(document):
+            continue
         prefix = (document_index,) if isinstance(value, list) else ()
         for index, path in enumerate(document.get("results", {}).get("parsing_errors", []) or []):
             result.append({"gap_only": True, "coverage_gap": f"checkov could not parse {path}",
@@ -921,7 +943,8 @@ def _checkov_parser(payload: bytes) -> list[dict[str, Any]]:
 
 
 def _checkov_parsing_errors(documents: Iterable[Any]) -> list[str]:
-    return sorted({str(path) for document in documents if isinstance(document, Mapping)
+    return sorted({str(path) for document in documents
+                   if isinstance(document, Mapping) and not _is_checkov_empty_summary(document)
                    for path in document.get("results", {}).get("parsing_errors", []) or []})
 
 
@@ -931,7 +954,7 @@ def _checkov_reported_paths(payload: bytes) -> set[str]:
     documents = value if isinstance(value, list) else [value]
     reported: set[str] = set()
     for document in documents:
-        if not isinstance(document, Mapping):
+        if not isinstance(document, Mapping) or _is_checkov_empty_summary(document):
             continue
         results = document.get("results", {})
         for key in ("passed_checks", "failed_checks", "skipped_checks"):

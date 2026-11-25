@@ -229,6 +229,30 @@ class RelationRecord:
 
 _SECRET_SEGMENTS = frozenset({"authorization", "password", "passwd", "secret", "secrets", "token", "credential",
                               "credentials"})
+_RUN_ARTIFACT_PATH = re.compile(
+    r"data/(?:jobs/[a-z][a-z0-9_]*/attempts/attempt_[0-9]+/[A-Za-z0-9_./-]+|"
+    r"(?:shared|indices)/[A-Za-z0-9_./-]+)"
+)
+
+
+def _is_run_artifact_descriptor(value: Any) -> bool:
+    if not isinstance(value, Mapping):
+        return False
+    keys = set(value.keys())
+    if not ({"path", "sha256"} <= keys <= {"path", "sha256", "size_bytes"}):
+        return False
+    path, sha = value.get("path"), value.get("sha256")
+    if not (isinstance(path, str) and isinstance(sha, str)):
+        return False
+    if ".." in path.split("/") or not _RUN_ARTIFACT_PATH.fullmatch(path):
+        return False
+    if not re.fullmatch(r"[0-9a-f]{64}", sha):
+        return False
+    if "size_bytes" in value:
+        size = value["size_bytes"]
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            return False
+    return True
 
 
 def sanitize_producer_data(value: Any, *, depth: int = 0) -> Any:
@@ -243,6 +267,9 @@ def sanitize_producer_data(value: Any, *, depth: int = 0) -> Any:
             if depth == 0 and name == "common":
                 from appsec_review.interchange import observation_metadata_from_mapping
                 result[name] = observation_metadata_from_mapping(child).as_dict()
+                continue
+            if name in {"artifact", "evidence_artifact", "normalized_artifact"} and _is_run_artifact_descriptor(child):
+                result[name] = dict(child)
                 continue
             # Key names are matched by whole segments so a structural key such as ``ordered_tokens``
             # survives while ``GITHUB_TOKEN`` or ``api_key`` still redacts its value.

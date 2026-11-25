@@ -484,6 +484,12 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
             continue
         output_path = scratch / ("tidy.json" if engine == "clang-tidy" else "analyze.json")
         units = _read_units(output_path, max_bytes=settings["max_output_bytes"])
+        if (units and len(units) == len(rows)
+                and len({row["file"] for row in rows}) == len(rows)
+                and all(item["compile_unit_id"] is None for item in units)
+                and all(item["file"] == row["file"] for item, row in zip(units, rows))):
+            units = [{**item, "compile_unit_id": _compile_unit_identity(row)}
+                     for item, row in zip(units, rows)]
         bad = [item for item in units or () if item["exit_code"] is not None and item["exit_code"] != 0]
         from appsec_review.runtime import execution_safety as safety
         safety.failed_result(bool(bad) or execution["exit_code"] != 0,

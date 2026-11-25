@@ -342,6 +342,15 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
         # the orchestrating user could not hash the workspace it must catalog. A run-owned
         # workspace is built once; incremental state has no reader.
         environment["CARGO_INCREMENTAL"] = "0"
+    build_system = str(recipe.get("build_system", ""))
+    if build_system in {"cmake", "make", "autotools"} or str(recipe.get("image_profile", "")) == "native":
+        if build_system == "cmake" and "CMAKE_BUILD_TYPE" not in environment:
+            environment["CMAKE_BUILD_TYPE"] = "RelWithDebInfo"
+        for flag_var in ("CFLAGS", "CXXFLAGS"):
+            current = environment.get(flag_var, "").strip()
+            tokens = current.split()
+            if not any(tok == "-g" or (tok.startswith("-g") and len(tok) > 2) for tok in tokens):
+                environment[flag_var] = f"{current} -g".strip() if current else "-g"
     for key, protected in project_dependency_environment(recipe).items():
         if key in {"MAVEN_OPTS", "GRADLE_USER_HOME"}:
             continue

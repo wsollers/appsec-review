@@ -347,3 +347,45 @@ def test_validate_enforcement_rejects_tampered_mismatched_and_unproven_closures(
     bad_closure["enforcement_id"] = _digest({k: v for k, v in bad_closure.items() if k != "enforcement_id"})
     with pytest.raises(ValueError, match="does not prove one compatible target"):
         validate_enforcement(bad_closure)
+
+
+def test_captured_enforcement_ignores_image_shell_archive_chains_but_rejects_untrusted_shell_or_wrapper(
+    tmp_path: Path,
+) -> None:
+    profiles = _compiler_profile_set()
+    dispatch, bound = _dispatch_and_bound()
+    ninja_ar_events = [
+        {"ordinal": 1, "pid": 10, "kind": "process_exec", "result": 0,
+         "executable": "/capture/wrappers/clang", "argv": ["clang", "-c", "main.c", "-o", "main.o"]},
+        {"ordinal": 2, "pid": 11, "kind": "process_exec", "result": 0,
+         "executable": "/usr/lib/llvm-18/bin/clang", "argv": ["clang", "-c", "main.c", "-o", "main.o"]},
+        {"ordinal": 3, "pid": 12, "kind": "process_exec", "result": 0,
+         "executable": "/bin/sh",
+         "argv": ["/bin/sh", "-c",
+                  ": && /usr/bin/cmake -E rm -f libsmoke.a && /capture/wrappers/ar qc libsmoke.a main.o && /usr/bin/ranlib libsmoke.a && :"]},
+        {"ordinal": 4, "pid": 13, "kind": "process_exec", "result": 0,
+         "executable": "/capture/wrappers/ar", "argv": ["ar", "qc", "libsmoke.a", "main.o"]},
+        {"ordinal": 5, "pid": 14, "kind": "process_exec", "result": 0,
+         "executable": "/usr/bin/ar", "argv": ["ar", "qc", "libsmoke.a", "main.o"]},
+        {"ordinal": 6, "pid": 15, "kind": "process_exec", "result": 0,
+         "executable": "/usr/bin/ranlib", "argv": ["ranlib", "libsmoke.a"]},
+    ]
+    proof, gaps = captured_enforcement(
+        captures=[(1, _fake_capture(ninja_ar_events))], dispatch=dispatch, bound=bound,
+        profiles=profiles, policy=None, run_root=tmp_path, artifacts=(),
+    )
+    assert proof["status"] == "proven" and gaps == []
+    assert [c["executable"] for c in proof["closure_manifest"]["compilers"]] == ["/usr/lib/llvm-18/bin/clang"]
+
+    # Workspace binary named 'sh' with -c source.c -o source.o still fails closed
+    spoofed_shell_events = [
+        *ninja_ar_events[:2],
+        {"ordinal": 7, "pid": 16, "kind": "process_exec", "result": 0,
+         "executable": "/workspace/sh", "argv": ["sh", "-c", "evil.c", "-o", "evil.o"]},
+    ]
+    spoofed_proof, _ = captured_enforcement(
+        captures=[(1, _fake_capture(spoofed_shell_events))], dispatch=dispatch, bound=bound,
+        profiles=profiles, policy=None, run_root=tmp_path, artifacts=(),
+    )
+    assert spoofed_proof["status"] == "unknown"
+    assert "unknown_compiler_in_capture" in spoofed_proof["unresolved_inputs"]

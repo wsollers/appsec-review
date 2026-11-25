@@ -201,6 +201,22 @@ def test_node_configure_restore_does_not_mount_immutable_image_dependencies() ->
         "source_dir": "projects/node/no-restore", "configure_commands": []})
 
 
+def test_probe_environment_injects_native_debug_flags_without_clobbering_explicit_settings() -> None:
+    cmake_env = _probe_environment({"build_system": "cmake", "source_dir": ".", "environment": {}})
+    assert cmake_env["CMAKE_BUILD_TYPE"] == "RelWithDebInfo"
+    assert cmake_env["CFLAGS"] == "-g"
+    assert cmake_env["CXXFLAGS"] == "-g"
+
+    preserved = _probe_environment({
+        "build_system": "cmake",
+        "source_dir": ".",
+        "environment": {"CMAKE_BUILD_TYPE": "Debug", "CFLAGS": "-O1 -ggdb3", "CXXFLAGS": "-Wall"},
+    })
+    assert preserved["CMAKE_BUILD_TYPE"] == "Debug"
+    assert preserved["CFLAGS"] == "-O1 -ggdb3"
+    assert preserved["CXXFLAGS"] == "-Wall -g"
+
+
 def test_probe_environment_disables_cargo_incremental_state_the_host_cannot_read() -> None:
     environment = _probe_environment({"build_system": "cargo", "source_dir": "rust",
                                       "environment": {"CARGO_INCREMENTAL": "1"}})

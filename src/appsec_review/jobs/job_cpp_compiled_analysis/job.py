@@ -15,6 +15,7 @@ from typing import Any
 from appsec_review import seeding
 from appsec_review.container_runtime import ContainerExecutor, ExecutionRequest, load_catalog
 from appsec_review.jobs.cpp_index_scopes import container_compile_database, project_prefix, workspace_root
+from appsec_review.jobs.build_bookkeeping import bookkeeping_reason
 from appsec_review.jobs.build_outcome import build_succeeded
 from appsec_review.jobs.job_language_build import load_accepted_language_build
 from appsec_review.jobs.job_language_build.native_components import (
@@ -212,7 +213,7 @@ def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
         tool_id="tool-infer",
         argv=("/opt/infer/bin/infer", "run", "--no-progress-bar", "--jobs", "2", "--results-dir",
               "/scratch/infer-out", "--compilation-database", "/scratch/compile_commands.json"),
-        target_root=case_root, scratch_root=scratch,
+        target_root=case_root, scratch_root=scratch, memory="4g",
     ))
     retained = unit.unit_root / f"{case_id}-infer-execution.json"
     retained.parent.mkdir(parents=True, exist_ok=True)
@@ -1217,22 +1218,25 @@ def _binary_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], e
                 any(not isinstance(line, str) for line in record["symbols"])):
             gaps.append(f"binary record {record_index} has an invalid artifact or symbol shape")
             continue
+        if record["path"] not in expected and bookkeeping_reason(record["path"]) is not None:
+            continue
         if expected and (record["path"] not in expected or
                          record["sha256"] != expected[record["path"]]["sha256"]):
             gaps.append(f"binary record is not an accepted artifact: {record['path']}")
             continue
         observed.add(record["path"])
         tools = record.get("tools")
-        for tool in ("nm", "readelf"):
-            receipt = tools.get(tool) if isinstance(tools, Mapping) else None
-            if not isinstance(receipt, Mapping):
-                gaps.append(f"{record['path']}: {tool} outcome unavailable")
-                continue
-            if type(receipt.get("exit_code")) is not int or receipt["exit_code"] != 0 or receipt.get("timeout"):
-                gaps.append(f"{record['path']}: {tool} failed with exit {receipt.get('exit_code')}: "
-                            f"{str(receipt.get('stderr', ''))[:512]}")
-            if receipt.get("output_truncated") or receipt.get("stderr_truncated"):
-                gaps.append(f"{record['path']}: {tool} output truncated")
+        if "tools" in record or execution.get("exit_code") != 0 or not isinstance(record.get("metadata"), str):
+            for tool in ("nm", "readelf"):
+                receipt = tools.get(tool) if isinstance(tools, Mapping) else None
+                if not isinstance(receipt, Mapping):
+                    gaps.append(f"{record['path']}: {tool} outcome unavailable")
+                    continue
+                if type(receipt.get("exit_code")) is not int or receipt["exit_code"] != 0 or receipt.get("timeout"):
+                    gaps.append(f"{record['path']}: {tool} failed with exit {receipt.get('exit_code')}: "
+                                f"{str(receipt.get('stderr', ''))[:512]}")
+                if receipt.get("output_truncated") or receipt.get("stderr_truncated"):
+                    gaps.append(f"{record['path']}: {tool} output truncated")
         if len(record["symbols"]) > 10000:
             gaps.append(f"{record['path']}: symbols truncated at 10000")
         kind = {"object": EntityKind.OBJECT_FILE, "library": EntityKind.LIBRARY,
@@ -1461,6 +1465,17 @@ def build_job(*, executor_factory=None) -> Job:
                 shutil.copytree(built, build)
             else:
                 build.mkdir(parents=True)
+            for staged_path in (build, *build.rglob("*")):
+                if staged_path.is_symlink():
+                    continue
+                try:
+                    if staged_path.is_dir():
+                        staged_path.chmod(0o755)
+                    elif staged_path.is_file():
+                        mode = staged_path.stat().st_mode
+                        staged_path.chmod(0o755 if (mode & 0o100) else 0o644)
+                except OSError:
+                    pass
             if action.get("compile_database_origin") == "captured-native-components":
                 identity = receipt["native_compile_database"]
                 database = (unit.job.run_root / str(identity.get("path", ""))).resolve()
@@ -1517,6 +1532,11 @@ def build_job(*, executor_factory=None) -> Job:
                                      "terminal_status": "BLOCKED_BY_COMPILE"}
                 continue
             candidate_links, link_gaps = _accepted_links(unit, compiled["build_receipt"])
+            candidate_links = [
+                row for row in candidate_links
+                if bookkeeping_reason(str(row.get("output_path", ""))) is None
+                and all(bookkeeping_reason(str(src)) is None for src in row.get("input_paths", ()))
+            ]
             identity = _checkpoint_identity(unit, case_id, "catalog",
                                             {"language_build": compiled["build_receipt"]["fingerprint"],
                                              "mapping": prepared[case_id]["artifact"]["sha256"],
@@ -1545,6 +1565,8 @@ def build_job(*, executor_factory=None) -> Job:
             outputs = []
             for path in sorted((root / "build").rglob("*")):
                 if not path.is_file() or path.is_symlink() or path.name == "compile_commands.json":
+                    continue
+                if bookkeeping_reason(path.relative_to(root).as_posix()) is not None:
                     continue
                 magic = path.read_bytes()[:4]
                 kind = "object" if path.suffix == ".o" else "library" if path.suffix in {".a", ".so"} else (

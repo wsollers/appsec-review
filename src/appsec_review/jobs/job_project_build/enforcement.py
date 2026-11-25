@@ -118,6 +118,20 @@ def _capture_wrapper_invocation(executable, argv):
     return (tool, command[1:]) if command[0] == f"/capture/wrappers/{tool}" else None
 
 
+_SHELL_LAUNCHERS = frozenset({"sh", "bash", "dash"})
+
+
+def _is_image_shell_command(executable: str, argv: Sequence[str]) -> bool:
+    """Identify image-owned POSIX shell ``-c <script>`` launchers; child execs are captured directly."""
+    from appsec_review.jobs.job_language_build.capture import image_owned
+    return (
+        image_owned(executable)
+        and PurePosixPath(executable).name in _SHELL_LAUNCHERS
+        and len(argv) >= 3
+        and argv[1] == "-c"
+    )
+
+
 def captured_enforcement(*, captures: Sequence[tuple[int, VerifiedCapture]],
                          dispatch: Mapping[str, Any], bound: Mapping[str, Any],
                          profiles: Mapping[str, Any], policy, run_root: Path,
@@ -164,6 +178,8 @@ def captured_enforcement(*, captures: Sequence[tuple[int, VerifiedCapture]],
             compiler_wrapper = wrapper is not None and tool_kind(
                 wrapper[0], [wrapper[0], *wrapper[1]]) in {"compiler", "linker-driver"}
             if kind not in {"compiler", "linker-driver"} and not compiler_wrapper:
+                if _is_image_shell_command(executable, argv):
+                    continue
                 # An unrecognised executable with compile flags cannot borrow a known driver's name.
                 source_argument = any(PurePosixPath(value).suffix.lower() in {".c", ".cc", ".cpp", ".cxx", ".c++"}
                                       for value in argv[1:])
