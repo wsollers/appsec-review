@@ -32,6 +32,28 @@ as `vendor`, `node_modules`, `build`, and `dist` do not establish platform owner
 Job construction does not enumerate application source trees to assemble an implementation
 identity; unused discovery left over from the former source-fingerprint path is removed.
 
+## Can a development job skip provenance verification?
+
+There is no per-job TOML opt-out. Selecting a development profile does not change these
+checks, and `first_party_managed` is not an unchecked mode.
+
+| Check | What would be lost by skipping it |
+| --- | --- |
+| [`verify_attempt_provenance` and `verify_receipt`](../../src/appsec_review/storage/shared.py) | The handoff must pin the full receipt closure. Receipt validation binds objects and dependencies to exact bytes and, for a reader with an input policy, checks the grant against the original producer. |
+| [`validate_claim_release`](../../src/appsec_review/runtime/release.py) | Handoff verification checks the claim's component and script identities against the pinned release. [Repair admission](../../src/appsec_review/runtime/repair.py) relies on that binding to decide whether a prior computation may be reused. |
+| [`validate_observation_provenance`](../../src/appsec_review/provenance.py) | Before publishing a validation receipt, the producer checks that each observation cites retained evidence or declares a gap, and that its selectors resolve. A well-formed JSON pointer to a nonexistent finding is not valid output. |
+
+To inspect an attempt, open `runs/<run-id>/data/jobs/<job-id>/attempts/<attempt-id>/`,
+not a mutable latest pointer. In `claim.json`, `resolved_config_sha256` identifies the frozen
+configuration, `job_config_sha256` identifies the job configuration, and `implementation_release`
+references the measured release when available. In an accepted `handoff.json`, `execution_status`
+describes task execution, `status` records acceptance, and `coverage` and `outcomes` describe
+what was covered or missed. None is a per-check verification log; there are no requested-mode
+or skipped-check fields. Do not infer that a particular check ran from `SUCCEEDED` alone.
+
+For the contract that distinguishes a valid reference from accepted evidence, see
+[job interchange](../architecture/job-interchange.md#native-result-and-common-observation).
+
 ## Streaming project discovery
 
 Intake and cataloging enumerate eligible target paths with a deterministic streaming walk, not

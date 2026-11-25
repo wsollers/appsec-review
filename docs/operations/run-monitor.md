@@ -12,6 +12,9 @@ The one-shot monitor derives a small text report from the existing authoritative
 The repository-agent [monitor skill](../../.claude/skills/monitor-review-run/SKILL.md) contains the
 standalone kickoff prompt and session scheduling/terminal cleanup procedure.
 Do not schedule against a guessed run or after a preflight that never submitted a run.
+The shared [Markdown report format and fresh-run kickoff](../monitoring_report.md) also describe
+a separate job-output verification chat and monitor rotation after an explicitly authorized
+repair/restart. Those roles do not turn this read-only polling command into a repair command.
 
 From the owning Linux checkout, using its own environment:
 
