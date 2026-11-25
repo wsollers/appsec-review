@@ -157,3 +157,75 @@ def test_extraction_gaps_from_the_reader_are_privatised_and_kept_with_a_partial_
                                      f"{binary['artifact_identity']}: inline_frames_truncated"])
     with shard(context, result) as database:
         assert database.execute("SELECT status, gap FROM coverage").fetchone() == ("partial", f"inline_frames_truncated; {hashed}")
+
+
+def test_run_owned_build_output_binds_checksumless_cpp_spans_while_keeping_prebuilt_and_bad_checksums_fail_closed(
+    tmp_path, monkeypatch,
+):
+    cpp_main = b"#include <iostream>\nint main() {\n  return 0;\n}\n"
+    cpp_req = b"#include <string>\nint handle() {\n  return 1;\n}\n"
+    records = (
+        SymbolRecord("cu:req", RecordKind.COMPILATION_UNIT, "request.cpp",
+                     source=SourceSpan("/workspace/build/../src/request.cpp", 1)),
+        SymbolRecord("fn:req", RecordKind.SYMBOL, "handle", (AddressRange(0x1000, 0x1010),),
+                     SourceSpan("/workspace/src/request.cpp", 2, 5), "cu:req"),
+        SymbolRecord("line:main", RecordKind.SOURCE_RANGE, ranges=(AddressRange(0x2000, 0x2008),),
+                     source=SourceSpan("../src/main.cpp", 3, 3),
+                     data={"comp_dir": "/workspace/build"}),
+        SymbolRecord("fn:std", RecordKind.SYMBOL, "basic_string", (AddressRange(0x3000, 0x3010),),
+                     SourceSpan("/usr/include/c++/13/bits/basic_string.h", 120, 3), "cu:req"),
+    )
+
+    # 1. Run-owned build-output artifact resolves both C++ files and leaves /usr/include unverified with 0 gaps.
+    context = job_context(tmp_path / "built")
+    run_root = context.run_root
+    shards = [
+        source_shard(run_root, cpp_main, path="src/main.cpp"),
+        source_shard(run_root, cpp_req, path="src/request.cpp"),
+    ]
+    built = artifact(run_root, "build/smoke_server", ELF)
+    built["reference"]["artifact_origin"] = "build-output"
+    job = build_job(extractor=lambda *a, **k: extracted(records))
+    decision = decide(monkeypatch, job, context, accepted_inputs([built], manifest(run_root, shards)))
+    result = handlers(job)["extract.clang_dwarf"](unit(context, "extract.clang_dwarf", {"decide.target": decision}))
+    assert result["terminal_status"] == "SUCCEEDED" and result["gaps"] == []
+    by_key = {row["native_key"]: row for row in payloads(context, result)}
+    assert by_key["cu:req"]["source_path"] == "src/request.cpp"
+    assert by_key["cu:req"]["source_mapping"] == "workspace-verified"
+    assert by_key["fn:req"]["source_path"] == "src/request.cpp"
+    assert by_key["line:main"]["source_path"] == "src/main.cpp"
+    assert by_key["line:main"]["source_mapping"] == "workspace-verified"
+    assert by_key["fn:std"]["source_mapping"] == "unverified"
+    assert "source_path" not in by_key["fn:std"] and "source_identity" not in by_key["fn:std"]
+    with shard(context, result) as database:
+        serialized = json.dumps(database.execute("SELECT * FROM entities").fetchall())
+        assert "/usr/include" not in serialized and "/workspace" not in serialized
+        assert database.execute("SELECT COUNT(*) FROM entities WHERE kind='source_span'").fetchone() == (1,)
+        assert database.execute("SELECT COUNT(*) FROM locations").fetchone() == (3,)
+
+    # 2. Prebuilt target-intake binary with identical checksum-less records fails closed.
+    pre_ctx = job_context(tmp_path / "prebuilt")
+    pre_shards = [
+        source_shard(pre_ctx.run_root, cpp_main, path="src/main.cpp"),
+        source_shard(pre_ctx.run_root, cpp_req, path="src/request.cpp"),
+    ]
+    prebuilt = artifact(pre_ctx.run_root, "bin/prebuilt_server", ELF)
+    assert prebuilt["reference"]["artifact_origin"] == "target-intake"
+    pre_dec = decide(monkeypatch, job, pre_ctx, accepted_inputs([prebuilt], manifest(pre_ctx.run_root, pre_shards)))
+    pre_res = handlers(job)["extract.clang_dwarf"](unit(pre_ctx, "extract.clang_dwarf", {"decide.target": pre_dec}))
+    assert pre_res["gaps"] == [f"{prebuilt['artifact_identity']}: source_mapping_unverified: checksum unavailable"]
+    assert all(row["source_mapping"] == "unverified" for row in payloads(pre_ctx, pre_res))
+
+    # 3. Checksum mismatch on run-owned build-output still fails closed.
+    bad_ctx = job_context(tmp_path / "bad_cksum")
+    bad_shards = [source_shard(bad_ctx.run_root, cpp_req, path="src/request.cpp")]
+    bad_built = artifact(bad_ctx.run_root, "build/request.cpp.o", ELF, "object")
+    bad_built["reference"]["artifact_origin"] = "build-output"
+    bad_job = build_job(extractor=lambda *a, **k: extracted((
+        SymbolRecord("line:bad", RecordKind.SOURCE_RANGE,
+                     source=SourceSpan("/workspace/src/request.cpp", 2, 5, checksum="a" * 32, checksum_kind="md5")),
+    )))
+    bad_dec = decide(monkeypatch, bad_job, bad_ctx, accepted_inputs([bad_built], manifest(bad_ctx.run_root, bad_shards)))
+    bad_res = handlers(bad_job)["extract.clang_dwarf"](unit(bad_ctx, "extract.clang_dwarf", {"decide.target": bad_dec}))
+    assert bad_res["gaps"] == [f"{bad_built['artifact_identity']}: source_checksum_unverified"]
+    assert payloads(bad_ctx, bad_res)[0]["source_mapping"] == "unverified"

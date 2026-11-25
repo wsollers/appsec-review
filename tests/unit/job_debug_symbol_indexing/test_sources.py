@@ -115,3 +115,47 @@ def test_column_beyond_the_line_is_not_a_match(tmp_path: Path) -> None:
     digest = hashlib.sha256(b"ab\ncd\n").hexdigest()
     assert sources.resolve(SourceSpan("src/main.cc", 1, 3, digest, "sha256"))[1] is None
     assert sources.resolve(SourceSpan("src/main.cc", 1, 4, digest, "sha256")) == (None, "source_checksum_unverified")
+
+
+def test_workspace_path_resolution_verifies_run_owned_checksumless_spans_and_rejects_untrusted_paths(tmp_path: Path) -> None:
+    run_root = tmp_path / "2026-11-13-0001"
+    cpp_bytes = b"#include <string>\nint parse_req() {\n  return 7;\n}\n"
+    sources, _ = _sources(tmp_path, [source_shard(run_root, cpp_bytes, path="src/request.cpp")])
+
+    # Prebuilt / non-run-owned artifacts reject checksum-less spans even under /workspace.
+    assert sources.resolve(SourceSpan("/workspace/src/request.cpp", 2, 5), allow_workspace_path=False) == (
+        None, "source_mapping_unverified: checksum unavailable"
+    )
+
+    # Run-owned build outputs resolve normalized /workspace paths and relative comp_dir + file paths.
+    for span, comp_dir in (
+        (SourceSpan("/workspace/src/request.cpp", 2, 5), None),
+        (SourceSpan("/workspace/build/../src/request.cpp", 2, 5), None),
+        (SourceSpan("../src/request.cpp", 2, 5), "/workspace/build"),
+    ):
+        bound, gap = sources.resolve(span, allow_workspace_path=True, comp_dir=comp_dir)
+        assert gap is None and bound is not None
+        assert bound["path"] == "src/request.cpp" and bound["source_mapping"] == "workspace-verified"
+        assert (bound["start_byte"], bound["end_byte"]) == (18, 36)
+
+    # Embedded checksum mismatches still fail closed even when path is under /workspace and allow_workspace_path=True.
+    assert sources.resolve(
+        SourceSpan("/workspace/src/request.cpp", 2, 5, "0" * 32, "md5"),
+        allow_workspace_path=True,
+    ) == (None, "source_checksum_unverified")
+
+    # Container toolchain system headers stay unbound without emitting bogus source-mapping gaps.
+    assert sources.resolve(SourceSpan("/usr/include/c++/13/string", 80, 3), allow_workspace_path=True) == (None, None)
+    assert sources.resolve(SourceSpan("/lib/x86_64-linux-gnu/crti.S", 10, 1), allow_workspace_path=True) == (None, None)
+
+    # Escaped/external paths and missing workspace files fail closed with named gaps.
+    for escaped in ("/workspace/../../etc/passwd", "/workspace_evil/src/request.cpp", "/home/builder/src/request.cpp"):
+        assert sources.resolve(SourceSpan(escaped, 1, 1), allow_workspace_path=True) == (
+            None, "source_mapping_unverified: external source path"
+        )
+    assert sources.resolve(SourceSpan("/workspace/src/missing.cpp", 1, 1), allow_workspace_path=True) == (
+        None, "source_mapping_unverified: workspace source unavailable"
+    )
+    assert sources.resolve(SourceSpan("/workspace/src/request.cpp", 99, 1), allow_workspace_path=True) == (
+        None, "source_line_out_of_bounds"
+    )

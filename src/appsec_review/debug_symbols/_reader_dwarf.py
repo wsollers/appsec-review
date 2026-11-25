@@ -18,6 +18,18 @@ _INTERVAL = re.compile(r"\[(0x[0-9a-fA-F]+),\s*(0x[0-9a-fA-F]+)\)")
 _LINE = re.compile(r"^(0x[0-9a-fA-F]+)\s+(\d+)\s+(\d+)\s+(\d+)\s+.*$")
 
 
+def _compose_dir(directory: str, path: str) -> str:
+    """Pure lexical composition; neither path is opened or resolved on the host."""
+    if directory and path and not path.startswith(("/", "\\")) and not re.match(r"^[A-Za-z]:", path):
+        prefix = directory.rstrip("/\\")
+        if (not directory.startswith(("/", "\\"))
+                and not re.match(r"^[A-Za-z]:", directory)
+                and (path == prefix or path.startswith(prefix + "/"))):
+            return path
+        return prefix + "/" + path
+    return path
+
+
 def _number(value: str, default=None):
     match = re.match(r"\(?\s*(0x[0-9a-fA-F]+|\d+)(?:\s|[)\" ]|$)", value)
     if not match:
@@ -144,6 +156,12 @@ def _line_tables(text, limits, gaps):
         if match and file_index is not None:
             key, value = match.groups()
             files[file_index][key] = value
+            if key == "dir_index":
+                dir_idx = _number(value, 0)
+                directory = directories.get(dir_idx, "")
+                if dir_idx:
+                    directory = _compose_dir(directories.get(0, ""), directory)
+                files[file_index]["directory"] = directory
             continue
         match = _LINE.match(line)
         if not match or current is None:
@@ -162,10 +180,12 @@ def _line_tables(text, limits, gaps):
                     gaps.add("source_ranges_file_unavailable")
                 else:
                     path = _string(info["name"])
-                    directory = directories.get(_number(info.get("dir_index", ""), 0), "")
+                    dir_idx = _number(info.get("dir_index", ""), 0)
+                    directory = directories.get(dir_idx, "")
+                    if dir_idx:
+                        directory = _compose_dir(directories.get(0, ""), directory)
                     # Pure string composition; neither path is opened or resolved.
-                    if directory and path and not path.startswith(("/", "\\")) and not re.match(r"^[A-Za-z]:", path):
-                        path = directory.rstrip("/\\") + "/" + path
+                    path = _compose_dir(directory, path)
                     checksum = info.get("md5_checksum")
                     if checksum and not re.fullmatch(r"[a-fA-F0-9]{32}", checksum):
                         raise ReaderFailure("malformed_tool_output")
@@ -191,17 +211,23 @@ def parse_dwarf(text: str, limits) -> tuple[list[SymbolRecord], set[str]]:
     gaps = {"variable_locations_not_indexed", "source_paths_unverified"}
     dies = _dies(text, limits)
     tables, line_records = _line_tables(text, limits, gaps)
-    line_owners: dict[int, list[str]] = {}
+    line_owners: dict[int, list[Die]] = {}
     for die in dies.values():
         if die.tag in ("compile_unit", "skeleton_unit"):
             table = _number(die.attrs.get("stmt_list", ""))
             if table is not None:
-                line_owners.setdefault(table, []).append(die.key)
+                line_owners.setdefault(table, []).append(die)
     for index, record in enumerate(line_records):
         table = int(record.key.split(":")[2], 16)
         owners = line_owners.get(table, [])
         if len(owners) == 1:
-            line_records[index] = replace(record, parent_key=owners[0])
+            cu_comp_dir = _string(owners[0].attrs.get("comp_dir", ""))
+            updated_source = record.source
+            if updated_source is not None:
+                composed = _compose_dir(cu_comp_dir, updated_source.path)
+                if composed != updated_source.path:
+                    updated_source = replace(updated_source, path=composed)
+            line_records[index] = replace(record, parent_key=owners[0].key, source=updated_source)
         else:
             gaps.add("source_range_compilation_unit_ambiguous" if owners
                      else "source_range_compilation_unit_unavailable")
@@ -232,12 +258,15 @@ def parse_dwarf(text: str, limits) -> tuple[list[SymbolRecord], set[str]]:
         return die
 
     def source(die, prefix="decl"):
+        cu = unit(die)
         path = _string(inherited(die, prefix + "_file"))
         line = _number(inherited(die, prefix + "_line"), 0)
         if not path:
             file_id = _number(inherited(die, prefix + "_file"))
-            table = tables.get(_number(unit(die).attrs.get("stmt_list", ""), 0), {})
-            path = _string(table.get(file_id, {}).get("name", ""))
+            table = tables.get(_number(cu.attrs.get("stmt_list", ""), 0), {})
+            entry = table.get(file_id, {})
+            path = _compose_dir(entry.get("directory", ""), _string(entry.get("name", "")))
+        path = _compose_dir(_string(cu.attrs.get("comp_dir", "")), path)
         if not path or not line:
             return None
         return SourceSpan(path, line, _number(inherited(die, prefix + "_column"), 0))
@@ -294,9 +323,10 @@ def parse_dwarf(text: str, limits) -> tuple[list[SymbolRecord], set[str]]:
                 "source_name_sha256": hashlib.sha256(name(die).encode("utf-8")).hexdigest(),
             })
             recorded_name = name(die)
+            span_path = _compose_dir(_string(die.attrs.get("comp_dir", "")), recorded_name)
             display_name = re.split(r"[/\\]", recorded_name)[-1]
             records.append(SymbolRecord(die.key, RecordKind.COMPILATION_UNIT, display_name,
-                                        intervals(die), SourceSpan(recorded_name, 1) if recorded_name else None,
+                                        intervals(die), SourceSpan(span_path, 1) if span_path else None,
                                         data=metadata))
         elif die.tag == "subprogram":
             parameters = [type_name(_number(inherited(child, "type"))) for child in die.children

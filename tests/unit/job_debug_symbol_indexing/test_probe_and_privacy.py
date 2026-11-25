@@ -111,3 +111,19 @@ def test_approved_data_refuses_metadata_deeper_than_the_bound() -> None:
         nested["child"] = {}
         nested = nested["child"]
     assert _approved_data(shallow)
+
+
+@pytest.mark.parametrize("kind,content,not_applicable", [
+    ("static-library", b"!<arch>\nmember", True),
+    ("library", b"!<arch>\nmember", True),
+    ("library", b"!<thin>\nmember", True),
+    ("compile-database", b"[{\"directory\": \"/workspace/build\"}]", True),
+    ("executable", b"\xcf\xfa\xed\xfe\x07\x00\x00\x01", False),
+    ("object", ELF, False),
+])
+def test_probe_marks_static_archives_and_non_symbol_artifacts_not_applicable_while_keeping_macho_probed(
+    tmp_path: Path, kind: str, content: bytes, not_applicable: bool,
+) -> None:
+    probed = _probe(tmp_path, artifact(tmp_path, "x", content, kind), MAXIMUM)
+    assert "gap" not in probed
+    assert bool(probed.get("is_not_applicable")) is not_applicable
