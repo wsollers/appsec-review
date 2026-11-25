@@ -316,3 +316,37 @@ GitHub enrichment still obeys its configured endpoint, credentials, bounds, and 
   inferred from the component boundary.
 - Adapters were validated against recorded and fake responses, not against live GitLab, Gerrit,
   Azure DevOps, or Perforce servers.
+
+
+## Tuning and whole-job recovery: `job_target_acquisition`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `[global] target_acquisition.command_timeout_seconds` | `3600` | execution | 1..172800; cross-field checks apply |
+| `[global] target_acquisition.http_timeout_seconds` | `60` | execution | 1..3600; cross-field checks apply |
+| `[global] target_acquisition.max_diff_bytes` | `67108864` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] target_acquisition.max_file_bytes` | `536870912` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] target_acquisition.max_files` | `500000` | coverage | 1..50000000; cross-field checks apply |
+| `[global] target_acquisition.max_http_response_bytes` | `33554432` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] target_acquisition.max_parallel_components` | `4` | execution | 1..64; cross-field checks apply |
+| `[global] target_acquisition.max_review_commits` | `10000` | coverage | 1..1000000; cross-field checks apply |
+| `[global] target_acquisition.max_total_bytes` | `8589934592` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/config/target_acquisition.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `steps.selection.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acquisition.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publication.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

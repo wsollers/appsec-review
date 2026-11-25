@@ -78,12 +78,11 @@ def _identity(unit: UnitContext, path: Path, document: Mapping[str, Any]) -> dic
 
 
 def _settings(unit: UnitContext):
-    frozen = unit.job.run_root / "data" / "configuration" / "appsec-review.toml"
-    data = frozen.read_bytes()
-    document = tomllib.loads(data.decode("utf-8"))
-    settings = parse_target_acquisition(document.get("target_acquisition"), unit.job.repository_root)
-    return settings, {"path": frozen.relative_to(unit.job.run_root).as_posix(),
-                      "sha256": hashlib.sha256(data).hexdigest()}
+    from appsec_review.runtime.configuration import configuration_snapshot
+    snapshot = configuration_snapshot(unit.job.run_root, unit.job.resolved_config_sha256)
+    settings = parse_target_acquisition(snapshot.document.get("target_acquisition"), unit.job.repository_root)
+    return settings, {"path": (snapshot.directory / "resolved.json").relative_to(unit.job.run_root).as_posix(),
+                      "sha256": snapshot.sha256}
 
 
 def build_job(*, environ: Mapping[str, str] | None = None, fetcher_factory=None) -> Job:
