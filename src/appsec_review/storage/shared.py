@@ -632,6 +632,11 @@ class SharedArtifacts:
             return value, ref
         candidates = []
         for candidate, value in self._requests(namespace, fingerprint):
+            actor = value.get("actor", {})
+            if (claim.get("recovery_boundary") == "whole_job"
+                    and actor.get("job_id") == self.actor["job_id"]
+                    and actor.get("attempt_id") != self.actor["attempt_id"]):
+                continue
             if admission is not None:
                 try:
                     admission.verify(self.run_root, value)
