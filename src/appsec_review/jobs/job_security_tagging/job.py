@@ -214,7 +214,7 @@ def _publish_shards(unit: UnitContext, records: list[dict[str, Any]], indexes: A
                            "component_topology": component_topology},
             parser_identity="tag-assignment/1", normalizer_identity="tag-vocabulary/1",
             mapping_identity="tag-crosswalk/1", upstream_manifests=[indexes.manifest_sha256])
-        path = unit.job.run_root / "data" / "indices" / TAG_INDEX / shard_id / f"{fingerprint}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / TAG_INDEX / "attempts" / unit.job.config.job_id / unit.job.attempt_id / shard_id / f"{fingerprint}.sqlite"
         if path.is_file():
             sha256 = IndexBuilder(path, name=TAG_INDEX, fingerprint=fingerprint, target_snapshot=snapshot,
                                   shard_id=shard_id).attest_existing()
