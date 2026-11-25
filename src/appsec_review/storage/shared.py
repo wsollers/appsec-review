@@ -637,6 +637,16 @@ class SharedArtifacts:
                     and actor.get("job_id") == self.actor["job_id"]
                     and actor.get("attempt_id") != self.actor["attempt_id"]):
                 continue
+            if claim.get("recovery_boundary") == "whole_job" and actor.get("job_id") != self.actor["job_id"]:
+                upstream = actor.get("job_id")
+                pin = claim.get("upstream_handoffs", {}).get(upstream)
+                if pin is None:
+                    continue
+                from appsec_review.runtime.consume import accepted_upstream
+                accepted = accepted_upstream(self.run_root, upstream, required=False)
+                if (accepted is None or accepted.sha256 != pin
+                        or accepted.as_tuple()[0]["attempt_id"] != actor.get("attempt_id")):
+                    continue
             if admission is not None:
                 try:
                     admission.verify(self.run_root, value)

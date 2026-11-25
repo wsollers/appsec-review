@@ -169,7 +169,9 @@ name, table, profile or arbitrary numeric-field exemption exists.
 
 The original snapshot and hashes never change. Admission writes a full immutable
 revision with exact deltas and original binding, and retains changed profile/overlay
-TOML bytes alongside their verified hashes and embedded documents. Host bindings stay
+TOML bytes alongside their verified hashes and embedded documents, for new run snapshots
+as well as revisions. Older snapshots lacking raw layer files retain their original
+embedded documents/hashes; missing historical bytes are not regenerated or claimed present. Host bindings stay
 hash-pinned. A new attempt claims its effective hash. `context_configuration` resolves
 that hash; artifacts include both the revision and original snapshots. A retained
 attempt is reconstructed with its own typed configuration, including original output
@@ -186,6 +188,8 @@ resizing. Resource admission, memory headroom, signing and sandbox grants are un
 
 `runtime.checkpoints.select_units` plans every unit as RUN for a new job attempt;
 `admitted_output` rejects cross-attempt cell salvage, including old repair decisions.
+Shared computation lookup also excludes previous attempts of the same job; cross-job
+hits must belong to an explicitly admitted, accepted upstream attempt.
 Whole accepted-job reuse remains available. Same-attempt idempotency is not a way to
 import cells from another attempt. No second recovery store or registry was introduced.
 

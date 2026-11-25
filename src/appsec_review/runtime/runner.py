@@ -100,7 +100,20 @@ class JobRunner:
         atomic_bytes(destination / "resolved.json", self.config.resolved_json)
         if self.config.host_pins is not None:
             atomic_bytes(destination / "host-pins.toml", self.config.host_pins.content)
+        source_layers = []
+        for name, source_path, expected in (("profile", self.config.profile_path, self.config.profile_sha256),
+                                            ("overlay", self.config.overlay_path, self.config.overlay_sha256)):
+            if source_path is None:
+                continue
+            import hashlib
+            content = source_path.read_bytes()
+            if hashlib.sha256(content).hexdigest() != expected:
+                raise ValueError("configuration source layer changed before run admission")
+            filename = name + ".toml"
+            atomic_bytes(destination / filename, content)
+            source_layers.append({"file": filename, "sha256": expected})
         atomic_json(manifest_path, {
+            "source_layers": source_layers,
             "schema": "appsec-review/run-configuration/2",
             "failure_finalization": "appsec-review/split-failure-finalization/1",
             "source_sha256": self.config.source_sha256,
