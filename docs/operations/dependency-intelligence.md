@@ -228,3 +228,81 @@ scripts/run-tests.sh --expect-tests 31 --parallel --test-workers 2 --shuffle-see
 
 Mocked tests verify parser, inference, HTTP, gap, and publication contracts. They do not prove live
 Scorecard reachability or provider availability; those remain explicit environment acceptance work.
+
+
+## Tuning and whole-job recovery: `job_dependency_intelligence`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.command_token_limit` | `4096` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.dependency_limit` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.inference_candidate_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.inference_failure_limit` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_advisories` | `5000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_bytes_per_file` | `524288` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_call_sites_per_advisory` | `32` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_osv_candidates_per_package` | `500` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_source_files` | `2000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.metadata_bytes_per_file` | `1048576` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.metadata_file_limit` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.max_input_tokens` | `32000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.max_output_tokens` | `16000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.retries` | `1` | coverage | integer >=0; exact parser/cross-field bounds? |
+| `settings.model.timeout_seconds` | `120` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_advisory_lookup.component_limit` | `4096` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_advisory_lookup.match_limit` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_advisory_lookup.rows_per_component` | `512` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_candidate_limit` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_evidence_limit` | `50000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_evidence_per_candidate` | `32` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_field_bytes` | `4096` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_inference.batch_candidates` | `10` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_inference.bytes_per_file` | `262144` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_inference.component_limit` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_inference.field_bytes` | `4096` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_inference.files_per_root` | `128` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_inference.group_limit` | `2048` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_inference.max_calls` | `256` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_inference.max_payload_bytes` | `98304` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_inference.source_bytes_limit` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_path_chars` | `512` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_root_limit` | `2048` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.native_source_bytes_limit` | `67108864` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.repository_limit` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.sbom_conversion_timeout_seconds` | `120` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.sbom_element_limit` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.sbom_input_bytes` | `16777216` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.sbom_output_bytes` | `33554432` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.scorecard.cache_lock_timeout_seconds` | `5` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.scorecard.max_requests` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.scorecard.max_response_bytes` | `1048576` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.scorecard.retries` | `2` | execution | integer >=0; exact parser/cross-field bounds? |
+| `settings.scorecard.timeout_seconds` | `30` | execution | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_dependency_intelligence/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.reachability_enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.model.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.model.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.model.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.model.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.native_inference.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.scorecard.cache_max_age_seconds` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.inputs.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.resolution.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.repositories.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.scorecards.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publication.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acceptance.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
