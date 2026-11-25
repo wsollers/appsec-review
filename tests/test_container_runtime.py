@@ -303,3 +303,167 @@ def test_measured_executor_preserves_linkage_resources_and_failed_receipts(tmp_p
     assert measured["resource_accounting_complete"] is (failure != "missing")
     assert sum(call[:2] == ["docker", "stop"] for call in calls) == int(failure in {"timeout", "canceled"})
     assert len([call for call in calls if call[:2] == ["docker", "run"]]) == 1
+
+
+@pytest.mark.parametrize(("oom_events", "oom_kill_events", "layout", "expected_oom"), [
+    (1, 1, "scope", True),
+    (1, 1, "docker_cid", True),
+    (2, 0, "scope", False),
+])
+def test_executor_detects_child_cgroup_oom_kill_when_pid1_exits_nonzero(
+    tmp_path: Path, oom_events: int, oom_kill_events: int, layout: str, expected_oom: bool,
+) -> None:
+    import socket as sock_mod
+    import tempfile
+    import threading
+
+    target, run = tmp_path / "target", tmp_path / "run"
+    target.mkdir()
+    scratch = run / "scratch"
+    cg_root = tmp_path / "cgroup"
+    cg_root.mkdir()
+    cid = "f1c2d883b471510cc362c626f164135166901aacc7dd094a5a1f9ad1e9dc9575"
+
+    with tempfile.TemporaryDirectory(dir="/tmp", prefix="appsec-ds-") as sock_dir:
+        sock_path = Path(sock_dir) / "docker.sock"
+        stop_srv = threading.Event()
+        srv = sock_mod.socket(sock_mod.AF_UNIX, sock_mod.SOCK_STREAM)
+        srv.bind(str(sock_path))
+        srv.listen(8)
+        srv.settimeout(0.05)
+
+        def serve() -> None:
+            while not stop_srv.is_set():
+                try:
+                    conn, _ = srv.accept()
+                except TimeoutError:
+                    continue
+                except OSError:
+                    break
+                with conn:
+                    req = conn.recv(4096).decode("utf-8", "replace")
+                    first = req.splitlines()[0] if req else ""
+                    path = first.split()[1] if len(first.split()) >= 2 else ""
+                    if path.startswith("/containers/") and path.endswith("/json"):
+                        body = json.dumps({"Id": cid, "State": {"OOMKilled": False, "ExitCode": 1}})
+                    else:
+                        body = ""
+                    resp = (f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                            f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n{body}")
+                    conn.sendall(resp.encode("utf-8"))
+
+        thread = threading.Thread(target=serve, daemon=True)
+        thread.start()
+        try:
+            def runner(argv, timeout):
+                argv = list(argv)
+                if argv[:3] == ["docker", "image", "inspect"]:
+                    return CommandOutcome(0, DIGEST.encode(), b"")
+                if argv[:2] == ["docker", "run"]:
+                    cname = argv[argv.index("--name") + 1]
+                    mem_dir = (cg_root / "system.slice" / f"docker-{cname}.scope"
+                               if layout == "scope" else cg_root / "docker" / cid)
+                    mem_dir.mkdir(parents=True, exist_ok=True)
+                    (mem_dir / "memory.events").write_text(
+                        f"low 0\nhigh 0\nmax 4\noom {oom_events}\noom_kill {oom_kill_events}\n",
+                        encoding="utf-8",
+                    )
+                    # Parent process catches child SIGKILL and exits 1 (not 137); State.OOMKilled stays False.
+                    return CommandOutcome(1, b"", b"Subprocess 1: died after receiving signal number -7\n",
+                                          oom_killed=False)
+                return CommandOutcome(0, b"", b"")
+
+            executor = ContainerExecutor(
+                catalog(tmp_path), run, runner=runner, cgroup_root=cg_root,
+                docker_socket=(sock_path if layout == "docker_cid" else tmp_path / "absent.sock"),
+            )
+            result = executor.execute(ExecutionRequest("tool-fixture", ("/bin/fixture",), target, scratch))
+        finally:
+            stop_srv.set()
+            srv.close()
+            thread.join(timeout=1.0)
+
+    assert result.exit_code == 1
+    assert result.oom_killed is expected_oom
+    assert result.terminal_status == ("OOM" if expected_oom else "COMPLETED")
+    receipt = json.loads((scratch / "execution.json").read_text(encoding="utf-8"))
+    assert receipt["oom_killed"] is expected_oom
+    assert receipt["terminal_status"] == ("OOM" if expected_oom else "COMPLETED")
+
+
+@pytest.mark.parametrize("via_safety", [False, True])
+def test_default_runner_and_post_rm_docker_oom_event_detect_child_oom(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, via_safety: bool,
+) -> None:
+    import socket as sock_mod
+    import tempfile
+    import threading
+    from appsec_review.container_runtime import executor as exec_mod
+
+    cid = "99887766554433221100ffeeddccbbaa99887766554433221100ffeeddccbbaa"
+    cname = "appsec-childoom000000000001"
+    real_popen = subprocess.Popen
+    monkeypatch.setattr("appsec_review.container_runtime.native_client.native_run", lambda *a, **k: None)
+    if via_safety:
+        monkeypatch.setattr(exec_mod.safety, "active", lambda: True)
+        monkeypatch.setattr(exec_mod.safety, "run_process",
+                            lambda argv, timeout, output_bytes=None: (1, b"", b"worker killed", False))
+    else:
+        monkeypatch.setattr(exec_mod.safety, "active", lambda: False)
+        monkeypatch.setattr(
+            exec_mod.subprocess, "Popen",
+            lambda argv, **kw: real_popen([sys.executable, "-c", "raise SystemExit(1)"], **kw),
+        )
+
+    with tempfile.TemporaryDirectory(dir="/tmp", prefix="appsec-ev-") as sock_dir:
+        sock_path = Path(sock_dir) / "docker.sock"
+        stop_srv = threading.Event()
+        srv = sock_mod.socket(sock_mod.AF_UNIX, sock_mod.SOCK_STREAM)
+        srv.bind(str(sock_path))
+        srv.listen(8)
+        srv.settimeout(0.05)
+
+        def serve() -> None:
+            while not stop_srv.is_set():
+                try:
+                    conn, _ = srv.accept()
+                except TimeoutError:
+                    continue
+                except OSError:
+                    break
+                with conn:
+                    req = conn.recv(4096).decode("utf-8", "replace")
+                    first = req.splitlines()[0] if req else ""
+                    path = first.split()[1] if len(first.split()) >= 2 else ""
+                    if path.startswith("/containers/"):
+                        # Simulate --rm having already removed the container before inspect completes.
+                        conn.sendall(b"HTTP/1.1 404 Not Found\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}")
+                    elif path.startswith("/events?"):
+                        event_line = json.dumps({
+                            "status": "oom",
+                            "id": cid,
+                            "Type": "container",
+                            "Action": "oom",
+                            "Actor": {"ID": cid, "Attributes": {"name": cname}},
+                        }) + "\n"
+                        resp = (f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                                f"Content-Length: {len(event_line)}\r\nConnection: close\r\n\r\n{event_line}")
+                        conn.sendall(resp.encode("utf-8"))
+
+        thread = threading.Thread(target=serve, daemon=True)
+        thread.start()
+        try:
+            outcome = exec_mod._default_runner(
+                ("docker", "run", "--rm", "--name", cname, "img:1", "/opt/infer/bin/infer"),
+                30,
+                output_bytes=4096,
+                cgroup_root=tmp_path / "missing-cgroup",
+                docker_socket=sock_path,
+            )
+        finally:
+            stop_srv.set()
+            srv.close()
+            thread.join(timeout=1.0)
+
+    assert outcome.exit_code == 1
+    assert outcome.oom_killed is True

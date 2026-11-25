@@ -1343,3 +1343,38 @@ def test_seeded_ir_and_ast_unusual_replay_and_neighborhood_branches(tmp_path: Pa
     ast_unit_cap, _ = _run(staged3, MissingLlExecutor(), "ast", seeded_settings={**sc.SEEDED, "unit_limit": 1}, ir=two_unit_ir)
     assert any("unit_limit 1 reached" in g for g in ast_unit_cap["projects"][sc.CASE]["gaps"])
     assert seeded is not None
+
+
+def test_seeded_ast_filter_collateral_foreign_nodes_do_not_emit_unresolved_location_gaps(tmp_path: Path) -> None:
+    staged = sc.stage(tmp_path, observations=[sc.observation(f"{sc.ROOT}/src/util.cpp", 14)])
+    admitted_fn = {
+        "id": "0x10",
+        "kind": "FunctionDecl",
+        "name": "copy_field",
+        "mangledName": "_Z10copy_fieldPcPKci",
+        "loc": {"file": "/scratch/source/src/util.cpp", "offset": 0, "line": 1, "col": 1, "tokLen": 1},
+        "range": {
+            "begin": {"file": "/scratch/source/src/util.cpp", "offset": 0, "line": 1, "col": 1, "tokLen": 1},
+            "end": {"file": "/scratch/source/src/util.cpp", "offset": 0, "line": 1, "col": 1, "tokLen": 1},
+        },
+    }
+    foreign_parm = {
+        "id": "0x20",
+        "kind": "ParmVarDecl",
+        "name": "__domain",
+        "loc": {"file": "/usr/include/x86_64-linux-gnu/sys/socket.h", "line": 102, "col": 27},
+        "range": {
+            "begin": {"file": "/usr/include/x86_64-linux-gnu/sys/socket.h", "line": 102, "col": 23},
+            "end": {"file": "/usr/include/x86_64-linux-gnu/sys/socket.h", "line": 102, "col": 27},
+        },
+    }
+    ast_stream = json.dumps(admitted_fn) + "\n" + json.dumps(foreign_parm) + "\n" + json.dumps(foreign_parm)
+    _, ast = _pair(staged, CannedExecutor(staged, ast=ast_stream))
+    assert not any("ast_location_unresolved" in gap or "ast_source_filtered" in gap
+                   for gap in ast["projects"][sc.CASE]["gaps"])
+    with _indexed(staged, ast) as db:
+        names = [row[0] for row in db.execute("select name from entities").fetchall()]
+        cov_gaps = [row[0] or "" for row in db.execute("select gap from coverage").fetchall()]
+    assert "copy_field" in names
+    assert "__domain" not in names
+    assert not any("ast_location_unresolved" in g or "ast_source_filtered" in g for g in cov_gaps)

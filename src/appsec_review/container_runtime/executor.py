@@ -2,16 +2,21 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
 import re
 import signal
+import socket
 import subprocess
+import threading
+import time
 from typing import Any
+import urllib.parse
 import uuid
 
 from appsec_review.container_runtime.catalog import ContainerCatalog, ToolImage
@@ -116,64 +121,308 @@ class ImageUnavailableError(RuntimeError):
     """The requested immutable image is absent, not a failed scanner invocation."""
 
 
+_DEFAULT_CGROUP_ROOT = Path("/sys/fs/cgroup")
+_DEFAULT_DOCKER_SOCKET = Path("/var/run/docker.sock")
+
+
 def _stamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def _default_runner(argv: Sequence[str], timeout: int, *, output_bytes: int | None = None) -> CommandOutcome:
-    if safety.active():
-        code, stdout, stderr, timed_out = safety.run_process(argv, timeout, output_bytes=output_bytes)
-        return CommandOutcome(code, stdout, stderr, timed_out, oom_killed=code == 137)
-    from .native_client import native_run
-    native = native_run(argv, timeout)
-    if native is not None:
-        return CommandOutcome(native[0], native[1], native[2], native[3],
-                              oom_killed=native[0] == 137)
-    process = subprocess.Popen(
-        list(argv), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        start_new_session=True)
-    capture = None
+def _docker_run_name(argv: Sequence[str]) -> str | None:
+    if len(argv) < 4 or argv[0] != "docker" or argv[1] != "run":
+        return None
+    for index in range(2, len(argv)):
+        token = argv[index]
+        if token in {"--", "--entrypoint"}:
+            break
+        if token == "--name" and index + 1 < len(argv):
+            return argv[index + 1] or None
+        if token.startswith("--name="):
+            return token.split("=", 1)[1] or None
+    return None
+
+
+def _memory_events_oom_kills(path: Path) -> int | None:
+    if path.is_symlink() or not path.is_file():
+        return None
     try:
-        capture = PipeCapture(process, output_bytes)
-        try:
-            capture.wait(timeout)
-        except subprocess.TimeoutExpired as timeout_error:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0] == "oom_kill":
             try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            try:
-                capture.wait(5)
-            except subprocess.TimeoutExpired as drain_error:
-                timeout_error.output, timeout_error.stderr = drain_error.output, drain_error.stderr
-                raise timeout_error from drain_error
-            return CommandOutcome(None, *capture.output(), timed_out=True)
-        return CommandOutcome(process.returncode, *capture.output(),
-                              oom_killed=process.returncode == 137)
+                return int(parts[1])
+            except ValueError:
+                return None
+    return None
+
+
+def _cgroup_oom_killed(name: str, *, container_id: str | None = None,
+                       cgroup_root: Path = _DEFAULT_CGROUP_ROOT) -> bool:
+    identifiers = tuple(dict.fromkeys(item for item in (container_id, name) if item))
+    if not identifiers or cgroup_root.is_symlink() or not cgroup_root.is_dir():
+        return False
+    candidates: list[Path] = []
+    for ident in identifiers:
+        candidates.extend((
+            cgroup_root / "system.slice" / f"docker-{ident}.scope" / "memory.events",
+            cgroup_root / "docker" / ident / "memory.events",
+            cgroup_root / f"docker-{ident}.scope" / "memory.events",
+            cgroup_root / ident / "memory.events",
+        ))
+    try:
+        children = tuple(cgroup_root.iterdir())
+    except OSError:
+        children = ()
+    for child in children:
+        if child.is_symlink() or not child.is_dir():
+            continue
+        for ident in identifiers:
+            candidates.extend((
+                child / f"docker-{ident}.scope" / "memory.events",
+                child / ident / "memory.events",
+            ))
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        oom_kills = _memory_events_oom_kills(candidate)
+        if oom_kills is not None and oom_kills > 0:
+            return True
+    return False
+
+
+class _UnixHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, socket_path: Path, *, timeout: float = 1.0) -> None:
+        super().__init__("localhost", timeout=timeout)
+        self._socket_path = str(socket_path)
+
+    def connect(self) -> None:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(self.timeout)
+        sock.connect(self._socket_path)
+        self.sock = sock
+
+
+def _docker_socket_get(docker_socket: Path, path: str, *, timeout: float = 1.0,
+                       max_bytes: int = 65536) -> tuple[int, str] | None:
+    if not hasattr(socket, "AF_UNIX"):
+        return None
+    try:
+        if not docker_socket.is_socket():
+            return None
+    except OSError:
+        return None
+    connection = _UnixHTTPConnection(docker_socket, timeout=timeout)
+    try:
+        connection.request("GET", path, headers={"Host": "localhost", "Connection": "close"})
+        response = connection.getresponse()
+        body = response.read(max_bytes).decode("utf-8", "replace")
+        return response.status, body
+    except (OSError, ValueError, http.client.HTTPException):
+        return None
     finally:
-        if capture is not None:
-            capture.close()
-        if process.poll() is None:
+        connection.close()
+
+
+def _inspect_docker_container(docker_socket: Path, ref: str) -> tuple[str | None, bool]:
+    if not ref:
+        return None, False
+    quoted = urllib.parse.quote(ref, safe="")
+    fetched = _docker_socket_get(docker_socket, f"/containers/{quoted}/json", timeout=0.5)
+    if fetched is None or fetched[0] != 200:
+        return None, False
+    try:
+        payload = json.loads(fetched[1])
+    except json.JSONDecodeError:
+        return None, False
+    if not isinstance(payload, Mapping):
+        return None, False
+    raw_id = payload.get("Id")
+    container_id = raw_id if isinstance(raw_id, str) and raw_id else None
+    state = payload.get("State")
+    state_oom = bool(state.get("OOMKilled")) if isinstance(state, Mapping) else False
+    return container_id, state_oom
+
+
+def _docker_oom_event_recorded(docker_socket: Path, refs: Sequence[str], *,
+                               since: float, until: float) -> bool:
+    unique_refs = tuple(dict.fromkeys(item for item in refs if item))
+    if not unique_refs:
+        return False
+    effective_until = min(until, time.time())
+    effective_since = min(since, effective_until)
+    filters = json.dumps({"type": ["container"], "event": ["oom"]}, separators=(",", ":"))
+    query = urllib.parse.urlencode({
+        "since": f"{effective_since:.6f}",
+        "until": f"{effective_until:.6f}",
+        "filters": filters,
+    })
+    fetched = _docker_socket_get(docker_socket, f"/events?{query}", timeout=1.0)
+    if fetched is None or fetched[0] != 200:
+        return False
+    for line in fetched[1].splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, Mapping):
+            continue
+        if event.get("Action") != "oom" and event.get("status") != "oom":
+            continue
+        actor = event.get("Actor") if isinstance(event.get("Actor"), Mapping) else {}
+        attrs = actor.get("Attributes") if isinstance(actor.get("Attributes"), Mapping) else {}
+        actor_id = str(actor.get("ID") or event.get("id") or "")
+        actor_name = str(attrs.get("name") or "")
+        if any(
+            ref == actor_name or ref == actor_id or (len(ref) >= 12 and actor_id.startswith(ref))
+            for ref in unique_refs
+        ):
+            return True
+    return False
+
+
+class _ContainerOomMonitor:
+    def __init__(self, name: str, *, cgroup_root: Path = _DEFAULT_CGROUP_ROOT,
+                 docker_socket: Path = _DEFAULT_DOCKER_SOCKET, poll_interval: float = 0.05) -> None:
+        self.name = name
+        self.cgroup_root = cgroup_root
+        self.docker_socket = docker_socket
+        self.poll_interval = poll_interval
+        self._started_at = max(0.0, time.time() - 1.0)
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._container_id: str | None = None
+        self._oom_detected = False
+
+    def _sample_once(self) -> bool:
+        if self._oom_detected:
+            return True
+        if self._container_id is None:
+            container_id, state_oom = _inspect_docker_container(self.docker_socket, self.name)
+            if container_id is not None:
+                self._container_id = container_id
+            if state_oom:
+                self._oom_detected = True
+                return True
+        if _cgroup_oom_killed(self.name, container_id=self._container_id, cgroup_root=self.cgroup_root):
+            self._oom_detected = True
+            return True
+        return False
+
+    def _loop(self) -> None:
+        while not self._stop.is_set():
+            if self._sample_once():
+                return
+            self._stop.wait(self.poll_interval)
+
+    def start(self) -> None:
+        self._started_at = max(0.0, time.time() - 1.0)
+        self._thread = threading.Thread(target=self._loop, name=f"oom-watch-{self.name}", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+            self._thread = None
+
+    def finish(self) -> bool:
+        self.stop()
+        if self._oom_detected or self._sample_once():
+            return True
+        if self._container_id is not None:
+            _, state_oom = _inspect_docker_container(self.docker_socket, self._container_id)
+            if state_oom:
+                self._oom_detected = True
+                return True
+        refs = [self.name, *([self._container_id] if self._container_id is not None else [])]
+        if _docker_oom_event_recorded(self.docker_socket, refs, since=self._started_at, until=time.time()):
+            self._oom_detected = True
+            return True
+        return False
+
+
+def _default_runner(argv: Sequence[str], timeout: int, *, output_bytes: int | None = None,
+                    cgroup_root: Path = _DEFAULT_CGROUP_ROOT,
+                    docker_socket: Path = _DEFAULT_DOCKER_SOCKET) -> CommandOutcome:
+    container_name = _docker_run_name(argv)
+    monitor = (_ContainerOomMonitor(container_name, cgroup_root=cgroup_root, docker_socket=docker_socket)
+               if container_name is not None else None)
+    if monitor is not None:
+        monitor.start()
+    try:
+        if safety.active():
+            code, stdout, stderr, timed_out = safety.run_process(argv, timeout, output_bytes=output_bytes)
+            oom_killed = code == 137 or (monitor.finish() if monitor is not None else False)
+            return CommandOutcome(code, stdout, stderr, timed_out, oom_killed=oom_killed)
+        from .native_client import native_run
+        native = native_run(argv, timeout)
+        if native is not None:
+            oom_killed = native[0] == 137 or (monitor.finish() if monitor is not None else False)
+            return CommandOutcome(native[0], native[1], native[2], native[3],
+                                  oom_killed=oom_killed)
+        process = subprocess.Popen(
+            list(argv), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            start_new_session=True)
+        capture = None
+        try:
+            capture = PipeCapture(process, output_bytes)
             try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.wait(timeout=5)
-        for stream in (process.stdout, process.stderr):
-            if stream is not None:
-                stream.close()
+                capture.wait(timeout)
+            except subprocess.TimeoutExpired as timeout_error:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                try:
+                    capture.wait(5)
+                except subprocess.TimeoutExpired as drain_error:
+                    timeout_error.output, timeout_error.stderr = drain_error.output, drain_error.stderr
+                    raise timeout_error from drain_error
+                oom_killed = monitor.finish() if monitor is not None else False
+                return CommandOutcome(None, *capture.output(), timed_out=True, oom_killed=oom_killed)
+            oom_killed = process.returncode == 137 or (monitor.finish() if monitor is not None else False)
+            return CommandOutcome(process.returncode, *capture.output(),
+                                  oom_killed=oom_killed)
+        finally:
+            if capture is not None:
+                capture.close()
+            if process.poll() is None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=5)
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+    finally:
+        if monitor is not None:
+            monitor.stop()
 
 
 class ContainerExecutor:
     """Execute only enabled catalog images under the repository runtime policy."""
 
     def __init__(self, catalog: ContainerCatalog, run_root: Path, *, runner: Runner | None = None,
-                 image_verifier: ImageSignatureVerifier | None = None):
+                 image_verifier: ImageSignatureVerifier | None = None,
+                 cgroup_root: Path = _DEFAULT_CGROUP_ROOT,
+                 docker_socket: Path = _DEFAULT_DOCKER_SOCKET):
         self.catalog = catalog
         self.run_root = run_root.resolve()
         self.runner = runner or _default_runner
         # None defers to the process-wide default, resolved at first use rather than construction.
         self._image_verifier = image_verifier
+        self.cgroup_root = cgroup_root
+        self.docker_socket = docker_socket
 
     def _run_control(self, argv: Sequence[str]) -> CommandOutcome:
         return self.runner(argv, 60)
@@ -341,8 +590,10 @@ class ContainerExecutor:
             lifecycle = (tracked_container(name, self._container_control, label="Scanner")
                          if review_resources_active() or safety.active() or measurement is not None else nullcontext())
             with lifecycle:
+                started_epoch = max(0.0, time.time() - 1.0)
                 try:
-                    outcome = (_default_runner(command, tool.timeout_seconds, output_bytes=tool.output_bytes)
+                    outcome = (_default_runner(command, tool.timeout_seconds, output_bytes=tool.output_bytes,
+                                               cgroup_root=self.cgroup_root, docker_socket=self.docker_socket)
                                if self.runner is _default_runner else self.runner(command, tool.timeout_seconds))
                 except BaseException as exc:
                     timeout_error = (exc if isinstance(exc, subprocess.TimeoutExpired)
@@ -378,6 +629,34 @@ class ContainerExecutor:
                         reference = measurement.finish(failed_outcome, error=exc, cleanup=termination)
                         atomic_json(receipt_path, {**partial, "metrics_receipt": reference})
                     raise
+                if not outcome.oom_killed:
+                    container_id, state_oom = (
+                        _inspect_docker_container(self.docker_socket, name)
+                        if self.docker_socket != _DEFAULT_DOCKER_SOCKET else (None, False)
+                    )
+                    socket_oom = (
+                        state_oom or _docker_oom_event_recorded(
+                            self.docker_socket,
+                            [name, *([container_id] if container_id is not None else [])],
+                            since=started_epoch,
+                            until=time.time(),
+                        )
+                        if self.docker_socket != _DEFAULT_DOCKER_SOCKET else False
+                    )
+                    measured_oom = None
+                    if (measurement is not None and not measurement.output.is_symlink()
+                            and measurement.output.is_file()):
+                        try:
+                            measured_oom = json.loads(
+                                measurement.output.read_text(encoding="utf-8")
+                            ).get("oom_kill_events")
+                        except (OSError, json.JSONDecodeError, AttributeError):
+                            measured_oom = None
+                    if (socket_oom
+                            or (type(measured_oom) is int and measured_oom > 0)
+                            or _cgroup_oom_killed(name, container_id=container_id,
+                                                  cgroup_root=self.cgroup_root)):
+                        outcome = replace(outcome, oom_killed=True)
                 if measurement is not None:
                     termination = terminate_measured() if outcome.timed_out else None
                     measurement.finish(outcome, cleanup=termination)
