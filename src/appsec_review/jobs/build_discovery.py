@@ -100,7 +100,7 @@ def _is_node_ancestor_context(path: PurePosixPath) -> bool:
 
 
 _PROFILE_COMMANDS: dict[str, frozenset[str]] = {
-    "native": frozenset({"cmake", "ninja", "make", "gmake", "clang", "clang++", "gcc", "g++",
+    "native": frozenset({"cmake", "ninja", "make", "gmake", "clang", "clang++",
                          "emcc", "em++", "emar", "wasm-ld", "llvm-ar", "wasm-opt", "wasm-tools",
                          "autoreconf", "autoconf",
                          "automake", "libtoolize", "meson", "bear", "pkg-config"}),
@@ -128,6 +128,57 @@ _FORBIDDEN_SUBCOMMANDS = {
     "composer": {"exec", "run-script", "test"}, "php": {"-r", "--interactive"},
 }
 _NATIVE_BOOTSTRAP_COMMANDS = frozenset({"autoreconf", "autoconf", "automake", "libtoolize"})
+_IMAGE_PROVIDED_ENVIRONMENT: dict[str, dict[str, str]] = {
+    "native": {"CC": "clang", "CXX": "clang++"},
+}
+_NATIVE_PREFERRED_COMPILERS: dict[str, str] = {"c": "clang", "cxx": "clang++"}
+_TOOLCHAIN_REDIRECT_ENV = frozenset({
+    "PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "COMPILER_PATH", "GCC_EXEC_PREFIX",
+    "CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "OBJC_INCLUDE_PATH",
+    "CCC_OVERRIDE_OPTIONS", "SDKROOT",
+})
+_CMAKE_COMPILER_CACHE_VAR = re.compile(r"^-D\s*CMAKE_(?:C|CXX)_COMPILER(?::[A-Z]+)?=.*$")
+_CMAKE_BARE_COMPILER_CACHE_VAR = re.compile(r"^CMAKE_(?:C|CXX)_COMPILER(?::[A-Z]+)?=.*$")
+_MAKE_COMPILER_VAR_ARG = re.compile(r"^(?:CC|CXX)=.*$")
+
+
+def _has_native_compiler_arg_override(argv: Sequence[str]) -> bool:
+    if not argv:
+        return False
+    executable = PurePosixPath(str(argv[0])).name
+    if executable == "cmake":
+        for index, arg in enumerate(argv[1:], start=1):
+            if _CMAKE_COMPILER_CACHE_VAR.fullmatch(arg):
+                return True
+            if arg == "-D" and index + 1 < len(argv) and _CMAKE_BARE_COMPILER_CACHE_VAR.fullmatch(argv[index + 1]):
+                return True
+    elif executable in {"make", "gmake"}:
+        return any(_MAKE_COMPILER_VAR_ARG.fullmatch(arg) for arg in argv[1:])
+    return False
+
+
+def _strip_native_compiler_arg_overrides(argv: list[Any]) -> list[Any]:
+    if not argv or not all(isinstance(arg, str) for arg in argv):
+        return argv
+    executable = PurePosixPath(argv[0]).name
+    if executable == "cmake":
+        cleaned: list[str] = [argv[0]]
+        index = 1
+        while index < len(argv):
+            arg = argv[index]
+            if _CMAKE_COMPILER_CACHE_VAR.fullmatch(arg):
+                index += 1
+                continue
+            if arg == "-D" and index + 1 < len(argv) and _CMAKE_BARE_COMPILER_CACHE_VAR.fullmatch(argv[index + 1]):
+                index += 2
+                continue
+            cleaned.append(arg)
+            index += 1
+        return cleaned if cleaned != argv else argv
+    if executable in {"make", "gmake"}:
+        cleaned = [argv[0], *(arg for arg in argv[1:] if not _MAKE_COMPILER_VAR_ARG.fullmatch(arg))]
+        return cleaned if cleaned != argv else argv
+    return argv
 
 _GRADLE_BUILD_TASKS = ("assemble", "classes", "jar", "war", "clean", "build")
 _ANDROID_GRADLE_BUILD_TASKS = ("assemble", "assembleDebug")
@@ -149,6 +200,9 @@ def build_recipe_inference_policy(unit: Mapping[str, Any]) -> dict[str, Any]:
     profile = required_image_profile(unit)
     policy: dict[str, Any] = {"required_image_profile": profile,
                               "allowed_executables": sorted(_PROFILE_COMMANDS.get(profile, ()))}
+    if profile in _IMAGE_PROVIDED_ENVIRONMENT:
+        policy["image_environment"] = dict(_IMAGE_PROVIDED_ENVIRONMENT[profile])
+        policy["preferred_compilers"] = dict(_NATIVE_PREFERRED_COMPILERS)
     if profile == "php" and unit.get("build_system") == "phpize":
         policy["allowed_executables"].append("./configure")
     if profile == "node":
@@ -1732,6 +1786,25 @@ def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | 
         environment = dict(value["environment"])
         environment.pop("JAVA_HOME", None)
         value["environment"] = environment
+    if value.get("image_profile") == "native":
+        if isinstance(value.get("environment"), Mapping):
+            # audit-buildenv-cpp sets ENV CC=clang CXX=clang++. Model-inferred CC/CXX values
+            # come from target docs or host assumptions and conflict with image-owned compiler
+            # verification.
+            environment = dict(value["environment"])
+            environment.pop("CC", None)
+            environment.pop("CXX", None)
+            value["environment"] = environment
+        for field in ("configure_commands", "build_commands"):
+            commands = value.get(field)
+            if isinstance(commands, list):
+                updated = [
+                    _strip_native_compiler_arg_overrides(command)
+                    if isinstance(command, list) else command
+                    for command in commands
+                ]
+                if updated != commands:
+                    value[field] = updated
     if value.get("image_profile") == "dotnet":
         for field in ("configure_commands", "build_commands"):
             commands = value.get(field)
@@ -1863,6 +1936,10 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
                 errors.append(f"environment key is unsafe: {key}")
             if not isinstance(value, str) or len(value.encode("utf-8")) > 1024 or "\0" in value:
                 errors.append(f"environment value is invalid: {key}")
+            if profile == "native" and key in {"CC", "CXX"}:
+                errors.append(f"environment key is owned by the native build image: {key}")
+            elif profile == "native" and key in _TOOLCHAIN_REDIRECT_ENV:
+                errors.append(f"environment key overrides image toolchain resolution: {key}")
     dependencies = recipe.get("dependency_files")
     marker_paths = {str(item["path"]) for item in unit.get("markers", ())}
     accepted_paths = marker_paths | set(descriptor_inventory_paths(unit))
@@ -1908,6 +1985,8 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
             if words & _FORBIDDEN_SUBCOMMANDS.get(executable, set()):
                 errors.append(f"{field}[{index}] requests execution, tests, or tool installation")
             lowered = [str(arg).lower() for arg in argv[1:]]
+            if profile == "native" and _has_native_compiler_arg_override(argv):
+                errors.append(f"{field}[{index}] overrides the image-provided C/C++ compiler")
             if executable in {"mvn", "mvnw", "gradle", "gradlew"}:
                 errors.extend(f"{field}[{index}] {error}"
                               for error in jvm_build_command_errors(str(profile), argv))

@@ -741,7 +741,10 @@ def _transport(monkeypatch, tmp_path, send):
 
     controller = Controller()
     monkeypatch.setattr(safety, "_ACTIVE", ContextVar("synthetic-controller", default=controller))
-    monkeypatch.setattr(shared, "current", lambda: SimpleNamespace(run_root=tmp_path))
+    monkeypatch.setattr(shared, "_ACTIVE", ContextVar("synthetic-shared", default=SimpleNamespace(
+        run_root=tmp_path,
+        actor={"run_id": "synthetic-run", "job_id": "job_target_analysis_plan", "attempt_id": "attempt_0001"},
+    )))
     monkeypatch.setitem(inference.PROVIDERS, "offline-scripted", send)
     return inference.infer, controller
 
@@ -976,3 +979,78 @@ def test_quoted_batch_evidence_is_byte_exact_or_withheld_before_model_and_cache(
             read_document=lambda *_: pytest.fail("complete cache must retain exact bytes"),
             cache_root=tmp_path / "cache", identity={})
         assert cached["cache_hit"] is True and cached["documents"] == result["documents"]
+
+
+def test_native_planning_favors_image_clang_over_target_readme_gcc_claims(tmp_path):
+    from appsec_review.guidance.compose import pin_bundle, render_prompt, verify_bundle
+    from appsec_review.jobs.build_discovery import descriptor_package, validate_build_recipe
+    from tests.unit.job_target_analysis_plan.test_partitioning import _resolve
+
+    texts = {
+        "CMakeLists.txt": "cmake_minimum_required(VERSION 3.20)\nproject(smoke CXX)\nadd_executable(app src/main.cpp)\n",
+        "README.md": "Build notes: expected to succeed in gcc 13.3 with CMake 3.28.\n",
+        "src/main.cpp": "int main() { return 0; }\n",
+    }
+    target = tmp_path / "target"
+    files = []
+    for rel, content in sorted(texts.items()):
+        dest = target / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        files.append({"path": rel, "sha256": hashlib.sha256(content.encode()).hexdigest(),
+                      "size_bytes": len(content.encode())})
+    unit = discover_build_units(files)[0]
+    unit["descriptor_package"] = descriptor_package(target, unit, files)
+    assert any(doc["path"] == "README.md" for doc in unit["descriptor_package"]["documents"])
+    catalog, _, final, _ = _inputs()
+    catalog = {**catalog, "files": files, "build_units": [unit]}
+    base_recipe = {
+        "schema": "appsec-review/build-recipe/1", "build_unit_id": unit["build_unit_id"],
+        "image_profile": "native", "source_dir": ".", "build_dir": "build",
+        "system_packages": [], "environment": {"CC": "gcc", "CXX": "g++"},
+        "dependency_files": ["CMakeLists.txt"],
+        "configure_commands": [[
+            "cmake", "-S", ".", "-B", "build",
+            "-DCMAKE_C_COMPILER=gcc", "-DCMAKE_CXX_COMPILER=g++",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        ]],
+        "build_commands": [["cmake", "--build", "build"]],
+        "expected_outputs": ["build"], "network_required": False,
+        "reason": "CMake build inferred from CMakeLists.txt",
+    }
+    planning_root = tmp_path / "planning"
+    calls = []
+
+    def infer_plan(request, **_kwargs):
+        calls.append(request)
+        digest = request.summary["guidance_bundle_sha256"]
+        bundle = json.loads((planning_root / "data/guidance" / digest / "bundle.json").read_bytes())
+        assert bundle["role_id"] == "build_engineer_native"
+        assert verify_bundle(bundle) == digest
+        assert render_prompt(bundle) == request.guidance
+        assert pin_bundle(planning_root, bundle)["bundle_sha256"] == digest
+        assert "CC=clang" in request.guidance and "CXX=clang++" in request.guidance
+        policy = request.summary["build_units"][0]["command_policy"]
+        assert policy["image_environment"] == {"CC": "clang", "CXX": "clang++"}
+        assert {"gcc", "g++"}.isdisjoint(policy["allowed_executables"])
+        if len(calls) == 1:
+            return ModelResult({**final, "build_recipes": [{
+                **base_recipe, "environment": {}, "configure_commands": [],
+                "build_commands": [["g++", "src/main.cpp", "-o", "build/app"]],
+            }]})
+        assert any("not allowlisted for native" in error for error in request.repair_errors)
+        return ModelResult({**final, "build_recipes": [base_recipe]})
+
+    planned, _ = _resolve(planning_root, catalog, custom_infer=infer_plan,
+                           target_root=target, max_input_tokens=32000)
+    assert planned["model_calls"] == 2
+    assert planned["gaps"] == []
+    action = planned["plan"]["build_topology"]["build_actions"][0]
+    accepted = action["recipe"]
+    assert accepted["environment"] == {}
+    assert accepted["configure_commands"] == [[
+        "cmake", "-S", ".", "-B", "build", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+    ]]
+    assert validate_build_recipe(accepted, unit) == []
+    refinement = planned["plan"]["build_topology"]["planning_refinement"]
+    assert refinement["units"][0]["blockers"] == []

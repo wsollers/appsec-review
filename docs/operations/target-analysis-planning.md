@@ -29,6 +29,11 @@ role and only the build units in that partition. Each request includes an image-
 each unit carries its required profile and a validator-derived command policy. Android applications
 therefore remain Java-family work while requiring the Android execution image before the model
 proposes a recipe.
+For `native` C/C++ units, the pinned `audit-buildenv-cpp` image owns `CC=clang` and
+`CXX=clang++`; the unit command policy publishes `image_environment` and `preferred_compilers`,
+omits `gcc`/`g++` from `allowed_executables`, and normalizes/rejects `CC`, `CXX`, toolchain
+redirection environment keys, and CMake/Make compiler-driver overrides so target host notes do
+not produce `uncontrolled_compiler_resolution_or_override` blockers.
 For .NET planning and image repair, accepted `PackageReference` or `PackageDownload` declarations
 require `network_required=true` under the existing validator policy. The flag selects project-image
 NuGet preparation; it is not evidence that a download occurred and does not control build-container

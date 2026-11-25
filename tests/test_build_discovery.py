@@ -1064,3 +1064,66 @@ def test_installed_build_logic_and_fixture_trees_are_never_units_and_take_their_
     assert assignment["jvm/buildSrc/src/main/kotlin/Conventions.kt"] == "context:jvm|gradle"
     # A Make rule that compiles a vendored library's source: vendor/ here is source the rule names.
     assert assignment["tools/vendor/lib/lib.c"] == "evidence_of:tools|make#all"
+
+
+def test_native_inference_policy_exposes_image_clang_toolchain_and_omits_gcc() -> None:
+    unit = discover_build_units([_file("native/CMakeLists.txt")])[0]
+    policy = build_recipe_inference_policy(unit)
+    assert policy["required_image_profile"] == "native"
+    assert policy["image_environment"] == {"CC": "clang", "CXX": "clang++"}
+    assert policy["preferred_compilers"] == {"c": "clang", "cxx": "clang++"}
+    assert {"clang", "clang++", "cmake", "ninja", "make"} <= set(policy["allowed_executables"])
+    assert {"gcc", "g++"}.isdisjoint(policy["allowed_executables"])
+
+
+def test_native_recipe_normalization_removes_image_owned_compiler_overrides() -> None:
+    unit = discover_build_units([_file("native/CMakeLists.txt")])[0]
+    recipe = {
+        **_recipe(unit),
+        "environment": {"CC": "gcc", "CXX": "g++", "VERBOSE": "1"},
+        "configure_commands": [[
+            "cmake", "-S", ".", "-B", "build",
+            "-DCMAKE_C_COMPILER=gcc",
+            "-DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/g++",
+            "-D", "CMAKE_C_COMPILER=clang",
+            "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+            "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchain.cmake",
+        ]],
+        "build_commands": [["make", "CC=gcc", "CXX=g++", "-j2"]],
+    }
+    normalized = normalize_build_recipe(recipe, unit)
+    assert normalized["environment"] == {"VERBOSE": "1"}
+    assert normalized["configure_commands"] == [[
+        "cmake", "-S", ".", "-B", "build",
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchain.cmake",
+    ]]
+    assert normalized["build_commands"] == [["make", "-j2"]]
+    assert validate_build_recipe(normalized, unit) == []
+
+
+@pytest.mark.parametrize(("overrides", "expected_fragment"), [
+    ({"build_commands": [["gcc", "-c", "main.c", "-o", "build/main.o"]]}, "not allowlisted for native"),
+    ({"build_commands": [["g++", "-c", "main.cpp", "-o", "build/main.o"]]}, "not allowlisted for native"),
+    ({"environment": {"CC": "gcc"}}, "owned by the native build image: CC"),
+    ({"environment": {"CXX": "clang++"}}, "owned by the native build image: CXX"),
+    ({"environment": {"PATH": "/custom/bin"}}, "overrides image toolchain resolution: PATH"),
+    ({"environment": {"GCC_EXEC_PREFIX": "/tmp"}}, "overrides image toolchain resolution: GCC_EXEC_PREFIX"),
+    ({"configure_commands": [["cmake", "-S", ".", "-B", "build", "-DCMAKE_C_COMPILER=gcc"]]},
+     "overrides the image-provided C/C++ compiler"),
+    ({"configure_commands": [["cmake", "-S", ".", "-B", "build", "-D", "CMAKE_CXX_COMPILER=g++"]]},
+     "overrides the image-provided C/C++ compiler"),
+    ({"build_commands": [["make", "CC=gcc"]]}, "overrides the image-provided C/C++ compiler"),
+], ids=[
+    "direct-gcc", "direct-gxx", "env-cc", "env-cxx", "env-path",
+    "env-gcc-prefix", "cmake-c-compiler", "cmake-split-cxx-compiler", "make-cc-arg",
+])
+def test_native_recipe_validation_rejects_gcc_and_unnormalized_compiler_overrides(
+    overrides: dict[str, object], expected_fragment: str,
+) -> None:
+    unit = discover_build_units([_file("native/CMakeLists.txt")])[0]
+    recipe = {**_recipe(unit), **overrides}
+    errors = validate_build_recipe(recipe, unit)
+    assert any(expected_fragment in error for error in errors), errors

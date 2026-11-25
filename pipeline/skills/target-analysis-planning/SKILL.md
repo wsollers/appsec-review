@@ -51,6 +51,10 @@ run target-produced programs. `system_packages` describes dependencies for the r
 image; it does not install them.
 
 The request-level `image_profiles` allowlist and each build unit's `command_policy` are authoritative.
+Pinned build images own their toolchain environment (such as `CC=clang` and `CXX=clang++` in
+`native` and `JAVA_HOME` in `java`); favor the compilers and SDKs each image provides, omit
+image-owned toolchain variables (`CC`, `CXX`, `JAVA_HOME`) and compiler-driver overrides, and
+never copy host compiler choices from target READMEs or comments.
 For an Android application the language family remains `java`, but `required_image_profile` is
 `android`. Use only the Gradle executables and task suffixes listed in that unit's policy. A listed
 task may be qualified with a module declared by the supplied `settings.gradle` descriptor. Do not
