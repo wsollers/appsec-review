@@ -221,6 +221,11 @@ Report `/4` preserves the exact runtime-profile name and digest in
 set follows the configuration loader's supported profiles; unknown names and malformed digests
 are rejected. The historical report `/2` and `/3` schemas are not changed.
 
+The LaTeX text renderer splits long escaped content across physical source lines without
+discarding text or splitting escape commands. Large gap inventories therefore stay below the
+engine's line buffer without raising its buffer limit. PDF availability is established by the
+render receipt and output file, not merely a successful Dagster task.
+
 ### Domain coverage and unknown measurements (T-5088)
 
 The report's `security-radar-tracker/2` keeps exposure, inspected scope, accepted claims,

@@ -282,6 +282,16 @@ def test_report_rejects_invalid_runtime_profile_identity(profile: dict[str, Any]
     assert SchemaSet(SCHEMAS).errors(report_schema_name(report), report)
 
 
+def test_long_gap_inventory_keeps_every_id_without_exceeding_tex_line_buffer() -> None:
+    _gate, report = _gate_and_report(verified_document())
+    report["gap_ids"] = [f"gap-{index:064x}" for index in range(1600)]
+    rendered = render_latex(executive_document(report, ()), ROOT / "containers" / "report" / "latex" / "template")
+    assert max(len(line.encode("utf-8")) for line in rendered.splitlines()) < 200000
+    flattened = rendered.replace("%\n", "").replace("\n", " ")
+    for identity in report["gap_ids"]:
+        assert escape_latex(identity) in flattened
+
+
 def test_decision_pending_with_and_without_bounds_projected_verbatim_and_never_hidden() -> None:
     # Replacement for test_decision_pending_is_a_named_gap_projected_verbatim_and_never_hidden
     bounded = verified_document()

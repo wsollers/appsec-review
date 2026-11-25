@@ -163,6 +163,23 @@ def test_escapes_cover_every_tex_special_and_break_long_identifiers() -> None:
     assert clean("a\x00b\u200bc\u202ed") == "abcd"
 
 
+@pytest.mark.parametrize("escape", [tex, tex_mono], ids=["prose", "monospace"])
+def test_long_unbroken_tex_text_has_short_source_lines_without_losing_text(escape) -> None:
+    value = "A" * 210000
+    escaped = escape(value)
+    assert max(len(line.encode("utf-8")) for line in escaped.splitlines()) < 200000
+    assert escaped.replace("%\n", "").replace(r"\allowbreak{}", "") == value
+
+
+@pytest.mark.parametrize("escape", [tex, tex_mono], ids=["prose", "monospace"])
+def test_tex_source_wrapping_keeps_escape_commands_intact(escape) -> None:
+    value = r"\%{}_$&#^~" * 512
+    escaped = escape(value)
+    assert "%\n" in escaped
+    expected = "".join(tex(char).replace(r"\allowbreak{}", "") for char in value)
+    assert escaped.replace("%\n", "").replace(r"\allowbreak{}", "") == expected
+
+
 def test_cli_writes_files_and_rejects_bad_input(run_dir: Path, tmp_path: Path, capsys) -> None:
     out = tmp_path / "out"
     assert main(["render", "--run", str(run_dir), "--format", "html", "--out", str(out)]) == 0

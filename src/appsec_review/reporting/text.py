@@ -11,7 +11,7 @@ import html
 import json
 import re
 import unicodedata
-from typing import Any
+from typing import Any, Iterable
 
 from .model import Truncation
 
@@ -28,6 +28,7 @@ _TEX_SPECIAL = {
 # Break opportunities for long identifiers in the monospace face.
 _BREAK_AFTER = set("/._:-=,;)]}>&?#@+")
 _FONT_LIMIT = 0x2E80  # beyond this the bundled fonts have no glyphs; show the code point instead
+_TEX_SOURCE_LINE_BYTES = 4096
 
 
 def sha256_text(text: str) -> str:
@@ -110,7 +111,25 @@ def anchor(*parts: str) -> str:
 def tex(text: str) -> str:
     """Escape for ordinary (sans) text. Total: every character is mapped, none can start a command."""
     cleaned = clean(text, keep_newlines=True).replace("\n", " ")
-    return "".join(" " if part.startswith(" ") else _tex_run(part) for part in re.split(r"( +)", cleaned) if part)
+    return _join_tex(" " if part.startswith(" ") else _tex_run(part) for part in re.split(r"( +)", cleaned) if part)
+
+
+def _join_tex(parts: Iterable[str]) -> str:
+    """Wrap between escaped tokens, without splitting commands or changing visible spacing."""
+    out: list[str] = []
+    width = 0
+    for part in parts:
+        if width >= _TEX_SOURCE_LINE_BYTES:
+            if part == " ":
+                out.append("\n")
+                width = 0
+                continue
+            out.append("%\n")
+            width = 0
+        out.append(part)
+        width = (len(part.rsplit("\n", 1)[-1].encode("utf-8")) if "\n" in part
+                 else width + len(part.encode("utf-8")))
+    return "".join(out)
 
 
 def _tex_run(run: str) -> str:
@@ -124,7 +143,7 @@ def _tex_run(run: str) -> str:
         if char in "_/" or (long_run and (char in _BREAK_AFTER or since >= 14)):
             out.append(r"\allowbreak{}")
             since = 0
-    return "".join(out)
+    return _join_tex(out)
 
 
 def _tex_char(char: str) -> str:
@@ -150,7 +169,7 @@ def tex_mono(text: str) -> str:
         if char in _BREAK_AFTER or run >= 14:
             out.append(r"\allowbreak{}")
             run = 0
-    return "".join(out)
+    return _join_tex(out)
 
 
 def tex_code_line(line: str) -> str:
