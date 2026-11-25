@@ -661,7 +661,7 @@ def test_analyzer_effective_workers_reach_real_pool(tmp_path, shipped, monkeypat
     monkeypatch.setattr(module, "accepted_cpp_scopes", lambda root: ({}, [], {}))
     for workers in (1, 3):
         config = replace(original, settings={**settings, "workers": workers})
-        unit = _unit(tmp_path, config, unit_id, {"load.accepted_cpp": {"scopes": []}})
+        unit = _unit(tmp_path / str(workers), config, unit_id, {"load.accepted_cpp": {"scopes": []}})
         result = _handler(module.build_job(), unit_id)(unit)
         assert result["scope_count"] == 0
     assert seen == [1, 3]
