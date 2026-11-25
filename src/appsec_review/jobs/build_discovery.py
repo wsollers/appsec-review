@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import posixpath
 import re
 from typing import Any, Callable, Literal, Mapping, Sequence
 import xml.etree.ElementTree as ET
@@ -651,19 +652,54 @@ def _attach_build_points(units: list[dict[str, Any]], inventory_paths: Sequence[
 
 
 _HEADER_SUFFIXES = frozenset({".h", ".hh", ".hpp", ".hxx", ".inl", ".ipp"})
+_LOCAL_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*"([^"]+)"', re.M)
+
+
+def _point_included_headers(point: Mapping[str, Any], inventory_set: set[str],
+                            read_text: Callable[[str], str | None],
+                            direct_cache: dict[str, tuple[str, ...]]) -> set[str]:
+    include_dirs = tuple(str(d) for d in point.get("include_dirs", ()))
+    visited: set[str] = set()
+    queue = [str(s) for s in point.get("sources", ())]
+    reached: set[str] = set()
+    while queue:
+        current = queue.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        raw_includes = direct_cache.get(current)
+        if raw_includes is None:
+            content = read_text(current)
+            raw_includes = tuple(_LOCAL_INCLUDE_RE.findall(content)) if content else ()
+            direct_cache[current] = raw_includes
+        cur_dir = PurePosixPath(current).parent
+        for inc in raw_includes:
+            for base_dir in (cur_dir, *(PurePosixPath(d) for d in include_dirs)):
+                cand = posixpath.normpath((base_dir / inc).as_posix())
+                if cand.startswith("../") or cand == "..":
+                    continue
+                if cand in inventory_set:
+                    reached.add(cand)
+                    if cand not in visited and PurePosixPath(cand).suffix.lower() in _HEADER_SUFFIXES:
+                        queue.append(cand)
+                    break
+    return reached
 
 
 def _bind_unnamed_headers(units: list[dict[str, Any]], inventory_paths: Sequence[str],
-                          build_trees: Sequence[str], trees: Sequence[Mapping[str, Any]]) -> None:
+                          build_trees: Sequence[str], trees: Sequence[Mapping[str, Any]],
+                          read_text: Callable[[str], str | None] | None = None) -> None:
     """A header no construct names, beside a source a build point compiles, is that point's header.
 
-    Plan §2.1 item 7's companion for headers: the compiler finds ``pack.h`` from ``pack.c`` through the
-    source's own directory, so the header belongs to the first point (descriptor order) of the innermost
-    unit that names a source in the header's directory. Headers an include directory or a prerequisite
-    already names keep that point.
+    When multiple build points share a source directory, prefer build points whose transitive
+    ``#include "..."`` closure reaches the header, falling back to descriptor order only when no
+    sibling point includes it.
     """
     claimed = {p for unit in units for point in unit.get("build_points", ()) for p in (*point.get("sources", ()), *point.get("headers", ()))}
     roots = [str(unit["root"]) for unit in units]
+    inventory_set = set(inventory_paths)
+    direct_cache: dict[str, tuple[str, ...]] = {}
+    point_closures: dict[int, set[str]] = {}
     for path in inventory_paths:
         if (PurePosixPath(path).suffix.lower() not in _HEADER_SUFFIXES or path in claimed or _under_generated_dir(path)
                 or _under_build_tree(path, build_trees) or _under_installed_tree(path, trees) is not None):
@@ -674,13 +710,27 @@ def _bind_unnamed_headers(units: list[dict[str, Any]], inventory_paths: Sequence
                                               str(unit["build_system"])))
         for unit in containing:
             if any(other != str(unit["root"]) and _is_under(path, other) and _is_under(other, str(unit["root"])) for other in roots):
-                continue  # a nested unit's tree is that unit's
-            point = next((p for p in unit.get("build_points", ())
-                          if any(PurePosixPath(s).parent.as_posix() == directory for s in p.get("sources", ()))), None)
-            if point is not None:
+                continue
+            candidates = [p for p in unit.get("build_points", ())
+                          if any(PurePosixPath(s).parent.as_posix() == directory for s in p.get("sources", ()))]
+            if not candidates:
+                continue
+            selected = [candidates[0]]
+            if len(candidates) > 1 and read_text is not None:
+                including = []
+                for cand in candidates:
+                    closure = point_closures.get(id(cand))
+                    if closure is None:
+                        closure = _point_included_headers(cand, inventory_set, read_text, direct_cache)
+                        point_closures[id(cand)] = closure
+                    if path in closure:
+                        including.append(cand)
+                if including:
+                    selected = including
+            for point in selected:
                 point["headers"] = sorted({*point.get("headers", ()), path})
-                claimed.add(path)
-                break
+            claimed.add(path)
+            break
 
 
 # Plan §2.1 decision 2: when several native build systems share one root, the unit whose build the
@@ -894,7 +944,7 @@ def discover_build_inventory(files: Sequence[Mapping[str, Any]], *,
             extra.extend(str(item["path"]) for item in unit["engine_project"].get("inventory", {}).get("embedded_packages", ()))
         if extra:
             unit["descriptors"] = sorted(dict.fromkeys([*unit.get("descriptors", ()), *extra]))
-    _bind_unnamed_headers(values, inventory_paths, build_trees, trees)
+    _bind_unnamed_headers(values, inventory_paths, build_trees, trees, read_text)
     # Orphan decision: a compiled-language source is claimed when a build point names it (source or
     # header through an include directory, or containment in a member directory), or when it sits
     # under a unit of its family whose build points could not be read completely (unresolved

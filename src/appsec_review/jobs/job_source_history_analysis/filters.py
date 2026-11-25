@@ -29,12 +29,41 @@ _FORMATTING_WORDS = re.compile(
 _compiled = compile_glob
 
 
+_NON_DOCUMENTATION_TXT = re.compile(
+    r"^(?:cmakelists\.txt|meson_options\.txt|(?:requirements|constraints)(?:[-_.][\w.-]+)?\.txt)$",
+    re.I,
+)
+_TOOLING_CONFIG_PATTERNS = (
+    ".editorconfig", "**/.editorconfig",
+    ".gitignore", "**/.gitignore",
+    ".gitattributes", "**/.gitattributes",
+    ".gitmodules", "**/.gitmodules",
+    ".mailmap",
+    ".clang-format", "**/.clang-format",
+    ".clang-tidy", "**/.clang-tidy",
+    ".prettierrc", "**/.prettierrc",
+    ".prettierignore", "**/.prettierignore",
+    ".eslintignore", "**/.eslintignore",
+    ".dockerignore", "**/.dockerignore",
+)
+
+
+def _is_build_or_manifest_txt(path: str) -> bool:
+    basename = path.rsplit("/", 1)[-1]
+    return bool(_NON_DOCUMENTATION_TXT.fullmatch(basename))
+
+
 def path_exclusion(path: str, rules: FilterRules) -> dict[str, str] | None:
     """Return the first matching exclusion category and pattern, in fixed category order."""
     for category, patterns in rules.category_patterns():
         for pattern in patterns:
+            if category == "documentation" and _is_build_or_manifest_txt(path):
+                continue
             if matches(path, pattern):
                 return {"category": category, "pattern": pattern, "rules": FILTER_IDENTITY}
+    for pattern in _TOOLING_CONFIG_PATTERNS:
+        if matches(path, pattern):
+            return {"category": "tooling", "pattern": pattern, "rules": FILTER_IDENTITY}
     return None
 
 

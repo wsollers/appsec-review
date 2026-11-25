@@ -254,8 +254,9 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
         churn = item["added"] + item["deleted"]
         change_count = len(item["ranking"])
         exclusion = exclusions[path]
+        non_code = "language" in eligible[path] and eligible[path].get("language") is None
         eligibility = (f"excluded:{exclusion['category']}" if exclusion else "no_ranking_changes" if not change_count
-                       else "zero_size" if not lines else "eligible")
+                       else "zero_size" if not lines else "non_code" if non_code else "eligible")
         shares = {author: _round(count / author_total) for author, count in sorted(item["authors"].items())}
         files[path] = {
             "path": path, "component_id": _component_of(path, roots), "rank_eligibility": eligibility,

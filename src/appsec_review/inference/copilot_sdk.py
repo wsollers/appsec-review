@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from dataclasses import replace
 import json
 import os
+from pathlib import Path
 from typing import Any, Sequence
 
 from .claude_cli import ModelOutputError, _plan_prompt, parse_model_payload
@@ -33,13 +34,39 @@ async def _models(names: Sequence[str]) -> dict[str, Any]:
     }
 
 
+def _ephemeral_session_persisted(session_id: str, working: str) -> bool:
+    for root in (auth_home(), Path(working)):
+        state_dir = root / "session-state"
+        if (state_dir / session_id).exists() or (state_dir / f"{session_id}.jsonl").exists():
+            return True
+    return False
+
+
 @asynccontextmanager
-async def _delete_after_use(client, session_id):
-    # SDK disconnect releases handlers but preserves a resumable conversation on disk.
+async def _session_scope(session, state: dict[str, bool]):
+    await session.__aenter__()
+    try:
+        yield session
+    finally:
+        await session.__aexit__(None, None, None)
+        state["disconnected"] = True
+
+
+@asynccontextmanager
+async def _delete_after_use(client, session_id: str, working: str, state: dict[str, bool]):
+    # SDK disconnect releases handlers; ephemeral sessions (enable_session_store=False,
+    # infinite_sessions disabled) never write a session-state file on disk, so Copilot CLI
+    # 1.0.25+ reports "Session file not found" on delete_session after clean disconnect.
     try:
         yield
     finally:
-        await client.delete_session(session_id)
+        try:
+            await client.delete_session(session_id)
+        except RuntimeError as exc:
+            expected = f"Failed to delete session {session_id}: Session file not found for {session_id}"
+            if not (state["disconnected"] and str(exc) == expected
+                    and not _ephemeral_session_persisted(session_id, working)):
+                raise
 
 
 def _prompt_text(request: ModelRequest | ReviewModelRequest) -> str:
@@ -86,9 +113,10 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
                 max_prompt_tokens=request.max_input_tokens, max_output_tokens=request.max_output_tokens)),
             on_event=observe,
         )
+        session_state = {"disconnected": False}
         async with (
-            _managed(_delete_after_use(client, session.session_id), "session deletion"),
-            _managed(session, "session"),
+            _managed(_delete_after_use(client, session.session_id, working, session_state), "session deletion"),
+            _managed(_session_scope(session, session_state), "session"),
         ):
             # The outer deadline covers authentication, catalog lookup, creation, and inference.
             try:

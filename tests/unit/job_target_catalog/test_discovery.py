@@ -401,3 +401,36 @@ def test_dependency_parser_preserves_gap_reason_and_component_or_file_scope(tmp_
     [gap] = result["gaps"]
     assert gap["reason"] == expected_reason
     assert gap["code"] == ("parser_error" if case in {"missing", "syntax", "unicode"} else "producer_reported_gap")
+
+
+def test_cmake_unnamed_headers_and_public_include_dirs_bind_to_including_link_targets(tmp_path):
+    unit = context(tmp_path, SYSTEMS)
+    cmake = b"""\
+cmake_minimum_required(VERSION 3.16)
+project(smoke LANGUAGES C CXX)
+add_library(smoke_zlib STATIC third_party/zlib/adler32.c)
+target_include_directories(smoke_zlib PUBLIC third_party/zlib)
+add_executable(smoke_synthetic src/synthetic.cpp)
+add_executable(smoke_server src/main.cpp src/request.cpp)
+target_link_libraries(smoke_server PRIVATE smoke_zlib)
+"""
+    entries = [
+        source(unit, "CMakeLists.txt", cmake, None),
+        source(unit, "third_party/zlib/adler32.c", b'#include "zlib.h"\n', "C"),
+        source(unit, "third_party/zlib/zlib.h", b"struct z_stream_s { int x; };\n", "C/C++"),
+        source(unit, "src/synthetic.cpp", b"int main() { return 0; }\n", "C++"),
+        source(unit, "src/main.cpp", b'#include "request.h"\n#include "util.h"\nint main() { return 0; }\n', "C++"),
+        source(unit, "src/request.cpp", b'#include "request.h"\n#include "cache.h"\n', "C++"),
+        source(unit, "src/cache.h", b"struct Session { int id; };\n", "C/C++"),
+        source(unit, "src/request.h", b"void handle_request();\n", "C/C++"),
+        source(unit, "src/util.h", b"struct frame { int len; };\n", "C/C++"),
+    ]
+    unit.outputs[PARTITION] = partition(entries)
+    discovered = handler(SYSTEMS)(unit)
+    points = {pt["name"]: pt for pt in discovered["build_units"][0]["build_points"]}
+    assert points["smoke_synthetic"]["headers"] == []
+    assert points["smoke_synthetic"]["include_dirs"] == []
+    assert points["smoke_server"]["headers"] == ["src/cache.h", "src/request.h", "src/util.h"]
+    assert points["smoke_server"]["include_dirs"] == ["third_party/zlib"]
+    assert points["smoke_zlib"]["headers"] == ["third_party/zlib/zlib.h"]
+    assert points["smoke_zlib"]["include_dirs"] == ["third_party/zlib"]

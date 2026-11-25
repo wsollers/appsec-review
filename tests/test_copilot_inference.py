@@ -705,3 +705,38 @@ def test_sdk_reports_reuse_and_cold_time_only_for_this_call(sdk, monkeypatch):
         sdk.ping_error = None
         rotated = copilot_sdk.send(request(), timeout_seconds=5)
         assert (rotated.client_reused, rotated.client_cold_start_ms) == (False, 500)
+
+
+def test_sdk_ephemeral_session_not_found_on_delete_succeeds_only_when_unpersisted_and_disconnected(
+    sdk, monkeypatch, tmp_path
+):
+    from appsec_review.runtime import resources
+
+    quarantined = []
+    monkeypatch.setattr(resources, "quarantine_resources", quarantined.append)
+
+    sdk.delete_error = RuntimeError(
+        "Failed to delete session test-session-1: Session file not found for test-session-1"
+    )
+    result = copilot_sdk.send(request(), timeout_seconds=5)
+    assert result.proposal == VALUE
+    assert quarantined == []
+
+    # Persisted session-state residue must still fail closed.
+    (tmp_path / "session-state" / "test-session-2").mkdir(parents=True)
+    sdk.delete_error = RuntimeError(
+        "Failed to delete session test-session-2: Session file not found for test-session-2"
+    )
+    with pytest.raises(ExecutionContractError, match="session deletion teardown failed"):
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert quarantined == ["copilot_teardown_unconfirmed"]
+
+    # Unclean session disconnect must also still fail closed.
+    quarantined.clear()
+    sdk.exit_error = RuntimeError("disconnect failed")
+    sdk.delete_error = RuntimeError(
+        "Failed to delete session test-session-3: Session file not found for test-session-3"
+    )
+    with pytest.raises(ExecutionContractError, match="session deletion teardown failed"):
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert "copilot_teardown_unconfirmed" in quarantined

@@ -266,3 +266,38 @@ def test_nested_anonymous_duplicate_symbols_and_preprocessor_complexity():
     assert by_id["a.c::f#2"]["cyclomatic_complexity"] == 1
     assert by_id["a.c::f#2"]["cognitive_complexity"] == 1
     assert result["gaps"] == ["preprocessor_branches_not_counted"]
+
+
+def test_cmake_non_code_preserved_while_editorconfig_and_prose_txt_excluded():
+    txt_rules = signals.FilterRules(
+        generated=(), lockfile=(), fixture=(), documentation=("*.md", "*.txt"),
+        vendored=(), test=(), formatting_balance_tolerance=0.1,
+    )
+    assert filters.path_exclusion("CMakeLists.txt", txt_rules) is None
+    assert filters.path_exclusion("sub/CMakeLists.txt", txt_rules) is None
+    assert filters.path_exclusion("requirements-dev.txt", txt_rules) is None
+    assert filters.path_exclusion("notes.txt", txt_rules) == {
+        "category": "documentation", "pattern": "*.txt", "rules": filters.FILTER_IDENTITY}
+    assert filters.path_exclusion(".editorconfig", txt_rules) == {
+        "category": "tooling", "pattern": ".editorconfig", "rules": filters.FILTER_IDENTITY}
+
+    commit = change()
+    commit["files"] = [
+        {"path": p, "current_path": p, "added": 4, "deleted": 1}
+        for p in ("CMakeLists.txt", ".editorconfig", "src/main.cpp")
+    ]
+    eligible = {
+        "CMakeLists.txt": {"line_count": 40, "language": None},
+        ".editorconfig": {"line_count": 10, "language": None},
+        "src/main.cpp": {"line_count": 50, "language": "C++"},
+    }
+    computed = signals.compute_signals(
+        [commit], {HEAD: {}}, {}, eligible=eligible, roots=[(".", "root")],
+        anchor_time=STAMP, window_months=6, half_life_days=1,
+        minor_author_share=0.6, fix_interval_days=30, filters=txt_rules,
+    )
+    assert computed["files"]["CMakeLists.txt"]["exclusion"] is None
+    assert computed["files"]["CMakeLists.txt"]["rank_eligibility"] == "non_code"
+    assert computed["files"]["CMakeLists.txt"]["change_count"] == 1
+    assert computed["files"][".editorconfig"]["rank_eligibility"] == "excluded:tooling"
+    assert computed["files"]["src/main.cpp"]["rank_eligibility"] == "eligible"

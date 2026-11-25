@@ -359,6 +359,8 @@ def cmake_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
     unresolved: list[dict[str, Any]] = []
     variables: dict[str, list[str]] = {}
     by_name: dict[str, dict[str, Any]] = {}
+    exported_includes: dict[str, set[str]] = {}
+    link_edges: dict[str, list[tuple[str, str]]] = {}
     module_dirs: list[str] = []
     lists = sorted(path for path in descriptors if posixpath.basename(path) == "CMakeLists.txt")
     for path in lists:
@@ -446,9 +448,39 @@ def cmake_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
                     _cmake_sources(base, args[1:], variables, inventory, unresolved, evidence)))
                 continue
             if name == "target_include_directories" and len(args) >= 2 and args[0] in by_name:
-                dirs = [_cmake_dir(base, root, a) for a in args[1:] if a.upper() not in {"PUBLIC", "PRIVATE", "INTERFACE", "SYSTEM", "BEFORE", "AFTER"}]
                 point = by_name[args[0]]
-                point["include_dirs"] = sorted(set(point["include_dirs"]) | {d for d in dirs if d})
+                vis = "INTERFACE" if point["kind"] == "interface_library" else "PRIVATE"
+                own_dirs: set[str] = set(point["include_dirs"])
+                pub_dirs = exported_includes.setdefault(args[0], set())
+                for a in args[1:]:
+                    up = a.upper()
+                    if up in {"PUBLIC", "PRIVATE", "INTERFACE"}:
+                        vis = up
+                        continue
+                    if up in {"SYSTEM", "BEFORE", "AFTER"}:
+                        continue
+                    resolved_dir = _cmake_dir(base, root, a)
+                    if resolved_dir:
+                        if vis in {"PRIVATE", "PUBLIC"} or point["kind"] == "interface_library":
+                            own_dirs.add(resolved_dir)
+                        if vis in {"PUBLIC", "INTERFACE"}:
+                            pub_dirs.add(resolved_dir)
+                point["include_dirs"] = sorted(own_dirs)
+                continue
+            if name == "target_link_libraries" and len(args) >= 2 and args[0] in by_name:
+                vis = "PUBLIC"
+                edges = link_edges.setdefault(args[0], [])
+                for a in args[1:]:
+                    up = a.upper()
+                    if up in {"PUBLIC", "PRIVATE", "INTERFACE"}:
+                        vis = up
+                        continue
+                    if up in {"LINK_PUBLIC", "LINK_PRIVATE", "LINK_INTERFACE_LIBRARIES"}:
+                        vis = "PRIVATE" if up == "LINK_PRIVATE" else "INTERFACE" if up == "LINK_INTERFACE_LIBRARIES" else "PUBLIC"
+                        continue
+                    if up in {"OPTIMIZED", "DEBUG", "GENERAL"}:
+                        continue
+                    edges.append((vis, a))
                 continue
             if name == "project" and args:
                 variables.setdefault("PROJECT_NAME", [args[0]])
@@ -456,6 +488,26 @@ def cmake_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
                 unresolved.append({"evidence": evidence, "reason": f"{name} is a dynamic construct"})
     for point in points:
         point["headers"] = _headers_under(point["include_dirs"], inventory) if point["include_dirs"] else []
+    changed = True
+    while changed:
+        changed = False
+        for tname, edges in link_edges.items():
+            pub = exported_includes.setdefault(tname, set())
+            for vis, dep in edges:
+                if vis in {"PUBLIC", "INTERFACE"} and dep in exported_includes:
+                    before_len = len(pub)
+                    pub.update(exported_includes[dep])
+                    if len(pub) != before_len:
+                        changed = True
+    for tname, edges in link_edges.items():
+        point = by_name.get(tname)
+        if point is None:
+            continue
+        inherited: set[str] = set(point["include_dirs"])
+        for vis, dep in edges:
+            if (vis in {"PRIVATE", "PUBLIC"} or point["kind"] == "interface_library") and dep in exported_includes:
+                inherited.update(exported_includes[dep])
+        point["include_dirs"] = sorted(inherited)
     return {"build_points": points, "drives": drives, "includes": sorted(set(includes)), "unresolved": unresolved}
 
 

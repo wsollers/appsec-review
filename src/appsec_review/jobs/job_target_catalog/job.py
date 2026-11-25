@@ -12,6 +12,7 @@ from typing import Any
 from appsec_review.interchange import (
     GAP_SCHEMA, GapCode, path_gap_records, producer_gap,
 )
+from .c_symbols import extract_c_family_symbols
 from appsec_review.jobs.cataloging import (
     BUILD_FILES, PROJECT_FILES, PROJECT_FILE_SUFFIXES, Bounds, inventory, write_json,
 )
@@ -587,35 +588,66 @@ def build_job(*, fail_task: str | None = None) -> Job:
                     raise CatalogIntegrityError(str(error)) from error
                 if len(raw) != item["size_bytes"]:
                     raise CatalogIntegrityError("symbol source size differs from the accepted catalog")
-                offset = 0
-                for number, line in enumerate(raw.decode("utf-8", errors="strict").splitlines(keepends=True), 1):
-                    match = pattern.match(line)
-                    if match:
+                decoded = raw.decode("utf-8", errors="strict")
+                if item["language"] in {"C", "C++", "C/C++"}:
+                    file_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
+                                                     {"path": item["path"], "sha256": item["sha256"]})
+                    for hit in extract_c_family_symbols(decoded, limit=50_000 - len(symbols) + 1):
+                        if len(symbols) >= 50_000:
+                            gap_records.append(producer_gap(
+                                GapCode.TRUNCATED, "symbol index bound reached",
+                                unit_id=unit.unit_id, scope_id="symbols",
+                            ))
+                            break
                         symbol_id = LogicalIdentity.derive(EntityKind.SYMBOL, unit.job.source_fingerprint,
-                                                           {"path": item["path"], "line": number, "name": match.group(1)})
-                        file_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
-                                                         {"path": item["path"], "sha256": item["sha256"]})
+                                                           {"path": item["path"], "line": hit.line, "name": hit.name})
                         location = SourceLocation(
                             target_snapshot=unit.job.source_fingerprint, path=item["path"], file_sha256=item["sha256"],
-                            start_byte=offset, end_byte=offset + len(line.encode()), start_line=number, end_line=number,
-                            start_column=match.start(1) + 1, end_column=match.end(1) + 1,
-                            producer_location={"parser": "bounded-declaration-pattern", "line": number},
+                            start_byte=hit.line_start_byte, end_byte=hit.line_end_byte,
+                            start_line=hit.line, end_line=hit.line,
+                            start_column=hit.start_column, end_column=hit.end_column,
+                            producer_location={"parser": "c-family-declaration-scanner",
+                                               "line": hit.line, "kind": hit.kind},
                             mapping_method="source-line-exact", confidence=1.0,
                         )
-                        builder.add_entity(EntityRecord(symbol_id, match.group(1), match.group(1), line.rstrip(),
+                        builder.add_entity(EntityRecord(symbol_id, hit.name, hit.name, hit.line_text,
                                                         {"language": item["language"],
+                                                         "kind": hit.kind,
                                                          "generated": bool(item.get("generated")),
                                                          **scope_fields(item)}, location))
                         builder.add_relation(RelationRecord(RelationKind.DEFINES, file_id.value,
                                                             symbol_id.value, True, 1.0))
                         symbols.append(symbol_id.value)
-                    if len(symbols) >= 50_000:
-                        gap_records.append(producer_gap(
-                            GapCode.TRUNCATED, "symbol index bound reached",
-                            unit_id=unit.unit_id, scope_id="symbols",
-                        ))
-                        break
-                    offset += len(line.encode())
+                else:
+                    offset = 0
+                    for number, line in enumerate(decoded.splitlines(keepends=True), 1):
+                        match = pattern.match(line)
+                        if match:
+                            symbol_id = LogicalIdentity.derive(EntityKind.SYMBOL, unit.job.source_fingerprint,
+                                                               {"path": item["path"], "line": number, "name": match.group(1)})
+                            file_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
+                                                             {"path": item["path"], "sha256": item["sha256"]})
+                            location = SourceLocation(
+                                target_snapshot=unit.job.source_fingerprint, path=item["path"], file_sha256=item["sha256"],
+                                start_byte=offset, end_byte=offset + len(line.encode()), start_line=number, end_line=number,
+                                start_column=match.start(1) + 1, end_column=match.end(1) + 1,
+                                producer_location={"parser": "bounded-declaration-pattern", "line": number},
+                                mapping_method="source-line-exact", confidence=1.0,
+                            )
+                            builder.add_entity(EntityRecord(symbol_id, match.group(1), match.group(1), line.rstrip(),
+                                                            {"language": item["language"],
+                                                             "generated": bool(item.get("generated")),
+                                                             **scope_fields(item)}, location))
+                            builder.add_relation(RelationRecord(RelationKind.DEFINES, file_id.value,
+                                                                symbol_id.value, True, 1.0))
+                            symbols.append(symbol_id.value)
+                        if len(symbols) >= 50_000:
+                            gap_records.append(producer_gap(
+                                GapCode.TRUNCATED, "symbol index bound reached",
+                                unit_id=unit.unit_id, scope_id="symbols",
+                            ))
+                            break
+                        offset += len(line.encode())
             except (OSError, UnicodeError):
                 gap_records.append(producer_gap(
                     GapCode.PARSER_ERROR, f"{item['path']}: text decode failed",
