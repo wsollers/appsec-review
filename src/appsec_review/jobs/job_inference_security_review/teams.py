@@ -45,6 +45,7 @@ from appsec_review.inference import ModelRequest, ModelResult, ReviewModelReques
 from appsec_review.inference.execution import CallContext
 from appsec_review.inference.recording import MODE_ENVIRONMENT
 from appsec_review.inference.usage import Usage
+from appsec_review.retrieval.core import RetrievalIntegrityError
 from appsec_review.retrieval.index import INDEX_NAMES
 from appsec_review.retrieval.model import EntityKind
 
@@ -248,9 +249,14 @@ class ReviewContext:
             if identity in self._resolves:
                 return self._resolves[identity]
         try:
-            found = bool(self.core.find(identity=identity, limit=1)["results"])
+            response = self.core.find(identity=identity, limit=1)
+        except RetrievalIntegrityError as exc:
+            raise IntegrityError("accepted shard failed verification during evidence lookup") from exc
         except (ValueError, LookupError):
-            found = False
+            return False
+        if response.get("status") != "ok":
+            return False
+        found = bool(response["results"])
         with self._lock:
             self._resolves[identity] = found
         return found

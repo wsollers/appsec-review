@@ -258,7 +258,7 @@ TOOLS: tuple[dict[str, Any], ...] = (
          "path": {"type": "string", "maxLength": 4096},
          "line": {"type": "integer", "minimum": 1, "maximum": 10000000},
          "function_name": {"type": "string", "minLength": 1, "maxLength": 256},
-         "direction": {"type": "string", "enum": ["backward", "forward", "both"]},
+         "direction": {"type": "string", "enum": ["backward", "forward"]},
          "max_depth": {"type": "integer", "minimum": 1, "maximum": 12},
          "edge_kinds": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 64}, "uniqueItems": True},
          "limit": {"type": "integer", "minimum": 1, "maximum": 100},

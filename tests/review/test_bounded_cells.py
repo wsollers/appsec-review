@@ -13,6 +13,27 @@ from tests.review.test_cells import (
 from tests.test_bounded_execution import Clock
 
 
+def test_oversized_first_scoped_row_is_diagnosed_without_leaking_its_bytes():
+    from appsec_review.review.cells import _bound
+    row = {"identity": LEAD, "name": "private-row-value" * 500}
+    cap = capability(max_result_bytes=640)
+    result, withheld = _bound("find", {"results": [row], "pagination": {"next_cursor": "past-row"}}, cap)
+    assert not withheld and result["truncated"] and result["results"] == [] and result["next_cursor"] is None
+    diagnostic = result["oversized_item"]
+    assert diagnostic["item_bytes"] == len(json.dumps(row, sort_keys=True).encode())
+    assert diagnostic["limit_bytes"] == 640 and diagnostic["hint"]
+    assert "private-row-value" not in json.dumps(result) and len(json.dumps(result).encode()) <= 640
+
+
+def test_coverage_metadata_alone_does_not_drop_the_row_or_mark_it_truncated():
+    from appsec_review.review.cells import _bound
+    row = {"identity": LEAD}
+    cap = capability(max_result_bytes=640)
+    result, _ = _bound("find", {"results": [row], "coverage_gaps": [str(i) * 200 for i in range(25)]}, cap)
+    assert result["results"] == [row] and result["gaps_truncated"] and not result["truncated"]
+    assert len(json.dumps(result).encode()) <= 640
+
+
 def test_review_backoff_consumes_deadline_without_resetting_usage_or_receipts(tmp_path):
     clock = Clock()
     calls = []

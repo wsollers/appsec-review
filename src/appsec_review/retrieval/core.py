@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 import base64
 from contextvars import ContextVar
@@ -15,7 +15,7 @@ import re
 import sqlite3
 import time
 import uuid
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, Mapping, Sequence
 
 from appsec_review.interchange import decode_handoff
 from appsec_review.observability import PipelineLog
@@ -39,6 +39,18 @@ RESPONSE_SCHEMA = "appsec-review/retrieval-response/1"
 _RUN_ID = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{4}$")
 _WORD = re.compile(r"[\w.$:/@+-]+", re.UNICODE)
 _ACTIVE_MCP: ContextVar[Mapping[str, str] | None] = ContextVar("active_appsec_mcp", default=None)
+_CALLER: ContextVar[Mapping[str, Any]] = ContextVar("appsec_retrieval_caller", default={})
+
+
+@contextmanager
+def retrieval_caller(*, job_id: str, cell_id: str, role: str, turn: int, caller_kind: str) -> Iterator[None]:
+    """Application-only audit context; never populated from query parameters."""
+    token = _CALLER.set({"job_id": job_id, "cell_id": cell_id, "role": role, "turn": turn,
+                         "caller_kind": caller_kind})
+    try:
+        yield
+    finally:
+        _CALLER.reset(token)
 
 
 @dataclass(frozen=True, slots=True)
@@ -563,14 +575,16 @@ class RetrievalCore:
 
     def _envelope(self, *, tool: str, results: list[dict[str, Any]], gaps: Iterable[str],
                   started: float, request_hash: str, offset: int = 0, has_more: bool = False,
-                  truncated: bool = False, page_cursors: list[str] | None = None) -> dict[str, Any]:
+                  truncated: bool = False, page_cursors: list[str] | None = None,
+                  status: str = "ok") -> dict[str, Any]:
         unique_gaps = list(dict.fromkeys(str(item) for item in gaps))
-        if len(unique_gaps) > 200:
+        gaps_truncated = len(unique_gaps) > 200
+        if gaps_truncated:
             unique_gaps = [*unique_gaps[:199],
                            f"truncated: {len(unique_gaps) - 199} additional coverage gap(s) omitted"]
-            truncated = True
         response = {
             "schema": RESPONSE_SCHEMA, "tool": tool, "run_id": self.run_id,
+            "gaps_truncated": gaps_truncated, "status": status,
             "index_manifest": {"schema": self.manifest["schema"], "sha256": self.manifest_sha256,
                                "content_sha256": self.manifest["content_sha256"]},
             "indexes": [{key: value[key] for key in ("name", "schema", "sha256", "fingerprint", "shard_id")}
@@ -593,9 +607,9 @@ class RetrievalCore:
                 response["coverage_gaps"].append(byte_gap)
             response["pagination"]["next_cursor"] = continuation()
         if len(canonical_json(response)) > self.limits.max_response_bytes:
+            response["gaps_truncated"] = bool(response["coverage_gaps"])
             response["coverage_gaps"] = ["response metadata exceeded byte budget"]
             response["indexes"] = []
-            response["truncated"] = True
         return response
 
     def _audit(self, tool: str, request_hash: str, filters: Mapping[str, Any], response: Mapping[str, Any]) -> None:
@@ -604,8 +618,10 @@ class RetrievalCore:
         # The run-wide pipeline log is read by later jobs and by reporting; an audit record stays small.
         # The full gap list is in the response the caller received; here it is counted, hashed and sampled.
         gaps = [str(item) for item in response["coverage_gaps"]]
-        self.log.write(event, run_id=self.run_id, job_id="retrieval", trigger="mcp",
+        caller = _CALLER.get()
+        self.log.write(event, run_id=self.run_id, job_id=caller.get("job_id", "retrieval"), trigger="mcp",
                        orchestrator="retrieval", details={
+                            **caller, "elapsed_ms": response["duration_ms"], "status": response["status"],
                             "mcp_tool": tool, "manifest_sha256": self.manifest_sha256,
                             "query_sha256": request_hash, "filters": filters,
                             "result_count": len(response["results"]),
@@ -644,7 +660,8 @@ class RetrievalCore:
                 [], ["query execution-time budget exceeded"], False, 0, True, False)
         response = self._envelope(tool=tool, results=results, gaps=gaps, started=started,
                                   request_hash=request_hash, offset=offset, has_more=has_more,
-                                  truncated=timed_out or operation_truncated, page_cursors=page_cursors)
+                                  truncated=timed_out or operation_truncated, page_cursors=page_cursors,
+                                  status="timeout" if timed_out else "ok")
         filters = {key: value for key, value in parameters.items() if key not in {"query", "cursor"}}
         self._audit(tool, request_hash, filters, response)
         return response
@@ -757,7 +774,10 @@ class RetrievalCore:
 
         def operation(deadline: float):
             self._check_deadline(deadline)
-            matches = self.find(identity=identity, limit=2)["results"]
+            found = self.find(identity=identity, limit=2)
+            if found["status"] == "timeout":
+                raise sqlite3.OperationalError("interrupted")
+            matches = found["results"]
             if not matches:
                 return [], ["source identity was not found in accepted indexes"], False, 0
             match = matches[0]
@@ -869,14 +889,22 @@ class RetrievalCore:
         parsed = LogicalIdentity.parse(identity)
         if parsed.kind not in {EntityKind.TOOL_OBSERVATION, EntityKind.EVIDENCE_ARTIFACT, EntityKind.FINDING_PACKAGE}:
             raise ValueError("resolve_evidence requires an evidence-bearing identity")
-        entity = self.find(identity=identity, limit=1)["results"]
-        trace = self.trace(identity=identity, relations=(RelationKind.OBSERVED_AT, RelationKind.DERIVED_FROM,
-                           RelationKind.SUPPORTS, RelationKind.CONTRADICTS), depth=2, limit=limit)
-        parameters = {"identity": identity, "limit": limit}
-        return self._execute("resolve_evidence", parameters, lambda deadline: (
-            [{"entity": entity[0] if entity else None, "relationships": trace["results"]}],
-            ([] if entity else ["evidence identity was not found"]) + trace["coverage_gaps"], False, 0,
-        ))
+
+        def operation(deadline: float):
+            found = self.find(identity=identity, limit=1)
+            if found["status"] == "timeout":
+                raise sqlite3.OperationalError("interrupted")
+            self._check_deadline(deadline)
+            trace = self.trace(identity=identity, relations=(RelationKind.OBSERVED_AT, RelationKind.DERIVED_FROM,
+                               RelationKind.SUPPORTS, RelationKind.CONTRADICTS), depth=2, limit=limit)
+            if trace["status"] == "timeout":
+                raise sqlite3.OperationalError("interrupted")
+            self._check_deadline(deadline)
+            entity = found["results"]
+            return ([{"entity": entity[0] if entity else None, "relationships": trace["results"]}],
+                    ([] if entity else ["evidence identity was not found"]) + trace["coverage_gaps"], False, 0)
+
+        return self._execute("resolve_evidence", {"identity": identity, "limit": limit}, operation)
 
     def coverage(self, *, indexes: Iterable[str] | None = None, limit: int = 50,
                  cursor: str | None = None) -> dict[str, Any]:
@@ -1978,6 +2006,19 @@ class RetrievalCore:
         request_hash = self._request_hash("query_doc_drift", params)
         offset = self._offset(cursor, request_hash)
 
+        def shard_gaps(database: sqlite3.Connection, shard: Mapping[str, Any]) -> set[str]:
+            return {*(str(gap) for gap in shard.get("gaps", ())), *(row["gap"] for row in database.execute(
+                "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))}
+
+        def local_gaps(payload: Mapping[str, Any], shared: set[str]) -> list[str]:
+            return list(dict.fromkeys(str(gap) for gap in payload.get("gaps") or () if str(gap) not in shared))
+
+        def projected(row: sqlite3.Row, index: str, shared: set[str]) -> dict[str, Any]:
+            item = self._entity(row, index)
+            if "gaps" in item["payload"]:
+                item["payload"]["gaps"] = local_gaps(item["payload"], shared)
+            return item
+
         def operation(deadline: float):
             found: list[dict[str, Any]] = []
             gaps: list[str] = []
@@ -1997,6 +2038,8 @@ class RetrievalCore:
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
                 with closing(self._database(shard, deadline)) as database:
+                    shared = shard_gaps(database, shard)
+                    gaps.extend(f"precomputed/{shard_id}: {gap}" for gap in sorted(shared))
                     for row in database.execute(
                         "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
                         "WHERE e.kind='precomputed_fact' ORDER BY e.identity"
@@ -2010,7 +2053,7 @@ class RetrievalCore:
                         row_path = row["path"] or payload.get("subject_path")
                         if norm_path is not None and row_path != norm_path:
                             continue
-                        gaps.extend(f"{row['identity']}: {gap}" for gap in payload.get("gaps") or ())
+                        gaps.extend(f"{row['identity']}: {gap}" for gap in local_gaps(payload, shared))
                         dk = res.get("drift_kind")
                         if not isinstance(dk, str) or dk not in kinds:
                             if dk is not None:
@@ -2021,17 +2064,16 @@ class RetrievalCore:
                         sev = str(res.get("severity") or "medium")
                         if severity is not None and sev != severity:
                             continue
-                        item = self._entity(row, "precomputed")
+                        item = projected(row, "precomputed", shared)
                         item["shard_id"] = shard_id
                         item["drift_kind"] = dk
                         found.append(item)
-                    gaps.extend(f"precomputed/{shard_id}: {row['gap']}" for row in database.execute(
-                        "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
-                gaps.extend(f"precomputed/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
             for shard in obs_shards:
                 self._check_deadline(deadline)
                 shard_id = str(shard.get("shard_id", "default"))
                 with closing(self._database(shard, deadline)) as database:
+                    shared = shard_gaps(database, shard)
+                    gaps.extend(f"observations/{shard_id}: {gap}" for gap in sorted(shared))
                     for row in database.execute(
                         "SELECT e.*, l.* FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
                         "ORDER BY e.identity"
@@ -2041,7 +2083,7 @@ class RetrievalCore:
                             continue
                         if norm_path is not None and row["path"] != norm_path:
                             continue
-                        gaps.extend(f"{row['identity']}: {gap}" for gap in payload.get("gaps") or ())
+                        gaps.extend(f"{row['identity']}: {gap}" for gap in local_gaps(payload, shared))
                         dk = payload.get("drift_kind")
                         if not isinstance(dk, str) or dk not in kinds:
                             gaps.append(f"{row['identity']}: no recognized document drift kind")
@@ -2051,13 +2093,10 @@ class RetrievalCore:
                         sev = str(payload.get("severity") or "medium")
                         if severity is not None and sev != severity:
                             continue
-                        item = self._entity(row, "observations")
+                        item = projected(row, "observations", shared)
                         item["shard_id"] = shard_id
                         item["drift_kind"] = dk
                         found.append(item)
-                    gaps.extend(f"observations/{shard_id}: {row['gap']}" for row in database.execute(
-                        "SELECT gap FROM coverage WHERE gap IS NOT NULL AND status != 'complete'"))
-                gaps.extend(f"observations/{shard_id}: {gap}" for gap in shard.get("gaps", ()))
             found.sort(key=lambda item: (item["identity"], item["shard_id"]))
             return found[offset:offset + limit], gaps, len(found) > offset + limit, offset
 

@@ -219,14 +219,37 @@ def expand_verifier(compact: Mapping[str, Any], labels: LabelTable, *, claim_id:
         compact, _ok = salvage_position(compact, "verifier", schema_errors, expansion)
     if not _validate(compact, COMPACT_SCHEMAS["verifier"], schema_errors, expansion):
         return expansion
-    positions = positions_of({**compact, "stance": None, "predicate": None}, labels, expansion, "verifier")
+    predicates = {}
+    gap_citations = []
+    for predicate, entry in compact["per_predicate"].items():
+        cites = []
+        for token in entry.get("cites", ()):
+            gap = labels.text_of(token) if entry["stance"] == UNRESOLVED else None
+            if gap is None:
+                cites.append(token)
+            else:
+                citation = {"predicate": predicate, "label": token, "gap": text(gap, limit=1000)}
+                if citation not in gap_citations:
+                    gap_citations.append(citation)
+        predicates[predicate] = {**entry, "cites": cites}
+    positions = positions_of({**compact, "per_predicate": predicates}, labels, expansion, "verifier")
     requests = expand_requests(compact.get("evidence_requests", ()), labels, expansion, "verifier")
     if expansion.errors:
         return expansion
+    disposition = compact["disposition"]
+    strongest = overall_stance(compact, positions)
+    # Predicate stances and verifier dispositions are different closed vocabularies.
+    # Retain a declared conclusion only if its predicate evidence survived resolution.
+    required = {"supported": "supports", "confirmed": "supports", "contradicted": "contradicts",
+                "not_reachable": "contradicts", "not_exploitable_in_observed_configuration": "contradicts"}
+    if disposition in required and (strongest != required[disposition] or gap_citations
+                                    or any(item.requested for item in positions)):
+        disposition = "insufficient_evidence"
     expansion.result = {
         "schema": VERIFIER_SCHEMA, "claim_id": claim_id, "citations": citations_of(positions),
         "proposed_relations": relations_of(positions), "evidence_requests": requests,
-        "rationale": summary_why(compact, positions), "proposed_disposition": compact["disposition"]}
+        "rationale": summary_why(compact, positions), "proposed_disposition": disposition,
+        **({"gap_citations": gap_citations} if gap_citations else {})}
     return expansion
 
 
@@ -496,12 +519,17 @@ def salvage_position(compact: Mapping[str, Any], role: str, schema_errors: Schem
                      ) -> tuple[dict[str, Any], bool]:
     """Coerce the recoverable containers of a ``blue-compact`` or ``verifier-compact`` answer."""
     document = json.loads(json.dumps(compact))
+    uncertainty = ("needs_gap", "unverified", "insufficient_evidence")
+    if role == "verifier" and document.get("disposition") in uncertainty:
+        document["disposition"] = "insufficient_evidence"
     _listify(document, "cites", expansion, role)
     _wrap_object(document, "evidence_requests", expansion, role)
     per_predicate = document.get("per_predicate")
     if isinstance(per_predicate, dict):
         for predicate, entry in per_predicate.items():
             if isinstance(entry, dict):
+                if role == "verifier" and entry.get("stance") in uncertainty:
+                    entry["stance"] = UNRESOLVED
                 _listify(entry, "cites", expansion, f"{role} {predicate}")
                 _listify(entry, "missing", expansion, f"{role} {predicate}")
     return document, not schema_errors(COMPACT_SCHEMAS[role], document)

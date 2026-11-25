@@ -169,6 +169,7 @@ def run_action(action: str, platform: str, profile: str, environ: Mapping[str, s
     from appsec_review.config.host_pins import HOST_PINS_ENV, HOST_PINS_PATH
     pins = Path(environ.get(HOST_PINS_ENV) or repository / HOST_PINS_PATH)
     environment[HOST_PINS_ENV] = str(pins if pins.is_absolute() else repository / pins)
+    environment["APPSEC_REVIEW_PROFILE"] = profile
     result = runner(compose_base(platform, profile) + commands[action], cwd=repository, env=environment,
                     check=False).returncode
     if action in LAUNCHING and result == OK:

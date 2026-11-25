@@ -51,6 +51,42 @@ def package(number: int, *, evidence_id: str = "ev-shared", context_records: int
     }
 
 
+def test_host_budgets_plan_the_same_rendered_twelve_rows_over_sixty_subjects():
+    from pathlib import Path
+    from appsec_review.config import load_config
+
+    root = Path(__file__).resolve().parents[3]
+    packages = [package(number) for number in range(12)]
+    for number, row in enumerate(packages):
+        evidence = [package(number, evidence_id=f"subject-{5 * number + j}")["evidence_references"][0]
+                    for j in range(5)]
+        row["evidence_references"] = [{**record, "excerpt": EXCERPT * 12} for record in evidence]
+        row["proof_obligations"] = [{**row["proof_obligations"][0], "subject_id": record["evidence_id"],
+                                     "obligation_id": f"{row['row_id']}:{record['evidence_id']}",
+                                     "evidence_ids": [record["evidence_id"]]} for record in evidence]
+        row["expansion_identities"] = [record["reference"]["source_identity"] for record in evidence]
+    assert len(assemble(packages)["evidence"]) == 60
+    counts = []
+    for profile_name in ("dev", "wsollers1-dev"):
+        config = load_config(root / "appsec-review.toml", profile=profile_name)
+        job = config.job("job_owasp_control_assessment")
+        profile = job.settings["model"]
+        settings = parse_settings(job.settings)
+
+        def estimate(view):
+            request = assessment._request(
+                view, batch={"batch_id": "batch", "assignment": {"persona": "general"}},
+                role="control_assessor", guidance={"bundle_sha256": "a" * 64}, text="guidance",
+                profile=profile, settings=settings, transcript=(), queries=0, turn=0, retry=0, part=None)
+            return estimate_tokens(request)
+
+        parts = plan_parts(packages, estimate=estimate, budget=profile["max_input_tokens"])
+        assert all(part.dispatch and part.estimate <= profile["max_input_tokens"] for part in parts)
+        assert [row_id for part in parts for row_id in part.row_ids] == [row["row_id"] for row in packages]
+        counts.append(len(parts))
+    assert counts[0] > counts[1] == 1
+
+
 def test_twelve_rows_sharing_one_excerpt_serialize_it_once():
     packages = [package(number, context_records=4) for number in range(12)]
     before = canonical_json(packages)
@@ -138,7 +174,10 @@ def test_investigate_dispatches_each_part_and_reports_rows(tmp_path, monkeypatch
     sizes = []
 
     def measure(request, *, timeout_seconds):
-        sizes.append(estimate_tokens(assessment.asdict(request)))
+        from appsec_review.inference.request import review_prompt
+        import json
+        wire = json.dumps(review_prompt(request, include_guidance=True)).encode("utf-8")
+        sizes.append(256 + (len(wire) * 115 + 279) // 280)
         return ModelResult({"schema": assessment.TURN_SCHEMA, "action": "final", "results": [
             {"row_id": row["row_id"], "obligations": []} for row in request.task_input["packages"]]})
     assert assessment.investigate(**probe, infer=measure)["status"] == "succeeded" and len(sizes) == 1
@@ -147,7 +186,7 @@ def test_investigate_dispatches_each_part_and_reports_rows(tmp_path, monkeypatch
 
     def infer(request, *, timeout_seconds):
         calls.append(request)
-        assert estimate_tokens(assessment.asdict(request)) <= budget
+        assert estimate_tokens(request) <= budget
         assert "evidence_references" not in request.task_input["packages"][0]
         return ModelResult({"schema": assessment.TURN_SCHEMA, "action": "final", "results": [
             {"row_id": row["row_id"], "obligations": []} for row in request.task_input["packages"]]})

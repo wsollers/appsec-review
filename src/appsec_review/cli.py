@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import socket
 import time
 from typing import Sequence
 
@@ -49,7 +50,7 @@ def parser() -> argparse.ArgumentParser:
     root.add_argument("--config", default="appsec-review.toml",
                       help="optional local path or file URI (defaults to repository configuration)")
     root.add_argument("--profile", choices=PROFILES, default=None,
-                      help="runtime profile (default: APPSEC_REVIEW_PROFILE, else dev; Copilot profiles use a separate login)")
+                      help="runtime profile (overrides APPSEC_REVIEW_PROFILE and the host default for new runs)")
     commands = root.add_subparsers(dest="command", required=True)
 
     run = commands.add_parser("run", help="dispatch one job")
@@ -201,6 +202,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         print(json.dumps(report, sort_keys=True, indent=2))
         return 1 if report["failures"] else 0
+    if args.command == "start" and args.profile is None and not os.environ.get("APPSEC_REVIEW_PROFILE"):
+        if socket.gethostname().partition(".")[0].casefold() == "wsollers1":
+            args.profile = "wsollers1-dev"
     compiler = getattr(args, "compiler_target", None)
     if args.command in {"run", "plan-resume", "resume", "plan-repair", "admit-repair", "verify-repair-stop",
                         "failure-replay", "build-failure-context",

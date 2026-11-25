@@ -733,6 +733,47 @@ def test_limits_timeout_audit_redaction_and_concurrent_reads(tmp_path: Path) -> 
     assert timeout["truncated"] and "execution-time budget" in timeout["coverage_gaps"][0]
 
 
+def test_resolution_audit_includes_nested_time_and_resets_caller(tmp_path):
+    from itertools import count
+    from appsec_review.retrieval.core import retrieval_caller
+
+    runs, ids = _fixture(tmp_path)
+    ticks = count()
+    core = RetrievalCore(runs, RUN_ID, clock=lambda: next(ticks) / 1000)
+    with retrieval_caller(job_id="job_inference_security_review", cell_id="cell-a", role="independent_verifier",
+                          turn=2, caller_kind="review_cell"):
+        response = core.resolve_evidence(identity=ids["observation"])
+    core.find(identity=ids["file"])
+    events = [json.loads(line) for line in (runs / RUN_ID / "data/logs/pipeline.jsonl").read_text().splitlines()]
+    resolution = next(event for event in events if event.get("details", {}).get("mcp_tool") == "resolve_evidence")
+    audit = resolution["details"]
+    assert audit["elapsed_ms"] == response["duration_ms"] and audit["elapsed_ms"] > 2
+    assert (resolution["job_id"], audit["cell_id"], audit["role"], audit["turn"], audit["caller_kind"]) == (
+        "job_inference_security_review", "cell-a", "independent_verifier", 2, "review_cell")
+    assert events[-1]["job_id"] == "retrieval" and "cell_id" not in events[-1]["details"]
+
+
+def test_inner_lookup_timeout_is_not_absence_and_is_not_cached(tmp_path):
+    from types import SimpleNamespace
+    from appsec_review.jobs.job_inference_security_review.teams import ReviewContext
+
+    runs, ids = _fixture(tmp_path)
+    # The outer excerpt deadline check passes; the nested point lookup crosses its deadline.
+    ticks = iter((0.0, 0.0, 0.0, 3.0))
+    core = RetrievalCore(runs, RUN_ID, limits=RetrievalLimits(timeout_ms=1), clock=lambda: next(ticks, 3.0))
+    response = core.read_excerpt(identity=ids["file"])
+    assert response["status"] == "timeout" and response["results"] == []
+    assert not any("not found" in gap for gap in response["coverage_gaps"])
+    assert any("execution-time" in gap for gap in response["coverage_gaps"])
+
+    ticks = iter((0.0, 3.0))
+    ctx = SimpleNamespace(core=core, _lock=threading.Lock(), _resolves={})
+    assert not ReviewContext.resolves(ctx, ids["file"])
+    assert ctx._resolves == {}
+    assert ReviewContext.resolves(ctx, ids["file"])
+    assert ctx._resolves == {ids["file"]: True}
+
+
 def test_mcp_core_parity_schema_serialization_and_live_stdio_smoke(tmp_path: Path) -> None:
     runs, ids = _fixture(tmp_path)
     core = RetrievalCore(runs, RUN_ID)

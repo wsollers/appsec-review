@@ -15,11 +15,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import hashlib
+import json
 from typing import Any, Callable, Mapping, Sequence
 
+from appsec_review.inference.request import ReviewModelRequest, review_prompt
 from appsec_review.storage import canonical_json
 
-REQUEST_RULE = "appsec-review/owasp-request-assembly/1"
+REQUEST_RULE = "appsec-review/owasp-request-assembly/2"
 # Package fields that hold batch-shared material and leave the row view.
 _HOISTED = frozenset({"routing_context", "graph_context", "limitations", "retrieval_manifest", "guidance",
                       "evidence_references", "proof_obligations", "component"})
@@ -37,8 +39,16 @@ READING_RULE = ("Each row cites its evidence by evidence_ids into `evidence`; it
 
 
 def estimate_tokens(value: Any) -> int:
-    """The workbench token estimate: canonical JSON bytes at 4 bytes per token, rounded up."""
-    return (len(canonical_json(value)) + 3) // 4
+    """Budget serialized provider text at 2.8 bytes/token, plus 15% and 256 framing tokens."""
+    system_bytes = 0
+    if isinstance(value, ReviewModelRequest):
+        separate_system = value.provider == "anthropic-api"
+        if separate_system:
+            system_bytes = len(value.guidance_text.encode("utf-8"))
+        value = review_prompt(value, include_guidance=not separate_system)
+    # The transports use json.dumps defaults for spaces and escaping, not canonical_json.
+    size = system_bytes + len(json.dumps(value).encode("utf-8"))
+    return 256 + (size * 115 + 279) // 280
 
 
 def _common(values: Sequence[Sequence[str]]) -> list[str]:

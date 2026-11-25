@@ -461,14 +461,14 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
             "schema": FACT_SCHEMA, "query_set": "document_context", "subject_identity": src_id,
             "subject_path": "src/auth.py",
             "result": {"kind": "route", "drift_kind": "undocumented_route", "severity": "high"},
-            "gaps": ["no accepted OpenAPI declaration for this request"],
+            "gaps": ["target document coverage is incomplete", "no accepted OpenAPI declaration for this request"],
         }, loc),
         *[
             EntityRecord(LogicalIdentity.derive(EntityKind.PRECOMPUTED_FACT, SNAPSHOT, {"doc": str(i)}),
                          f"dc:{i + 2}", "Missing context", "coverage only", {
                              "schema": FACT_SCHEMA, "query_set": "document_context",
                              "subject_identity": src_id, "subject_path": "src/auth.py",
-                             "result": result, "gaps": [f"missing declaration {i}"],
+                             "result": result, "gaps": ["target document coverage is incomplete", f"missing declaration {i}"],
                          }, loc)
             for i, result in enumerate(({}, {"drift_kind": "arbitrary gap text"}))
         ],
@@ -541,6 +541,9 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
     assert any("unsupported drift kind" in gap for gap in drift["coverage_gaps"])
     assert any("no recognized document drift kind" in gap for gap in drift["coverage_gaps"])
     assert "precomputed/precomputed-doc: target document coverage is incomplete" in drift["coverage_gaps"]
+    assert sum("target document coverage is incomplete" in gap for gap in drift["coverage_gaps"]) == 1
+    precomputed = next(row for row in drift["results"] if row["index"] == "precomputed")
+    assert precomputed["payload"]["gaps"] == ["no accepted OpenAPI declaration for this request"]
     assert "observations/document-drift: document claims remain unverified" in drift["coverage_gaps"]
     with pytest.raises(ValueError, match="drift_kind must"):
         core.query_doc_drift(drift_kind="arbitrary gap text")
@@ -548,7 +551,8 @@ def test_t172_retrieval_core_all_ten_query_methods_over_immutable_shards(tmp_pat
                               started=core.clock(), request_hash="a" * 64)
     assert len(envelope["coverage_gaps"]) == 200
     assert envelope["coverage_gaps"][-1] == "truncated: 6 additional coverage gap(s) omitted"
-    assert envelope["truncated"] is True
+    assert envelope["gaps_truncated"] is True
+    assert envelope["truncated"] is False
     assert len(core.query_engineering_signals(path="src/auth.py", signal_family="priority")["results"]) == 1
     assert len(core.query_sca_reachability(package="pyjwt", reachability_class="call_graph_reachable")["results"]) == 1
     assert len(sanitizer_core.query_sanitizer_readiness(build_unit="unit-1", sanitizer="asan")["results"]) == 1

@@ -654,7 +654,7 @@ PROFILE_ENVIRONMENT = "APPSEC_REVIEW_PROFILE"
 PROFILE_LAYER = "runtime_profile"
 DEFAULT_PROFILE = "dev"
 PROFILES: tuple[str, ...] = ("dev", "prod", "copilot-dev", "copilot-prod", "copilot-carbon-prod",
-                            "copilot-dev-astra-6.2", "copilot-dev-gemini")
+                            "copilot-dev-astra-6.2", "copilot-dev-gemini", "wsollers1-dev")
 PROFILE_DIRECTORY = "profiles"
 _NAME = re.compile(r"[a-z][a-z0-9_]{0,63}")
 PROFILE_MODEL_JOBS: tuple[str, ...] = (
@@ -772,7 +772,9 @@ def profile_override_keys(document: object) -> tuple[str, ...]:
         job = table(jobs[job_id], field, {"settings"})
         if job_id in PROFILE_MODEL_JOBS:
             settings = table(job["settings"], f"{field}.settings",
-                             {"model", "models"} if job_id == "job_owasp_control_assessment" else {"model"})
+                             {"model", "models", "max_turns"} if job_id == "job_owasp_control_assessment" else {"model"})
+            if "max_turns" in settings:
+                keys += typed({"max_turns": settings["max_turns"]}, f"{field}.settings", {"max_turns": int})
             if "model" in settings:
                 keys += typed(settings["model"], f"{field}.settings.model", PROFILE_JOB_MODEL_KEYS)
             if "models" in settings:
@@ -840,6 +842,8 @@ def _apply_profile(document: dict[str, Any], profile: Mapping[str, Any]) -> None
     for job_id, job in profile["jobs"].items():
         settings = job["settings"]
         if job_id in PROFILE_MODEL_JOBS:
+            if "max_turns" in settings:
+                base_table(("jobs", job_id, "settings"))["max_turns"] = settings["max_turns"]
             if "model" in settings:
                 base_table(("jobs", job_id, "settings", "model")).update(settings["model"])
             for name, values in settings.get("models", {}).items():

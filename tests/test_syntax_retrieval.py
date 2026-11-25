@@ -107,6 +107,22 @@ def test_source_only_navigation_exact_spans_ast_subjects_and_excerpts(tmp_path):
     assert identity.producer["syntax_projection"] == SCHEMA
 
 
+def test_match_capture_budget_is_utf8_safe_and_never_serializes_unrelated_block_tables():
+    from appsec_review.retrieval.syntax import _match_payload
+    from appsec_review.retrieval.syntax_contract import MAX_NAME_BYTES
+
+    value = "\u754c" * 512
+    raw = {"syntax": {"schema": SCHEMA, "source_identity": "file", "category": "definition",
+                      "written_name": value, "syntactic_qualifiers": [value] * 10},
+           "cfg_nodes": [{"snippet": "private block bytes"}], "captures": ["private capture"]}
+    match = _match_payload(raw)
+    assert set(match) == {"syntax_only", "syntax"}
+    returned = match["syntax"]
+    assert 0 < len(returned["written_name"].encode()) <= MAX_NAME_BYTES and "\ufffd" not in returned["written_name"]
+    assert returned["capture_bytes_omitted"] > 0 and returned["qualifiers_omitted"] == 2
+    assert all(len(name.encode()) <= MAX_NAME_BYTES for name in returned["syntactic_qualifiers"])
+
+
 def test_raw_ast_subject_and_response_byte_bound(tmp_path):
     core, source, _, _ = _run(tmp_path)
     root = core.find(kind="ast_node", name="module", indexes=["analysis"])["results"][0]

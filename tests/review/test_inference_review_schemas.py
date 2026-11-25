@@ -461,6 +461,13 @@ def test_worker_turn_schema_tracks_capability_and_rejects_unknown_fields():
         assert ("locator" in branch["properties"]["parameters"]["properties"]) == (tool in LOCATOR_TOOLS)
         assert branch["properties"]["parameters"]["additionalProperties"] is False
     turn = validator("worker-turn")
+    from appsec_review.mcp.schema import TOOLS
+    declared = next(tool for tool in TOOLS if tool["name"] == "query_cpg_slice")["inputSchema"]
+    assert set(declared["properties"]["direction"]["enum"]) == {"backward", "forward"}
+    for direction in ("backward", "forward", "both"):
+        action = {"action": "retrieve", "requests": [{"tool": "query_cpg_slice",
+                  "parameters": {"function_name": "example", "direction": direction}}]}
+        assert turn.is_valid(action) == (direction != "both")
     turn.validate({"action": "retrieve", "requests": [{"tool": "expand", "parameters": {"label": "K1"}}]})
     assert not turn.is_valid({"action": "retrieve", "requests": [
         {"tool": "expand", "parameters": {"label": "K1", "files": "src"}}]})

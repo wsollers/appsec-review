@@ -24,6 +24,30 @@ if TYPE_CHECKING:
 QUERY_SYNTAX = "query_syntax"
 
 
+def _match_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Project just the syntax match; CFG tables and raw captures are not part of this route."""
+    syntax = payload["syntax"]
+    fields = ("schema", "source_identity", "category", "enclosing_definition", "resolution", "syntax_only",
+              "import_expression", "import_form", "name_span")
+    match = {key: syntax[key] for key in fields if key in syntax}
+    omitted = 0
+
+    def bounded(value: str) -> str:
+        nonlocal omitted
+        encoded = value.encode("utf-8")
+        prefix = encoded[:MAX_NAME_BYTES].decode("utf-8", errors="ignore")
+        omitted += len(encoded) - len(prefix.encode("utf-8"))
+        return prefix
+
+    match["written_name"] = bounded(syntax["written_name"])
+    qualifiers = syntax.get("syntactic_qualifiers", ())
+    match["syntactic_qualifiers"] = [bounded(name) for name in qualifiers[:8]]
+    if omitted or len(qualifiers) > 8:
+        match["capture_bytes_omitted"] = omitted
+        match["qualifiers_omitted"] = max(0, len(qualifiers) - 8)
+    return {"syntax_only": True, "syntax": match}
+
+
 def row_in_scope(row: Mapping[str, Any], sources: tuple[str, ...] | list[str]) -> bool:
     """Only an exact, signed source-file identity grants syntax rows; prefixes never do."""
     payload = row.get("payload")
@@ -106,6 +130,7 @@ def query_syntax(core: "RetrievalCore", *, mode: str, subject: str, name: str | 
                        " AND ".join(base) + " ORDER BY e.identity LIMIT ?")
                 for row in database.execute(sql, [*values, offset + limit + 1]):
                     item = core._entity(row, "analysis")
+                    item["payload"] = _match_payload(item["payload"])
                     item["shard_id"] = shard.get("shard_id", "default")
                     found.setdefault(item["identity"], item)
                 source = database.execute("SELECT l.path FROM locations l WHERE l.entity_id=?", (source_id,)).fetchone()

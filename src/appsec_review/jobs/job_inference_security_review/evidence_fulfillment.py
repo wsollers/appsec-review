@@ -167,6 +167,8 @@ def fulfill_evidence_requests(
     if admitted and allowed and hasattr(core, "find"):
         for eid in sorted(allowed):
             response = core.find(identity=eid, limit=1)
+            if response.get("status") != "ok":
+                continue
             found = response["results"]
             if found:
                 if found[0]["identity"] != eid:

@@ -937,8 +937,7 @@
                   "type": "string",
                   "enum": [
                     "backward",
-                    "forward",
-                    "both"
+                    "forward"
                   ]
                 },
                 "max_depth": {

@@ -52,7 +52,7 @@ _AUTHORITATIVE_INDEX = {
     "build_action": "build", "tool_observation": "observations", "tag_assignment": "tags",
     "priority_item": "priority",
 }
-EVIDENCE_RULE = "appsec-review/owasp-evidence-binding/4"
+EVIDENCE_RULE = "appsec-review/owasp-evidence-binding/5"
 
 
 def redact(text: str) -> tuple[str, bool]:

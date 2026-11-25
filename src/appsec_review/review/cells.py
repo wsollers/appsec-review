@@ -34,7 +34,7 @@ from appsec_review.inference.errors import (
 )
 from appsec_review.inference.execution import CallAccounting, CallContext, Execution, RetryPolicy
 from appsec_review.inference.usage import Usage
-from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError
+from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError, retrieval_caller
 from appsec_review.review.capability import (
     EXPAND_SCHEMA, EXPAND_TOOL, GRAPH_ROW_KINDS, LOCATOR_TOOLS, AuthorityDenied, CellCapability, TOOL_SCHEMAS,
 )
@@ -536,8 +536,10 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
             attempt.end(CellStatus.TIMED_OUT, GapClass.BUDGET_GAP, "cap_reached_without_final")
             attempt.repair_errors = ("the cell's query or turn cap was reached; the next turn must be final",)
             return attempt
-        responses = [_retrieve(spec, cell_id, attempt, capability, core, turn_number, index, item, entry)
-                     for index, item in enumerate(turn["requests"])]
+        with retrieval_caller(job_id="job_inference_security_review", cell_id=cell_id,
+                              role=spec.role.value, turn=turn_number, caller_kind="review_cell"):
+            responses = [_retrieve(spec, cell_id, attempt, capability, core, turn_number, index, item, entry)
+                         for index, item in enumerate(turn["requests"])]
         if attempt.repeated is not None:
             attempt.end(CellStatus.INVALID, GapClass.AUTHORITY_ERROR, attempt.repeated)
             attempt.repair_errors = ("the same request was denied twice; the cell ended without a usable result",)
@@ -753,15 +755,35 @@ def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability,
             kept.append(scoped)
     manifest = response.get("index_manifest") if isinstance(response.get("index_manifest"), Mapping) else {}
     pagination = response.get("pagination") if isinstance(response.get("pagination"), Mapping) else {}
+    gaps = response.get("coverage_gaps", ()) or ()
     bounded = {"tool": tool, "index_manifest_sha256": manifest.get("sha256"),
                "results": kept, "withheld_out_of_scope": withheld,
-               "coverage_gaps": [str(item)[:256] for item in list(response.get("coverage_gaps", ()) or ())[:20]],
+               "coverage_gaps": [str(item)[:256] for item in gaps[:20]],
+               "gaps_truncated": bool(response.get("gaps_truncated")) or len(gaps) > 20,
                "truncated": bool(response.get("truncated")),
                "next_cursor": pagination.get("next_cursor") if not withheld else None}
-    while kept and len(json.dumps(bounded, sort_keys=True, default=str).encode()) > capability.max_result_bytes:
-        kept.pop()
+
+    def size(value: Any) -> int:
+        return len(json.dumps(value, sort_keys=True, default=str).encode())
+
+    while size(bounded) > capability.max_result_bytes:
+        if bounded["coverage_gaps"]:
+            bounded["coverage_gaps"].pop()
+            bounded["gaps_truncated"] = True
+            continue
+        if not kept:
+            break
+        omitted = kept.pop()
         bounded["truncated"] = True
+        # The upstream cursor resumes *after* its whole page, not after this prefix.
         bounded["next_cursor"] = None
+        if not kept:
+            bounded["oversized_item"] = {"item_bytes": size(omitted), "limit_bytes": capability.max_result_bytes,
+                                         "hint": "Narrow the query to a smaller item or source span."}
+        else:
+            bounded["narrowing_hint"] = "Retry with a smaller page limit; the upstream cursor would skip rows."
+        if not kept:
+            bounded.pop("narrowing_hint", None)
     return bounded, withheld
 
 

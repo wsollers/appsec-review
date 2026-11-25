@@ -157,6 +157,36 @@ def test_round2_locationless_row_does_not_match_an_arbitrary_source_path(evidenc
     assert (outcome.fulfilled_count, outcome.unfulfilled_count) == (0, 1)
 
 
+def test_review_lookup_propagates_shard_integrity_failure_without_caching_absence(evidence_core):
+    from threading import Lock
+    from types import SimpleNamespace
+    from appsec_review.jobs.job_inference_security_review.teams import ReviewContext
+    from appsec_review.retrieval.core import RetrievalIntegrityError
+    from appsec_review.review.models import IntegrityError
+
+    core, ids = evidence_core
+    ctx = SimpleNamespace(core=core, _lock=Lock(), _resolves={})
+    shard = core.run_root / core.indexes["analysis"][0]["relative_path"]
+    with shard.open("ab") as handle:
+        handle.write(b"changed after manifest verification")
+    with pytest.raises(IntegrityError, match="failed verification") as failure:
+        ReviewContext.resolves(ctx, ids["parse_token"])
+    assert isinstance(failure.value.__cause__, RetrievalIntegrityError)
+    assert ctx._resolves == {}
+
+
+@pytest.mark.parametrize("status", ["timeout", "error", None])
+def test_failed_lookup_cannot_fulfill_request_even_with_a_returned_row(evidence_core, monkeypatch, status):
+    core, ids = evidence_core
+    entity = ids["parse_token"]
+    response = core.find(identity=entity, limit=1)
+    assert response["results"]
+    monkeypatch.setattr(core, "find", lambda **_: {**response, "status": status})
+    outcome = fulfill_evidence_requests(core, [entity], _pending([("Check parse_token", [entity])], entity))
+    assert (outcome.fulfilled_count, outcome.unfulfilled_count) == (0, 1)
+    assert not outcome.fulfilled_items and not outcome.extra_entities
+
+
 def test_round2_rejects_citation_without_accepted_shard_identity(evidence_core, monkeypatch):
     from appsec_review.review.models import IntegrityError
 
