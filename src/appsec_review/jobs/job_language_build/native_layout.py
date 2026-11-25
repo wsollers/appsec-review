@@ -672,7 +672,7 @@ def heuristic_roots(workspace: Path, preexisting: Preexisting, covered: Iterable
         named = PurePosixPath(relative).name.casefold() in HEURISTIC_NAMES if relative else False
         for entry in entries:
             child = _join(relative, entry.name)
-            if entry.name in {".git", ".hg", ".svn"} or any(_under(child, root) for root in covered):
+            if entry.name in {".git", ".hg", ".svn", "CMakeFiles"} or any(_under(child, root) for root in covered):
                 continue
             if named and preexisting.created(child) and not is_covered(child):
                 build_file = any((Path(entry.path) / name).is_file() for name in BUILD_SYSTEM_FILES)

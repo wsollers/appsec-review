@@ -215,3 +215,205 @@ def test_generic_reconciliation_contract_is_shared_by_all_descriptor_languages(
     assert result.facts["failed_exec_events"] == 1
     assert result.facts["connect_events"] == 1
     assert result.facts["envp_redacted_names"] == ["TOKEN"]
+
+
+
+
+def _pid_exec(
+    executable: str,
+    argv: Sequence[str],
+    *,
+    pid: int,
+    ordinal: int,
+    result: int = 0,
+) -> dict[str, Any]:
+    return {
+        "kind": "process_exec",
+        "pid": pid,
+        "ordinal": ordinal,
+        "timestamp_ns": ordinal * 1000,
+        "executable": executable,
+        "argv": list(argv),
+        "argv_truncated": False,
+        "result": result,
+        "envp_captured": False,
+        "envp_redacted_names": [],
+    }
+
+
+def _fork(pid: int, child_pid: int, ordinal: int) -> dict[str, Any]:
+    return {
+        "kind": "process_fork",
+        "pid": pid,
+        "child_pid": child_pid,
+        "ordinal": ordinal,
+        "timestamp_ns": ordinal * 1000,
+    }
+
+
+def _chdir(pid: int, path: str, ordinal: int) -> dict[str, Any]:
+    return {
+        "kind": "directory_change",
+        "pid": pid,
+        "path": path,
+        "result": 0,
+        "ordinal": ordinal,
+        "timestamp_ns": ordinal * 1000,
+    }
+
+
+def _cwd_call(
+    index: int,
+    tool: str,
+    argv: Sequence[str],
+    working_directory: object = None,
+) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "tool": tool,
+        "argv": list(argv),
+        "exit_code": 0,
+        "stdout": {"bytes": 0, "truncated": False},
+        "stderr": {"bytes": 0, "truncated": False},
+        "response_files": {"observed": 0, "references": []},
+    }
+    if working_directory is not None:
+        record["working_directory"] = working_directory
+    return {
+        "uri": f"tool-calls/{index:08d}-{tool}/record.json",
+        "sha256": f"{index:064x}"[-64:],
+        "record": record,
+    }
+
+
+def test_cmake_probe_repeated_argv_across_distinct_cwds_reconciles_without_gaps(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "build").mkdir()
+    (tmp_path / "build" / "compile_commands.json").write_text("[]\n", encoding="utf-8")
+    (tmp_path / "build" / "libsmoke.a").write_bytes(b"!<arch>\n")
+    scratch_c = "/workspace/build/CMakeFiles/CMakeScratch/TryCompile-0001"
+    scratch_cxx = "/workspace/build/CMakeFiles/CMakeScratch/TryCompile-0002"
+
+    configure_events: list[dict[str, Any]] = [
+        _pid_exec("/capture/wrappers/cmake", ["cmake", "-S", ".", "-B", "build", "-G", "Ninja"], pid=10, ordinal=1),
+        _pid_exec("/usr/bin/cmake", ["/usr/bin/cmake", "-S", ".", "-B", "build", "-G", "Ninja"], pid=10, ordinal=2),
+        _pid_exec("/capture/wrappers/ninja", ["/capture/wrappers/ninja", "--version"], pid=11, ordinal=3),
+        _pid_exec("/usr/bin/ninja", ["/usr/bin/ninja", "--version"], pid=11, ordinal=4),
+        _fork(10, 20, 5),
+        _chdir(20, scratch_c, 6),
+        _pid_exec("/capture/wrappers/ninja", ["/capture/wrappers/ninja", "--version"], pid=20, ordinal=7),
+        _pid_exec("/usr/bin/ninja", ["/usr/bin/ninja", "--version"], pid=20, ordinal=8),
+        _pid_exec("/capture/wrappers/clang", ["/capture/wrappers/clang", "-Wl,--help"], pid=20, ordinal=9),
+        _pid_exec("/usr/bin/clang", ["/usr/bin/clang", "-Wl,--help"], pid=20, ordinal=10),
+        _pid_exec("/capture/wrappers/clang++", ["/capture/wrappers/clang++", "-Wl,--help"], pid=20, ordinal=11),
+        _pid_exec("/usr/bin/clang++", ["/usr/bin/clang++", "-Wl,--help"], pid=20, ordinal=12),
+        _fork(10, 30, 13),
+        _chdir(30, scratch_cxx, 14),
+        _pid_exec("/capture/wrappers/ninja", ["/capture/wrappers/ninja", "--version"], pid=30, ordinal=15),
+        _pid_exec("/usr/bin/ninja", ["/usr/bin/ninja", "--version"], pid=30, ordinal=16),
+        _pid_exec("/capture/wrappers/clang", ["/capture/wrappers/clang", "-Wl,--help"], pid=30, ordinal=17),
+        _pid_exec("/usr/bin/clang", ["/usr/bin/clang", "-Wl,--help"], pid=30, ordinal=18),
+        _pid_exec("/capture/wrappers/clang++", ["/capture/wrappers/clang++", "-Wl,--help"], pid=30, ordinal=19),
+        _pid_exec("/usr/bin/clang++", ["/usr/bin/clang++", "-Wl,--help"], pid=30, ordinal=20),
+    ]
+    configure_calls = [
+        _cwd_call(1, "cmake", ["cmake", "-S", ".", "-B", "build", "-G", "Ninja"], "/workspace"),
+        _cwd_call(2, "ninja", ["ninja", "--version"], "/workspace"),
+        _cwd_call(3, "ninja", ["ninja", "--version"], scratch_c),
+        _cwd_call(4, "clang", ["clang", "-Wl,--help"], scratch_c),
+        _cwd_call(5, "clang++", ["clang++", "-Wl,--help"], scratch_c),
+        _cwd_call(6, "ninja", ["ninja", "--version"], scratch_cxx),
+        _cwd_call(7, "clang", ["clang", "-Wl,--help"], scratch_cxx),
+        _cwd_call(8, "clang++", ["clang++", "-Wl,--help"], scratch_cxx),
+    ]
+    build_events: list[dict[str, Any]] = [
+        _pid_exec("/usr/bin/cmake", ["/usr/bin/cmake", "--build", "build"], pid=40, ordinal=1),
+        _fork(40, 41, 2),
+        _chdir(41, "/workspace/build", 3),
+        _pid_exec("/usr/bin/cmake", ["/usr/bin/cmake", "-E", "rm", "-f", "libsmoke.a"], pid=41, ordinal=4),
+    ]
+    build_calls = [
+        _cwd_call(1, "cmake", ["cmake", "--build", "build"], "/workspace"),
+    ]
+
+    result = reconcile_captured_build(
+        [
+            (1, Capture(configure_events, calls=configure_calls)),
+            (2, Capture(build_events, calls=build_calls)),
+        ],
+        tmp_path,
+        ".",
+        native.CAPTURE_DESCRIPTOR,
+    )
+
+    assert result.facts["tool_call_records"] == 9
+    assert result.facts["unreconciled_tool_calls"] == 0
+    assert result.gaps == ()
+
+    reconciled_image_rows = [
+        (row["tool"], row["working_directory"], row["mapping"])
+        for row in result.rows
+        if str(row["evidence"]["process_exec"]["executable"]).startswith("/usr/bin/")
+    ]
+    assert reconciled_image_rows == [
+        ("cmake", ".", "syscall-process-exec+tool-call"),
+        ("ninja", ".", "syscall-process-exec+tool-call"),
+        ("ninja", "build/CMakeFiles/CMakeScratch/TryCompile-0001", "syscall-process-exec+tool-call"),
+        ("clang", "build/CMakeFiles/CMakeScratch/TryCompile-0001", "syscall-process-exec+tool-call"),
+        ("clang++", "build/CMakeFiles/CMakeScratch/TryCompile-0001", "syscall-process-exec+tool-call"),
+        ("ninja", "build/CMakeFiles/CMakeScratch/TryCompile-0002", "syscall-process-exec+tool-call"),
+        ("clang", "build/CMakeFiles/CMakeScratch/TryCompile-0002", "syscall-process-exec+tool-call"),
+        ("clang++", "build/CMakeFiles/CMakeScratch/TryCompile-0002", "syscall-process-exec+tool-call"),
+        ("cmake", ".", "syscall-process-exec+tool-call"),
+        ("cmake", "build", "syscall-process-exec"),
+    ]
+    wrapper_mappings = {
+        row["mapping"]
+        for row in result.rows
+        if str(row["evidence"]["process_exec"]["executable"]).startswith("/capture/wrappers/")
+    }
+    assert wrapper_mappings == {"syscall-process-exec"}
+
+    cmake_configure = next(
+        row for row in result.rows
+        if row["tool"] == "cmake" and "-G" in row["argv"] and row["mapping"] == "syscall-process-exec+tool-call"
+    )
+    assert [out["workspace_path"] for out in cmake_configure["outputs"]] == ["build/compile_commands.json"]
+    for non_configure in (
+        row for row in result.rows
+        if row["tool"] == "cmake" and ("--build" in row["argv"] or "-E" in row["argv"])
+    ):
+        assert non_configure["outputs"] == []
+
+
+def test_reconciler_enforces_per_directory_exec_budget_and_validates_cwd_fields(
+    tmp_path: Path,
+) -> None:
+    events = [
+        _pid_exec("/usr/bin/clang", ["clang", "-Wl,--help"], pid=10, ordinal=1),
+        _fork(10, 11, 2),
+        _chdir(11, "/workspace/sub", 3),
+        _pid_exec("/usr/bin/clang", ["clang", "-Wl,--help"], pid=11, ordinal=4),
+        _pid_exec("/usr/bin/cc", ["cc", "-c", "single.c"], pid=10, ordinal=5),
+    ]
+    calls = [
+        _cwd_call(1, "clang", ["clang", "-Wl,--help"], "/workspace"),
+        _cwd_call(2, "clang", ["clang", "-Wl,--help"], "/workspace"),  # exceeds /workspace count=1
+        _cwd_call(3, "clang", ["clang", "-Wl,--help"], "/workspace/other"),  # unmatched cwd
+        _cwd_call(4, "clang", ["clang", "-Wl,--help"]),  # legacy omitted cwd with multi-dir execs -> ambiguous
+        _cwd_call(5, "cc", ["cc", "-c", "single.c"]),  # legacy omitted cwd with single-dir exec -> reconciles
+        _cwd_call(6, "clang", ["clang", "-Wl,--help"], "<redacted: secret detected by gitleaks>"),
+        _cwd_call(7, "clang", ["clang", "-Wl,--help"], ""),
+    ]
+
+    result = reconcile_captured_build([(1, Capture(events, calls=calls))], tmp_path, ".", DESCRIPTOR)
+
+    assert result.facts["unreconciled_tool_calls"] == 3
+    assert result.facts["redacted_tool_calls"] == 1
+    assert result.facts["malformed_records"] == 1
+    by_key = {(row["tool"], row["working_directory"]): row["mapping"] for row in result.rows}
+    assert by_key == {
+        ("clang", "."): "syscall-process-exec+tool-call",
+        ("clang", "sub"): "syscall-process-exec",
+        ("cc", "."): "syscall-process-exec+tool-call",
+    }

@@ -142,9 +142,10 @@ class ContainerSimulation:
     """Syscalls and wrapped tool calls observed inside one simulated captured build container."""
 
     def __init__(self, capture_root: Path, environment: dict[str, str], *, capture_envp: bool,
-                 call_limit: int) -> None:
+                 call_limit: int, working_directory: str = "/workspace") -> None:
         self.root, self.environment = capture_root, dict(environment)
         self.capture_envp, self.call_limit = capture_envp, call_limit
+        self.working_directory = working_directory
         self._clock, self._pid = 1_700_000_000.0, 100
 
     def _write(self, pid: int, call: str, result: str) -> None:
@@ -177,7 +178,8 @@ class ContainerSimulation:
                                'sin_addr=inet_addr("%s")}, 16)' % (port, address), "0")
 
     def tool_call(self, tool: str, arguments: Sequence[str], *, executable: str, stdout: bytes = b"",
-                  stderr: bytes = b"", exit_code: int = 0) -> None:
+                  stderr: bytes = b"", exit_code: int = 0,
+                  working_directory: str | None = None) -> None:
         """Write the record `containers/build-capture/tool-wrapper.py` writes for a PATH tool."""
         counter = self.root / "tool-call-counter"
         ordinal = int(counter.read_text(encoding="utf-8") or "0") + 1 if counter.is_file() else 1
@@ -194,6 +196,7 @@ class ContainerSimulation:
         (call_root / "record.json").write_text(json.dumps({
             "schema": "appsec-review/build-tool-call/1", "ordinal": ordinal, "tool": tool,
             "executable": executable, "argv": [tool, *arguments], "environment": environment,
+            "working_directory": self.working_directory if working_directory is None else working_directory,
             "environment_captured": self.capture_envp,
             "environment_redacted_names": sorted(key for key in environment if key in redacted),
             "exit_code": exit_code,
@@ -265,9 +268,11 @@ def simulated_executor(profile: BuildProfile, behavior: Behavior, *, scanner: Sc
             workspace / logical_capture.removeprefix("/workspace/")
         environment = dict(argv[index + 1].split("=", 1) for index, value in enumerate(argv[:-1])
                            if value == "--env")
-        working_directory = argv[argv.index("--workdir") + 1].removeprefix("/workspace/")
+        container_workdir = argv[argv.index("--workdir") + 1]
+        working_directory = container_workdir.removeprefix("/workspace/")
         simulation = ContainerSimulation(capture_root, environment, capture_envp=envp == "1",
-                                         call_limit=int(call_limit))
+                                         call_limit=int(call_limit),
+                                         working_directory=container_workdir)
         code, stdout, stderr = behavior(tuple(command), workspace, working_directory, environment, simulation)
         return code, stdout, stderr, code is None
 

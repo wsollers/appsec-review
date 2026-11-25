@@ -96,10 +96,36 @@ def _paths(kind: str, argv: Sequence[str]) -> tuple[list[str], list[str]]:
     return inputs, outputs
 
 
+_CMAKE_NON_CONFIGURE_FLAGS = frozenset({
+    "--build", "--install", "-E", "-P", "--open", "--find-package", "--workflow",
+    "--system-information", "-N", "--version", "-version", "--help", "-h",
+})
+
+
+def _cmake_compile_database(name: str, kind: str, values: Sequence[str]) -> str | None:
+    if kind != "build-driver" or name not in {"cmake", "cmake3"}:
+        return None
+    args = values[1:]
+    if not args or args == ["-H"] or any(arg in _CMAKE_NON_CONFIGURE_FLAGS for arg in args):
+        return None
+    build_dir: str | None = None
+    for index, value in enumerate(args):
+        if value == "-B" and index + 1 < len(args):
+            build_dir = args[index + 1]
+        elif value.startswith("-B") and len(value) > 2:
+            build_dir = value[2:]
+    if build_dir in {None, "", "."}:
+        return "compile_commands.json"
+    return f"{build_dir.rstrip('/')}/compile_commands.json"
+
+
 def _row(name: str, kind: str, argv: Sequence[str], workspace: Path, directory: str,
          origin: str) -> dict[str, Any]:
     values = [str(value) for value in argv]
     inputs, outputs = _paths(kind, values)
+    cmake_db = _cmake_compile_database(name, kind, values)
+    if cmake_db is not None and cmake_db not in outputs:
+        outputs.append(cmake_db)
     return {"tool": name, "tool_kind": kind, "argv": values,
             "argv_sha256": hashlib.sha256(canonical_json(values)).hexdigest(),
             "working_directory": directory,
