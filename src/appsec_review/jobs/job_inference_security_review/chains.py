@@ -493,6 +493,17 @@ def verify_publication(run_root: Path, projection: Projection, reference: Mappin
                        run_id: str) -> dict[str, Any]:
     """Revalidate the manifest and every bound pre-publication artifact against the single ledger."""
     manifest = read_artifact(run_root, reference)
+    parts = Path(reference["path"]).parts
+    receipts_root = run_root / "data" / "jobs" / JOB_ID / "cells"
+    if len(parts) > 5 and parts[:4] == ("data", "jobs", JOB_ID, "attempts"):
+        from appsec_review.runtime.release import read_document
+        from appsec_review.storage.shared import safe_path
+        attempt_path = Path(*parts[:5])
+        claim = read_document(safe_path(run_root, (attempt_path / "claim.json").as_posix()))
+        if (claim.get("job_id"), claim.get("run_id"), claim.get("attempt_id")) != (JOB_ID, run_id, parts[4]):
+            raise IntegrityError("chain manifest belongs to another attempt")
+        if claim.get("recovery_boundary") == "whole_job":
+            receipts_root = run_root / attempt_path / "cells"
     schemas.validate("attack-chain-manifest", manifest)
     if manifest["run_id"] != run_id or {item["chain_id"] for item in manifest["items"]} != set(projection.attack_chains):
         raise IntegrityError("attack-chain manifest does not exactly cover the current run's chain ledger")
@@ -519,17 +530,17 @@ def verify_publication(run_root: Path, projection: Projection, reference: Mappin
                 or item.get("composed_severity") != artifact["assessment"].get("composed_severity")
                 or item.get("chain_boundary_crossings", []) != artifact["assessment"].get("chain_boundary_crossings", [])):
             raise IntegrityError("attack-chain manifest, artifact and ledger decision disagree")
-        _verify_actor_receipt(run_root, projection, proposal.composer, "composer", "succeeded", None, schemas)
+        _verify_actor_receipt(run_root, projection, proposal.composer, "composer", "succeeded", None, schemas, receipts_root=receipts_root)
         for challenge in view.challenges:
             receipt = _verify_actor_receipt(run_root, projection, challenge.actor, challenge.kind,
-                                            challenge.status, challenge.receipt, schemas)
+                                            challenge.status, challenge.receipt, schemas, receipts_root=receipts_root)
             if receipt and receipt["turns"][0]["request_sha256"] != challenge.request_sha256:
                 raise IntegrityError("chain challenge is not bound to its original independent request")
     return manifest
 
 
 def _verify_actor_receipt(run_root: Path, projection: Projection, actor, kind: str, status: str,
-                          reference: policy.Artifact | None, schemas):
+                          reference: policy.Artifact | None, schemas, *, receipts_root: Path | None = None):
     task, role, schema = TASKS[kind]
     cell_id = actor.conversation_id
     records = projection.cells.get(cell_id, ())
@@ -542,7 +553,7 @@ def _verify_actor_receipt(run_root: Path, projection: Projection, actor, kind: s
         if status != "not_launched" or record.attempts or reference is not None:
             raise IntegrityError("attempted chain work is missing its original receipt")
         return None
-    path = (run_root / "data" / "jobs" / JOB_ID / "cells" / cell_id / f"attempt-{record.attempts}.json")
+    path = ((receipts_root or run_root / "data" / "jobs" / JOB_ID / "cells") / cell_id / f"attempt-{record.attempts}.json")
     expected = policy.Artifact(path.relative_to(run_root).as_posix(), record.receipt_sha256)
     if reference is not None and reference != expected:
         raise IntegrityError("chain challenge receipt is not its terminal cell's receipt")

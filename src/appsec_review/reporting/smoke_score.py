@@ -940,6 +940,9 @@ def model_calls(run: RunData) -> dict[str, Any]:
         row["input_tokens"] += int(usage.get("input_tokens") or 0)
         row["output_tokens"] += int(usage.get("output_tokens") or 0)
     budget_path = run.data / "jobs" / REVIEW_JOB / "budget" / "budget.json"
+    accepted_attempt = run.attempt_dir(REVIEW_JOB)
+    if accepted_attempt is not None and (accepted_attempt / "budget" / "budget.json").is_file():
+        budget_path = accepted_attempt / "budget" / "budget.json"
     budget = None
     if budget_path.is_file():
         state = run.read_json(budget_path, "review budget ledger")

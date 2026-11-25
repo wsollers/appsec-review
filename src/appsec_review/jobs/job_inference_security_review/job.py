@@ -257,9 +257,9 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
     return ReviewContext(
         run_root=Path(run_root), run_id=run_id, repository_root=root, settings=settings, core=core, infer=infer,
         attempt_id=Path(attempt_root).name,
-        result_cache=cache_from_settings(settings.result_cache, run_id),
-        receipts_root=Path(run_root) / "data" / "jobs" / JOB_ID / "cells",
-        budget=JobBudget.for_run(Path(run_root), settings.budgets, new_timing_mode="active_v2"),
+        result_cache=cache_from_settings(settings.result_cache, sha256_hex({"run_id": run_id, "attempt_id": Path(attempt_root).name})),
+        receipts_root=Path(attempt_root) / "cells",
+        budget=JobBudget(Path(attempt_root) / "budget", settings.budgets, _new_timing_mode="active_v2"),
         semaphore=ReviewTeamSemaphore.for_run(Path(run_root), settings.teams.review_teams),
         vocabulary=vocabulary, crosswalk=crosswalk, covers=load_persona_covers(root, registry),
         role_tools={name: tuple(value.get("tools", ())) for name, value in registry["roles"].items()},
@@ -281,7 +281,7 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         return Path(repository_root or unit.job.repository_root).resolve()
 
     def job_data(unit: UnitContext) -> Path:
-        return unit.job.run_root / "data" / "jobs" / JOB_ID
+        return unit.job.attempt_root
 
     # scope --------------------------------------------------------------------------------------
     def accept(unit: UnitContext) -> Mapping[str, Any]:

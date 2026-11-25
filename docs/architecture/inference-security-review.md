@@ -2683,3 +2683,225 @@ will be enforced in code.
     inference run that includes `job_code_graph_index`. A failure there is treated as a bug, not a
     design change.
 <!-- historical:end -->
+
+
+## Tuning and whole-job recovery: `job_inference_security_review`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.attack_chains.max_candidates_per_composition` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.attack_chains.max_challenge_cells` | `100` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.attack_chains.max_evidence_per_obligation` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.attack_chains.max_expansions` | `100` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.attack_chains.max_links` | `6` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.attack_chains.max_queries` | `12` | coverage | 0..10000; cross-field checks apply |
+| `settings.attack_chains.max_result_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.attack_chains.max_turns` | `4` | coverage | 1..1000; cross-field checks apply |
+| `settings.budgets.budget_team_packages` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.budgets.max_input_tokens` | `480000000` | coverage | 1..2000000; cross-field checks apply |
+| `settings.budgets.max_model_turns` | `12000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.budgets.max_output_tokens` | `48000000` | coverage | 1..1000000; cross-field checks apply |
+| `settings.budgets.max_retrieval_queries` | `40000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.budgets.timeout_seconds` | `28800` | coverage | 1..86400; cross-field checks apply |
+| `settings.decision_audit.max_input_bytes` | `67108864` | coverage | 4096..67108864; cross-field checks apply |
+| `settings.decision_audit.max_page_size` | `200` | coverage | 1..100; cross-field checks apply |
+| `settings.decision_audit.max_records` | `100000` | coverage | 1..1000000; cross-field checks apply |
+| `settings.decision_audit.page_size` | `50` | coverage | 1..200; cross-field checks apply |
+| `settings.decision_audit.shard_bytes` | `8388608` | coverage | 4096..8388608; cross-field checks apply |
+| `settings.decision_audit.shard_records` | `5000` | coverage | 1..5000; cross-field checks apply |
+| `settings.hunting.agents` | `4` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.hunting.brief_bounds.max_files` | `120` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.hunting.brief_bounds.max_functions` | `400` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.hunting.brief_bounds.max_leads` | `60` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.hunting.max_areas` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.lanes.hunt_max_claims_per_package` | `5` | coverage | 1..100; cross-field checks apply |
+| `settings.lanes.hunt_max_units` | `10` | coverage | 0..100000; cross-field checks apply |
+| `settings.lanes.lead_max_claims_per_package` | `3` | coverage | 1..100; cross-field checks apply |
+| `settings.models.default.max_input_tokens` | `128000` | coverage | 1..2000000; cross-field checks apply |
+| `settings.models.default.max_output_tokens` | `32000` | coverage | 1..1000000; cross-field checks apply |
+| `settings.models.default.max_queries` | `40` | coverage | 0..1000 |
+| `settings.models.default.max_turns` | `4` | coverage | 1..1000; cross-field checks apply |
+| `settings.models.default.timeout_seconds` | `600` | coverage | 1..86400 seconds |
+| `settings.models.planner.max_input_tokens` | `128000` | coverage | 1..2000000; cross-field checks apply |
+| `settings.models.planner.max_output_tokens` | `32000` | coverage | 1..1000000; cross-field checks apply |
+| `settings.models.planner.max_queries` | `0` | coverage | 0..1000 |
+| `settings.models.planner.max_turns` | `2` | coverage | 1..1000; cross-field checks apply |
+| `settings.models.planner.timeout_seconds` | `900` | coverage | 1..86400 seconds |
+| `settings.models.triage.max_input_tokens` | `64000` | coverage | 1..2000000; cross-field checks apply |
+| `settings.models.triage.max_output_tokens` | `16000` | coverage | 1..1000000; cross-field checks apply |
+| `settings.models.triage.max_queries` | `0` | coverage | 0..1000 |
+| `settings.models.triage.max_turns` | `1` | coverage | 1..1000; cross-field checks apply |
+| `settings.models.triage.timeout_seconds` | `600` | coverage | 1..86400 seconds |
+| `settings.models.verifier.max_input_tokens` | `128000` | coverage | 1..2000000; cross-field checks apply |
+| `settings.models.verifier.max_output_tokens` | `32000` | coverage | 1..1000000; cross-field checks apply |
+| `settings.models.verifier.max_queries` | `40` | coverage | 0..1000 |
+| `settings.models.verifier.max_turns` | `4` | coverage | 1..1000; cross-field checks apply |
+| `settings.models.verifier.timeout_seconds` | `600` | coverage | 1..86400 seconds |
+| `settings.packages.caller_depth` | `2` | coverage | 1..4; cross-field checks apply |
+| `settings.packages.max_behavior_artifact_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.packages.max_callers` | `16` | coverage | 1..1000; cross-field checks apply |
+| `settings.packages.max_context_entries` | `64` | coverage | 1..10000; cross-field checks apply |
+| `settings.packages.max_depth` | `4` | coverage | 1..8; cross-field checks apply |
+| `settings.packages.max_memory_context_entries` | `24` | coverage | 1..1000; cross-field checks apply |
+| `settings.packages.max_operation_records` | `2000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.packages.max_package_bytes` | `65536` | coverage | 1..16777216; cross-field checks apply |
+| `settings.packages.max_page_size` | `20` | coverage | 1..100; cross-field checks apply |
+| `settings.packages.max_pages` | `5` | coverage | 1..100; cross-field checks apply |
+| `settings.packages.max_slice_lines` | `120` | coverage | 1..2000; cross-field checks apply |
+| `settings.packages.max_slice_lines_per_function` | `40` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.packages.max_view_bytes` | `49152` | coverage | 4096..1048576; cross-field checks apply |
+| `settings.packages.max_view_source_lines` | `160` | coverage | 10..2000; cross-field checks apply |
+| `settings.packages.max_view_type_declarations` | `6` | coverage | 0..32; cross-field checks apply |
+| `settings.packages.unit_max_files` | `200` | coverage | 1..100000; cross-field checks apply |
+| `settings.red_output.max_chain_seeds` | `4` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_chain_steps` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_evidence_refs` | `64` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_evidence_requests` | `16` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_gaps` | `32` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_obligations` | `48` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_path_nodes` | `16` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_proposals` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_result_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_taint_paths` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_text_chars` | `2000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.result_cache.connect_timeout_seconds` | `0.5` | execution | 0.05..10 seconds |
+| `settings.retry.backoff_seconds` | `[2, 10]` | coverage | 0..16 nondecreasing integer delays; each 0..3600 seconds |
+| `settings.retry.max_attempts` | `2` | coverage | 1..10 |
+| `settings.retry.retry_on_timeout` | `true` | coverage | true or false; existing retry validation |
+| `settings.roles.adjudication_judge.max_cited_row_chars` | `400` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.roles.adjudication_judge.max_cited_rows_per_side` | `12` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.roles.adjudication_judge.max_why_chars` | `600` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.roles.adjudication_judge.workers` | `4` | execution | 1..64; cross-field checks apply |
+| `settings.roles.independent_verifier.workers` | `4` | execution | 1..64; cross-field checks apply |
+| `settings.rounds.max_active_claims` | `500` | coverage | 1..100000; cross-field checks apply |
+| `settings.rounds.max_attack_chains` | `50` | coverage | 0..10000; cross-field checks apply |
+| `settings.rounds.max_rounds` | `1` | coverage | 1..16; cross-field checks apply |
+| `settings.triage.batch_size` | `20` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.triage.max_excerpt_lines` | `24` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.triage.max_leads` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.triage.max_reason_chars` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
+
+| `settings.retry.retry_on_provider_error` | `true` | coverage | true/false; maximum attempts and deadline still apply |
+
+| `settings.retry.retry_on_invalid_output` | `true` | coverage | true/false; maximum attempts and deadline still apply |
+
+? The [executing job/parser](../../src/appsec_review/config/inference_review.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Each new attempt owns fresh cell receipts, triage cache, memo namespace and budget; prior attempt spending and gaps are not rewritten. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.decision_audit.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.warrant_policy.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.rounds.stable_rounds_required` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.teams.review_teams` | Changes independent participant/judge composition and assessment semantics, unlike concurrent-team capacity. |
+| `settings.teams.red_per_team` | Changes independent participant/judge composition and assessment semantics, unlike concurrent-team capacity. |
+| `settings.teams.blue_per_team` | Changes independent participant/judge composition and assessment semantics, unlike concurrent-team capacity. |
+| `settings.teams.verifier_per_team` | Changes independent participant/judge composition and assessment semantics, unlike concurrent-team capacity. |
+| `settings.lanes.lead_admission_kev` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.lanes.exploration_enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.lanes.exploration_reserve` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.lanes.lead_budget_share` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.lanes.incomplete_gap_ratio` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.lps` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.sii` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.hotspot` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.tag_density` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.tag_density_full_tags_per_file` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.lead_hint_high` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.lead_hint_medium` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.lead_hint_low` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.lead_hint_info` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.lead_hints_max` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.advisory_kev` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.advisory_epss` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.facet_exposure` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.ranking.facet_trust` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.packages.hunt_menu_partition_size` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.packages.lead_cluster_lines` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.models.default.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.default.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.default.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.default.thinking_min_output_tokens` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.triage.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.triage.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.triage.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.triage.thinking_min_output_tokens` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.verifier.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.verifier.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.verifier.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.verifier.thinking_min_output_tokens` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.planner.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.planner.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.planner.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.planner.thinking_min_output_tokens` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.roles.adjudication_judge.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.roles.adjudication_judge.judges_per_claim` | Changes independent participant/judge composition and assessment semantics, unlike concurrent-team capacity. |
+| `settings.poc_candidates.accept_partly` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.verification.require_distinct_model_for_ship_blocking` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.result_cache.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.result_cache.ttl_seconds` | TTL/endpoint/role/enabled selection changes permitted cache provenance/freshness; only connection wait is execution tuning. |
+| `settings.hunting.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.triage.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.ship_block.kev_dependency_blocks` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.verification.supported` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.verification.confirmed` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.taint_path.code_evidence` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.taint_path.tool_observation` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.taint_path.codeql_path_observation` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.taint_path.graph_dataflow_path` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.attacker_control.internal` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.attacker_control.direct_unclassified` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.attacker_control.local` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.attacker_control.remote` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.guard_absent.code_evidence` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.guard_absent.tool_observation` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.guard_absent.graph_fact` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.exposure.local` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.exposure.internal_network` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.points.exposure.public` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.bands.medium` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.exploitability.bands.high` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.environmental.points.exposure.local` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.environmental.points.exposure.internal_network` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.environmental.points.exposure.public` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.environmental.points.privilege.sandboxed` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.environmental.points.privilege.elevated` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.environmental.points.data_sensitivity.sensitive` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.environmental.points.data_sensitivity.secret` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.environmental.bands.medium` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.scoring.providers.application_risk_matrix.environmental.bands.high` | Changes scoring, lane allocation/termination, stable package identity or required reasoning semantics; not a simple exploration ceiling. |
+| `settings.poc.execution_enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.poc.require_target_authorization` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.poc.require_isolation` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.poc.read_only_target` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.poc.allow_host_execution` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.poc.allow_production_services` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.poc.allow_real_credentials` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.poc.allow_privileged_containers` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.poc.allow_docker_socket` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.poc.allow_deploy_sign_publish` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.poc.max_attempts_per_claim` | PoC limits are sandbox capability grants; this job may not widen execution authority via tuning. |
+| `settings.poc.cpu_limit` | PoC limits are sandbox capability grants; this job may not widen execution authority via tuning. |
+| `settings.poc.memory_mb` | PoC limits are sandbox capability grants; this job may not widen execution authority via tuning. |
+| `settings.poc.timeout_seconds` | PoC limits are sandbox capability grants; this job may not widen execution authority via tuning. |
+| `settings.poc.scratch_mb` | PoC limits are sandbox capability grants; this job may not widen execution authority via tuning. |
+| `steps.scope.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.triage.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.packages.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.lead_review.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.hunt_review.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.merge.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.adjudicate.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.scoring.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.attack_chains.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.completeness.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publication.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
