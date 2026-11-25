@@ -340,3 +340,24 @@ def test_in_source_builds_use_the_workspace_root(tmp_path: Path, build_dir: str)
                      preexisting=Preexisting(["a.c"]), discovery=BuildOutputDiscovery())
 
     assert facts.ninja_edges == [(("a.o",), ("a.c",))]
+
+
+
+def test_heuristic_roots_ignore_cmakefiles_object_mirrors_of_target_third_party_sources(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path / "third_party/zlib/adler32.c")
+    _write(tmp_path / "third_party/cjson/cJSON.c")
+    _write(tmp_path / "build/CMakeFiles/smoke_zlib.dir/third_party/zlib/adler32.c.o")
+    _write(tmp_path / "build/CMakeFiles/smoke_cjson.dir/third_party/cjson/cJSON.c.o")
+    _write(tmp_path / "third_party/fetched/lib.c")
+
+    roots = heuristic_roots(
+        tmp_path,
+        Preexisting(["third_party/zlib/adler32.c", "third_party/cjson/cJSON.c"]),
+        covered=(),
+    )
+
+    assert [(root.root, root.confidence, root.basis) for root in roots] == [
+        ("third_party/fetched", "low", "heuristic"),
+    ]

@@ -105,6 +105,15 @@ def _orderable(event: Mapping[str, Any]) -> bool:
     return True
 
 
+def _normalize_directory(current: str) -> str:
+    normalized = posixpath.normpath(current)
+    if normalized == "/workspace":
+        return "."
+    if normalized.startswith("/workspace/"):
+        return normalized[len("/workspace/"):]
+    return normalized
+
+
 def _workspace_directory(directories: Mapping[tuple[int, int], str], event: Mapping[str, Any],
                          default: str) -> str:
     """The workspace-relative directory the kernel ran this exec in.
@@ -120,11 +129,7 @@ def _workspace_directory(directories: Mapping[tuple[int, int], str], event: Mapp
     current = directories.get(key)
     if current is None:
         return default
-    if current == "/workspace":
-        return "."
-    if current.startswith("/workspace/"):
-        return current[len("/workspace/"):]
-    return current
+    return _normalize_directory(current)
 
 
 def _identity_key(identity: ToolIdentity, argv: Sequence[str]) -> str:
@@ -163,7 +168,9 @@ def reconcile_captured_build(
     # or through a toolchain proxy and the binary it resolves to, is two rows.
     rows: dict[tuple[int, str, str, str], dict[str, Any]] = {}
     reconcilable: dict[tuple[int, str], list[dict[str, Any]]] = {}
+    reconcilable_by_dir: dict[tuple[int, str, str], list[dict[str, Any]]] = {}
     invocation_directories: dict[tuple[int, str], str | None] = {}
+    matched_execs: dict[int, int] = {}
     classify_record = descriptor.classify_record or descriptor.classify_tool
     facts: dict[str, Any] = {
         "process_exec_events": 0,
@@ -293,6 +300,7 @@ def reconcile_captured_build(
                 }
                 rows[key] = row
                 reconcilable.setdefault(invocation, []).append(row)
+                reconcilable_by_dir.setdefault((*invocation, working_directory), []).append(row)
                 invocation_directories.setdefault(invocation, working_directory)
             observed_exec = row["evidence"]["process_exec"]
             observed_exec["count"] += 1
@@ -307,25 +315,49 @@ def reconcile_captured_build(
             document = call["record"]
             argv = _argv(document.get("argv"))
             tool = document.get("tool", "")
-            if argv is None or not isinstance(tool, str):
+            raw_directory = document.get("working_directory")
+            if argv is None or not isinstance(tool, str) or (
+                raw_directory is not None
+                and (not isinstance(raw_directory, str) or not raw_directory or "\0" in raw_directory)
+            ):
                 facts["malformed_records"] += 1
                 continue
-            if argv and argv[0].startswith(_REDACTED):
+            if (argv and argv[0].startswith(_REDACTED)) or (
+                isinstance(raw_directory, str) and raw_directory.startswith(_REDACTED)
+            ):
                 facts["redacted_tool_calls"] += 1
                 continue
             identity = classify_record(PurePosixPath(tool).name, argv)
             if identity is None:
                 continue
             invocation = (ordinal, _identity_key(identity, argv))
-            candidates = reconcilable.get(invocation)
-            # Wrapper records do not carry a cwd. Equal argv in different directories cannot
-            # be attributed to one of those execs without inventing secondary provenance.
-            if not candidates or invocation_directories[invocation] is None:
+            if raw_directory is None:
+                # Legacy records without a cwd cannot disambiguate equal argv across directories.
+                target_directory = invocation_directories.get(invocation)
+                if not reconcilable.get(invocation) or target_directory is None:
+                    facts["unreconciled_tool_calls"] += 1
+                    continue
+            else:
+                target_directory = _normalize_directory(raw_directory)
+            dir_candidates = reconcilable_by_dir.get((*invocation, target_directory))
+            if not dir_candidates:
                 facts["unreconciled_tool_calls"] += 1
                 continue
             # A wrapper runs the real tool from the image; its launcher only started the wrapper.
-            row = next((item for item in candidates
-                        if image_owned(item["evidence"]["process_exec"]["executable"])), candidates[0])
+            # Each wrapper record consumes at most one observed process_exec in its directory.
+            ordered_candidates = [
+                *(item for item in dir_candidates if image_owned(item["evidence"]["process_exec"]["executable"])),
+                *(item for item in dir_candidates if not image_owned(item["evidence"]["process_exec"]["executable"])),
+            ]
+            row = next(
+                (item for item in ordered_candidates
+                 if matched_execs.get(id(item), 0) < item["evidence"]["process_exec"]["count"]),
+                None,
+            )
+            if row is None:
+                facts["unreconciled_tool_calls"] += 1
+                continue
+            matched_execs[id(row)] = matched_execs.get(id(row), 0) + 1
             if row["evidence"]["tool_call"] is None:
                 row["evidence"]["tool_call"] = _tool_call_evidence(call, document)
 

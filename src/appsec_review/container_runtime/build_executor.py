@@ -892,6 +892,8 @@ class BuildContainerExecutor:
             if source.name == "record.json":
                 document = json.loads(source.read_text(encoding="utf-8"))
                 document["argv"] = ["<redacted: secret scan disposition>"]
+                if "working_directory" in document:
+                    document["working_directory"] = "<redacted: secret scan disposition>"
                 document["environment"] = {
                     key: "<redacted: secret scan disposition>"
                     for key in document.get("environment", {})}

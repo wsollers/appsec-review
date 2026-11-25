@@ -38,6 +38,10 @@ if ordinal > limit:
 
 call_root = root / "tool-calls" / f"{ordinal:08d}-{tool.replace('/', '_')}"
 call_root.mkdir(parents=True)
+try:
+    working_directory: str | None = os.getcwd()
+except OSError:
+    working_directory = os.environ.get("PWD")
 stdout_path, stderr_path = call_root / "stdout", call_root / "stderr"
 process = subprocess.Popen([real, *argv], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 sizes = {"stdout": 0, "stderr": 0}
@@ -76,7 +80,7 @@ environment = ({key: ("<redacted>" if key in redacted else value)
                 for key, value in sorted(os.environ.items())
                 if not key.startswith("APPSEC_CAPTURE_")}
                if os.environ["APPSEC_CAPTURE_ENVP"] == "1" else {})
-record = {
+record: dict[str, object] = {
     "schema": "appsec-review/build-tool-call/1", "ordinal": ordinal, "tool": tool,
     "executable": real, "argv": [tool, *argv], "environment": environment,
     "environment_captured": os.environ["APPSEC_CAPTURE_ENVP"] == "1",
@@ -87,6 +91,8 @@ record = {
     "stderr": {"uri": "stderr", "bytes": sizes["stderr"], "retained_bytes": stderr_path.stat().st_size,
                "truncated": False, "storage": "complete-file", "sha256": digest(stderr_path)},
 }
+if working_directory is not None:
+    record["working_directory"] = working_directory
 (call_root / "record.json").write_text(
     json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
 # The fixed container UID owns these files on a native Linux bind mount.  Permit the host

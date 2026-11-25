@@ -54,6 +54,46 @@ def test_tool_wrapper_retains_complete_stream_files_beyond_legacy_limit(
     assert record["stderr"]["retained_bytes"] == record["stderr"]["bytes"] == 10
     assert record["stdout"]["storage"] == record["stderr"]["storage"] == "complete-file"
     assert record["stdout"]["truncated"] is record["stderr"]["truncated"] is False
+    assert record["working_directory"] == str(Path.cwd())
+
+
+def test_tool_wrapper_records_working_directory_across_distinct_cwds(tmp_path: Path) -> None:
+    tools = tmp_path / "bin"
+    capture = tmp_path / "capture"
+    workspace = tmp_path / "workspace"
+    scratch = workspace / "build" / "CMakeFiles" / "CMakeScratch" / "TryCompile-0001"
+    tools.mkdir()
+    capture.mkdir()
+    (capture / "envp-redact-names.json").write_text("[]\n", encoding="utf-8")
+    scratch.mkdir(parents=True)
+    probe = tools / "ninja"
+    probe.write_text("#!/bin/sh\nprintf '1.11.1\n'\n", encoding="utf-8")
+    probe.chmod(0o755)
+    wrapper = Path(__file__).parents[1] / "containers" / "build-capture" / "tool-wrapper.py"
+    environment = {
+        **os.environ,
+        "APPSEC_CAPTURE_ROOT": str(capture),
+        "APPSEC_CAPTURE_CALL_LIMIT": "10",
+        "APPSEC_CAPTURE_STREAM_LIMIT": "1024",
+        "APPSEC_CAPTURE_REAL_PATH": str(tools),
+        "APPSEC_CAPTURE_ENVP": "0",
+    }
+
+    subprocess.run(
+        [sys.executable, str(wrapper), "ninja", "--version"],
+        cwd=workspace, env=environment,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+    )
+    subprocess.run(
+        [sys.executable, str(wrapper), "ninja", "--version"],
+        cwd=scratch, env=environment,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+    )
+
+    first = json.loads((capture / "tool-calls" / "00000001-ninja" / "record.json").read_text(encoding="utf-8"))
+    second = json.loads((capture / "tool-calls" / "00000002-ninja" / "record.json").read_text(encoding="utf-8"))
+    assert first["working_directory"] == str(workspace.resolve())
+    assert second["working_directory"] == str(scratch.resolve())
 
 
 def test_capture_assets_resolve_from_configured_installed_application_root(
@@ -252,6 +292,7 @@ def test_capture_secret_scan_failure_redacts_retained_inputs_and_records_gap(tmp
     (tool_call / "stderr").write_bytes(b"")
     (tool_call / "record.json").write_text(json.dumps({
         "schema": "appsec-review/build-tool-call/1", "argv": [synthetic_secret],
+        "working_directory": f"/workspace/{synthetic_secret}",
         "environment": {"DISCORD_PUBLIC_KEY": synthetic_secret},
         "stdout": {"uri": "stdout", "sha256": hashlib.sha256(
             synthetic_secret.encode()).hexdigest(), "retained_bytes": len(synthetic_secret)},
@@ -274,6 +315,7 @@ def test_capture_secret_scan_failure_redacts_retained_inputs_and_records_gap(tmp
         path.read_text(encoding="utf-8", errors="replace")
         for path in capture.rglob("*") if path.is_file())
     retained_call = json.loads((tool_call / "record.json").read_text(encoding="utf-8"))
+    assert retained_call["working_directory"].startswith("<redacted:")
     assert retained_call["stdout"]["sha256"] == hashlib.sha256(
         (tool_call / "stdout").read_bytes()).hexdigest()
     assert not trace.exists()
