@@ -332,3 +332,44 @@ flowchart LR
 ```
 
 <!-- generated:end -->
+
+
+## Tuning and whole-job recovery: `job_cbmc_analysis`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.command_timeout_seconds` | `45` | coverage | 4..600 seconds; <=total_timeout_seconds |
+| `settings.max_functions` | `16` | coverage | 1..256; cross-field checks apply |
+| `settings.max_goto_bytes` | `67108864` | coverage | 1..268435456; cross-field checks apply |
+| `settings.max_instructions` | `100000` | coverage | 1..1000000; cross-field checks apply |
+| `settings.max_output_bytes` | `4194304` | coverage | 1..16777216; cross-field checks apply |
+| `settings.max_properties` | `2000` | coverage | 1..10000; cross-field checks apply |
+| `settings.max_property_summaries` | `16` | coverage | 1..64; cross-field checks apply |
+| `settings.max_scopes` | `8` | coverage | 1..64; cross-field checks apply |
+| `settings.max_seeds_per_scope` | `32` | coverage | 1..256; cross-field checks apply |
+| `settings.max_source_bytes` | `134217728` | coverage | 1..1073741824; cross-field checks apply |
+| `settings.max_source_files` | `10000` | coverage | 1..100000; cross-field checks apply |
+| `settings.max_trace_steps` | `24` | coverage | 1..128; cross-field checks apply |
+| `settings.max_trace_value_chars` | `200` | coverage | 1..1024; cross-field checks apply |
+| `settings.max_translation_units` | `8` | coverage | 1..64; cross-field checks apply |
+| `settings.total_timeout_seconds` | `300` | coverage | 1..3600; cross-field checks apply |
+
+? The [executing job/parser](../../src/appsec_review/config/cbmc.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.unwind_limits` | unwind_limits changes the bounded proof/model semantics and must remain material. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.analyze.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acceptance.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

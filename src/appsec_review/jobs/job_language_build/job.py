@@ -1816,7 +1816,7 @@ def _publish_build_index(unit: UnitContext, receipts: list[Mapping[str, Any]]) -
         producer_artifacts=producer, tool_identity={"executor": EXECUTOR_IDENTITY},
         parser_identity="language-build-command-artifact/1", normalizer_identity="sanitized-build-evidence/1",
         mapping_identity="workspace-artifact/1", upstream_manifests=(prior_sha,))
-    path = unit.job.run_root / "data" / "indices" / "build" / f"language-build-{unit.job.attempt_id}-{fingerprint}.sqlite"
+    path = unit.job.run_root / "data" / "indices" / "build" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"language-build-{unit.job.attempt_id}-{fingerprint}.sqlite"
     builder = IndexBuilder(path, name="build", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id="language-build")
     for receipt in receipts:
@@ -1910,7 +1910,7 @@ def iteration_controller(unit: UnitContext):
                     **preparation["action"], "terminal_status": preparation["terminal_status"],
                     "gaps": _receipt_gaps(preparation.get("gaps", ()), probe.get("gaps", ()))}, accepted))
     typed = unit.job.config.typed_settings
-    configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
+    configuration_sha256 = unit.job.resolved_config_sha256
     for dispatch in dispatches:
         if dispatch.get("execution_owner") == "job_project_build":
             receipt = next(item for item in accepted["probe_receipts"]
@@ -1954,7 +1954,7 @@ def iteration_controller(unit: UnitContext):
         configuration=configuration, releases=unit.job.review_policy.releases.view(),
         execution_identity=EXECUTOR_IDENTITY, output_policy_identity=_build_output_policy(unit).identity,
         validate_receipt=lambda receipt: _validate_checkpoint_artifacts(unit.job.run_root, receipt),
-        product_overrides=overrides,
+        product_overrides=overrides, attempt_id=unit.job.attempt_id,
         omitted_receipts={item["build_unit_id"]: item for item in skipped})
     return controller, accepted, skipped
 
@@ -1968,7 +1968,7 @@ def build_job(*, executor_factory=None) -> Job:
         if executor_factory is None:
             from appsec_review.jobs.job_build_iteration.job import invoke_registered_iteration
             invoke = lambda request, label, _execute: invoke_registered_iteration(
-                unit.job.run_root, request, label)
+                unit.job.run_root, request, label, unit.job.resolved_config_sha256)
         result = controller.run(lambda request, run_id: _production_iteration(
             unit, request, run_id, accepted, executor_factory), invoke=invoke)
         return result
@@ -1978,7 +1978,7 @@ def build_job(*, executor_factory=None) -> Job:
         typed = unit.job.config.typed_settings
         if not isinstance(typed, LanguageBuildSettings):
             raise ValueError("typed language-build settings are unavailable")
-        configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
+        configuration_sha256 = unit.job.resolved_config_sha256
         wasm_rules = wasm._producer_rules(unit.job.config.settings["wasm"])
         consumed_families = (frozenset(value for rule in wasm_rules.values()
                                        for value in rule["families"])

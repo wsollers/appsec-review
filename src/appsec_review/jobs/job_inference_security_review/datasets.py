@@ -39,7 +39,7 @@ DATASETS = (
               "Unknown-severity assessments, immutable shared-result receipts and legacy cache entries.",
               artifacts=(_A + "/steps/triage/tasks/lead_severity/lead-triage.json",
                          _A + "/shared/lead-triage/*.json",
-                         _J + "/triage-cache/*.json"),
+                         _J + "/triage-cache/*.json", _A + "/triage-cache/*.json"),
               reason="model assessments are untrusted intermediate results, not accepted findings", authority=EvidenceAuthority.PROVISIONAL),
     artifact_only("review_packages", "packages", "inference_review", "appsec-review/review-package/7",
                   "Lane A finding-lead and lane B hunt packages with their verified package manifest.",
@@ -49,7 +49,7 @@ DATASETS = (
     protected("review_cells", "lead_review", "inference_review", "appsec-review/cell-attempt-receipt/1",
               "Per-cell attempt receipts, verifier request checks and lane team documents (hashes and validated "
               "model results only; raw prompts are never stored).",
-              artifacts=(_J + "/cells/**", _A + "/steps/lead_review/**", _A + "/steps/hunt_review/**",
+              artifacts=(_J + "/cells/**", _A + "/cells/**", _A + "/steps/lead_review/**", _A + "/steps/hunt_review/**",
                          _A + "/budget/**", _J + "/budget/**", _A + "/lanes/**", _J + "/review-teams/**"),
               reason="model results and retrieval transcripts are untrusted worker output kept for audit and "
                      "cell reuse only", authority=EvidenceAuthority.PROVISIONAL),

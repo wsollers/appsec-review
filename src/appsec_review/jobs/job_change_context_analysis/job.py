@@ -99,11 +99,11 @@ def _accepted_outputs(run_root: Path, handoff: Mapping[str, Any]) -> Mapping[str
 
 def _resolved_job_settings(run_root: Path, job_id: str) -> Mapping[str, Any]:
     """Read another job's settings from the run-owned, hash-verified resolved configuration."""
-    destination = run_root / "data" / "configuration"
-    manifest = json.loads((destination / "manifest.json").read_text(encoding="utf-8"))
-    resolved = _read(run_root, {"path": _rel(run_root, destination / "resolved.json"),
-                                "sha256": manifest["resolved_sha256"]})
-    return resolved["jobs"][job_id]["settings"]
+    from appsec_review.runtime.configuration import configuration_snapshot
+    accepted = _accepted_handoff(run_root, job_id, required=True)
+    assert accepted is not None
+    snapshot = configuration_snapshot(run_root, accepted[0]["resolved_config_sha256"])
+    return snapshot.document["jobs"][job_id]["settings"]
 
 
 def _load_catalog(run_root: Path) -> dict[str, Any]:

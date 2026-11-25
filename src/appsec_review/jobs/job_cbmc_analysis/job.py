@@ -238,7 +238,7 @@ def publish(unit: UnitContext, document: Mapping[str, Any], plan_ref: Mapping[st
         shard_id = f"cbmc-{label}-{unit.job.attempt_id}"
         fingerprint = hashlib.sha256(canonical_json({"implementation": IMPLEMENTATION, "label": label,
                                                      "analysis": analysis_ref["sha256"]})).hexdigest()
-        path = unit.job.run_root / "data" / "indices" / "observations" / f"{shard_id}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{shard_id}.sqlite"
         builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                                target_snapshot=snapshot, shard_id=shard_id)
         if label == "results":

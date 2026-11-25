@@ -63,7 +63,9 @@ def trusted_origin(unit: UnitContext, scope: AcceptedScope, handoff: Mapping[str
                 or job.config.job_id != "job_inference_security_review"):
             raise IntegrityError("audit context has a foreign run or attempt")
         claim_path = safe_path(root, attempt + "/claim.json")
-        manifest_path = safe_path(root, "data/configuration/manifest.json")
+        from appsec_review.runtime.configuration import configuration_snapshot
+        snapshot = configuration_snapshot(root, job.resolved_config_sha256)
+        manifest_path = snapshot.directory / "manifest.json"
         if not claim_path.is_file() or not manifest_path.is_file():
             raise IntegrityError("audit control anchor is not a regular file")
         claim = read_document(claim_path)
@@ -86,7 +88,8 @@ def trusted_origin(unit: UnitContext, scope: AcceptedScope, handoff: Mapping[str
                 or claim.get("input_manifest_path") != manifest_path
                 or claim.get("input_manifest_sha256") != scope.manifest_sha256):
             raise IntegrityError("audit scope differs from the attempt's admitted manifest")
-        config_ref = {"path": "data/configuration/resolved.json", "sha256": claim["resolved_config_sha256"]}
+        config_ref = {"path": (snapshot.directory / "resolved.json").relative_to(root).as_posix(),
+                      "sha256": claim["resolved_config_sha256"]}
         if manifest.get("resolved_sha256") != config_ref["sha256"]:
             raise IntegrityError("audit claim differs from frozen configuration identity")
         reader = BoundReader(root, DecisionAuditSettings())
@@ -251,7 +254,7 @@ def _publish(*, run_root, attempt_root, origin, scope, collection, inputs, setti
             if record.attempts != 0:
                 raise IntegrityError("attempted cell lacks an original receipt")
             continue
-        path = f"data/jobs/job_inference_security_review/cells/{cell_id}/attempt-{record.attempts}.json"
+        path = f"{attempt}/cells/{cell_id}/attempt-{record.attempts}.json"
         receipt = document({"path": path, "sha256": record.receipt_sha256}, RECEIPT_SCHEMA,
                            namespace="review-cell", owned=False)
         value = receipt.value
@@ -281,7 +284,7 @@ def _publish(*, run_root, attempt_root, origin, scope, collection, inputs, setti
                     continue
                 cell_id = row["verifier_cell_id"]
                 cell = projection.cells[cell_id][0]
-                expected = f"data/jobs/job_inference_security_review/cells/{cell_id}/independence-attempt-{cell.attempts}.json"
+                expected = f"{attempt}/cells/{cell_id}/independence-attempt-{cell.attempts}.json"
                 if ref["path"] != expected:
                     raise IntegrityError("request check belongs to another cell or attempt")
                 found = document(ref, "appsec-review/verifier-request-check/1", namespace="cell-check", owned=False)

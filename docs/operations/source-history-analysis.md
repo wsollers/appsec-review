@@ -436,3 +436,70 @@ Deterministic gaps persist until the target or the configuration changes. Exampl
 clone, divergent paths, unsupported languages, and unsupported repository formats. Do not edit
 accepted pointers or delete shards to force recovery; use
 `--force-from job_source_history_analysis`.
+
+
+## Tuning and whole-job recovery: `job_source_history_analysis`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.blame_max_file_bytes` | `1048576` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.blame_max_files` | `50` | coverage | 0..10000; cross-field checks apply |
+| `settings.changelog.max_entries` | `100000` | coverage | 1..1000000; cross-field checks apply |
+| `settings.changelog.max_file_bytes` | `16777216` | coverage | 1..16777216; cross-field checks apply |
+| `settings.changelog.max_files` | `16` | coverage | 1..256; cross-field checks apply |
+| `settings.changelog.max_line_bytes` | `4096` | coverage | 64..65536; cross-field checks apply |
+| `settings.changelog.max_paths_per_entry` | `2000` | coverage | 1..100000; cross-field checks apply |
+| `settings.co_change_top_k` | `10` | coverage | 1..100; cross-field checks apply |
+| `settings.git.max_changed_paths` | `1000000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.git.max_message_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.git.max_output_bytes` | `268435456` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.git.max_record_bytes` | `1048576` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.github.max_pages` | `50` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.github.max_records` | `5000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.github.max_requests` | `2000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.github.per_page` | `100` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.github.timeout_seconds` | `30` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.hotspot_count` | `10` | coverage | 1..100; cross-field checks apply |
+| `settings.line_history.max_file_bytes` | `1048576` | coverage | 1..16777216; cross-field checks apply |
+| `settings.line_history.max_files` | `50` | coverage | 1..256; cross-field checks apply |
+| `settings.max_changes` | `20000` | coverage | 1..200000; cross-field checks apply |
+| `settings.ranking_top_n` | `200` | coverage | 1..10000; cross-field checks apply |
+| `settings.symbols.max_file_bytes` | `1048576` | coverage | 1..16777216; cross-field checks apply |
+| `settings.symbols.max_files` | `200` | coverage | 1..256; cross-field checks apply |
+| `settings.symbols.max_nodes_per_file` | `200000` | coverage | 1..500000; cross-field checks apply |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_source_history_analysis/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.history_window_months` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.bulk_change_file_threshold` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.recency_half_life_days` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.minor_author_share` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.young_line_days` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.co_change_min_support` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.fix_on_fix.interval_days` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.symbols.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.sii.tier_1_share` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.sii.tier_2_share` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.sii.weights.relative_churn` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.sii.weights.revision_frequency` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.sii.weights.author_entropy` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.sii.weights.complexity` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.filters.formatting_balance_tolerance` | Changes the history/scoring definition (time window, decay, classification, author threshold or weighting), rather than truncating requested work. |
+| `settings.git.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.changelog.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `steps.resolve_sources.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acquire.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.analyze.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

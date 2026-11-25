@@ -987,7 +987,7 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
                 "execution": None, "record_count": 0, "gaps": envelope["exclusions_and_gaps"],
                 "retry_count": 0}
     identity = _checkpoint_identity(unit, adapter, catalog, selection, image_id, mounts)
-    checkpoint_root = unit.job.run_root / "data" / "task-checkpoints" / "job_evidence_collection" / adapter.tool_id / identity[:24]
+    checkpoint_root = unit.job.run_root / "data" / "task-checkpoints" / "job_evidence_collection" / "attempts" / unit.job.attempt_id / adapter.tool_id / identity[:24]
     checkpoint_path = checkpoint_root / "checkpoint.json"
     retry_marker = checkpoint_root.parent / "retry-required.json"
     with FileLock(checkpoint_root.parent / (identity[:24] + ".lock")):
@@ -1155,7 +1155,7 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
         tool_identity={"tool_id": producer}, parser_identity="static-adapters/1",
         normalizer_identity=NORMALIZER_IDENTITY, mapping_identity="native-location/1",
     )
-    index_path = (unit.job.run_root / "data" / "indices" / "observations" / shard_id /
+    index_path = (unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / shard_id /
                   f"{fingerprint}.sqlite")
     checkpoint = (unit.job.run_root / "data" / "task-checkpoints" / "job_evidence_collection" /
                   "index" / shard_id / f"{fingerprint}.json")

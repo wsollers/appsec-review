@@ -64,7 +64,10 @@ def _read_json_artifact(run_root: Path, identity: Mapping[str, Any]) -> Any:
 
 
 def _case_root(unit: UnitContext, case_id: str) -> Path:
-    root = (unit.job.run_root / "data" / "cpp" / "projects" / case_id).resolve()
+    accepted = load_accepted_cpp(unit.job.run_root)
+    catalog = accepted["result"]["outputs"]["catalog.projects"]["projects"][case_id]
+    _read_json_artifact(unit.job.run_root, catalog["compile_database"])
+    root = (unit.job.run_root / catalog["compile_database"]["path"]).resolve().parent
     if unit.job.run_root.resolve() not in root.parents:
         raise ValueError("case root escapes the run")
     return root
@@ -822,7 +825,7 @@ def build_job(*, infer: Infer | None = None) -> Job:
                 })
             shard_id = f"build-security-{case_id}"
             shard_suffix = hashlib.sha256(shard_id.encode()).hexdigest()[:16]
-            path = (unit.job.run_root / "data" / "indices" / "build_security" /
+            path = (unit.job.run_root / "data" / "indices" / "build_security" / "attempts" / unit.job.config.job_id / unit.job.attempt_id /
                     f"{fingerprint}-{shard_suffix}.sqlite")
             reused = path.exists()
             if not reused:

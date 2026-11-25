@@ -353,7 +353,7 @@ def build_job() -> Job:
                 parser_identity=PARSER_IDENTITY, normalizer_identity=NORMALIZER_IDENTITY,
                 mapping_identity=MAPPING_IDENTITY, upstream_manifests=(str(upstream_identity["sha256"]),))
             shard_id = f"profile-data-{value['build_unit_id']}"
-            path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}.sqlite"
+            path = unit.job.run_root / "data" / "indices" / "analysis" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
             if path.exists():
                 sha = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
                                    target_snapshot=unit.job.source_fingerprint, shard_id=shard_id).attest_existing()

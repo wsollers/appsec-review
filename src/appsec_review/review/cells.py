@@ -18,6 +18,7 @@ failure raises.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
 import json
 from pathlib import Path
@@ -28,13 +29,13 @@ import time
 import traceback
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
-from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest
+from appsec_review.inference import ModelOutputError, ModelResult, ReviewModelRequest, worker_scope
 from appsec_review.inference.errors import (
     ExecutionLimit, FailureCategory, ModelTokenCapExceeded, ProviderError, failure_category,
 )
 from appsec_review.inference.execution import CallAccounting, CallContext, Execution, RetryPolicy
 from appsec_review.inference.usage import Usage
-from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError
+from appsec_review.retrieval.core import RetrievalGap, RetrievalIntegrityError, retrieval_caller
 from appsec_review.review.capability import (
     EXPAND_SCHEMA, EXPAND_TOOL, GRAPH_ROW_KINDS, LOCATOR_TOOLS, AuthorityDenied, CellCapability, TOOL_SCHEMAS,
 )
@@ -157,7 +158,8 @@ def cell_fingerprint(spec: CellSpec, capability: CellCapability) -> str:
         "guidance_bundle": spec.guidance_bundle_sha256,
         "model": {"provider": spec.provider, "model": spec.model, "reasoning": spec.reasoning},
         "tool_capabilities": {key: semantic[key] for key in ("tools", "indexes", "entities",
-                                                              "entity_prefixes", "graph_scopes")},
+                                                              "entity_prefixes", "graph_scopes", "read_view_sha256")
+                              if key in semantic},
         "budgets": {**{key: semantic[key] for key in ("max_queries", "max_turns", "page_size",
                                                        "max_depth", "max_result_bytes")},
                     "max_input_tokens": spec.max_input_tokens,
@@ -195,6 +197,7 @@ class _Attempt:
         self.status, self.gap_class, self.reason = status, gap_class, reason[:256]
 
 
+@worker_scope()
 def run_cell(spec: CellSpec, *, infer: Infer, core: Any, capability: CellCapability,
              receipts_root: Path, validate_final: ValidateFinal, max_attempts: int = 1,
              retry_on_timeout: bool = True, retry_on_provider_error: bool = True,
@@ -407,6 +410,11 @@ def _bind(spec: CellSpec, capability: CellCapability, core: Any) -> str:
         raise IntegrityError("cell capability is not bound to this cell's manifest, package, role, or round")
     if getattr(core, "manifest_sha256", None) != capability.manifest_sha256:
         raise IntegrityError("retrieval core is pinned to a different accepted manifest")
+    if capability.read_view_sha256 is not None and (
+        getattr(core, "run_id", None) != capability.run_id
+        or getattr(core, "read_view_sha256", None) != capability.read_view_sha256
+    ):
+        raise IntegrityError("cell is bound to a different accepted run or read view")
     return cell_fingerprint(spec, capability)
 
 
@@ -435,15 +443,19 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
     if view is not None:
         task_input["artifact_admission"]["material_gap_count"] = len(view.document.get("material_gaps", ()))
         task_input["artifact_admission"]["view_omitted"] = dict(view.document.get("omitted", {}))
+    previous_catalog_sha256 = None
     for turn_number in range(1, capability.max_turns + 1):
         final_required = turn_number == capability.max_turns or attempt.queries >= capability.max_queries
         request = ReviewModelRequest(
             schema=TURN_SCHEMA, role=Role(spec.role).value, persona=spec.persona,
             stack_profile=spec.stack_profile, guidance_bundle_sha256=spec.guidance_bundle_sha256,
-            guidance_text=spec.guidance_text, task_input=task_input, transcript=tuple(transcript),
+            guidance_text=spec.guidance_text, task_input={**task_input, "artifact_admission": {
+                **task_input["artifact_admission"], "previous_catalog_sha256": previous_catalog_sha256}},
+            transcript=tuple(transcript),
             provider=spec.provider, model=spec.model, reasoning=spec.reasoning,
             max_input_tokens=spec.max_input_tokens, max_output_tokens=spec.max_output_tokens,
             repair_errors=repair_errors if turn_number == 1 else (), cell_id=cell_id)
+        previous_catalog_sha256 = request.capability_artifact_card.get("catalog_sha256")
         entry: dict[str, Any] = {"turn": turn_number, "request_sha256": sha256_hex(asdict(request)),
                                  "transcript_sha256": sha256_hex(transcript),
                                  "final_required": final_required, "action": None,
@@ -536,8 +548,10 @@ def _run_attempt(spec: CellSpec, cell_id: str, number: int, *, infer: Infer, cor
             attempt.end(CellStatus.TIMED_OUT, GapClass.BUDGET_GAP, "cap_reached_without_final")
             attempt.repair_errors = ("the cell's query or turn cap was reached; the next turn must be final",)
             return attempt
-        responses = [_retrieve(spec, cell_id, attempt, capability, core, turn_number, index, item, entry)
-                     for index, item in enumerate(turn["requests"])]
+        with retrieval_caller(job_id="job_inference_security_review", cell_id=cell_id,
+                              role=spec.role.value, turn=turn_number, caller_kind="review_cell"):
+            responses = [_retrieve(spec, cell_id, attempt, capability, core, turn_number, index, item, entry)
+                         for index, item in enumerate(turn["requests"])]
         if attempt.repeated is not None:
             attempt.end(CellStatus.INVALID, GapClass.AUTHORITY_ERROR, attempt.repeated)
             attempt.repair_errors = ("the same request was denied twice; the cell ended without a usable result",)
@@ -587,6 +601,24 @@ def _retrieve(spec: CellSpec, cell_id: str, attempt: _Attempt, capability: CellC
     try:
         if decision.tool == EXPAND_TOOL:
             response, skipped = _expand(spec, attempt, capability, core, decision)
+        elif decision.tool == "query_cfg_function":
+            # Only the application supplies the fit predicate. Charge the same JSON the
+            # worker sees, including escaped Unicode, the citation label and wrapper.
+            preview_labels = deepcopy(attempt.labels)
+
+            def fits(page: dict) -> bool:
+                preview, _ = _bound(tool, page, capability, attempt.seen,
+                                    locator_paths=view.locator_paths if view is not None else None, trim=False)
+                _label_rows(preview["results"], preview_labels)
+                return len(json.dumps({"index": index, "status": "ok", **preview}, sort_keys=True,
+                                      default=str).encode()) <= capability.max_result_bytes
+
+            response = core.query_cfg_function(**decision.parameters, _cell_line=decision.line, _cell_fits=fits)
+            if not fits(response):  # Even a terminal gap/timeout must fit its envelope.
+                response = {**response, "results": [], "pagination": {"next_cursor": None}, "truncated": True,
+                            "gaps_truncated": True, "coverage_gaps": ["CFG result cannot fit the cell byte cap"]}
+                if not fits(response):
+                    raise RetrievalGap("CFG result envelope cannot fit the cell byte cap")
         else:
             response = getattr(core, decision.tool)(**dict(decision.parameters))
     except IntegrityError:
@@ -728,7 +760,7 @@ def _expand(spec: CellSpec, attempt: _Attempt, capability: CellCapability, core:
 
 def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability,
            seen: set[str] | frozenset[str] = frozenset(), granted: set[str] | None = None,
-           *, locator_paths: set[str] | frozenset[str] | None = None
+           *, locator_paths: set[str] | frozenset[str] | None = None, trim: bool = True
            ) -> tuple[dict[str, Any], int]:
     """Withhold out-of-scope rows and trim to the cell byte cap; identities are retained.
 
@@ -739,6 +771,20 @@ def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability,
     granted = set() if granted is None else granted
     rows = [_plain(row) for row in response.get("results", ()) or ()]
     for row in rows:
+        if capability.read_view_sha256 is not None and isinstance(row, dict):
+            entity = row.get("entity") if isinstance(row.get("entity"), dict) else row
+            # Only record fields are citation anchors. Strings in target text, names and
+            # arbitrary payload data cannot turn themselves into citable identities.
+            records = [entity]
+            if tool == "resolve_evidence":
+                records.extend(r for r in row.get("relationships", ()) if isinstance(r, dict))
+            for record in records:
+                if record.get("index") is not None and record["index"] not in capability.indexes:
+                    continue
+                for key in ("identity", "source_identity", "ast_identity", "logical_id", "source_id", "target_id"):
+                    identity = record.get(key)
+                    if isinstance(identity, str) and _LOGICAL_ID.fullmatch(identity):
+                        granted.add(identity)
         _grant_graph_row(row, capability, granted)
         _grant_exploration_row(tool, row, capability, seen, granted, locator_paths)
         if isinstance(row, dict) and isinstance(row.get("entity"), dict):
@@ -753,15 +799,35 @@ def _bound(tool: str, response: Mapping[str, Any], capability: CellCapability,
             kept.append(scoped)
     manifest = response.get("index_manifest") if isinstance(response.get("index_manifest"), Mapping) else {}
     pagination = response.get("pagination") if isinstance(response.get("pagination"), Mapping) else {}
+    gaps = response.get("coverage_gaps", ()) or ()
     bounded = {"tool": tool, "index_manifest_sha256": manifest.get("sha256"),
                "results": kept, "withheld_out_of_scope": withheld,
-               "coverage_gaps": [str(item)[:256] for item in list(response.get("coverage_gaps", ()) or ())[:20]],
+               "coverage_gaps": [str(item)[:256] for item in gaps[:20]],
+               "gaps_truncated": bool(response.get("gaps_truncated")) or len(gaps) > 20,
                "truncated": bool(response.get("truncated")),
                "next_cursor": pagination.get("next_cursor") if not withheld else None}
-    while kept and len(json.dumps(bounded, sort_keys=True, default=str).encode()) > capability.max_result_bytes:
-        kept.pop()
+
+    def size(value: Any) -> int:
+        return len(json.dumps(value, sort_keys=True, default=str).encode())
+
+    while trim and size(bounded) > capability.max_result_bytes:
+        if bounded["coverage_gaps"]:
+            bounded["coverage_gaps"].pop()
+            bounded["gaps_truncated"] = True
+            continue
+        if not kept:
+            break
+        omitted = kept.pop()
         bounded["truncated"] = True
+        # The upstream cursor resumes *after* its whole page, not after this prefix.
         bounded["next_cursor"] = None
+        if not kept:
+            bounded["oversized_item"] = {"item_bytes": size(omitted), "limit_bytes": capability.max_result_bytes,
+                                         "hint": "Narrow the query to a smaller item or source span."}
+        else:
+            bounded["narrowing_hint"] = "Retry with a smaller page limit; the upstream cursor would skip rows."
+        if not kept:
+            bounded.pop("narrowing_hint", None)
     return bounded, withheld
 
 
@@ -808,23 +874,32 @@ def _exploration_row_in_scope(
     known: set[str] | frozenset[str],
     locator_paths: set[str] | frozenset[str] | None,
 ) -> bool:
+    if (tool in {"query_cfg_function", "query_guard_dominators", "query_cpg_slice", "query_call_paths"}
+            and "analysis" not in capability.indexes):
+        return False
     if tool in {"query_cfg_function", "query_guard_dominators"}:
         src = row.get("source_identity")
         if isinstance(src, str) and (capability.entity_in_scope(src) or src in known):
             return True
-        return locator_paths is not None and isinstance(row.get("path"), str) and row["path"] in locator_paths
+        return (capability.read_view_sha256 is not None
+                or locator_paths is not None and isinstance(row.get("path"), str) and row["path"] in locator_paths)
     if tool == "query_cpg_slice":
+        if row.get("record_type") != "cpg_node":
+            return False
         src = row.get("source_identity")
-        if isinstance(src, str) and (capability.entity_in_scope(src) or src in known):
-            return True
-        if locator_paths is not None:
-            return isinstance(row.get("path"), str) and row["path"] in locator_paths
-        return bool(capability.graph_scopes) or "graph" in capability.indexes
+        logical_id = row.get("logical_id")
+        return (capability.read_view_sha256 is not None
+                or any(isinstance(value, str) and (capability.entity_in_scope(value) or value in known)
+                       for value in (src, logical_id))
+                or locator_paths is not None and isinstance(row.get("path"), str) and row["path"] in locator_paths)
     if tool == "query_call_paths":
-        hops = row.get("hops") if isinstance(row.get("hops"), Sequence) else ()
-        if locator_paths is not None:
-            return any(isinstance(h, Mapping) and h.get("path") in locator_paths for h in hops)
-        return bool(capability.graph_scopes) or "graph" in capability.indexes
+        hops = row.get("hops")
+        if row.get("record_type") != "cpg_path" or not isinstance(hops, (list, tuple)) or not hops:
+            return False
+        return all(isinstance(h, Mapping) and
+                   (capability.read_view_sha256 is not None or
+                    locator_paths is not None and isinstance(h.get("path"), str) and h["path"] in locator_paths)
+                   for h in hops)
     return True
 
 
@@ -844,6 +919,12 @@ def _grant_exploration_row(
             if isinstance(ast_id, str) and _LOGICAL_ID.fullmatch(ast_id):
                 granted.add(ast_id)
                 row.setdefault("identity", ast_id)
+        return
+    if tool == "query_cpg_slice" and _exploration_row_in_scope(tool, row, capability, seen, locator_paths):
+        identity = row.get("logical_id")
+        if isinstance(identity, str) and _LOGICAL_ID.fullmatch(identity):
+            granted.add(identity)
+            row.setdefault("identity", identity)
         return
     if tool in {"query_threat_boundaries", "query_doc_drift", "query_engineering_signals"}:
         identity = row.get("identity")
@@ -873,6 +954,8 @@ def _scope_row(tool: str, row: Any, capability: CellCapability,
                locator_paths: set[str] | frozenset[str] | None = None) -> tuple[Any, int]:
     if not isinstance(row, dict):
         return None, 1
+    if capability.read_view_sha256 is not None and row.get("index") not in (None, *capability.indexes):
+        return None, 1
     if row.get("index") == "debug_symbols" and not capability.debug_symbol_row_in_scope(row, known):
         return None, 1
     if tool in {"query_cfg_function", "query_guard_dominators", "query_cpg_slice", "query_call_paths"}:
@@ -881,10 +964,14 @@ def _scope_row(tool: str, row: Any, capability: CellCapability,
     if tool == "resolve_evidence":
         dropped = 0
         entity = row.get("entity")
-        if isinstance(entity, dict) and not _endpoints_in_scope(entity, capability, known):
+        def visible(record):
+            return ((capability.read_view_sha256 is None or record.get("index") is None
+                     or record["index"] in capability.indexes)
+                    and _endpoints_in_scope(record, capability, known))
+        if isinstance(entity, dict) and not visible(entity):
             entity, dropped = None, 1
         relationships = [item for item in row.get("relationships", ()) or ()
-                         if isinstance(item, dict) and _endpoints_in_scope(item, capability, known)]
+                         if isinstance(item, dict) and visible(item)]
         dropped += len(row.get("relationships", ()) or ()) - len(relationships)
         return {**row, "entity": entity, "relationships": relationships}, dropped
     return (row, 0) if _endpoints_in_scope(row, capability, known) else (None, 1)

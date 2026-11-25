@@ -100,3 +100,38 @@ graph-fact causes, immutable publication and acceptance checks.
 A re-run in the same application run produces the same assignment set for the same accepted
 manifest and pinned taxonomy, and replaces earlier tag shards in the accepted manifest instead of
 duplicating them.
+
+
+## Tuning and whole-job recovery: `job_security_tagging`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.collation.max_files_per_component` | `4096` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.collation.max_source_bytes_per_file` | `262144` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.collation.model_pass.max_components` | `64` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.collation.model_pass.max_excerpt_lines` | `400` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_assignments` | `500000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_entities_per_shard` | `50000` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/config/collation.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.collation.model_pass.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `steps.taxonomy.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.scope.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.collection.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.collation.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.crosswalk.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.integrity.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publication.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

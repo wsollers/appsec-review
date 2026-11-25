@@ -226,6 +226,12 @@ a missing key in a new profile and so on fail there). It is hashed as its own la
 content in the run's `resolved.json` as `configuration_profile = {name, path, sha256, keys}`.
 Every run records `configuration_profile`; a `dev` run records name `dev` with no file.
 
+For a new CLI `start` or an unconfigured local deployment on WSOLLERS1, `wsollers1-dev`
+raises the OWASP assessor and reviewer to 64,000 input tokens, 8,000 output tokens and
+eight turns. It inherits the base models and reasoning. Explicit profiles (including `dev`)
+take precedence. Hall 5000, Zarathustra and unrecognized hosts retain the existing default;
+the capacity overlay controls resources, not model budgets.
+
 A profile file may set only the keys below. Anything else, a wrong type or an empty table is
 rejected with a message that names the key.
 

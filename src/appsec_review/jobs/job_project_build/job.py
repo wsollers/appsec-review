@@ -482,6 +482,7 @@ def _probe_cache(unit: UnitContext, recipe_identity: str,
                     if unit.job.config.build_capture is not None else "required")
     identity = hashlib.sha256(canonical_json({
         "run_scope": str(unit.job.run_root.resolve()),
+        "attempt_id": unit.job.attempt_id,
         "target_snapshot": unit.job.source_fingerprint,
         "assurance_mode": unit.job.review_policy.mode.value,
         "component_releases": {key: unit.job.review_policy.releases.values.get(key)
@@ -1178,7 +1179,7 @@ def build_job(*, executor_factory=None, image_resolver_factory=None, unity_execu
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         accepted = load_accepted_plan(unit.job.run_root)
         actions = list(accepted["build_topology"]["build_actions"])
-        configuration_sha256 = resolved_configuration_identity(unit.job.run_root)
+        configuration_sha256 = unit.job.resolved_config_sha256
         dependencies: dict[str, set[str]] = {str(item["build_unit_id"]): set() for item in actions}
         accepted_graph = accepted.get("build_topology", {}).get("executable_graph")
         if not isinstance(accepted_graph, Mapping):

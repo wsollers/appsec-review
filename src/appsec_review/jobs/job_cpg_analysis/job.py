@@ -172,7 +172,7 @@ def _not_applicable(unit: UnitContext, scope: IndexScope) -> dict[str, Any]:
               "observation_count": 0, "not_applicable_inputs": scope.not_applicable_inputs()}
     fingerprint = checkpoint_identity({"adapter": ADAPTER, "scope": scope.as_dict(), **result})
     shard = f"joern-{scope.scope_id}"
-    path = unit.job.run_root / "data" / "indices" / "observations" / f"{fingerprint}.sqlite"
+    path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
     builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     index = IndexIdentity("observations", "appsec-review/retrieval-index/2", builder.build(), fingerprint,
@@ -187,7 +187,8 @@ def _generate(unit: UnitContext, scope: IndexScope, executor_factory: Any,
         return _not_applicable(unit, scope)
     limits = _settings(unit)
     limit = limits["max_cpg_bytes"]
-    root = unit.job.run_root / "data" / "code-index" / "joern" / scope.scope_id
+    root = (unit.job.run_root / "data" / "code-index" / "joern" / scope.scope_id /
+            "attempts" / unit.job.attempt_id)
     values: dict[str, Any] = {
         "schema": SCHEMA, "adapter": ADAPTER, "manifest_schema": CPG_MANIFEST_SCHEMA, "argv": list(ARGV),
         "scope": scope.as_dict(), "gap": JOERN_GAP,
@@ -357,7 +358,7 @@ def _publish_shard(unit: UnitContext, scope: IndexScope, *, artifacts: list[Any]
         name="observations", target_snapshot=scope.case_snapshot, producer_artifacts=artifacts,
         tool_identity={**tool, **({"seeded": seeded_identity} if seeded_identity else {})},
         parser_identity=ADAPTER, normalizer_identity=ADAPTER, mapping_identity="cpp-source-mapping/3")
-    path = (unit.job.run_root / "data" / "indices" / "observations" /
+    path = (unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id /
             f"{fingerprint}-{hashlib.sha256(shard.encode()).hexdigest()[:16]}.sqlite")
     builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)

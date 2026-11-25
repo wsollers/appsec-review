@@ -563,6 +563,10 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
         if assessment_mode == "assessment":
             from .obligations import instantiate
             package["proof_obligations"] = instantiate(control, row, observations, max_subjects=max_subjects)
+            cited = {identity for item in package["proof_obligations"] for identity in item["evidence_ids"]}
+            observations = sorted((record for record in observations if record.get("evidence_id") in cited),
+                                  key=lambda record: str(record["evidence_id"]))
+            package["evidence_references"] = observations
             package["limitations"] = [
                 *component.get("limitations", []),
                 "Assessment covers named source subjects, not the entire component or deployed system.",
@@ -571,14 +575,9 @@ def build_finding_packages(batch: Mapping[str, Any], rows: Sequence[Mapping[str,
             package.setdefault("limitations", []).append(
                 f"package evidence bound omitted {omitted} accepted records; no obligations use omitted evidence")
         if assessment_mode == "assessment" and max_evidence_bytes is not None:
-            # T-5013: the request carries the obligations' own evidence first, then other accepted records
-            # within the byte budget; the rest stays reachable through bounded expansion by identity.
-            cited = {identity for item in package["proof_obligations"] for identity in item.get("evidence_ids", ())}
-            ordered = sorted(observations, key=lambda item: (item.get("evidence_id") not in cited,
-                                                             str(item.get("evidence_id") or "")))
             kept: list[dict[str, Any]] = []
             used = 0
-            for item in ordered:
+            for item in observations:
                 size = len(canonical_json(item))
                 if kept and used + size > max_evidence_bytes:
                     break

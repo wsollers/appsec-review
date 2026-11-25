@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -11,7 +10,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from appsec_review.config import load_config
-from appsec_review.inference import PROVIDERS, MODEL_CHECKS
+from appsec_review.inference import PROVIDERS, MODEL_CHECKS, _copilot_worker, worker_scope
 from appsec_review.inference import copilot_sdk
 from appsec_review.inference.claude_cli import ModelOutputError
 from appsec_review.inference.request import ModelRequest, ReviewModelRequest
@@ -56,7 +55,8 @@ def fake_sdk_modules(monkeypatch):
 
 
 @pytest.fixture
-def sdk(monkeypatch, fake_sdk_modules):
+def sdk(monkeypatch, tmp_path, fake_sdk_modules):
+    import copilot
     from copilot.session_events import AssistantMessageData, AssistantUsageData
 
     state = SimpleNamespace(options=None, prompt=None, closed=False, aborted=False,
@@ -65,10 +65,13 @@ def sdk(monkeypatch, fake_sdk_modules):
                             models=["claude-haiku-5.5"], input_tokens=10, output_tokens=20,
                             cache_read_tokens=3, extra_usage=[], usage=True, failure=None,
                             abort_error=None, exit_error=None, exit_delay=0, abort_delay=0,
-                            exit_started=False, client_closed=False)
+                            exit_started=False, client_closed=False, raw_prompt=None,
+                            starts=0, stops=0, listings=0, session_count=0, sends=0, loops=[],
+                            working_dirs=[], deleted=[], stop_error=None, delete_error=None, ping_error=None)
 
     class Session:
-        session_id = "test-session"
+        def __init__(self, number):
+            self.session_id = f"test-session-{number}"
 
         async def __aenter__(self):
             return self
@@ -87,6 +90,8 @@ def sdk(monkeypatch, fake_sdk_modules):
                 raise state.abort_error
 
         async def send_and_wait(self, prompt, *, timeout):
+            state.sends += 1
+            state.raw_prompt = prompt
             state.prompt = json.loads(prompt)
             await asyncio.sleep(state.delay)
             if state.failure:
@@ -102,22 +107,52 @@ def sdk(monkeypatch, fake_sdk_modules):
                 tool_requests=state.tools))
 
     class Client:
+        def __init__(self, **options):
+            self.working = options["working_directory"]
+
+        async def start(self):
+            state.starts += 1
+            state.loops.append(asyncio.get_running_loop())
+            self.reader = asyncio.create_task(asyncio.Event().wait())
+
+        async def get_auth_status(self):
+            return SimpleNamespace(isAuthenticated=True)
+
+        async def stop(self):
+            state.stops += 1
+            state.client_closed = True
+            self.reader.cancel()
+            await asyncio.gather(self.reader, return_exceptions=True)
+            if state.stop_error:
+                raise state.stop_error
+
+        async def ping(self):
+            assert not self.reader.done() and Path(self.working).is_dir()
+            if state.ping_error:
+                raise state.ping_error
+
+        async def delete_session(self, session_id):
+            if state.delete_error:
+                raise state.delete_error
+            state.deleted.append(session_id)
+
         async def list_models(self):
+            state.listings += 1
             return [SimpleNamespace(id=name, policy=SimpleNamespace(state=state.policy),
                                     supported_reasoning_efforts=state.reasoning) for name in state.models]
 
         async def create_session(self, **options):
             state.options = options
-            return Session()
+            state.session_count += 1
+            path = Path(options["working_directory"])
+            assert path == Path(options["config_directory"]) and str(path) != self.working
+            assert path.is_dir() and path.stat().st_mode & 0o077 == 0
+            state.working_dirs.append(path)
+            return Session(state.session_count)
 
-    @asynccontextmanager
-    async def client():
-        try:
-            yield Client(), "/isolated"
-        finally:
-            state.client_closed = True
-
-    monkeypatch.setattr(copilot_sdk, "_client", client)
+    monkeypatch.setattr(copilot, "CopilotClient", Client)
+    monkeypatch.setenv("APPSEC_COPILOT_HOME", str(tmp_path))
+    monkeypatch.setattr(_copilot_worker.tempfile, "tempdir", str(tmp_path))
     return state
 
 
@@ -319,17 +354,17 @@ def test_client_uses_only_dedicated_login(monkeypatch, tmp_path):
     monkeypatch.setenv("APPSEC_COPILOT_HOME", str(home))
     for name in ("GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN", "ANTHROPIC_API_KEY"):
         monkeypatch.setenv(name, "must-not-reach-worker")
-    monkeypatch.setattr(copilot_sdk.tempfile, "tempdir", str(tmp_path))
+    monkeypatch.setattr(_copilot_worker.tempfile, "tempdir", str(tmp_path))
     seen = {}
 
     class Client:
         def __init__(self, **kwargs):
             seen.update(kwargs)
 
-        async def __aenter__(self):
-            return self
+        async def start(self):
+            pass
 
-        async def __aexit__(self, *_):
+        async def stop(self):
             pass
 
         async def get_auth_status(self):
@@ -338,7 +373,7 @@ def test_client_uses_only_dedicated_login(monkeypatch, tmp_path):
     monkeypatch.setattr(copilot, "CopilotClient", Client)
 
     async def check():
-        async with copilot_sdk._client():
+        async with _copilot_worker._client():
             pass
 
     asyncio.run(check())
@@ -498,11 +533,11 @@ def test_sdk_cancellation_during_teardown_keeps_control_flow_and_cleanup_evidenc
 
 def test_sdk_unconfirmed_background_cleanup_never_returns_success(sdk, monkeypatch):
     from appsec_review.runtime import execution_safety as safety, resources
-    retained, cleaned = [], []
+    retained, closed = [], []
     monkeypatch.setattr(resources, "quarantine_resources", lambda _: None)
     monkeypatch.setattr(safety, "retain_failure",
                         lambda action, error, **kw: retained.append((action, error, kw)))
-    monkeypatch.setattr(copilot_sdk, "_CLEANUP_SECONDS", 0.001)
+    monkeypatch.setattr(_copilot_worker, "_CLEANUP_SECONDS", 0.001)
     real_loop = asyncio.new_event_loop
 
     def loop_for_fake_sdk():
@@ -515,13 +550,13 @@ def test_sdk_unconfirmed_background_cleanup_never_returns_success(sdk, monkeypat
             for pending in asyncio.all_tasks(loop):
                 pending.cancel()
                 loop.run_until_complete(asyncio.gather(pending, return_exceptions=True))
-                cleaned.append(True)
             close()
+            closed.append(loop.is_closed())
 
         loop.close = close_and_dispose_fake
         return loop
 
-    monkeypatch.setattr(copilot_sdk.asyncio, "new_event_loop", loop_for_fake_sdk)
+    monkeypatch.setattr(_copilot_worker.asyncio, "new_event_loop", loop_for_fake_sdk)
 
     async def operation():
         async def background():
@@ -536,4 +571,106 @@ def test_sdk_unconfirmed_background_cleanup_never_returns_success(sdk, monkeypat
 
     with pytest.raises(ExecutionContractError, match="cancellation bound"):
         copilot_sdk._run(operation(), timeout_seconds=1)
-    assert cleaned and retained[0][2]["pending_tasks"] == 1
+    assert closed == [True] and retained[0][2]["pending_tasks"] == 1
+
+
+def test_scoped_turns_share_only_healthy_transport_and_bounded_catalog(sdk, monkeypatch):
+    now = [100.]
+    monkeypatch.setattr(_copilot_worker, "_catalog_clock", lambda: now[0])
+    model = request().model
+    with worker_scope():
+        assert copilot_sdk.models([model], timeout_seconds=5)["models"][model]["available"]
+        assert copilot_sdk.send(request(), timeout_seconds=5).input_tokens == 10
+        sdk.input_tokens = 7
+        assert copilot_sdk.send(request(), timeout_seconds=5).input_tokens == 7
+        assert (sdk.starts, sdk.listings, sdk.stops) == (1, 1, 0)
+        assert sdk.deleted == ["test-session-1", "test-session-2"]
+        assert len(set(sdk.working_dirs)) == 2 and not any(path.exists() for path in sdk.working_dirs)
+        now[0] += _copilot_worker._CATALOG_TTL_SECONDS
+        sdk.policy = "disabled"
+        assert not copilot_sdk.models([model], timeout_seconds=5)["models"][model]["available"]
+        assert (sdk.starts, sdk.listings, sdk.stops) == (2, 2, 1)
+    assert sdk.stops == 2 and all(loop.is_closed() for loop in sdk.loops)
+
+
+def test_failed_reused_transport_is_closed_without_resending(sdk):
+    with worker_scope():
+        copilot_sdk.send(request(), timeout_seconds=5)
+        sdk.ping_error = ConnectionResetError()
+        with pytest.raises(ProviderError) as error:
+            copilot_sdk.send(request(), timeout_seconds=5)
+        assert error.value.code == "network" and (sdk.starts, sdk.stops, sdk.sends) == (1, 1, 1)
+        sdk.ping_error = None
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert (sdk.starts, sdk.stops, sdk.sends) == (2, 2, 2)
+
+
+def test_session_deletion_failure_quarantines_and_blocks_worker_reuse(sdk, monkeypatch):
+    from appsec_review.runtime import resources
+    quarantined = []
+    monkeypatch.setattr(resources, "quarantine_resources", quarantined.append)
+    with worker_scope():
+        sdk.delete_error = RuntimeError("private error")
+        with pytest.raises(ExecutionContractError, match="session deletion teardown failed"):
+            copilot_sdk.send(request(), timeout_seconds=5)
+        with pytest.raises(ExecutionContractError, match="unconfirmed"):
+            copilot_sdk.send(request(), timeout_seconds=5)
+    assert quarantined == ["copilot_teardown_unconfirmed"] and sdk.starts == sdk.stops == 1
+
+
+def test_scope_exit_fails_closed_on_stop(sdk, monkeypatch):
+    from appsec_review.runtime import resources
+    quarantined = []
+    monkeypatch.setattr(resources, "quarantine_resources", quarantined.append)
+    with pytest.raises(ExecutionContractError, match="client teardown failed"):
+        with worker_scope():
+            copilot_sdk.send(request(), timeout_seconds=5)
+            sdk.stop_error = RuntimeError("private stop failure")
+    assert quarantined == ["copilot_teardown_unconfirmed"] and sdk.loops[0].is_closed()
+
+
+def test_scopes_do_not_share_transport_across_threads(sdk):
+    from concurrent.futures import ThreadPoolExecutor
+    from contextvars import copy_context
+
+    model = request().model
+    with worker_scope():
+        copilot_sdk.models([model], timeout_seconds=5)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(copy_context().run, copilot_sdk.models, [model], timeout_seconds=5).result()
+        assert sdk.starts == 2 and sdk.stops == 1 and sdk.loops[1].is_closed()
+        copilot_sdk.models([model], timeout_seconds=5)
+    assert sdk.starts == sdk.stops == 2
+
+
+def test_review_wire_prefix_survives_changed_cell_input_and_turn(sdk):
+    from appsec_review.inference.request import review_prompt
+    turn = {"actions": ["final"], "tool_catalog": []}
+    req = ReviewModelRequest(schema="appsec-review/worker-turn/1", role="red", persona="p",
+                             stack_profile="native", guidance_bundle_sha256="a" * 64,
+                             guidance_text="registered", task_input={"input": {"id": 1}, "turn_protocol": turn},
+                             transcript=(), provider="copilot-sdk", model="claude-haiku-5.5", reasoning="low",
+                             max_input_tokens=1000, max_output_tokens=200)
+    sdk.response = json.dumps({"schema": req.schema, "action": "final", "result": {}})
+    copilot_sdk.send(req, timeout_seconds=5)
+    first = sdk.raw_prompt
+    assert first.startswith('{"guidance":"registered"')
+    prefix = first[:first.index('"input":')]
+    assert '"tool_catalog":' in prefix and '"capability_artifact_card":' not in prefix
+    req = replace(req, task_input={"turn_protocol": dict(reversed(tuple(turn.items()))), "input": {"id": 2}},
+                  transcript=({"turn": 1},), repair_errors=("invalid",))
+    copilot_sdk.send(req, timeout_seconds=5)
+    assert sdk.raw_prompt.startswith(prefix)
+    assert sdk.prompt == json.loads(json.dumps(review_prompt(req, include_guidance=True)))
+
+
+def test_sdk_own_send_timeout_with_failed_abort_is_a_contract_failure(sdk, monkeypatch):
+    from appsec_review.runtime import resources
+    quarantined = []
+    monkeypatch.setattr(resources, "quarantine_resources", quarantined.append)
+    sdk.failure = TimeoutError("private SDK timeout")
+    sdk.abort_error = RuntimeError("private SDK abort error")
+    with pytest.raises(ExecutionContractError, match="abort failed"):
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert sdk.aborted and sdk.closed and sdk.stops == 1 and sdk.sends == 1
+    assert quarantined == ["copilot_teardown_unconfirmed"]

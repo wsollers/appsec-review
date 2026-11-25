@@ -1440,7 +1440,7 @@ def build_job(*, executor_factory: ExecutorFactory | None = None,
         changelog_output = unit.outputs.get(CHANGELOG_UNIT, {})
         source = lane_source(unit)
         shard_id = "git-history" + (f"-{source_key(source)}" if source.get("root", ".") != "." else "")
-        path = unit.job.run_root / "data" / "indices" / "history" / shard_id / f"{fingerprint}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "history" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / shard_id / f"{fingerprint}.sqlite"
         eligible = eligible_of(unit)
         target = (unit.job.target_root or Path()).resolve()
 

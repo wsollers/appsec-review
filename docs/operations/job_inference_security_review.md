@@ -1647,12 +1647,15 @@ fulfilled/unfulfilled accounting. Delivery of a citation is not satisfaction of 
 
 ### `attack_chains`
 
-1. In `attack_chains.compose_candidates`, assemble bounded chain proposals from adjudicated
-   claims, score-qualified candidates and retained chain seeds.
-2. In `attack_chains.refute_edges`, challenge the connecting assumptions and evidence.
-3. In `attack_chains.verify_weakest_links`, independently check weakest links and produce terminal
-   decisions, artifacts and a protected manifest. Keep chain qualification and component-claim
-   states distinct; account for bounds, missing evidence and failed cells.
+1. The stable `attack_chains.compose_candidates` unit checks only existing, adjudicated findings'
+   cited `dataflow_path` facts. It re-resolves the original content hash and reads ordered steps
+   from the pinned graph shard. It does not expand pairs, use seed hints, or launch a composer.
+2. The `refute_edges` / `verify_weakest_links` unit IDs remain for the existing job contract. The
+   deterministic checker records a contradictory endpoint only for an explicit recorded sink
+   mismatch; absent anchors and conflicting evidence are limitations, not proof of refutation.
+3. Publish the bounded static assessments in `finding_paths` on the protected chain manifest.
+   Do not change claim state, severity or ship-block policy. Historical chain items are still
+   verifiable under their original receipt and ledger contracts.
 
 ### `completeness`
 

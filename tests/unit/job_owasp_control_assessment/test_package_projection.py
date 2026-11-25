@@ -28,14 +28,16 @@ def package(accepted, maximum):
 
 def test_configured_evidence_beyond_the_old_100_record_limit_reaches_worker(accepted):
     result = package(accepted, 101)
-    assert len(result["evidence_references"]) == 101
+    cited = {eid for obligation in result["proof_obligations"] for eid in obligation["evidence_ids"]}
+    assert {ref["evidence_id"] for ref in result["evidence_references"]} == cited
+    assert len(result["evidence_references"]) == 1
     assert any(item["supported"] for item in result["proof_obligations"])
     assert result["evidence_references"][-1]["source_subject"]["complete"]
 
 
 def test_omitted_evidence_cannot_generate_an_unanswerable_obligation(accepted):
     result = package(accepted, 100)
-    assert len(result["evidence_references"]) == 100
+    assert result["evidence_references"] == []
     assert not any(item["supported"] for item in result["proof_obligations"])
     assert any("omitted 1" in gap for gap in result["limitations"])
 

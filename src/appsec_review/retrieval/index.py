@@ -5,7 +5,7 @@ from __future__ import annotations
 from appsec_review.storage.validation import validation_operation
 
 from collections import Counter
-from contextlib import closing
+from contextlib import closing, contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from functools import cached_property
@@ -73,11 +73,20 @@ class IndexSelection:
             "manifest_sha256": manifest_sha256, "selection_sha256": self.sha256})).hexdigest()
 
 
+@dataclass(frozen=True, slots=True)
+class SelectedShardFacts:
+    """SQL-derived facts only; never a retained publication check or input grant."""
+    swift_enabled: bool
+    custody: tuple[tuple[str, str, bytes], ...]
+
+
 @dataclass
 class _SelectedReceiptPolicy:
     selection: IndexSelection
     manifest: Mapping[str, Any]
     requested: Mapping[str, Any]
+    capture: dict[bytes, SelectedShardFacts] | None = None
+    replay: Mapping[bytes, SelectedShardFacts] | None = None
     _stack: ContextVar[tuple[Mapping[str, Any], ...]] = field(
         default_factory=lambda: ContextVar("selected_receipt_payloads", default=()))
     _summaries: ContextVar[Mapping[tuple[str, str], Any]] = field(
@@ -140,8 +149,11 @@ class _SelectedReceiptPolicy:
             return
         observe_shard(root, value)
         if (value["relative_path"], value["sha256"]) not in self.active:
-            database, _, _ = _selected_payload(root, value, self)
-            database.close()
+            if self.replay is not None:
+                _preflight_payload(root, value, self)
+            else:
+                database, _, _ = _selected_payload(root, value, self)
+                database.close()
 
     def admit_reference(self, root: Path, ref: Mapping[str, Any]) -> None:
         self._execute(root, self._plan(root, ref))
@@ -733,18 +745,32 @@ def _load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | N
     return document, actual
 
 
-def open_selected_shard(run_root: Path, shard: Mapping[str, Any], *,
-                        selection: IndexSelection, manifest: Mapping[str, Any]) -> sqlite3.Connection:
-    """Open selected data under the current read scope, never a retained admission context."""
-    from appsec_review.storage.shared import receipt_read_scope
+def _selected_policy(run_root, shard, selection, manifest, **kwargs):
     if not selection.includes(shard):
         raise ValueError("index is outside the selected source view")
     if manifest.get("run_id") != Path(run_root).name:
         raise ValueError("selected shard manifest belongs to another run")
-    policy = _SelectedReceiptPolicy(selection, manifest, shard)
+    return _SelectedReceiptPolicy(selection, manifest, shard, **kwargs)
+
+
+def open_selected_shard(run_root: Path, shard: Mapping[str, Any], *, selection: IndexSelection,
+                        manifest: Mapping[str, Any], capture: dict[bytes, SelectedShardFacts] | None = None
+                        ) -> sqlite3.Connection:
+    """Open selected data under the current read scope, never a retained admission context."""
+    from appsec_review.storage.shared import receipt_read_scope
+    policy = _selected_policy(run_root, shard, selection, manifest, capture=capture)
     with receipt_read_scope(run_root, policy):
         database, _, _ = _selected_payload(run_root, shard, policy)
         return database
+
+
+def _preflight_selected_shard(run_root: Path, shard: Mapping[str, Any], *, selection: IndexSelection,
+                             manifest: Mapping[str, Any], facts: Mapping[bytes, SelectedShardFacts]) -> None:
+    """Repeat the selected publication, dependency, source and grant checks without reading SQLite rows."""
+    from appsec_review.storage.shared import receipt_read_scope
+    policy = _selected_policy(run_root, shard, selection, manifest, replay=facts)
+    with receipt_read_scope(run_root, policy):
+        _preflight_payload(run_root, shard, policy)
 
 
 def _verify_payload_publication(run_root: Path, identity: IndexIdentity) -> Path:
@@ -770,7 +796,7 @@ def _verify_payload_publication(run_root: Path, identity: IndexIdentity) -> Path
 
 def _validate_payload_database(run_root: Path, database: sqlite3.Connection, identity: IndexIdentity,
                                manifest: Mapping[str, Any], *, swift_enabled: bool,
-                               selection: IndexSelection | None = None):
+                               selection: IndexSelection | None = None, custody_rows=None):
     metadata = dict(database.execute("SELECT key, value FROM metadata"))
     if (metadata.get("schema"), metadata.get("name"), metadata.get("fingerprint"),
             metadata.get("shard_id", "default")) != (
@@ -779,7 +805,8 @@ def _validate_payload_database(run_root: Path, database: sqlite3.Connection, ide
     if metadata.get("target_snapshot") != manifest.get("target_snapshot"):
         raise ValueError(f"index target snapshot mismatch: {identity.name}/{identity.shard_id}")
     if selection is not None:
-        _verify_selected_custody(run_root, manifest, database, selection)
+        _verify_selected_custody(run_root, manifest,
+                                 _selected_custody_rows(database) if custody_rows is None else custody_rows, selection)
     if not swift_enabled and identity.producer.get("job") != "job_target_catalog":
         if any(is_swift_path(str(row[0])) for row in database.execute("SELECT path FROM locations")):
             raise ValueError(f"index contains Swift-derived locations while tools.enable_swift=false: "
@@ -802,43 +829,73 @@ def _validate_payload_database(run_root: Path, database: sqlite3.Connection, ide
     return entities, relations
 
 
-def _selected_payload(run_root: Path, raw: Mapping[str, Any], policy: _SelectedReceiptPolicy):
+@contextmanager
+def _selected_publication(run_root: Path, raw: Mapping[str, Any], policy: _SelectedReceiptPolicy):
     from appsec_review.runtime.inputs import observe_shard
-    from appsec_review.observability.spans import count_work
     identity = IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))})
     observe_shard(run_root, raw)
     token = policy._stack.set((*policy.stack, raw))
     try:
-        path = _verify_payload_publication(run_root, identity)
-        database = sqlite3.connect(f"file:{path.as_posix()}?mode=ro&immutable=1", uri=True, timeout=0.1)
-        try:
-            database.row_factory = sqlite3.Row
-            database.execute("PRAGMA query_only=ON")
-            count_work("shard_validations")
-            entities, relations = _validate_payload_database(
-                run_root, database, identity, policy.manifest,
-                swift_enabled=swift_enabled_from_run(run_root), selection=policy.selection)
-            policy._summaries.set({**policy._summaries.get(), (identity.relative_path, identity.sha256):
-                                   (entities, relations)})
-            return database, entities, relations
-        except Exception:
-            database.close()
-            raise
+        yield identity, _verify_payload_publication(run_root, identity)
     finally:
         policy._stack.reset(token)
 
 
+def _facts_key(raw, policy):
+    # Bind facts to the exact selection, manifest and entire descriptor, not a shared blob alone.
+    return hashlib.sha256(canonical_json([policy.identity, raw])).digest()
+
+
+def _preflight_payload(run_root: Path, raw: Mapping[str, Any], policy: _SelectedReceiptPolicy) -> None:
+    with _selected_publication(run_root, raw, policy):
+        facts = policy.replay.get(_facts_key(raw, policy))
+        if facts is None or facts.swift_enabled != swift_enabled_from_run(run_root):
+            raise ValueError("selected shard has no verified SQL facts for the current view and policy")
+        _verify_selected_custody(run_root, policy.manifest, facts.custody, policy.selection)
+
+
+def _selected_payload(run_root: Path, raw: Mapping[str, Any], policy: _SelectedReceiptPolicy):
+    from appsec_review.observability.spans import count_work
+    with _selected_publication(run_root, raw, policy) as (identity, path):
+        database = sqlite3.connect(f"{path.as_uri()}?mode=ro&immutable=1", uri=True, timeout=0.1)
+        try:
+            database.row_factory = sqlite3.Row
+            database.execute("PRAGMA query_only=ON")
+            count_work("shard_validations")
+            swift_enabled = swift_enabled_from_run(run_root)
+            rows = _selected_custody_rows(database)
+            if policy.capture is not None:
+                rows = tuple(dict.fromkeys(rows))
+            entities, relations = _validate_payload_database(
+                run_root, database, identity, policy.manifest, swift_enabled=swift_enabled,
+                selection=policy.selection, custody_rows=rows)
+            if policy.capture is not None:
+                policy.capture[_facts_key(raw, policy)] = SelectedShardFacts(swift_enabled, rows)
+            policy._summaries.set({**policy._summaries.get(), (identity.relative_path, identity.sha256):
+                                   (entities, relations)})
+            return database, entities, relations
+        except BaseException:
+            database.close()
+            raise
+
+
+def _selected_custody_rows(database: sqlite3.Connection):
+    from appsec_review.retrieval.source_resolution import source_native
+    for path, sha256, raw in database.execute("SELECT path, file_sha256, producer_location_json FROM locations"):
+        native = source_native(json.loads(raw))
+        if native:
+            yield path, sha256, canonical_json(native)
+
+
 def _verify_selected_custody(run_root: Path, manifest: Mapping[str, Any],
-                              database: sqlite3.Connection, selection: IndexSelection) -> None:
-    from appsec_review.retrieval.source_resolution import read_source_bytes, source_native
+                             rows: Iterable[tuple[str, str, bytes]], selection: IndexSelection) -> None:
+    from appsec_review.retrieval.source_resolution import read_source_bytes
     from appsec_review.runtime.consume import accepted_upstream
     from appsec_review.runtime.inputs import observe_output
     from appsec_review.storage.validation import current_validation
     validation = current_validation(run_root)
-    for path, sha256, raw in database.execute("SELECT path, file_sha256, producer_location_json FROM locations"):
-        native = source_native(json.loads(raw))
-        if not native:
-            continue
+    for path, sha256, raw in rows:
+        native = json.loads(raw)
         producer, output = (("job_binary_evidence_indexing", "binary_pseudo_c")
                             if native["source_domain"] == "binary"
                             else ("job_tree_sitter_ast", "generated_source_backing"))

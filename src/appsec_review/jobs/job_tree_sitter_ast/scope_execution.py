@@ -111,9 +111,9 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
     fingerprint = scope_fingerprint(target_snapshot=unit.job.source_fingerprint, scope=scope,
         grammar=grammar, image_id=loaded["image_id"], normalizer_schema=NORMALIZER_SCHEMA, limits=limits,
         cfg_builder=cfg_builder)
-    artifact_path = unit.job.run_root / "data" / "treesitter" / "shards" / f"{fingerprint}.jsonl"
-    index_path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}.sqlite"
-    metadata_path = unit.job.run_root / "data" / "treesitter" / "shards" / f"{fingerprint}.json"
+    artifact_path = unit.job.run_root / "data" / "treesitter" / "attempts" / unit.job.attempt_id / "shards" / f"{fingerprint}.jsonl"
+    index_path = unit.job.run_root / "data" / "indices" / "analysis" / "attempts" / unit.job.attempt_id / f"{fingerprint}.sqlite"
+    metadata_path = unit.job.run_root / "data" / "treesitter" / "attempts" / unit.job.attempt_id / "shards" / f"{fingerprint}.json"
     metadata = reusable_shard(metadata_path, artifact_path, index_path, fingerprint)
     if metadata is not None:
         if metadata.get("cfg_builder") != cfg_builder:
@@ -134,7 +134,7 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
     target_root = unit.job.target_root or Path()
     if generated:
         # Keep the source mount outside writable /scratch, with no writable alias.
-        target_root = unit.job.run_root / "data/treesitter/inputs" / fingerprint
+        target_root = unit.job.run_root / "data/treesitter/inputs" / unit.job.attempt_id / fingerprint
         for path, data in generated_bytes.items():
             relative = (target_root / path).relative_to(unit.job.run_root).as_posix()
             reference = immutable_bytes(unit.job.run_root, relative, data)
@@ -174,7 +174,7 @@ def parse_scope(unit: UnitContext, raw_scope: Mapping[str, Any],
         artifact_path=artifact_path, index_path=index_path,
         source_bytes=source_bytes,
         dispositions=job_dispositions(settings),
-        cfg_dir=unit.job.run_root / "data" / "treesitter" / "cfg" / fingerprint)
+        cfg_dir=unit.job.run_root / "data" / "treesitter" / "cfg" / unit.job.attempt_id / fingerprint)
     counts_dict = dict(counts)
     cfg_artifacts = counts_dict.pop("cfg_artifacts", None)
     measurement.record_output(unit.job.run_root, container_output)

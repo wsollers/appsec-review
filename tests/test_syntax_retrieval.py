@@ -107,6 +107,22 @@ def test_source_only_navigation_exact_spans_ast_subjects_and_excerpts(tmp_path):
     assert identity.producer["syntax_projection"] == SCHEMA
 
 
+def test_match_capture_budget_is_utf8_safe_and_never_serializes_unrelated_block_tables():
+    from appsec_review.retrieval.syntax import _match_payload
+    from appsec_review.retrieval.syntax_contract import MAX_NAME_BYTES
+
+    value = "\u754c" * 512
+    raw = {"syntax": {"schema": SCHEMA, "source_identity": "file", "category": "definition",
+                      "written_name": value, "syntactic_qualifiers": [value] * 10},
+           "cfg_nodes": [{"snippet": "private block bytes"}], "captures": ["private capture"]}
+    match = _match_payload(raw)
+    assert set(match) == {"syntax_only", "syntax"}
+    returned = match["syntax"]
+    assert 0 < len(returned["written_name"].encode()) <= MAX_NAME_BYTES and "\ufffd" not in returned["written_name"]
+    assert returned["capture_bytes_omitted"] > 0 and returned["qualifiers_omitted"] == 2
+    assert all(len(name.encode()) <= MAX_NAME_BYTES for name in returned["syntactic_qualifiers"])
+
+
 def test_raw_ast_subject_and_response_byte_bound(tmp_path):
     core, source, _, _ = _run(tmp_path)
     root = core.find(kind="ast_node", name="module", indexes=["analysis"])["results"][0]
@@ -233,3 +249,125 @@ def test_invalid_or_unbounded_syntax_requests_are_rejected(tmp_path, arguments):
     core, _, _, _ = _run(tmp_path)
     with pytest.raises(ValueError):
         core.query_syntax(**arguments)
+
+
+def _compact_cfg_index(tmp_path, *, oversized_middle=False):
+    """Accepted records only: exercise cursor, serialization and scope without a target or parser."""
+    from appsec_review.retrieval import INDEX_SCHEMA, EntityRecord, SourceLocation
+    from appsec_review.retrieval.syntax_contract import CFG_SCHEMA
+
+    root = tmp_path / RUN_ID
+    path, digest = "page.py", "f" * 64
+    source = LogicalIdentity.derive(EntityKind.SOURCE_FILE, "snapshot", {"path": path, "sha256": digest}).value
+    builder = IndexBuilder(root / "analysis.sqlite", name="analysis", fingerprint=digest, target_snapshot="snapshot")
+    for line, name in enumerate(("first", "second"), 1):
+        ast = LogicalIdentity.derive(EntityKind.AST_NODE, "snapshot", {"function": name})
+        cfg = dict(schema=CFG_SCHEMA, source_identity=source, function_id=f"cfgfn:{name}", function_name=name,
+                   start_line=line, end_line=line, node_count=3, edge_count=4, guard_count=1, coverage_status="complete")
+        nodes = [dict(node_id=f"{name}-{i}", kind=kind, start_line=line, start_byte=i, statement_text="not projected")
+                 for i, kind in enumerate(("branch", "statement", "return"))]
+        nodes[0]["guard_expression"] = "flag"
+        nodes[1]["calls"] = ["\u754c" * 200] + ["helper"] * 8
+        edges = [dict(edge_id=f"{name}-{i}", source_node_id=nodes[i % 3]["node_id"],
+                      target_node_id=nodes[(i + 1) % 3]["node_id"], edge_kind="fallthrough") for i in range(4)]
+        if oversized_middle and name == "first":
+            nodes[1]["calls"] = ["x" * 512] * 8
+            edges[1]["edge_id"] += "z" * 6000
+        location = SourceLocation("snapshot", path, digest, 0, 3, line, line, 1, 4, {}, "exact", 1.0)
+        builder.add_entity(EntityRecord(ast, name, name, name, {"cfg": cfg, "cfg_nodes": nodes[::-1],
+                                                                 "cfg_edges": edges[::-1]}, location))
+    index = IndexIdentity("analysis", INDEX_SCHEMA, builder.build(), digest, "analysis.sqlite",
+                          {"job": "job_tree_sitter_ast"})
+    manifest = root / "manifest.json"
+    write_manifest(manifest, run_id=RUN_ID, target_snapshot="snapshot", target_root=root, indexes=[index])
+    return RetrievalCore(tmp_path, RUN_ID, manifest_path=manifest), source
+
+
+def test_compact_cfg_pages_preserve_blocks_edges_and_function_boundaries(tmp_path):
+    core, source = _compact_cfg_index(tmp_path)
+    query = dict(subject=source, block_limit=2, edge_limit=1)
+    cursor, pages = None, []
+    for _ in range(8):
+        page = core.query_cfg_function(**query, cursor=cursor)
+        row, = page["results"]
+        pages.append(row)
+        assert (row["node_count"], row["edge_count"], row["guard_count"]) == (3, 4, 1)
+        assert all("statement_text" not in n and "path" not in n for n in row["nodes"])
+        if len(pages) == 1:
+            replay = core.query_cfg_function(**query)
+            assert replay["results"] == page["results"] and replay["pagination"] == page["pagination"]
+            next_cursor = page["pagination"]["next_cursor"]
+            for changed in ({"edge_limit": 2}, {"block_limit": 1}, {"function_name": "second"}):
+                with pytest.raises(ValueError, match="cursor"):
+                    core.query_cfg_function(**{**query, **changed}, cursor=next_cursor)
+        cursor = page["pagination"]["next_cursor"]
+        if cursor is None:
+            break
+    assert cursor is None and [p["function_name"] for p in pages] == ["first"] * 4 + ["second"] * 4
+    for offset, name in ((0, "first"), (4, "second")):
+        rows = pages[offset:offset + 4]
+        assert [(r["block_offset"], r["edge_offset"]) for r in rows] == [(0, 0), (2, 1), (3, 2), (3, 3)]
+        nodes = [n for r in rows for n in r["nodes"]]
+        assert [n["node_id"] for n in nodes] == [f"{name}-{i}" for i in range(3)]
+        assert [n["highlights"] for n in nodes] == [["branch"], ["call"], ["exit"]]
+        assert nodes[1]["calls_omitted"] == 1 and nodes[1]["capture_bytes_omitted"] == 90
+        assert [e["edge_id"] for r in rows for e in r["edges"]] == [f"{name}-{i}" for i in range(4)]
+
+
+def test_compact_cfg_cell_pages_fit_final_serialization_and_report_stuck_item(tmp_path):
+    from types import SimpleNamespace
+    from appsec_review.review.cells import _Attempt, _retrieve
+
+    core, source = _compact_cfg_index(tmp_path)
+    def retrieve(cap, **params):
+        capability = _capability(core, source, tools=("query_cfg_function",), max_result_bytes=cap)
+        request = {"tool": "query_cfg_function", "parameters": {"subject": source, **params}}
+        result = _retrieve(SimpleNamespace(view=None), "cell", _Attempt(1), capability, core,
+                           0, 1, request, {"retrievals": []})
+        assert result["status"] == "ok" and len(json.dumps(result, sort_keys=True).encode()) <= cap
+        return result
+
+    full = retrieve(65536)
+    # A budget measured on unescaped Unicode would overfill the actual labelled cell response.
+    cap = len(json.dumps(full, ensure_ascii=False).encode())
+    part = retrieve(cap)
+    row, = part["results"]
+    assert row["identity"] == row["ast_identity"] and row["label"] and part["next_cursor"]
+    assert len(row["nodes"]) + len(row["edges"]) < 7
+    assert part == retrieve(cap)
+    resumed = retrieve(cap, cursor=part["next_cursor"])["results"][0]
+    assert resumed["block_offset"] == len(row["nodes"]) and resumed["edge_offset"] == len(row["edges"])
+    # The gap-only continuation fits even when a scoped summary cannot.
+    skipped = retrieve(720)
+    assert not skipped["results"] and skipped["next_cursor"] and skipped["truncated"]
+    assert any("function 0 omitted" in gap for gap in skipped["coverage_gaps"])
+    following = retrieve(65536, cursor=skipped["next_cursor"])
+    assert following["results"][0]["function_name"] == "second"
+    stuck = retrieve(410)
+    assert not stuck["results"] and stuck["next_cursor"] is None and stuck["truncated"]
+    assert any("nothing advanced" in g for g in stuck["coverage_gaps"])
+
+
+def test_compact_cfg_oversized_middle_items_do_not_hide_later_items_or_functions(tmp_path):
+    core, source = _compact_cfg_index(tmp_path, oversized_middle=True)
+    core.limits = replace(core.limits, max_response_bytes=3000)
+    query = dict(subject=source, block_limit=3, edge_limit=1)
+    cursor, seen, pages = None, set(), []
+    for _ in range(20):
+        page = core.query_cfg_function(**query, cursor=cursor)
+        row, = page["results"]
+        pages.append(row)
+        assert (row["node_count"], row["edge_count"], row["guard_count"]) == (3, 4, 1)
+        cursor = page["pagination"]["next_cursor"]
+        if cursor is None:
+            break
+        assert cursor not in seen
+        seen.add(cursor)
+    assert cursor is None
+    assert [n["node_id"] for row in pages for n in row["nodes"]] == [
+        "first-0", "first-2", "second-0", "second-1", "second-2"]
+    assert [e["edge_id"] for row in pages for e in row["edges"]] == [
+        "first-0", "first-2", "first-3", "second-0", "second-1", "second-2", "second-3"]
+    assert [row["omitted_item"] for row in pages if "omitted_item" in row] == [
+        {"kind": "block", "position": 1, "reason": "byte_limit", "id": "first-1"},
+        {"kind": "edge", "position": 1, "reason": "byte_limit"}]

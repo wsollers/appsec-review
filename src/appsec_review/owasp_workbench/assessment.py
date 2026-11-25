@@ -269,9 +269,9 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
     budget = int(profile["max_input_tokens"])
 
     def estimate(view: Mapping[str, Any]) -> int:
-        return estimate_tokens(asdict(_request(view, batch=batch, role=role, guidance=guidance, text=text,
-                                               profile=profile, settings=settings, transcript=(), queries=0,
-                                               turn=0, retry=0, part=None)))
+        return estimate_tokens(_request(view, batch=batch, role=role, guidance=guidance, text=text,
+                                        profile=profile, settings=settings, transcript=(), queries=0,
+                                        turn=0, retry=0, part=None))
 
     parts = plan_parts(packages, estimate=estimate, budget=budget)
     outcomes: list[dict[str, Any]] = []
@@ -372,7 +372,7 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
             request = _request(part.view, batch=batch, role=role, guidance=guidance, text=text, profile=profile,
                                settings=settings, transcript=transcript, queries=queries, turn=turn, retry=retry,
                                part=number if parts > 1 else None)
-            estimate = estimate_tokens(asdict(request))
+            estimate = estimate_tokens(request)
             if estimate > int(profile["max_input_tokens"]):
                 terminal = "input_budget"
                 break

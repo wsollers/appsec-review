@@ -146,3 +146,60 @@ only this job runs. Do not edit accepted pointers or delete shards. The
 configuration/upstream invalidation from the absence of a live export/history freshness probe.
 Settings and export-pin changes require a new run: `--force-from` does not replace an existing
 run's frozen resolved configuration.
+
+
+## Tuning and whole-job recovery: `job_change_context_analysis`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.ownership.line_attribution_max_file_bytes` | `1048576` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.ownership.line_attribution_max_files` | `50` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.ranking_top_components` | `100` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.ranking_top_files` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.ranking_top_functions` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.repeated_repairs.fix_on_fix_max_checks` | `100` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.supporting_change_limit` | `20` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_change_context_analysis/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.review.fast_review_seconds` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.deployments.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.deployments.pre_deployment_window_hours` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.scope_sprawl.min_unrelated_groups` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.scope_sprawl.min_churn_lines` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.scope_sprawl.min_group_entropy` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.scope_sprawl.related_component_min_support` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.repeated_repairs.window_days` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.repeated_repairs.min_fix_changes` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.test_association.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.test_association.min_production_churn_lines` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.ownership.dominant_owner_share` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.ownership.bus_factor_share` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.organization.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.priority_weights.fast_review_change_count` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.priority_weights.stale_approval_change_count` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.priority_weights.unapproved_mainline_change_count` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.priority_weights.off_hours_change_count` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.priority_weights.pre_deployment_change_count` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.priority_weights.sprawling_change_count` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.priority_weights.repeated_repair_peak` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.priority_weights.fix_on_fix_event_count` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.priority_weights.untested_production_change_count` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.priority_weights.lifetime_principal_author_share` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `settings.priority_weights.departed_dominant_owner` | Defines a change-risk predicate, ownership/repair/deployment window or score; fast_review_seconds is a scoring threshold, not a wait. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.attribute.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.analyze.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

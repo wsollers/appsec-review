@@ -2785,7 +2785,7 @@ def publish_alternate_cpg(
         "graph": cpg, "file_shas": dict(shas),
     })).hexdigest()
 
-    out_dir = run_root / "data" / "code-graph" / "alternate-cpg" / fingerprint
+    out_dir = unit_root / "alternate-cpg" / fingerprint
     out_dir.mkdir(parents=True, exist_ok=True)
     nodes_path = out_dir / "cpg-nodes.jsonl"
     edges_path = out_dir / "cpg-edges.jsonl"
@@ -2961,7 +2961,7 @@ def publish_alternate_cpg(
         "".join(json.dumps(p, sort_keys=True) + "\n" for p in raw_paths).encode("utf-8"),
     )
 
-    shard_path = run_root / "data" / "indices" / "analysis" / ALTERNATE_CPG_SHARD_ID / f"{fingerprint}.sqlite"
+    shard_path = out_dir / f"{fingerprint}.sqlite"
     builder = IndexBuilder(
         shard_path,
         name="analysis",

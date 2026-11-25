@@ -92,7 +92,7 @@ def _domain_id_for_pkg(pkg: Mapping[str, Any]) -> str:
 def build_attack_chain_cards(
     report: Mapping[str, Any], *, manifest_items: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
-    """Multi-Step Attack Chains & Trust-Boundary Breaches projection (`entry -> hop -> sink`)."""
+    """Historical chain membership, not source order, calls or proof of boundary crossings."""
     all_pkgs = (
         *(report.get("findings") or ()),
         *(report.get("verification_backlog") or ()),
@@ -105,17 +105,13 @@ def build_attack_chain_cards(
     for ch in _chain_items(report):
         claim_ids = [str(cid) for cid in (ch.get("component_claim_ids") or ())]
         steps: list[dict[str, Any]] = []
-        domains_seen: list[str] = []
         for idx, cid in enumerate(claim_ids):
-            role = "entry" if idx == 0 else ("sink" if idx == len(claim_ids) - 1 else "hop")
             pkg = by_claim.get(cid)
             sev = _clean_sev(((pkg or {}).get("ship_block") or {}).get("technical_severity"))
             dom_id = _domain_id_for_pkg(pkg) if pkg else "unclassified"
-            if dom_id != "unclassified" and dom_id not in domains_seen:
-                domains_seen.append(dom_id)
             steps.append({
                 "step_index": idx + 1,
-                "role": role,
+                "role": "component",
                 "claim_id": cid,
                 "finding_package_id": pkg.get("finding_package_id") if pkg else None,
                 "title": str((pkg or {}).get("title") or cid),
@@ -124,16 +120,11 @@ def build_attack_chain_cards(
             })
         composed = _clean_sev(by_chain.get(ch["chain_id"], {}).get("composed_severity"))
 
-        trust_boundary = (
-            " -> ".join(domains_seen)
-            if len(domains_seen) >= 2
-            else (domains_seen[0] if domains_seen else "application_trust_boundary")
-        )
         cards.append({
             "chain_id": str(ch["chain_id"]),
             "status": str(ch["status"]),
             "composed_severity": composed,
-            "trust_boundary_crossed": trust_boundary,
+            "trust_boundary_crossed": "[unverified link]",
             "step_count": len(steps),
             "steps": steps,
             "gap_count": int(ch.get("gap_count", 0)) + int(composed == "unrated"),

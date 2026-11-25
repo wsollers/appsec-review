@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import closing
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
-from .model import EntityKind, LogicalIdentity, normalize_relative_path
+from .model import EntityKind, LogicalIdentity, canonical_json, normalize_relative_path
 from .syntax_contract import (
     CFG_SCHEMA,
     GUARD_POLARITIES,
@@ -22,6 +22,30 @@ if TYPE_CHECKING:
     from .core import RetrievalCore
 
 QUERY_SYNTAX = "query_syntax"
+
+
+def _match_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Project just the syntax match; CFG tables and raw captures are not part of this route."""
+    syntax = payload["syntax"]
+    fields = ("schema", "source_identity", "category", "enclosing_definition", "resolution", "syntax_only",
+              "import_expression", "import_form", "name_span")
+    match = {key: syntax[key] for key in fields if key in syntax}
+    omitted = 0
+
+    def bounded(value: str) -> str:
+        nonlocal omitted
+        encoded = value.encode("utf-8")
+        prefix = encoded[:MAX_NAME_BYTES].decode("utf-8", errors="ignore")
+        omitted += len(encoded) - len(prefix.encode("utf-8"))
+        return prefix
+
+    match["written_name"] = bounded(syntax["written_name"])
+    qualifiers = syntax.get("syntactic_qualifiers", ())
+    match["syntactic_qualifiers"] = [bounded(name) for name in qualifiers[:8]]
+    if omitted or len(qualifiers) > 8:
+        match["capture_bytes_omitted"] = omitted
+        match["qualifiers_omitted"] = max(0, len(qualifiers) - 8)
+    return {"syntax_only": True, "syntax": match}
 
 
 def row_in_scope(row: Mapping[str, Any], sources: tuple[str, ...] | list[str]) -> bool:
@@ -106,6 +130,7 @@ def query_syntax(core: "RetrievalCore", *, mode: str, subject: str, name: str | 
                        " AND ".join(base) + " ORDER BY e.identity LIMIT ?")
                 for row in database.execute(sql, [*values, offset + limit + 1]):
                     item = core._entity(row, "analysis")
+                    item["payload"] = _match_payload(item["payload"])
                     item["shard_id"] = shard.get("shard_id", "default")
                     found.setdefault(item["identity"], item)
                 source = database.execute("SELECT l.path FROM locations l WHERE l.entity_id=?", (source_id,)).fetchone()
@@ -230,12 +255,13 @@ _CFG_ORDER = (
 )
 
 
-def _cfg_page_state(core: "RetrievalCore", cursor: str | None, request_hash: str):
+def _cfg_page_state(core: "RetrievalCore", cursor: str | None, request_hash: str, *, compact: bool = False):
     state = core._cursor_state(cursor, request_hash)
     position = state.get("position", {"function": None, "block": None})
     if not isinstance(position, dict) or set(position) != {"function", "block"}:
         raise ValueError("invalid CFG cursor position")
-    for field, types in (("function", (str, int, int, str)), ("block", (int, int, str))):
+    block_types = (int, int) if compact else (int, int, str)
+    for field, types in (("function", (str, int, int, str)), ("block", block_types)):
         key = position[field]
         if key is not None and (not isinstance(key, list) or len(key) != len(types)
                                 or any(type(value) is not kind for value, kind in zip(key, types))):
@@ -243,6 +269,8 @@ def _cfg_page_state(core: "RetrievalCore", cursor: str | None, request_hash: str
     if (state["offset"] and position["function"] is None
             or position["block"] is not None and position["function"] is None):
         raise ValueError("invalid CFG cursor position")
+    if compact and position["block"] is not None and min(position["block"]) < 0:
+        raise ValueError("invalid CFG cursor offsets")
     return state["offset"], position
 
 
@@ -276,7 +304,7 @@ def _cfg_candidates(core: "RetrievalCore", deadline: float, filters, position, b
     return [(key, *found[key]) for key in sorted(found)]
 
 
-def _load_cfg(core: "RetrievalCore", deadline: float, shard, identity):
+def _load_cfg(core: "RetrievalCore", deadline: float, shard, identity, *, compact=False):
     core._check_deadline(deadline)
     with closing(core._database(shard, deadline)) as database:
         row = database.execute(
@@ -289,7 +317,154 @@ def _load_cfg(core: "RetrievalCore", deadline: float, shard, identity):
         record = _sanitize_cfg_function_record(
             payload, ast_identity=identity, rel_path=rel_path, file_sha256=row["file_sha256"],
             shard_id=str(shard.get("shard_id", "default")), guards_complete=complete)
+        if compact:
+            for count in ("node_count", "edge_count"):
+                record[count] = payload["cfg"].get(count, record[count])
         return record, gaps
+
+
+_CFG_SUMMARY = ("schema", "ast_identity", "function_id", "function_name", "qualified_name", "source_identity",
+                "path", "file_sha256", "language", "start_line", "end_line", "entry_node_id", "exit_node_id",
+                "node_count", "edge_count", "guard_count")
+_CFG_NODE = ("node_id", "ast_identity", "kind", "start_line", "end_line", "start_byte", "end_byte",
+             "guard_expression", "guard_polarity", "calls")
+_CFG_EDGE = ("edge_id", "source_node_id", "target_node_id", "edge_kind", "guard_polarity")
+
+
+def _compact_cfg_node(node: Mapping[str, Any]) -> dict[str, Any]:
+    item = {key: node[key] for key in _CFG_NODE if node.get(key) not in (None, "", [])}
+    omitted_bytes = 0
+
+    def excerpt(text: str) -> str:
+        nonlocal omitted_bytes
+        data = text.encode("utf-8")
+        value = data[:MAX_NAME_BYTES].decode("utf-8", errors="ignore")
+        omitted_bytes += len(data) - len(value.encode("utf-8"))
+        return value
+    highlights = []
+    if node["kind"] in {"branch", "loop", "switch"} or node.get("guard_expression"):
+        highlights.append("branch")
+    if node.get("guard_expression"):
+        item["guard_expression"] = excerpt(node["guard_expression"])
+    if calls := node.get("calls"):
+        highlights.append("call")
+        item["calls"] = [excerpt(name) for name in calls[:8]]
+        if len(calls) > 8:
+            item["calls_omitted"] = len(calls) - 8
+    if omitted_bytes:
+        item["capture_bytes_omitted"] = omitted_bytes
+    if node["kind"] in {"exit", "return", "throw"} or node.get("early_exit"):
+        highlights.append("exit")
+    if highlights:
+        item["highlights"] = highlights
+    return item
+
+
+def _compact_cfg_page(core, candidate, later_functions, position, offset, request_hash, block_limit,
+                      edge_limit, deadline, cell_fits):
+    key, shard, identity, _ = candidate
+    rec, gaps = _load_cfg(core, deadline, shard, identity, compact=True)
+    nodes, edges = rec["nodes"], rec["edges"]
+    n, e = position["block"] or (0, 0)
+    if position["block"] is not None and (tuple(position["function"]) != key or n > len(nodes) or e > len(edges)
+                                           or (n, e) == (len(nodes), len(edges))):
+        raise ValueError("invalid CFG cursor offsets")
+    summary = {k: rec[k] for k in _CFG_SUMMARY}
+    summary.update(block_offset=n, edge_offset=e)
+    blocks = [_compact_cfg_node(node) for node in nodes[n:n + block_limit]]
+    links = [{k: edge[k] for k in _CFG_EDGE if edge.get(k) is not None} for edge in edges[e:e + edge_limit]]
+
+    def fit(row, page_gaps, next_n, next_e, *, omitted=False):
+        core._check_deadline(deadline)
+        remainder = (next_n, next_e) != (len(nodes), len(edges))
+        more = remainder or later_functions
+        next_cursor = core._cursor(offset + int(not remainder), request_hash, position={
+            "function": key, "block": (next_n, next_e) if remainder else None}) if more else None
+        if next_cursor and len(next_cursor) > 4096:
+            return None
+        rows = [] if row is None else [row]
+        # A gap-only page has legitimately advanced; its zero-row prefix owns the cursor.
+        cursors = [next_cursor] if row is None else [None, next_cursor]
+        truncated = more or omitted
+        preview = core._envelope(tool=QUERY_CFG_FUNCTION, results=rows.copy(), gaps=page_gaps,
+                                 started=core.clock(), request_hash=request_hash, has_more=more,
+                                 truncated=truncated, page_cursors=cursors)
+        # Reserve the configured duration width, not an arbitrary payload margin.
+        preview["duration_ms"] = max(preview["duration_ms"], core.limits.timeout_ms)
+        if (len(preview["results"]) != len(rows) or (row is None and page_gaps[0] not in preview["coverage_gaps"])
+                or len(canonical_json(preview)) > core.limits.max_response_bytes
+                or (cell_fits and not cell_fits(preview))):
+            return None
+        core._check_deadline(deadline)
+        return rows, page_gaps, more, offset, truncated, cursors
+
+    def largest_prefix(header, page_gaps):
+        def prefix(length):
+            nb = min(length, len(blocks))
+            ne = length - nb
+            return fit({**header, "nodes": blocks[:nb], "edges": links[:ne]}, page_gaps, n + nb, e + ne)
+
+        # The final page (no cursor) can be smaller than a shorter prefix. Try it first.
+        count = len(blocks) + len(links)
+        result = prefix(count)
+        if result is not None:
+            return result
+        lo, hi, best = 1, count - 1, None
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            result = prefix(mid)
+            if result is None:
+                hi = mid - 1
+            else:
+                best, lo = result, mid + 1
+        return best
+
+    # Keep scope and citation fields, offsets and producer totals even on a minimal row.
+    minimal = {k: summary[k] for k in ("ast_identity", "source_identity", "path", "start_line", "end_line",
+                                        "node_count", "edge_count", "guard_count", "block_offset", "edge_offset")}
+    minimal["summary_fields_omitted"] = True
+    gap_options = [gaps]
+    if gaps:
+        gap_options.append([f"{len(gaps)} CFG coverage gap(s) omitted: byte limit"])
+    for page_gaps in gap_options:
+        for header in (summary, minimal):
+            result = largest_prefix(header, page_gaps)
+            if result is not None:
+                return result
+
+    if blocks or links:
+        kind, index, item_id = (("block", n, blocks[0]["node_id"]) if blocks else
+                                ("edge", e, links[0]["edge_id"]))
+        next_n, next_e = (n + 1, e) if blocks else (n, e + 1)
+        marker = {"kind": kind, "position": index, "reason": "byte_limit"}
+        for omission in ({**marker, "id": item_id}, marker):
+            for page_gaps in gap_options:
+                for header in (summary, minimal):
+                    row = {**header, "nodes": [], "edges": [], "omitted_item": omission}
+                    result = fit(row, page_gaps, next_n, next_e, omitted=True)
+                    if result is not None:
+                        return result
+
+        # At a tight boundary the summary alone may fit but not its marker. Keep
+        # later items reachable with a gap-only page rather than skipping the function.
+        if fit({**minimal, "nodes": [], "edges": []}, [], next_n, next_e, omitted=True) is not None:
+            item_gap = (f"CFG function {offset}: {kind} {index} omitted: byte limit; "
+                        f"totals {rec['node_count']} blocks, {rec['edge_count']} edges, {rec['guard_count']} guards")
+            for page_gaps in gap_options:
+                result = fit(None, [item_gap, *page_gaps], next_n, next_e, omitted=True)
+                if result is not None:
+                    return result
+
+    # No scoped summary fits. Name the skipped remainder, without exposing source
+    # identifiers outside a scoped result row. Try the shortest diagnostic last.
+    short_gap = f"CFG function {offset} omitted"
+    detail = (f"{short_gap} from block {n}/{rec['node_count']}, edge {e}/{rec['edge_count']}: "
+              "cannot fit minimal summary and continuation")
+    for page_gaps in ([detail, *gaps], [detail], [short_gap]):
+        result = fit(None, page_gaps, len(nodes), len(edges), omitted=True)
+        if result is not None:
+            return result
+    return [], [f"CFG function {offset}: omission and continuation cannot fit; nothing advanced"], False, offset, True, None
 
 
 def query_cfg_function(
@@ -300,6 +475,10 @@ def query_cfg_function(
     path: str | None = None,
     limit: int = 20,
     cursor: str | None = None,
+    block_limit: int | None = None,
+    edge_limit: int | None = None,
+    _cell_fits: Callable[[dict], bool] | None = None,
+    _cell_line: int | None = None,
 ) -> dict[str, Any]:
     """Return bounded intra-procedural CFGs (nodes, edges, guard polarities) from accepted analysis shards."""
     if subject is None and function_name is None and path is None:
@@ -311,6 +490,11 @@ def query_cfg_function(
         raise ValueError("function_name exceeds bound")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= min(100, core.limits.max_results):
         raise ValueError("CFG result limit exceeds bound")
+
+    compact = block_limit is not None or edge_limit is not None or _cell_fits is not None
+    for bound in (block_limit, edge_limit):
+        if bound is not None and (type(bound) is not int or not 1 <= bound <= 100):
+            raise ValueError("CFG block_limit and edge_limit must be integers between 1 and 100")
 
     subject_kind: str | None = None
     if subject is not None:
@@ -331,8 +515,12 @@ def query_cfg_function(
         "limit": limit,
         "cursor": cursor,
     }
+    if compact:
+        block_limit = block_limit or limit
+        edge_limit = edge_limit or limit
+        parameters.update(block_limit=block_limit, edge_limit=edge_limit, line=_cell_line)
     request_hash = core._request_hash(QUERY_CFG_FUNCTION, parameters)
-    offset, position = _cfg_page_state(core, cursor, request_hash)
+    offset, position = _cfg_page_state(core, cursor, request_hash, compact=compact)
 
     def operation(deadline: float):
         gaps: list[str] = []
@@ -347,6 +535,9 @@ def query_cfg_function(
             elif subject_kind == "cfgfn":
                 clauses.append("json_extract(e.payload_json, '$.cfg.function_id')=?")
                 values.append(subject)
+            if _cell_line is not None:
+                clauses.append("l.start_line<=? AND l.end_line>=?")
+                values.extend([_cell_line, _cell_line])
             if norm_path is not None:
                 clauses.append("l.path=?")
                 values.append(norm_path)
@@ -356,9 +547,14 @@ def query_cfg_function(
                 values.extend([function_name, function_name])
             return clauses, values, None
 
-        candidates = _cfg_candidates(core, deadline, filters, position, limit)
+        candidates = _cfg_candidates(core, deadline, filters, position, 1 if compact else limit)
+        if compact and candidates:
+            return _compact_cfg_page(core, candidates[0], len(candidates) > 1, position, offset, request_hash,
+                                     block_limit, edge_limit, deadline, _cell_fits)
         results = []
-        cursors = [core._cursor(offset, request_hash, position=position)]
+        # There is no continuation for a withheld first full record: replaying
+        # the same request/position under the same budget could never progress.
+        cursors = [None]
         for key, shard, identity, _ in candidates[:limit]:
             record, coverage_gaps = _load_cfg(core, deadline, shard, identity)
             results.append(record)
@@ -373,6 +569,13 @@ def query_cfg_function(
             gaps.append("no accepted job_tree_sitter_ast analysis shards available")
         elif not candidates:
             gaps.append("no matching intra-procedural CFG function in accepted analysis shards; absence is not evidence")
+        if results:
+            preview = core._envelope(tool=QUERY_CFG_FUNCTION, results=results.copy(), gaps=gaps,
+                                     started=core.clock(), request_hash=request_hash, has_more=more,
+                                     page_cursors=cursors)
+            if not preview["results"]:
+                return ([], ["full CFG exceeds byte budget; retry with block_limit or edge_limit", *gaps],
+                        False, offset, True, None)
         return results, gaps, more, offset, False, cursors
 
     return core._execute(QUERY_CFG_FUNCTION, parameters, operation)

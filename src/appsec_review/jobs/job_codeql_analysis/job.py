@@ -631,7 +631,7 @@ def _database_one(unit: UnitContext, scope: CodeQLScope,
         build_image_tag=build_image_tag, build_image_id=build_image_id,
         runtime_user=runtime_user, scope_id=scope.scope_id,
         build_image_derived_from=derived_base_image_id(_scope_image_value(scope, receipts, settings)))
-    root = unit.job.run_root / "data" / "codeql" / "scopes" / scope.scope_id
+    root = unit.job.run_root / "data" / "codeql" / "attempts" / unit.job.attempt_id / "scopes" / scope.scope_id
     root.mkdir(parents=True, exist_ok=True)
     image_artifact = _json_artifact(unit.job.run_root, root / "image.json", asdict(image))
     asset_lock = load_asset_lock(unit.job.repository_root)
@@ -750,7 +750,7 @@ def _query_one(unit: UnitContext, database: Mapping[str, Any],
     query_component = f"query_{scope.language}_{query_profile['query_id']}"
     identity = _query_identity(database, query_profile, settings,
                               query_release=_policy(unit).releases.values.get(query_component))
-    scope_root = unit.job.run_root / "data" / "codeql" / "scopes" / scope.scope_id
+    scope_root = unit.job.run_root / "data" / "codeql" / "attempts" / unit.job.attempt_id / "scopes" / scope.scope_id
     root = scope_root / "queries" / str(query_profile["query_id"])
     root.mkdir(parents=True, exist_ok=True)
     checkpoint_path, sarif_path = root / "query-checkpoint.json", root / "sarif" / "results.sarif"
@@ -1083,7 +1083,7 @@ def _export_one(unit: UnitContext, database: Mapping[str, Any], *,
     releases = _release_projection(unit, "codeql_runner", f"export_{scope.language}")
     identity = _export_identity(database, profile, settings,
                                runner_sha256=json.dumps(releases, sort_keys=True), seeds=seed_rows)
-    scope_root = run_root / "data" / "codeql" / "scopes" / scope.scope_id
+    scope_root = run_root / "data" / "codeql" / "attempts" / unit.job.attempt_id / "scopes" / scope.scope_id
     exports_root, staging = scope_root / "exports", scope_root / "export"
     checkpoint_path = scope_root / "export-checkpoint.json"
     from uuid import uuid4
@@ -1355,7 +1355,7 @@ def _normalize_one(unit: UnitContext, query: Mapping[str, Any]) -> Mapping[str, 
         mapping_identity="accepted-codeql-source-map/1")
     shard = f"codeql-{scope.language}-{scope.scope_id}-{query_id}"
     physical = hashlib.sha256(shard.encode()).hexdigest()[:16]
-    path = unit.job.run_root / "data" / "indices" / "observations" / f"{fingerprint}-{physical}.sqlite"
+    path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.attempt_id / f"{fingerprint}-{physical}.sqlite"
     builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     evidence = LogicalIdentity.derive(EntityKind.EVIDENCE_ARTIFACT, unit.job.source_fingerprint,

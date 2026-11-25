@@ -176,7 +176,7 @@ class IndexScope:
 
 def _scope(run_root: Path, case_id: str, catalog: Mapping[str, Any]) -> IndexScope:
     mapping = catalog["mapping"]
-    case_root = (run_root / "data" / "cpp" / "projects" / case_id).resolve()
+    case_root = (run_root / str(catalog["compile_database"]["path"])).resolve().parent
     if run_root.resolve() not in case_root.parents:
         raise ValueError("C++ case root escapes the run")
     compile_database = catalog["compile_database"]

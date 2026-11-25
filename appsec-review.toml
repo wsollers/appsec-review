@@ -2818,8 +2818,8 @@ retries = 1
 [jobs.job_owasp_control_assessment.settings.parser_versions]
 component_rules = "2"
 applicability_rules = "4"
-batching_rules = "1"
-evidence_binding = "4"
+batching_rules = "2"
+evidence_binding = "5"
 subject_selection = "2"
 result_validator = "4"
 

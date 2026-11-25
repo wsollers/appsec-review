@@ -83,7 +83,9 @@ class LabelTable:
 
     def text_of(self, token: Any) -> str | None:
         """The material-gap text an ``X`` label names; ``None`` for any other token."""
-        return self._texts.get(token) if isinstance(token, str) else None
+        if isinstance(token, str) and re.fullmatch(r"X[1-9][0-9]{0,3}", token):
+            return self._texts.get(token)
+        return None
 
     def resolve_all(self, tokens: Iterable[Any]) -> tuple[list[str], list[str]]:
         """(distinct identities in order, tokens that did not resolve)."""

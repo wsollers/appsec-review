@@ -331,3 +331,67 @@ See [metrics operations](metrics.md).
 - It never repairs its way past a validator, never sets a claim state or score, and never reads `compile_failed` as
   evidence against a finding.
 - It stores model output and PoC source verbatim as data only.
+
+
+## Tuning and whole-job recovery: `job_poc_generation`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.brief.declaration_lines` | `30` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.brief.max_brief_bytes` | `131072` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.brief.max_source_files` | `64` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.brief.view_bytes` | `49152` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.brief.view_source_lines` | `160` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.brief.view_type_declarations` | `6` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.build.command_timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.build.object_limit` | `512` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.build.output_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.build.workspace_bytes_limit` | `1073741824` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.build.workspace_file_limit` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_candidates` | `16` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.models.default.max_input_tokens` | `32000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.models.default.max_output_tokens` | `8000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.models.default.max_queries` | `8` | coverage | integer >=0; exact parser/cross-field bounds? |
+| `settings.models.default.max_turns` | `6` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.models.default.timeout_seconds` | `600` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.retry.max_attempts` | `2` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.retry.retry_on_timeout` | `true` | coverage | true or false; existing retry validation |
+| `settings.workers` | `1` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.retry.retry_on_provider_error` | `true` | coverage | true/false; maximum attempts and deadline still apply |
+| `settings.retry.retry_on_invalid_output` | `true` | coverage | true/false; maximum attempts and deadline still apply |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_poc_generation/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.models.default.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.default.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.default.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.bounds.max_function_lines` | Defines permitted generated code/loop/array forms and compiler safety limits; not an unrestricted code-generation budget. |
+| `settings.bounds.max_file_bytes` | Defines permitted generated code/loop/array forms and compiler safety limits; not an unrestricted code-generation budget. |
+| `settings.bounds.max_includes` | Defines permitted generated code/loop/array forms and compiler safety limits; not an unrestricted code-generation budget. |
+| `settings.bounds.max_list_items` | Defines permitted generated code/loop/array forms and compiler safety limits; not an unrestricted code-generation budget. |
+| `settings.bounds.max_text_chars` | Defines permitted generated code/loop/array forms and compiler safety limits; not an unrestricted code-generation budget. |
+| `settings.bounds.max_string_literal_bytes` | Defines permitted generated code/loop/array forms and compiler safety limits; not an unrestricted code-generation budget. |
+| `settings.bounds.max_loop_iterations` | Defines permitted generated code/loop/array forms and compiler safety limits; not an unrestricted code-generation budget. |
+| `settings.bounds.max_array_elements` | Defines permitted generated code/loop/array forms and compiler safety limits; not an unrestricted code-generation budget. |
+| `settings.bounds.max_violations` | Defines permitted generated code/loop/array forms and compiler safety limits; not an unrestricted code-generation budget. |
+| `settings.build.compile_check` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.plan.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.write.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.validate.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.compile.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.package.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

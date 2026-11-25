@@ -240,7 +240,8 @@ def test_executive_report_posture_chains_roadmap_and_multi_format_rendering() ->
     assert len(chains) == 1
     assert chains[0]["composed_severity"] == "unrated"
     assert chains[0]["severity_gap"] == "chain_severity_unrated"
-    assert [s["role"] for s in chains[0]["steps"]] == ["entry", "sink"]
+    assert [s["role"] for s in chains[0]["steps"]] == ["component", "component"]
+    assert chains[0]["trust_boundary_crossed"] == "[unverified link]"
 
     gaps = build_named_coverage_gaps(synthetic_report, syn_radar)
     assert any(g.get("gap_id") == "gap-syntactic" or "syntactic" in str(g) for g in gaps)

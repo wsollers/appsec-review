@@ -29,6 +29,8 @@ docs/architecture/code-graph-precomputation.md (D4, sections 7.1 to 7.4) is norm
 """
 from __future__ import annotations
 
+from functools import partial
+
 from collections.abc import Callable, Mapping
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict
@@ -164,7 +166,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         dispositions = job_dispositions(unit.job.config.settings)
         values: list[dict[str, Any]] = []
         for record in codeql["scopes"]:
-            scope = dict(record)
+            scope = {**record, "attempt_id": unit.job.attempt_id}
             scope["source_dispositions"] = dispositions.record()
             if scope["export_status"] == s.SUCCEEDED:
                 s.verify_exports(run_root, scope, settings)
@@ -177,7 +179,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 scope, snapshot=unit.job.source_fingerprint, catalog_release=current.release_id, columns_release=columns,
                 settings=settings, tool_version=tool_version, implementation=implementation)
             reusable, reason = releases.require("graph_catalog", "graph_columns", "graph_normalizer", "validation")
-            scope["reused"] = s.reuse_checkpoint(run_root, scope["scope_id"], scope["identity"]) if reusable else None
+            scope["reused"] = s.reuse_checkpoint(run_root, scope["scope_id"], scope["identity"], attempt_id=unit.job.attempt_id) if reusable else None
             if not reusable:
                 unit.job.events.write("CHECKPOINT_MISSED", scope_id=scope["scope_id"], reason=reason)
             values.append(scope)
@@ -213,7 +215,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 upstream=[{"index": EXPORT_UPSTREAM_INDEX, "shard_id": f"{scope['scope_id']}:export-manifest",
                            "sha256": scope["export_manifest"]["sha256"]}],
                 dispositions=job_dispositions(unit.job.config.settings))
-            stage = s.write_stage(run_root, scope["scope_id"], "normalized", s.encode_stage(
+            stage = partial(s.write_stage, attempt_id=unit.job.attempt_id)(run_root, scope["scope_id"], "normalized", s.encode_stage(
                 scope["scope_id"], result.facts, result.symbols, result.relations, result.coverage, {}))
             gaps = [f"{scope['scope_id']}: {row.family.value}: {row.status.value}"
                     for row in result.coverage if row.status is not Coverage.COMPLETE]
@@ -288,7 +290,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                 coverage = [s.with_gaps(row, sink_gaps, partial=False, facts=len(sinks), counts=sink_counts)
                             if row.family is Family.SINK_SITE else row for row in coverage]
                 gaps.extend(sink_gaps)
-            stage = s.write_stage(run_root, scope["scope_id"], "crosschecked", s.encode_stage(
+            stage = partial(s.write_stage, attempt_id=unit.job.attempt_id)(run_root, scope["scope_id"], "crosschecked", s.encode_stage(
                 scope["scope_id"], facts_out, symbols,
                 [*relations, *result.relations, *svf_result.relations], coverage,
                 {"cross_check": summary}))
@@ -376,7 +378,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                                 "correlation_states": dict(summary.get("states", {}))},
                      "scorecard": scorecard,
                      "gaps": gaps, "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
-            checkpoint = s.save_checkpoint(run_root, scope["scope_id"], scope["identity"], value)
+            checkpoint = s.save_checkpoint(run_root, scope["scope_id"], scope["identity"], value, attempt_id=unit.job.attempt_id)
             return {**value, "checkpoint": checkpoint, "checkpoint_reused": False}
 
         results = _map(unit, one, list(loaded["scopes"]))

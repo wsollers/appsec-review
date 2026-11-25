@@ -435,7 +435,7 @@ def _skipped_scope_index(unit: UnitContext, skipped: Mapping[str, Any]) -> dict[
     """Retain known applicability, without asserting measured or unavailable coverage."""
     shard = f"clangd-{skipped['scope_id']}"
     fingerprint = checkpoint_identity({"schema": SCHEMA, "normalizer": NORMALIZER, **skipped})
-    path = unit.job.run_root / "data" / "indices" / "analysis" / f"{fingerprint}.sqlite"
+    path = unit.job.run_root / "data" / "indices" / "analysis" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
     builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     sha, _ = builder.build_or_reuse()
@@ -465,7 +465,8 @@ def _execution_artifacts(run_root: Path, execution: Mapping[str, Any]) -> dict[s
 def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) -> dict[str, Any]:
     limits = _settings(unit)
     dispositions = job_dispositions(unit.job.config.settings)
-    root = unit.job.run_root / "data" / "code-index" / "clangd" / scope.scope_id
+    root = (unit.job.run_root / "data" / "code-index" / "clangd" / scope.scope_id /
+            "attempts" / unit.job.attempt_id)
     identity = checkpoint_identity({
         "schema": SCHEMA, "scope": scope.as_dict(), "normalizer": NORMALIZER,
         "tool": tool_identity(unit.job.repository_root, TOOL_ID) if executor_factory is None
@@ -502,7 +503,7 @@ def _index_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any) ->
                        "image_digest": execution["image_digest"]},
         parser_identity="clangd-yaml-parser/1", normalizer_identity=NORMALIZER,
         mapping_identity="cpp-source-mapping/3")
-    path = (unit.job.run_root / "data" / "indices" / "analysis" /
+    path = (unit.job.run_root / "data" / "indices" / "analysis" / "attempts" / unit.job.config.job_id / unit.job.attempt_id /
             f"{fingerprint}-{hashlib.sha256(shard.encode()).hexdigest()[:16]}.sqlite")
     builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)

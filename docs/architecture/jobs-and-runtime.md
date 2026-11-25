@@ -701,3 +701,68 @@ metadata, unsupported formats, unavailable model/tooling, truncation, and parser
 coverage gaps rather than clean results. Exact command text is never written to the central log or
 retrieval databases. Operational details are in
 [`../operations/post-build-security-assessment.md`](../operations/post-build-security-assessment.md).
+
+
+## Tuning and whole-job recovery: `job_model_connectivity`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.timeout_seconds` | `120` | execution | 1..600 seconds |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_model_connectivity/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. The readiness gate remains always-executed rather than reusable. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.connectivity.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publication.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
+
+
+## Tuning and whole-job recovery: `job_review_intake`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `[global] binary_decompilation.analysis_timeout_seconds` | `3600` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.cpus` | `4` | execution | finite number >0; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.decompile_timeout_seconds` | `60` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_binary_bytes` | `536870912` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_function_bytes` | `262144` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_functions` | `50000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_heap` | `"6g"` | execution | positive integer m/g; memory/headroom admission |
+| `[global] binary_decompilation.max_pcode_ops` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_strings` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.memory` | `"8g"` | execution | positive integer m/g; memory/headroom admission |
+| `[global] binary_decompilation.output_file_bytes` | `2147483648` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.pids_limit` | `1024` | execution | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.timeout_seconds` | `7200` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] inventory.max_file_bytes` | `12582912` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model_preflight.timeout_seconds` | `120` | execution | 1..600 seconds |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_review_intake/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.model_preflight.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.resolve_configuration.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.prepare_target.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.binary_evidence.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publish_intake.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

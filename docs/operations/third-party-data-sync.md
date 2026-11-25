@@ -491,3 +491,99 @@ delay is enforced. Docker must be available for the cve-bin-tool build and the p
 validator image. A nonzero exit means at
 least one source branch failed; inspect the attempt's unit receipts rather than treating an
 unavailable source as successful.
+
+
+## Tuning and whole-job recovery: `job_third_party_data_sync`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `steps.cve_bin_tool_db_build.settings.build_timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds? |
+| `steps.cve_bin_tool_db_build.settings.run_timeout_seconds` | `3600` | execution | positive integer; exact parser/cross-field bounds? |
+| `steps.epss_sync.settings.timeout_seconds` | `120` | execution | positive integer; exact parser/cross-field bounds? |
+| `steps.grype_db_sync.settings.download_timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds? |
+| `steps.grype_db_sync.settings.memory` | `"6g"` | execution | positive integer m/g; memory/headroom admission |
+| `steps.grype_db_sync.settings.run_timeout_seconds` | `900` | execution | positive integer; exact parser/cross-field bounds? |
+| `steps.kev_sync.settings.timeout_seconds` | `120` | execution | positive integer; exact parser/cross-field bounds? |
+| `steps.mitre_sync.settings.timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds? |
+| `steps.nvd_sync.settings.download_timeout_seconds` | `90` | execution | finite number >0; exact parser/cross-field bounds? |
+| `steps.nvd_sync.settings.max_attempts` | `6` | execution | positive integer; exact parser/cross-field bounds? |
+| `steps.nvd_sync.settings.request_delay_with_key_seconds` | `0.6` | execution | finite number >=0; exact parser/cross-field bounds? |
+| `steps.nvd_sync.settings.request_delay_without_key_seconds` | `6.0` | execution | finite number >=0; exact parser/cross-field bounds? |
+| `steps.nvd_sync.settings.request_timeout_seconds` | `120` | execution | finite number >0; exact parser/cross-field bounds? |
+| `steps.nvd_sync.settings.retry_delay_seconds` | `5` | execution | finite number >=0; exact parser/cross-field bounds? |
+| `steps.nvd_sync.settings.retry_max_delay_seconds` | `60` | execution | finite number >=0; exact parser/cross-field bounds? |
+| `steps.osv_sync.settings.timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_third_party_data_sync/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Feed publication remains an independent maintenance operation; tuning does not refresh or replace a review?s pinned feed snapshot. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `schedule.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `steps.nvd_sync.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.nvd_sync.settings.first_year` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.nvd_sync.settings.page_size` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.nvd_sync.settings.max_window_days` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.nvd_sync.settings.max_download_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.nvd_sync.settings.max_api_response_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.nvd_sync.settings.max_uncompressed_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.nvd_sync.tasks.fetch.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.nvd_sync.tasks.process.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.nvd_sync.tasks.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.osv_sync.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.osv_sync.settings.max_archive_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.osv_sync.settings.max_uncompressed_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.osv_sync.settings.max_records` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.osv_sync.settings.max_lookup_results` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.osv_sync.tasks.fetch.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.osv_sync.tasks.index.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.osv_sync.tasks.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.grype_db_sync.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.grype_db_sync.settings.schema_major` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.grype_db_sync.settings.max_listing_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.grype_db_sync.settings.max_archive_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.grype_db_sync.settings.max_uncompressed_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.grype_db_sync.settings.max_database_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.grype_db_sync.settings.max_archive_members` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.grype_db_sync.settings.max_zstd_window_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.grype_db_sync.settings.max_age_seconds` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.grype_db_sync.settings.max_future_seconds` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.grype_db_sync.tasks.fetch.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.grype_db_sync.tasks.import.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.grype_db_sync.tasks.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.mitre_sync.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.mitre_sync.settings.max_source_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.mitre_sync.settings.max_uncompressed_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.mitre_sync.settings.max_records` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.mitre_sync.settings.max_lookup_results` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.mitre_sync.tasks.fetch.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.mitre_sync.tasks.normalize.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.mitre_sync.tasks.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.cve_bin_tool_db_build.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.cve_bin_tool_db_build.settings.max_layer_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.cve_bin_tool_db_build.settings.max_total_layer_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.cve_bin_tool_db_build.tasks.resolve_nvd_snapshot.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.cve_bin_tool_db_build.tasks.build.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.cve_bin_tool_db_build.tasks.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.kev_sync.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.kev_sync.settings.max_source_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.kev_sync.settings.max_records` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.kev_sync.tasks.fetch.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.kev_sync.tasks.normalize.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.kev_sync.tasks.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.epss_sync.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.epss_sync.settings.max_source_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.epss_sync.settings.max_uncompressed_bytes` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.epss_sync.settings.max_records` | Selects model, source, algorithm, required evidence or authority; not a reviewed execution/coverage capacity. |
+| `steps.epss_sync.tasks.fetch.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.epss_sync.tasks.normalize.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.epss_sync.tasks.publish.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

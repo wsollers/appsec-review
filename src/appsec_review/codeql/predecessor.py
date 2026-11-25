@@ -211,8 +211,11 @@ def _import_databases(context, expected: Mapping[str, str], *, checkpoint_schema
             timeout_seconds=reader.seconds_left()) as lease, \
             operation_span(context.events, "codeql.predecessor_import", resource_lease_id=lease):
         handoff, artifacts = _handoff(reader, source, selection)
+        from appsec_review.runtime.configuration import configuration_snapshot
+        original_snapshot = configuration_snapshot(source, handoff["resolved_config_sha256"])
         original, original_sha = reader.document(
-            source, "data/configuration/resolved.json", handoff["resolved_config_sha256"])
+            source, (original_snapshot.directory / "resolved.json").relative_to(source).as_posix(),
+            original_snapshot.sha256)
         original_policy = original.get("review_policy", {})
         if (original_policy.get("mode") != policy.mode.value
                 or original_policy.get("project_id") != policy.project_id
@@ -251,8 +254,12 @@ def _import_databases(context, expected: Mapping[str, str], *, checkpoint_schema
             if (value is None or value.get("terminal_status") != "SUCCEEDED"
                     or value.get("database_identity") != expected[scope_id]):
                 raise ValueError("predecessor selected database is missing, failed or materially incompatible")
-            relative = f"data/codeql/scopes/{scope_id}/database-manifest.json"
             ref = value.get("database_manifest")
+            relative = ref.get("path") if isinstance(ref, dict) else None
+            allowed = (f"data/codeql/scopes/{scope_id}/database-manifest.json",
+                       f"data/codeql/attempts/{handoff['attempt_id']}/scopes/{scope_id}/database-manifest.json")
+            if relative not in allowed:
+                raise ValueError("predecessor database is outside its accepted attempt")
             if (not isinstance(ref, dict) or ref.get("path") != relative or artifacts.get(relative) != ref):
                 raise ValueError("predecessor database declaration is not bound to its handoff")
             manifest, _ = reader.document(source, relative, ref["sha256"])
@@ -262,7 +269,7 @@ def _import_databases(context, expected: Mapping[str, str], *, checkpoint_schema
                                ("size_bytes", min(bytes_limit, selection.max_bytes - total_bytes))):
                 if type(manifest.get(key)) is not int or not 0 <= manifest[key] <= limit:
                     raise ValueError("predecessor selection exceeds its aggregate import bounds")
-            database = safe_path(source, f"data/codeql/scopes/{scope_id}/database")
+            database = safe_path(source, str(Path(relative).parent / "database"))
             directories[scope_id] = _tree(
                 reader, source, database, manifest, file_limit=file_limit, bytes_limit=bytes_limit)
             total_files += manifest["file_count"]
@@ -277,11 +284,12 @@ def _import_databases(context, expected: Mapping[str, str], *, checkpoint_schema
                 or current_claim.get("source_fingerprint") != context.source_fingerprint
                 or current_claim.get("review_policy") != policy.view()):
             raise ValueError("predecessor destination claim binding differs")
+        snapshot = configuration_snapshot(destination, current_claim["resolved_config_sha256"])
         current, current_sha = reader.document(
-            destination, "data/configuration/resolved.json", current_claim["resolved_config_sha256"])
+            destination, (snapshot.directory / "resolved.json").relative_to(destination).as_posix(), snapshot.sha256)
         if current.get("review_policy") != policy.view():
             raise ValueError("predecessor selection differs from the current frozen configuration")
-        root = safe_path(destination, "data/codeql")
+        root = safe_path(destination, f"data/codeql/attempts/{context.attempt_id}")
         root.mkdir(parents=True, exist_ok=True)
         with TemporaryDirectory(prefix=".predecessor-", dir=root) as temporary:
             staged = Path(temporary)
@@ -312,13 +320,13 @@ def _import_databases(context, expected: Mapping[str, str], *, checkpoint_schema
             # Check all destinations before replacing any selected database.
             for scope_id, _, manifest, _ in selected:
                 reader.check()
-                target = safe_path(destination, f"data/codeql/scopes/{scope_id}")
+                target = safe_path(destination, f"data/codeql/attempts/{context.attempt_id}/scopes/{scope_id}")
                 if (target / "database").exists():
                     _tree(reader, destination, target / "database", manifest,
                           file_limit=file_limit, bytes_limit=bytes_limit)
             for scope_id, _, manifest, _ in selected:
                 reader.check()
-                target = safe_path(destination, f"data/codeql/scopes/{scope_id}")
+                target = safe_path(destination, f"data/codeql/attempts/{context.attempt_id}/scopes/{scope_id}")
                 target.mkdir(parents=True, exist_ok=True)
                 if (target / "database").exists():
                     os.replace(target / "database", staged / scope_id / "previous-database")

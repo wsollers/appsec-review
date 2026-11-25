@@ -132,3 +132,94 @@ flowchart TD
   manifest --> consumer["Admitted application or capability-scoped query"]
   handoff --> resume["Identity-checked reuse or explicitly admitted repair"]
 ```
+
+
+## Operational configuration compatibility and attempt ownership
+
+`config/operational.py` is the single exact-path declaration/comparison mechanism.
+All 48 configured jobs are accounted for in their canonical job pages, linked from
+[job tuning](../operations/job-tuning.md). Forty-five jobs have declared local or
+inherited controls; artifact indexing, image-pin verification and the internal build
+transaction have no independent mutable job setting. Their input contracts and
+inherited scheduling/build settings are documented, not silently omitted.
+
+### Compatibility categories
+
+* **Execution**: tool/transport/admission waits, actual worker pools, resource capacity
+  and diagnostic intervals. Accepted prior results keep their original limits and gaps.
+* **Coverage**: model time/retries/calls/tokens, analysis deadlines, parser/index/output
+  ceilings and evidence batching. Neither increases nor decreases reinterpret accepted
+  evidence. Expanded coverage requires an explicitly requested whole-producer rerun
+  and reconsideration of affected downstream jobs.
+* **Material/authority**: model/provider/reasoning, scoring and proof semantics, sources,
+  query/seed selection, rules, schemas, signing/custody, required evidence and sandbox
+  grants. The job pages name specifically excluded candidates and their technical reason.
+* **Provenance**: profile/overlay selection, source digest and embedded document changes
+  are recorded as full layer deltas only when every changed layer leaf is an exact
+  declared operational control and the full effective document remains compatible.
+  Layering is not an exemption for model or release changes.
+
+Declarations carry explicit value kinds: positive/nonnegative integers or finite
+numbers, reviewed booleans, memory strings (`<positive integer>m/g`) and review retry
+backoff arrays (0..16 nondecreasing integer delays of 0..3600 seconds). Job parsers
+remain authoritative for tighter ranges and cross-field constraints. No suffix,
+name, table, profile or arbitrary numeric-field exemption exists.
+
+### Immutable effective configuration
+
+The original snapshot and hashes never change. Admission writes a full immutable
+revision with exact deltas and original binding, and retains changed profile/overlay
+TOML bytes alongside their verified hashes and embedded documents, for new run snapshots
+as well as revisions. Older snapshots lacking raw layer files retain their original
+embedded documents/hashes; missing historical bytes are not regenerated or claimed present. Host bindings stay
+hash-pinned. A new attempt claims its effective hash. `context_configuration` resolves
+that hash; artifacts include both the revision and original snapshots. A retained
+attempt is reconstructed with its own typed configuration, including original output
+validators, limits, resource policy and gaps, rather than the consumer's current bounds.
+Build iteration workers reconstruct the admitted revision from pinned layers, not live
+source TOML, and must reproduce the exact resolved hash.
+
+The four `review_policy.resources` capacities are execution controls, not changes to
+review authority. New attempts use the new budget; retained claims retain the old one.
+Existing active/persistent/quarantined lease compatibility checks still reject unsafe
+resizing. Resource admission, memory headroom, signing and sandbox grants are unchanged.
+
+### Whole-job recovery boundary
+
+`runtime.checkpoints.select_units` plans every unit as RUN for a new job attempt;
+`admitted_output` rejects cross-attempt cell salvage, including old repair decisions.
+Shared computation lookup also excludes previous attempts of the same job; cross-job
+hits must belong to an explicitly admitted, accepted upstream attempt.
+Whole accepted-job reuse remains available. Same-attempt idempotency is not a way to
+import cells from another attempt. No second recovery store or registry was introduced.
+
+CodeQL database/query/export outputs; C++ build scopes; Clang/CPG/symbol/SVF analysis;
+Tree-sitter shards/CFGs; graph stages; artifact-security and evidence-tool checkpoints;
+planning feedback; and index publication paths are attempt-owned. C++ downstream
+readers resolve the source root from the accepted compile-database artifact instead
+of a mutable run-wide directory. Existing dataset contracts retain historical paths
+and declare new raw-artifact paths. Stable content identities do not authorize
+reusing an earlier attempt's computation or overwriting its evidence.
+
+Inference review starts each whole-job attempt with its own cell receipts, triage and
+memo namespace and model budget. Historical spending/receipt ledgers remain unchanged;
+new allowance does not erase or certify their missing usage reports. Dependency
+scorecard caching is attempt-local. Build probes/image-repair caches include the
+attempt identity. New language-build attempts invalidate old selected-node execution
+receipts and rerun the selected graph, while preserving immutable products/ledger
+snapshots and enforcing workspace/request admission. Historical workspace reconstruction
+retains its original interpretation. Tool installation/compilation caches and pinned
+feed/source inputs are not review-result salvage.
+
+Feed maintenance remains separate from review execution. Tuning maintenance waits does
+not refresh a review's immutable feed inputs. Pre-review binary-decompilation limits
+apply only to explicitly requested new publications, never reinterpret old binary
+outputs. No reload, restart or live action is authorized by configuration admission.
+
+### Validation record
+
+The all-job pass used source, syntax, metadata and Git checks only. Regression suites,
+provider/tool invocations and live review/restart validation were not run, as requested.
+This documents implemented boundaries, not proof that every job has completed a live
+recovery. Exact fields, base defaults, parser-bound references, exceptions and downstream
+impact are recorded in each canonical job page.

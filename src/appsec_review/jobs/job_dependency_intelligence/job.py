@@ -406,7 +406,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                                  max_response_bytes=int(settings["max_response_bytes"]),
                                  timeout_seconds=int(settings["timeout_seconds"]), retries=int(settings["retries"]),
                                  transport=scorecard_transport)
-        cache = ScorecardCache(unit.job.repository_root / str(settings["cache_root"]),
+        cache = ScorecardCache(unit.unit_root / "scorecard-cache",
                                max_age_seconds=int(settings["cache_max_age_seconds"]),
                                max_response_bytes=int(settings["max_response_bytes"]),
                                lock_timeout_seconds=int(settings["cache_lock_timeout_seconds"]))
@@ -513,7 +513,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
             producer_artifacts=producer_artifacts, tool_identity={**tool_identity, **provenance},
             parser_identity=ADVISORY_PARSER_IDENTITY, normalizer_identity=ADVISORY_NORMALIZER_IDENTITY,
             mapping_identity=ADVISORY_MAPPING_IDENTITY)
-        shard_path = (unit.job.run_root / "data" / "indices" / "observations"
+        shard_path = (unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id
                       / f"{ADVISORY_SHARD_ID}-{fingerprint}.sqlite")
         builder = IndexBuilder(shard_path, name="observations", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint, shard_id=ADVISORY_SHARD_ID)
@@ -606,7 +606,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                            }},
             parser_identity=PARSER_IDENTITY, normalizer_identity=NORMALIZER_IDENTITY,
             mapping_identity=MAPPING_IDENTITY)
-        path = unit.job.run_root / "data" / "indices" / "inventory" / f"{fingerprint}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "inventory" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
         builder = IndexBuilder(path, name="inventory", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint,
                                shard_id="dependency-intelligence")

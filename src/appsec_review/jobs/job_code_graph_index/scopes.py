@@ -433,19 +433,21 @@ def scope_identity(scope: Mapping[str, Any], *, snapshot: str, catalog_release: 
     })
 
 
-def scope_root(run_root: Path, scope_id: str) -> Path:
+def scope_root(run_root: Path, scope_id: str, attempt_id: str = "legacy") -> Path:
     if not scope_id or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-_." for character in scope_id):
         raise IntegrityError(f"CodeQL scope id is not a safe path segment: {scope_id!r}")
-    return run_root / "data" / "code-graph" / "scopes" / scope_id
+    if not attempt_id or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_." for c in attempt_id):
+        raise IntegrityError("invalid graph attempt identity")
+    return run_root / "data" / "code-graph" / "attempts" / attempt_id / "scopes" / scope_id
 
 
-def reuse_checkpoint(run_root: Path, scope_id: str, identity: str) -> dict[str, Any] | None:
+def reuse_checkpoint(run_root: Path, scope_id: str, identity: str, *, attempt_id: str = "legacy") -> dict[str, Any] | None:
     """A prior scope result whose shards still verify, or ``None`` (absent, stale or unverifiable).
 
     A checkpoint whose identity matches but whose shards no longer verify is an unverifiable
-    leftover: it and its shard files are deleted and the scope is rebuilt, never republished.
+    leftover: it is not republished, and its recorded files are never deleted.
     """
-    path = scope_root(run_root, scope_id) / "checkpoint.json"
+    path = scope_root(run_root, scope_id, attempt_id) / "checkpoint.json"
     if not path.is_file() or path.is_symlink():
         return None
     try:
@@ -464,17 +466,12 @@ def reuse_checkpoint(run_root: Path, scope_id: str, identity: str) -> dict[str, 
                 or file_sha256(candidate) != shard.get("sha256"):
             valid = False
     if not valid:
-        for shard in shards or ():
-            candidate = (run_root / str(shard.get("relative_path", ""))).resolve()
-            if run_root.resolve() in candidate.parents and candidate.is_file():
-                candidate.unlink()
-        path.unlink()
         return None
     return {**dict(result), "checkpoint_reused": True}
 
 
-def save_checkpoint(run_root: Path, scope_id: str, identity: str, result: Mapping[str, Any]) -> dict[str, Any]:
-    path = scope_root(run_root, scope_id) / "checkpoint.json"
+def save_checkpoint(run_root: Path, scope_id: str, identity: str, result: Mapping[str, Any], *, attempt_id: str = "legacy") -> dict[str, Any]:
+    path = scope_root(run_root, scope_id, attempt_id) / "checkpoint.json"
     atomic_json(path, {"schema": CHECKPOINT_SCHEMA, "identity": identity, "result": dict(result)})
     return artifact(run_root, path)
 
@@ -526,8 +523,8 @@ def decode_stage(document: Mapping[str, Any]) -> tuple[list[GraphFact], list[Ent
     return facts, symbols, relations, coverage
 
 
-def write_stage(run_root: Path, scope_id: str, name: str, document: Mapping[str, Any]) -> dict[str, Any]:
-    path = scope_root(run_root, scope_id) / "work" / f"{name}.json"
+def write_stage(run_root: Path, scope_id: str, name: str, document: Mapping[str, Any], *, attempt_id: str = "legacy") -> dict[str, Any]:
+    path = scope_root(run_root, scope_id, attempt_id) / "work" / f"{name}.json"
     atomic_json(path, dict(document))
     return artifact(run_root, path)
 
@@ -722,9 +719,10 @@ def _publish_one(run_root: Path, *, scope: Mapping[str, Any], family: Family | N
                 database_shard_id(scope["scope_id"]))
     fingerprint = digest({"schema": INDEX_SCHEMA, "index": GRAPH_INDEX, "shard_id": shard_id,
                           "scope_identity": identity})
-    path = run_root / "data" / "indices" / GRAPH_INDEX / shard_id / f"{fingerprint}.sqlite"
+    path = (scope_root(run_root, scope["scope_id"], scope.get("attempt_id", "legacy")) / "indices" /
+            shard_id / f"{fingerprint}.sqlite")
     if path.exists():
-        path.unlink()  # an unverifiable leftover of an interrupted attempt; never accepted as is
+        raise IntegrityError("graph shard already exists in this attempt")
     builder = IndexBuilder(path, name=GRAPH_INDEX, fingerprint=fingerprint, target_snapshot=snapshot,
                            shard_id=shard_id)
     seen: set[str] = set()

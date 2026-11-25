@@ -318,6 +318,8 @@
         "function_name",
         "path",
         "limit",
+        "block_limit",
+        "edge_limit",
         "cursor"
       ]
     },

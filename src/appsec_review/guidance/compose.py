@@ -27,7 +27,7 @@ from .fragments import (
     policy_keys, text_sha256, validate_procedure_text,
 )
 from .routing import GENERALIST, STACK_IDS
-from .skills import load_runtime_skill, select_review_procedures
+from .skills import load_runtime_skill, review_query_policy, select_review_procedures
 
 
 REGISTRY_SCHEMA = "appsec-review/guidance-registry/1"
@@ -58,7 +58,7 @@ PROHIBITED_DECISIONS = frozenset({
     "read_target_guidance", "execute_code", "change_configuration", "override_score",
 })
 REGISTRY_KEYS = frozenset({"schema", "version", "roles", "personas", "stacks", "tasks", "assignment",
-                           "persona_migrations", "runtime_skills"})
+                           "persona_migrations", "runtime_skills", "review_procedure_selection"})
 TASK_INPUT_FORBIDDEN = frozenset({"readable_roots", "tools", "granted_tools", "authority", "role", "persona",
                                   "stack", "model", "model_profile", "budget", "permissions"})
 _KEY = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -138,6 +138,8 @@ def validate_registry(registry: Mapping[str, Any]) -> dict[str, Any]:
     for old, new in registry.get("persona_migrations", {}).items():
         _require("viewpoint" in personas.get(old, {}), f"persona migration source is unknown: {old}")
         _require("path" in personas.get(new, {}), f"persona migration target is unknown: {new}")
+    if "review_procedure_selection" in registry:
+        review_query_policy(registry)
     return dict(registry)
 
 

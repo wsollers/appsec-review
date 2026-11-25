@@ -20,7 +20,7 @@ from appsec_review.inference import ModelRequest, ReviewModelRequest
 from appsec_review.inference.request import plan_prompt, review_prompt
 from appsec_review.review.models import IntegrityError
 from appsec_review.storage import canonical_json
-from tests.test_guidance_compose import ROOT, repo
+from tests.test_guidance_compose import ROOT, repo, taxonomy
 
 WORKERS = [(name, family) for name, worker in SPECIALIZED_WORKERS.items()
            for family in (BUILD_FAMILIES if "{family}" in worker.role else (None,))]
@@ -223,3 +223,102 @@ def test_legacy_specialized_bytes_are_read_only_and_verified(tmp_path, family):
     (destination / names[0]).write_bytes(b"tampered")
     with pytest.raises(IntegrityError):
         load_pinned_prompt(tmp_path, identity)
+
+
+def test_review_turn_catalog_is_standalone_and_resets_on_schema_change(tmp_path):
+    from dataclasses import replace
+    from appsec_review.guidance.cards import review_tool_catalog
+    from tests.review.test_cells import ScriptedInfer, SPAN, capability, final, retrieve, run
+
+    cap = capability(tools=("expand", "find", "read_excerpt", "query_cpg_slice"))
+    infer = ScriptedInfer(retrieve({"tool": "read_excerpt", "parameters": {"identity": SPAN}}), final(SPAN))
+    run(tmp_path, infer, cap=cap)
+    first, second = infer.requests
+    def protocol(request):
+        rendered = review_prompt(request, include_guidance=False)
+        assert "parameters" not in json.dumps(rendered["capability_artifact_card"])
+        return rendered["task_input"]["turn_protocol"]
+
+    assert protocol(first)["tool_catalog"] == review_tool_catalog(cap.tools)
+    assert protocol(second)["catalog_format"] == "typed_signatures"
+    signatures = {sig["name"]: sig for sig in protocol(second)["tool_catalog"]}
+    assert signatures["read_excerpt"]["required"] == ["identity"]
+    assert "backward|forward" in signatures["query_cpg_slice"]["fields"]["direction"]
+    assert signatures["find"]["fields"]["locator"].startswith("{path:string, line:integer")
+    assert signatures["expand"]["selectors"] == "exactly one of label, ref, files; offset pages files"
+    assert len(canonical_json(protocol(second))) < len(canonical_json(protocol(first)))
+    changed = deepcopy(second.task_input)
+    cap = capability(tools=("find",))
+    changed.update(capability=cap.public_view())
+    changed["turn_protocol"]["tool_catalog"] = review_tool_catalog(cap.tools)
+    assert protocol(replace(second, task_input=changed))["catalog_format"] == "full_schemas"
+    assert protocol(replace(second, transcript=()))["catalog_format"] == "full_schemas"
+
+
+def test_review_guidance_is_pinned_by_usable_structural_source(tmp_path, repo, taxonomy):
+    from threading import Lock
+    from types import SimpleNamespace
+    from appsec_review.jobs.job_inference_security_review.teams import ReviewContext
+    from appsec_review.review.models import Lane, Role
+    from tests.review.test_cells import capability
+
+    ctx = SimpleNamespace(run_root=tmp_path, repository_root=repo, vocabulary=taxonomy[0], crosswalk=taxonomy[1],
+                          _lock=Lock(), _bundles={}, _pinned=set())
+    def pinned(tools, populations):
+        cap = capability(role=Role.INDEPENDENT_VERIFIER, tools=tools, indexes=("graph", "analysis"))
+        result = ReviewContext.bundle(ctx, role=cap.role, persona="generalist", stack="generic", task="blind_verifier",
+                                     lane=Lane.LEAD, capability=cap, population=populations)
+        bundle = result["bundle"]
+        assert load_pinned_prompt(tmp_path, bundle["sha256"]) == result["text"]
+        return bundle
+
+    direct = pinned(("find",), {})
+    alternate = pinned(("find", "query_cpg_slice"), {"alternate_cpg": {"known_row_count": 1}})
+    codeql = pinned(("find", "list_codeql_databases"), {"codeql_databases": {"known_row_count": 1}})
+    assert section(direct, "receipt")["capability"]["query_sources"] == []
+    assert section(alternate, "receipt")["capability"]["query_sources"] == ["alternate_cpg"]
+    assert section(codeql, "receipt")["capability"]["query_sources"] == ["codeql_databases"]
+    assert not any(item["id"] == "evidence-and-graph-querying" for item in section(direct, "procedures")["items"])
+    assert any(item["id"] == "evidence-and-graph-querying" for item in section(alternate, "procedures")["items"])
+    assert section(alternate, "receipt")["capability"]["query_procedures"] == {
+        "evidence-and-graph-querying": ["alternate_cpg"]}
+
+    # Changing only the trusted selection must not reuse a cached bundle for the same grant.
+    path = repo / "pipeline/guidance/registry.json"
+    registry = json.loads(path.read_text())
+    rule = registry["review_procedure_selection"]["evidence-and-graph-querying"]
+    rule["any_dataset"] = ["codeql_databases"]
+    path.write_text(json.dumps(registry))
+    no_longer_selected = pinned(("find", "query_cpg_slice"), {"alternate_cpg": {"known_row_count": 1}})
+    assert section(no_longer_selected, "receipt")["capability"]["query_procedures"] == {}
+    assert section(no_longer_selected, "procedures") == section(direct, "procedures")
+    assert no_longer_selected["sha256"] != alternate["sha256"]
+    rule["roles"] = ["blue_team_refuter"]
+    path.write_text(json.dumps(registry))
+    wrong_role = pinned(("find", "list_codeql_databases"), {"codeql_databases": {"known_row_count": 1}})
+    assert section(wrong_role, "procedures") == section(direct, "procedures")
+    assert len(ctx._pinned) == 5
+
+
+@pytest.mark.parametrize("bad", ["role", "dataset", "unknown_key", "other_skill", "duplicate", "denied_job"])
+def test_query_procedure_policy_rejects_unknown_or_widened_selection(repo, bad):
+    path = repo / "pipeline/guidance/registry.json"
+    registry = json.loads(path.read_text())
+    name = "evidence-and-graph-querying"
+    policy = registry["review_procedure_selection"]
+    rule = policy[name]
+    if bad == "role":
+        rule["roles"].append("hypothesis_hunter")
+    elif bad == "dataset":
+        rule["any_dataset"].append("analysis")
+    elif bad == "unknown_key":
+        rule["force"] = True
+    elif bad == "other_skill":
+        policy["generative-investigation"] = rule
+    elif bad == "duplicate":
+        rule["any_dataset"].append(rule["any_dataset"][0])
+    else:
+        registry["runtime_skills"][name]["jobs"] = ["job_poc_generation"]
+    path.write_text(json.dumps(registry))
+    with pytest.raises(GuidanceError):
+        load_registry(repo)

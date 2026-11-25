@@ -206,7 +206,8 @@ def build_job(
             executor = grype_executor_factory(unit)
         else:
             import json
-            document = json.loads((unit.job.run_root / "data/configuration/resolved.json").read_bytes())
+            from appsec_review.runtime.configuration import context_configuration
+            document = context_configuration(unit.job)
             executor = ContainerExecutor(load_catalog(unit.job.repository_root, resolved_config=document),
                                          unit.job.run_root)
         return grype_feed.import_database(_grype(unit.job), unit.output("grype_db_sync.fetch"),

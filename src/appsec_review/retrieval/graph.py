@@ -680,3 +680,64 @@ __all__ = [
     "query_cpg_slice",
     "request_error",
 ]
+
+
+ALT_PATH_SHARD = "analysis/alternate-cpg"
+ALT_SCHEMA = "appsec-review/alternate-cpg/1"
+
+
+def alternate_path_shard(shard: Mapping[str, Any]) -> bool:
+    producer = shard.get("producer") or {}
+    return (f"{shard.get('name')}/{shard.get('shard_id')}" == ALT_PATH_SHARD
+            and producer.get("job") == "job_code_graph_index" and producer.get("kind") == "alternate_cpg"
+            and producer.get("schema") == ALT_SCHEMA)
+
+
+def cited_path(core: RetrievalCore, *, identity: str, shard: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Point read for the application, not a worker tool. Never enumerate paths to a sink."""
+    if (LogicalIdentity.parse(identity).kind is not EntityKind.DATAFLOW_PATH
+            or shard not in core.indexes.get(shard.get("name"), ())
+            or shard.get("producer", {}).get("job") != "job_code_graph_index"
+            or not (alternate_path_shard(shard) or (shard["name"] == GRAPH_INDEX
+                    and shard["producer"].get("family") == Family.DATAFLOW_PATH.value))):
+        return None
+
+    def operation(deadline):
+        with closing(core._database(shard, deadline)) as db:
+            row = db.execute("SELECT payload_json FROM entities WHERE identity=? AND kind=?",
+                             (identity, Family.DATAFLOW_PATH.value)).fetchone()
+            if row is None:
+                return [], [], False, 0
+            raw = json.loads(row[0])
+            return [_restore_paths(raw, core._safe_payload(raw))], [], False, 0
+
+    response = core._execute("cited_graph_path", {"identity": identity, "shard_sha256": shard["sha256"]}, operation)
+    return response["results"][0] if response["results"] and not response["truncated"] else None
+
+
+def cited_cpg_nodes(core: RetrievalCore, shard: Mapping[str, Any], ids: tuple[str, ...]) -> dict[str, dict]:
+    """Point reads of only the endpoints named by one stored path, from the very same shard."""
+    if (not alternate_path_shard(shard) or shard not in core.indexes.get("analysis", ())
+            or not 1 <= len(ids) <= 17):
+        return {}
+    # Publisher derives logical IDs from native node ID and node kind. Do not try other indexes
+    # or nearest-function matches when an endpoint is absent from this pinned publication.
+    from appsec_review.jobs.job_code_graph_index.alternate_cpg import _NODE_ENTITY_KIND
+    expected = {LogicalIdentity.derive(kind, core.manifest["target_snapshot"], {"cpg_node_id": n}).value: n
+                for n in ids for kind in set(_NODE_ENTITY_KIND.values())}
+
+    def operation(deadline):
+        sql = ("SELECT e.identity,e.native_id,e.name,e.kind,l.path,l.file_sha256,l.start_line,l.end_line,"
+               "l.target_snapshot,l.ambiguous,l.confidence FROM entities e LEFT JOIN locations l ON l.entity_id=e.identity "
+               "WHERE json_extract(e.payload_json,'$.schema')=? AND json_extract(e.payload_json,'$.cpg_record')='cpg_node' "
+               "AND e.identity IN (" + ",".join("?" for _ in expected) + ") ORDER BY e.identity")
+        with closing(core._database(shard, deadline)) as db:
+            rows = [dict(row) for row in db.execute(sql, (ALT_SCHEMA, *expected))
+                    if expected[row["identity"]] == row["native_id"]]
+        return rows, [], False, 0
+
+    response = core._execute("cited_cpg_nodes", {"shard_sha256": shard["sha256"], "native_ids": ids}, operation)
+    if response["truncated"]:
+        return {}
+    rows = response["results"]
+    return {r["native_id"]: r for r in rows if sum(item["native_id"] == r["native_id"] for item in rows) == 1}

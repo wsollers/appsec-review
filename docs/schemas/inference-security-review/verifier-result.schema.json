@@ -23,6 +23,23 @@
     "citations": {
       "$ref": "common.schema.json#/$defs/predicate_citations"
     },
+    "gap_citations": {
+      "description": "Cell-local material gaps; not source identities or proposed evidence relations.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 192,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["predicate", "label", "gap"],
+        "properties": {
+          "predicate": {"$ref": "common.schema.json#/$defs/predicate"},
+          "label": {"type": "string", "pattern": "^X[1-9][0-9]{0,3}$"},
+          "gap": {"type": "string", "minLength": 1, "maxLength": 1000}
+        }
+      }
+    },
     "proposed_relations": {
       "$ref": "common.schema.json#/$defs/proposed_relations"
     },
@@ -42,5 +59,9 @@
         "insufficient_evidence"
       ]
     }
+  },
+  "if": {"required": ["gap_citations"]},
+  "then": {
+    "properties": {"proposed_disposition": {"const": "insufficient_evidence"}}
   }
 }

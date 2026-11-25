@@ -226,3 +226,63 @@ Scripted offline acceptance covers actual full-catalog publications through proj
 and red/blue/verifier request bodies with source retrieval and indirect-proof guards. It is not
 live-provider efficacy validation, real-host target execution, runtime-adapter acceptance, exploit
 confirmation or customer safety certification.
+
+
+## Tuning and whole-job recovery: `job_owasp_control_assessment`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.max_batch_size` | `12` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_batches` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_components` | `128` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_components_per_batch` | `5` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_discovery_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_discovery_files` | `512` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_evidence_per_component` | `60` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_queries` | `12` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_source_lines` | `120` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_subjects_per_control` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_tag_records` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_turns` | `4` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.max_input_tokens` | `24000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.max_output_tokens` | `6000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.retries` | `1` | coverage | integer >=0; exact parser/cross-field bounds? |
+| `settings.model.timeout_seconds` | `120` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.models.reviewer.max_input_tokens` | `24000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.models.reviewer.max_output_tokens` | `6000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.models.reviewer.retries` | `1` | coverage | integer >=0; exact parser/cross-field bounds? |
+| `settings.models.reviewer.timeout_seconds` | `120` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.asvs_level` | ASVS level and selected model/framework change the required assessment/control set. |
+| `settings.dynamic_authorized` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.model.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.model.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.model.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.model.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.reviewer.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.models.reviewer.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.reviewer.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.models.reviewer.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `steps.standards_selection.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.characterization.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.applicability.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.batching.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.validation.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.verification.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.join.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.publication.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.

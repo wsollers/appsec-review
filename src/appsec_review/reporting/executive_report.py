@@ -124,7 +124,7 @@ def _finding_blocks(index: int, item: Mapping[str, Any], bound: BoundDossier | N
     preconditions = dossier.get("preconditions") or ()
     items += [Para("Preconditions (accepted claim assumptions, not independently observed here)", muted=True),
               _bullets(preconditions or ["Not recorded; no prerequisites are inferred."]),
-              Para("Attack path: entry to vulnerable function", muted=True),
+              Para("Attack path: entry to vulnerable function (cited static evidence)", muted=True),
               Para("Cited means retained predicate evidence, not an observed execution. Analyst-assessed evidence "
                    "remains noncounted; claim preconditions remain assumed; missing transitions remain unknown. "
                    "Neither citation order nor a conditional CBMC witness establishes an ordered execution path.",

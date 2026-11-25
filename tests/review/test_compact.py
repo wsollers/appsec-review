@@ -360,6 +360,28 @@ def test_a_verifier_stance_without_a_resolvable_citation_is_unresolved() -> None
     expansion = verifier({"disposition": "supported", "per_predicate": {
         "affected_construct": {"stance": "supports", "cites": ["K404"]}}})
     assert expansion.result["proposed_relations"] == [] and expansion.feedback
+    assert expansion.result["proposed_disposition"] == "insufficient_evidence"
+
+
+@pytest.mark.parametrize("stance", ["needs_gap", "unverified", "insufficient_evidence", "unresolved"])
+def test_blind_verifier_gap_is_uncertainty_not_entity_evidence(stance):
+    expansion = verifier({"disposition": "unverified", "per_predicate": {
+        "security_impact": {"stance": stance, "cites": ["X1", "X99"]}}})
+    result = expansion.result
+    assert not SCHEMAS.errors("verifier-result", result)
+    assert result["proposed_disposition"] == "insufficient_evidence"
+    assert result["gap_citations"] == [{"predicate": "security_impact", "label": "X1", "gap": table().text_of("X1")}]
+    assert not result["proposed_relations"] and not result["citations"]
+    assert any("X99" in note for note in expansion.feedback)
+    assert SCHEMAS.errors("verifier-result", {**result, "proposed_disposition": "confirmed"})
+
+
+def test_blind_verifier_drops_gap_used_for_confirmation():
+    expansion = verifier({"disposition": "confirmed", "per_predicate": {
+        "security_impact": {"stance": "supports", "cites": ["X1"]}}})
+    assert expansion.result["proposed_disposition"] == "insufficient_evidence"
+    assert not expansion.result["proposed_relations"] and "gap_citations" not in expansion.result
+    assert any("X1" in item for item in expansion.feedback)
 
 
 # ------------------------------------------------------------------------------------------------ poc_basis

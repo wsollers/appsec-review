@@ -20,7 +20,7 @@ DATASETS = (
             indexes=("analysis",), prefixes=("tree-sitter-coverage-",), route="coverage index=analysis"),
     artifact_only("tree_sitter_node_shards", "parse", "syntax", "appsec-review/tree-sitter-normalizer/1",
                   "Normalized Tree-sitter syntax node JSONL shards.",
-                  artifacts=("data/treesitter/shards/*.jsonl",),
+                  artifacts=("data/treesitter/shards/*.jsonl", "data/treesitter/attempts/*/shards/*.jsonl"),
                   reason="same nodes as the accepted analysis shards; kept for deterministic reuse"),
     artifact_only("tree_sitter_cfg", "parse", "syntax", "appsec-review/tree-sitter-cfg/1",
                   "Deterministic intra-procedural Tree-sitter CFG basic blocks, control-flow edges and branch guard polarities.",
@@ -28,7 +28,7 @@ DATASETS = (
                   reason="intra-procedural CFG and guard dominators live in accepted analysis shards; JSONL artifacts support deterministic reuse and audit"),
     artifact_only("tree_sitter_scope_results", "parse", "syntax", "appsec-review/tree-sitter-ast/1",
                   "Per-scope Tree-sitter parse metadata and dynamic scope outcomes.",
-                  artifacts=("data/treesitter/shards/*.json",
+                  artifacts=("data/treesitter/shards/*.json", "data/treesitter/attempts/*/shards/*.json",
                              _A + "/steps/parse/tasks/dynamic_scopes/dynamic/*.json"),
                   reason="per-scope metadata records shard reuse and dynamic fan-out outcomes; syntax queries use "
                          "accepted analysis shards"),

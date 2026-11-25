@@ -42,8 +42,9 @@ def test_real_inference_job_handoff_publishes_manifest_metrics_and_no_invented_c
         key: outputs["publication.publish_handoff"]["artifact"][key] for key in ("path", "sha256")})
     assert handoff["schema"] == "appsec-review/inference-review-handoff/3"
     manifest = chains.read_artifact(fixture.run_root, handoff["attack_chain_manifest"])
-    assert manifest["items"] and all(item["status"] == "insufficient_evidence" for item in manifest["items"])
-    assert any("no_commissioned_native_continuity_producer" in gap for gap in manifest["gaps"])
+    assert manifest["items"] == [] and manifest["finding_paths"] == []
+    assert "reported_findings_without_cited_graph_path" in manifest["gaps"]
+    assert manifest["exploration"]["expanded"] == 0
     paths = [
         fixture.run_root / output["ledger_shard"]["path"]
         for output in outputs.values()

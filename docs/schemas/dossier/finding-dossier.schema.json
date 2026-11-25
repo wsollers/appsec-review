@@ -192,6 +192,33 @@
         }
       }
     },
+    "finding_path_rows": {
+      "type": "array",
+      "maxItems": 8192,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stage",
+          "assessment",
+          "references"
+        ],
+        "properties": {
+          "stage": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "assessment": {
+            "type": "string",
+            "maxLength": 16384
+          },
+          "references": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        }
+      }
+    },
     "taint_path_timeline": {
       "type": "array",
       "items": {

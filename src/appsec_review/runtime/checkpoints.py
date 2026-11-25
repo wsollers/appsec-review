@@ -87,6 +87,8 @@ def admitted_output(run_root: Path, entry: Mapping[str, Any], claim: Mapping[str
             or checkpoint["input_key"] != input_key(claim)):
         raise ValueError("unit checkpoint input/implementation/portability changed")
     original = read_document(verify_reference(run_root, checkpoint["claim"]))
+    if original.get("attempt_id") != claim.get("attempt_id"):
+        raise ValueError("cross-attempt unit salvage is not a whole-job recovery")
     if input_key(original) != input_key(claim):
         raise ValueError("checkpoint claim differs from the admitted fresh attempt")
     status = read_document(verify_reference(run_root, checkpoint["status"]))
@@ -120,26 +122,7 @@ def _reusable_predecessor(run_root: Path, previous: Path, claim: Mapping[str, An
 
 
 def select_units(run_root: Path, job: Job, claim: Mapping[str, Any]) -> dict[str, Any]:
+    """A failed/new job executes every unit; only accepted whole jobs are reusable."""
     from appsec_review.runtime.launch import unit_order
-    candidates = sorted((run_root / f"data/jobs/{job.job_id}/attempts").glob("*/claim.json"))
-    candidates = [path for path in candidates if path.parent.name < claim.get("attempt_id", "attempt_9999")]
-    previous = candidates[-1].parent if candidates else None
-    result = {}
-    for unit_id in unit_order(job):
-        entry: dict[str, Any] = {"action": "RUN", "reason": "no failed or verified-stopped predecessor with a successful checkpoint"}
-        unit = next(unit for unit in job.units if unit.unit_id == unit_id)
-        if previous is not None and (previous / "status.json").exists():
-            step, task = unit_id.split(".")
-            checkpoint = previous / "steps" / step / "tasks" / task / "checkpoint.json"
-            try:
-                if checkpoint.exists() and _reusable_predecessor(run_root, previous, claim):
-                    entry["checkpoint"] = reference(run_root, checkpoint)
-                    admitted_output(run_root, entry, claim, unit_id)
-                    if any(result[dep]["action"] != "REUSE" for dep in unit.dependencies):
-                        entry["reason"] = "dependency unit is not admitted for reuse"
-                    else:
-                        entry.update(action="REUSE", reason="successful portable unit; exact inputs and implementation")
-            except (OSError, ValueError, KeyError, TypeError) as exc:
-                entry["reason"] = f"checkpoint admission refused: {type(exc).__name__}: {exc}"
-        result[unit_id] = entry
-    return result
+    return {unit_id: {"action": "RUN", "reason": "whole-job attempt; no prior cell reuse"}
+            for unit_id in unit_order(job)}

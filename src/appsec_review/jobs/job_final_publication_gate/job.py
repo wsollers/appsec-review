@@ -70,9 +70,11 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         document = verified.document
         document["_decision_audit"] = classifier.decision_audit_summary(
             verified.decision_audit, document["inputs"]["job_handoff"]["sha256"])
-        configuration_sha = resolved_configuration_identity(unit.job.run_root)
-        configuration_path = unit.job.run_root / "data" / "configuration" / "resolved.json"
-        configuration = json.loads(configuration_path.read_text(encoding="utf-8"))
+        from appsec_review.runtime.configuration import configuration_snapshot
+        snapshot = configuration_snapshot(unit.job.run_root, unit.job.resolved_config_sha256)
+        configuration_sha = snapshot.sha256
+        configuration_path = snapshot.directory / "resolved.json"
+        configuration = snapshot.document
         jobs = configuration["jobs"]
         enabled = {name: bool(jobs.get(job, {}).get("settings", {}).get("enabled", False))
                    for name, (job, *_rest) in PRODUCERS.items()}

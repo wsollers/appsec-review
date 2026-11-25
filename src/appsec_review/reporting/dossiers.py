@@ -13,6 +13,7 @@ from typing import Any, Mapping, Sequence, cast
 from appsec_review.jobs.completion_contracts import (
     DOSSIER_SCHEMA, DossierKind, FindingBinding, nonexecution_assurance, verify_nonexecution_assurance,
 )
+from appsec_review.retrieval.graph import ALT_PATH_SHARD
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.decision_audit.contracts import DecisionRecord, VerificationRecord
 from appsec_review.review.decision_audit.reader import AcceptedAudit
@@ -21,6 +22,7 @@ from appsec_review.storage import canonical_json
 from .digest import bullets, code, field, table
 from .dimensions import DIMENSIONS, dimension_of_package, owasp_of_cwe_or_domain
 from .model import Box, Document, Fields, Heading, Para, Stat, Stats
+from .technical_evidence import attack_path, citations, cited_path_rows
 from .text import bound, bound_lines, clean
 from .tokens import BoxKind, Limits
 
@@ -310,7 +312,8 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
                   claim: Mapping[str, Any], relations: Sequence[Mapping[str, Any]],
                   excerpts: Sequence[Mapping[str, Any]] = (), poc: Mapping[str, Any] | None = None,
                   poc_source: str | None = None, remediation: Sequence[Mapping[str, Any]] = (),
-                  chains: Sequence[Mapping[str, Any]] = (), provenance: Mapping[str, Any],
+                  chains: Sequence[Mapping[str, Any]] = (), finding_paths: Sequence[Mapping[str, Any]] = (),
+                  provenance: Mapping[str, Any],
                   gaps: Sequence[str] = (), limits: DossierLimits = DossierLimits(),
                   decision_audit: AcceptedAudit | None = None) -> dict[str, Any]:
     """Build a closed, deterministic model from already verified accepted records."""
@@ -447,8 +450,29 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
         sources=sources,
         claim=claim,
     )
-    # Neither accepted producer carries an ordered taint path. Excerpt/citation order is context only.
-    taint_path_timeline: list[dict[str, Any]] = []
+    path_rows = []
+    for path in finding_paths:
+        pin = path["citation"]
+        relation = by_id.get(pin["relation_id"])
+        alternate_context = (relation is not None and relation.get("shard_id") == ALT_PATH_SHARD
+                             and path["status"] == "unverified" and relation.get("complete") is True
+                             and relation.get("retrieval_receipt_sha256") and relation.get("provenance") is None
+                             and relation.get("kind") in {"supports", "qualifies"})
+        if (path["claim_id"] != binding.claim_id or path["adjudication_id"] != finding["adjudication_id"]
+                or path["manifest_sha256"] != (provenance.get("source_manifest") or {}).get("sha256")
+                or (pin["relation_id"] not in cited and not alternate_context) or relation is None
+                or any(pin[key] != relation.get(key) for key in pin)
+                or relation.get("claim_id") != binding.claim_id or relation.get("entity_kind") != "dataflow_path"
+                or relation.get("predicate") != "source_to_sink_reachability"
+                or (relation.get("kind") != "supports" and not alternate_context)):
+            raise IntegrityError("dossier finding path disagrees with the accepted finding or evidence pins")
+        for row in cited_path_rows(path):
+            path_rows.append({key: project.text(value, "finding_path." + key,
+                                                identity=key == "references" or row.stage in {
+                                                    "Producer evidence", "Retrieval receipt", "Accepted shard",
+                                                    "Snapshot / manifest"})
+                              for key, value in asdict(row).items()})
+    # Historical timeline rows had no authenticated path citation. Do not upgrade them.
     adjudication_summary = _build_adjudication_summary(
         finding=finding,
         statement=statement_proj,
@@ -476,7 +500,8 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
         "ship_block": ship_proj,
         "missing_predicates": missing_preds,
         "classification_badge": classification_badge,
-        "taint_path_timeline": taint_path_timeline,
+        "taint_path_timeline": [],
+        "finding_path_rows": path_rows,
         "adjudication_summary": adjudication_summary,
         "poc_harness_summary": poc_harness_summary,
         "remediation_guide": remediation_guide,
@@ -499,7 +524,6 @@ def dossier_document(dossier: Mapping[str, Any], *, source_date_epoch: int = 0) 
         raise IntegrityError("unsupported dossier model")
     limits = Limits(text_chars=16000, value_chars=240, code_lines=200, code_chars=32000, rows=256, ids=32)
     badge = dossier.get("classification_badge") or {}
-    timeline = dossier.get("taint_path_timeline") or ()
     adj = dossier.get("adjudication_summary") or {}
     poc_sum = dossier.get("poc_harness_summary") or {}
     rem_guide = dossier.get("remediation_guide") or {}
@@ -534,24 +558,11 @@ def dossier_document(dossier: Mapping[str, Any], *, source_date_epoch: int = 0) 
                 Para("Preconditions"), bullets(dossier["preconditions"] or ["None recorded."], limits))),
         Heading(1, "Source-to-Sink Call & Taint Path Timeline", "taint-timeline"),
     ]
-    if timeline:
-        blocks.append(Box(
-            BoxKind.EVIDENCE,
-            "Ordered source-to-sink propagation and guard checks",
-            items=(table(
-                ("Step", "Role", "Location", "Symbol", "Taint Transform", "Guard Disposition"),
-                [(str(step["step_index"]), step["role"], step["location"], step["symbol"],
-                  step["taint_transform"], step["guard_disposition"])
-                 for step in timeline],
-                limits,
-                widths=(0.07, 0.11, 0.22, 0.18, 0.21, 0.21),
-                mono=(True, True, True, True, False, False),
-            ),),
-        ))
-    else:
-        blocks.append(Box(BoxKind.GAP, "No source-to-sink path recorded",
-                          items=(Para("No ordered path steps were available for this finding. "
-                                      "Source excerpts and citations below are unordered context, not a taint path."),)))
+    rows = attack_path(dossier, citations(dossier))
+    blocks.append(Box(BoxKind.EVIDENCE if dossier.get("finding_path_rows") else BoxKind.GAP,
+                      "Cited static path" if dossier.get("finding_path_rows") else "No source-to-sink path recorded",
+                      items=(Para("Static evidence only; source excerpts and unordered citations are not a path."),
+                             *(Para(f"{row.stage}: {row.assessment} [{row.references}]") for row in rows))))
 
     blocks.append(Heading(1, "Accepted adjudication and evidence summary", "adjudication"))
     if adj:

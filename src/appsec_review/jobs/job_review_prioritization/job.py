@@ -868,7 +868,7 @@ def build_job() -> Job:
                            "config": hashlib.sha256(canonical_json(dict(settings))).hexdigest()},
             parser_identity="tree-sitter-accepted-shards", normalizer_identity=MAPPING_IDENTITY + "+" + POLICY_IDENTITY,
             mapping_identity=GRAPH_IDENTITY)
-        path = unit.job.run_root / "data" / "indices" / "priority" / SHARD_ID / f"{fingerprint}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "priority" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / SHARD_ID / f"{fingerprint}.sqlite"
         checkpoint_path = unit.unit_root / "artifacts" / f"index-checkpoint-{fingerprint}.json"
         # Upstream units declared their own gaps already; this unit declares only its own and carries the
         # merged list as ``aggregated_gaps`` so the job outcome holds one gap record per distinct reason.

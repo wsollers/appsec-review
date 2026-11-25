@@ -1,8 +1,7 @@
 """Conservative display adapters for the existing, gate-bound dossier contract.
 
-These are views, not new evidence or scoring inputs. The accepted dossier currently has neither
-authenticated ordered call edges nor affected-version CVE/CVSS/EPSS records. In particular its
-legacy timeline and free-text locators are not a source of execution order or function names.
+Only producer-verified finding path rows carry order. Unordered citations, excerpt order,
+legacy timelines and free-text locators cannot establish an edge or an advisory score.
 """
 from __future__ import annotations
 
@@ -79,7 +78,42 @@ def citations(dossier: Mapping[str, Any]) -> tuple[Citation, ...]:
     return tuple(result)
 
 
+def cited_path_rows(path: Mapping[str, Any]) -> tuple[PathRow, ...]:
+    """Display one producer-checked graph path; never connect different path identities."""
+    pin = path["citation"]
+    cite = pin["relation_id"]
+    rows = [PathRow("Cited static path", f"{path['status'].replace('_', ' ')}; not a runtime observation.", cite),
+            PathRow("Producer evidence", pin["entity_id"], pin["content_sha256"]),
+            PathRow("Accepted shard", pin["shard_id"], path["shard_sha256"] or "[unverified link]"),
+            PathRow("Retrieval receipt", pin["relation_id"], pin["retrieval_receipt_sha256"] or "[unverified link]"),
+            PathRow("Snapshot / manifest", path["target_snapshot"], path["manifest_sha256"])]
+    for step in path["steps"]:
+        if step["gap_before"]:
+            rows.append(PathRow("Missing transition", "[unverified link]", cite))
+        span = step["span"]
+        symbol = step["symbol"] or step["symbol_id"] or "[unverified link]"
+        where = f"{span['path']}:{span['start_line']}-{span['end_line']}" if span else "[unverified link]"
+        detail = f"{symbol} at {where}"
+        ref = f"{cite} / step {step['ordinal']}"
+        edge = step.get("incoming_edge")
+        if edge:
+            detail += f"; incoming {edge['kind']} ({edge['tier']})"
+            ref += f"; edge {edge['id']}"
+            if site := edge.get("site"):
+                detail += f" at {site['path']}:{site['start_line']}"
+                ref += f"; site file {site['file_sha256']}"
+        rows.append(PathRow(f"{step['ordinal'] + 1}. {step['role']}", detail,
+                            f"{ref}; file {span['file_sha256']}" if span else ref))
+    rows.extend(PathRow("Path control", control["description"], control["reference"]) for control in path["controls"])
+    rows.extend(PathRow("Counterevidence", "Recorded against reachability", ref) for ref in path["counter_relations"])
+    rows.extend(PathRow("Qualification", "[unverified link] " + reason, cite) for reason in path["limitations"])
+    return tuple(rows)
+
+
 def attack_path(dossier: Mapping[str, Any], refs: tuple[Citation, ...]) -> tuple[PathRow, ...]:
+    if dossier.get("finding_path_rows"):
+        return tuple(PathRow(**row) for row in dossier["finding_path_rows"])
+
     def refs_for(*predicates: str) -> str:
         return ", ".join(row.label for row in refs if row.predicate in predicates) or "No admitted citation"
 
@@ -87,17 +121,17 @@ def attack_path(dossier: Mapping[str, Any], refs: tuple[Citation, ...]) -> tuple
     # contain a call path, and bounded model-checker witnesses do not prove external reachability.
     return (
         PathRow("Attacker input / entry",
-                "Entry identity and input-to-function transition not established in accepted evidence.",
+                "[unverified link] Entry identity and input-to-function transition not established in accepted evidence.",
                 refs_for("attacker_input_control", "configuration_enables")),
         PathRow("Relevant functions / calls",
-                "Function names and ordered calls not established in accepted evidence. "
+                "[unverified link] Function names and ordered calls not established in accepted evidence. "
                 "Cited affected-source spans are listed in the evidence register, not joined into a path.",
                 refs_for("affected_construct", "source_to_sink_reachability")),
         PathRow("Trust boundary / guard",
-                "Specific boundary crossing and guard disposition not established in accepted evidence.",
+                "[unverified link] Specific boundary crossing and guard disposition not established in accepted evidence.",
                 refs_for("missing_or_ineffective_guard", "configuration_enables")),
         PathRow("Vulnerable sink / effect",
-                "Sink function and entry-to-sink chain not established in accepted evidence. "
+                "[unverified link] Sink function and entry-to-sink chain not established in accepted evidence. "
                 "The accepted mechanism and impact classification are described above.",
                 refs_for("affected_construct", "security_impact")),
     )

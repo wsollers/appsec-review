@@ -664,7 +664,7 @@ def _index_identity(unit: UnitContext, builder: IndexBuilder,
 def _shard_path(unit: UnitContext, fingerprint: str, shard_id: str) -> Path:
     # The fingerprint already binds the shard identity. Keeping the filename compact also keeps
     # restart-safe test and run paths below the Windows legacy path-length boundary.
-    return unit.job.run_root / "data" / "indices" / "artifacts" / f"{fingerprint}.sqlite"
+    return unit.job.run_root / "data" / "indices" / "artifacts" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
 
 
 def _catalogs(unit: UnitContext) -> Mapping[str, Any]:

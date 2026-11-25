@@ -10,19 +10,19 @@ from appsec_review.runtime.datasets import artifact_only, indexed, protected
 
 
 _A = "data/jobs/job_codeql_analysis/attempts/*"
-_SCOPES = "data/codeql/scopes/*"
+_SCOPES = "data/codeql/attempts/*/scopes/*"
 DATASETS = (
     artifact_only("codeql_predecessor_import", "execution", "codeql",
                   "appsec-review/codeql-predecessor-import/1",
                   "Explicit first-party database re-admission and detached-copy provenance.",
-                  artifacts=("data/codeql/predecessor-import.json",),
+                  artifacts=("data/codeql/predecessor-import.json", "data/codeql/attempts/*/predecessor-import.json"),
                   reason="records source and destination custody without importing prior findings"),
     # Declared before the scope material: the inventory audit gives a file to the first matching
     # claim, so the run-level graph export index must precede the generic artifacts/codeql claim.
     artifact_only("codeql_graph_export", "execution", "codeql", "appsec-review/codeql-graph-export/1",
                   "Bounded raw CodeQL graph exports and their manifest per scope "
                   "(appsec-review/codeql-graph-export-manifest/1), plus the run-level export index.",
-                  artifacts=(_SCOPES + "/exports/**", _A + "/artifacts/codeql/graph-exports.json"),
+                  artifacts=("data/codeql/scopes/*/exports/**", _SCOPES + "/exports/**", _A + "/artifacts/codeql/graph-exports.json"),
                   reason="raw rows hold CodeQL internal ids; normalized facts are the graph index"),
     indexed("codeql_observations", "execution", "codeql", "appsec-review/codeql-sarif-normalizer/3",
             "CodeQL observations with rule identity, mapped locations and ordered flow steps.",
@@ -41,7 +41,7 @@ DATASETS = (
               "CodeQL databases, staged workspaces, raw SARIF, replay commands and execution streams.",
               # Every scope subtree except exports/ (owned by codeql_graph_export): a tree claim on
               # the scope root would swallow the export files.
-              artifacts=(_SCOPES + "/*", _SCOPES + "/database/**", _SCOPES + "/workspace/**",
+              artifacts=("data/codeql/scopes/**", _SCOPES + "/*", _SCOPES + "/database/**", _SCOPES + "/workspace/**",
                          _SCOPES + "/executions/**", _SCOPES + "/queries/**", _SCOPES + "/export/**",
                          "data/codeql/predecessor-import.lock",
                          _A + "/steps/plan/tasks/inventory/inventory/executions/**"),

@@ -44,20 +44,18 @@ def _invoke(definition, request: Mapping[str, Any], label: str) -> Mapping[str, 
     return result.output_for_node("execute_build_node")
 
 
-def load_iteration_configuration(run_root: Path):
+def load_iteration_configuration(run_root: Path, expected_sha256: str | None = None):
     from appsec_review.config import load_config
-    manifest = json.loads((run_root / "data/configuration/manifest.json").read_bytes())
-    selection = manifest["selection"]
-    config = load_config(Path(manifest["sources"][0]["path"]), profile=selection["profile"],
-                         overlay=selection.get("overlay"), compiler_target=selection["compiler_target"])
-    if config.resolved_sha256 != manifest["resolved_sha256"]:
-        raise ValueError("iteration worker configuration differs from its frozen run")
-    return config
+    from appsec_review.runtime.configuration import configuration_snapshot
+    snapshot = configuration_snapshot(run_root, expected_sha256)
+    return load_config(_snapshot=snapshot)
 
 
-def invoke_registered_iteration(run_root: Path, request: Mapping[str, Any], label: str):
+def invoke_registered_iteration(run_root: Path, request: Mapping[str, Any], label: str,
+                                expected_sha256: str | None = None):
     from appsec_review.runtime import JobRunner
-    return _invoke(registered_definition(load_iteration_configuration(run_root), JobRunner), request, label)
+    config = load_iteration_configuration(run_root, expected_sha256)
+    return _invoke(registered_definition(config, JobRunner), request, label)
 
 
 def iteration_inputs(run_root: Path, reference: Mapping[str, Any]):
@@ -111,7 +109,7 @@ def build_job() -> Job:
         pending = json.loads(pending_path.read_bytes())
         if pending["request"] != reference:
             raise ValueError("standalone iteration is not the controller's claimed request")
-        config = load_iteration_configuration(unit.job.run_root)
+        config = load_iteration_configuration(unit.job.run_root, unit.job.resolved_config_sha256)
         language = replace(unit, job=replace(unit.job, config=config.job("job_language_build")))
         controller, accepted, _skipped = iteration_controller(language)
         return controller._execute(reference, unit.job.orchestration["run_id"],

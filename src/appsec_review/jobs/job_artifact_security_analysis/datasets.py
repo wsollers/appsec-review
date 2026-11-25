@@ -31,7 +31,8 @@ DATASETS = (
               artifacts=(_A + "/artifacts/asa/**", _A + "/steps/analyze/tasks/*/containers/**",
                          _A + "/steps/analyze/tasks/*/target-inputs/**",
                          _A + "/steps/analyze/tasks/*/installer-records/**",
-                         "data/artifact-security/checkpoints/*/*.json"), reason=RAW),
+                         "data/artifact-security/checkpoints/*/*.json",
+                         "data/artifact-security/attempts/*/checkpoints/*/*.json"), reason=RAW),
 )
 
 from appsec_review.runtime.contracts import (

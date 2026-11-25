@@ -590,7 +590,7 @@ def test_checkpoints_seeded_coverage_database_card_and_publish_scope_edges(tmp_p
     card = database_card(scope, snapshot=SNAPSHOT, coverage=seeded_cov)
     assert card.payload["coverage"] == "partial"
 
-    # Pre-create leftover sqlite shard to verify _publish_one unlinks it cleanly, and include symbol-only relation.
+    # Publish symbol-only relations, then verify a later attempt preserves these shards.
     sym1 = EntityRecord(
         LogicalIdentity.derive(EntityKind.SYMBOL, SNAPSHOT, {"s": "1"}), "u1", "f1", "sym f1", {}, None
     )
@@ -610,7 +610,9 @@ def test_checkpoints_seeded_coverage_database_card_and_publish_scope_edges(tmp_p
         unit_id="correlate.scopes",
         card=card,
     )
-    # Second publish_scope with same identity exercises existing sqlite file unlink branch!
+    # A whole-job retry publishes into its own attempt, preserving the prior shard bytes.
+    retained = {item["relative_path"]: (tmp_path / item["relative_path"]).read_bytes() for item in shards}
+    scope = {**scope, "attempt_id": "attempt_0002"}
     shards = publish_scope(
         tmp_path,
         scope=scope,
@@ -625,6 +627,8 @@ def test_checkpoints_seeded_coverage_database_card_and_publish_scope_edges(tmp_p
         card=card,
     )
     assert len(shards) == 8
+
+    assert all((tmp_path / path).read_bytes() == data for path, data in retained.items())
 
     # Orphan relation touching neither fact nor symbol raises IntegrityError.
     miss1 = LogicalIdentity.derive(EntityKind.SYMBOL, SNAPSHOT, {"m": "1"}).value
@@ -653,7 +657,7 @@ def test_checkpoints_seeded_coverage_database_card_and_publish_scope_edges(tmp_p
     cp_file.write_text("{bad-json", encoding="utf-8")
     assert reuse_checkpoint(tmp_path, "cpp-s1", "ident-1") is None
 
-    # Corrupted shard sha256 triggers cleanup of shard files & checkpoint.json.
+    # Corrupted metadata is not reused and never authorizes deletion.
     atomic_json(
         cp_file,
         {
@@ -663,11 +667,13 @@ def test_checkpoints_seeded_coverage_database_card_and_publish_scope_edges(tmp_p
         },
     )
     assert reuse_checkpoint(tmp_path, "cpp-s1", "ident-1") is None
-    assert not cp_file.exists()
+    assert cp_file.exists()
+    assert (tmp_path / shards[0]["relative_path"]).is_file()
 
     # Symlink checkpoint returns None.
     other = tmp_path / "other.json"
     atomic_json(other, {"ok": 1})
+    cp_file.unlink()
     cp_file.symlink_to(other)
     assert reuse_checkpoint(tmp_path, "cpp-s1", "ident-1") is None
 

@@ -101,7 +101,8 @@ class BuildIterations:
                  releases: Mapping[str, str], execution_identity: str, output_policy_identity: str,
                  validate_receipt: Callable[[Mapping[str, Any]], None] | None = None,
                  product_overrides: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
-                 omitted_receipts: Mapping[str, Mapping[str, Any]] | None = None):
+                 omitted_receipts: Mapping[str, Mapping[str, Any]] | None = None,
+                 attempt_id: str | None = None):
         self.run_root = run_root.resolve(strict=True)
         self.target = target.resolve(strict=True)
         self.graph = copy.deepcopy(dict(graph))
@@ -109,6 +110,7 @@ class BuildIterations:
         self.dispatches = {str(item["build_unit_id"]): copy.deepcopy(dict(item)) for item in dispatches}
         if len(self.dispatches) != len(dispatches):
             raise ValueError("iteration dispatches repeat a build unit")
+        self.attempt_id = attempt_id
         self.configuration = dict(configuration)
         self.releases = dict(releases)
         self.execution_identity = execution_identity
@@ -312,7 +314,7 @@ class BuildIterations:
                 self._binding(uid, ())
             except ReconstructionMiss as error:
                 refusals[uid] = str(error)
-        if not refusals and self.dispatches:
+        if not refusals and self.dispatches and self.attempt_id is None:
             for uid, entry in self._ledger()["nodes"].items():
                 if uid not in self.dispatches:
                     refusals[uid] = "retained producer has no selected recipe admission for workspace reconstruction"
@@ -542,6 +544,9 @@ class BuildIterations:
             prior = ledger["nodes"].get(uid)
             if prior is not None:
                 try:
+                    if self.attempt_id is not None and prior.get("producer_attempt_id") != self.attempt_id:
+                        retain(self.run_root, "ledgers", ledger)
+                        raise ReconstructionMiss("whole-job attempt requires recomputing every build node")
                     if prior["binding"] != binding.view():
                         raise ReconstructionMiss("selected node inputs changed")
                     if self.graph["schema"] == "appsec-review/build-topology/1" and any(
@@ -601,6 +606,7 @@ class BuildIterations:
                     found = writer.product_interfaces(completed["workspace_product"], binding)
                 receipt = read_reference(self.run_root, completed["receipt"])
                 ledger["nodes"][uid] = {
+                    "producer_attempt_id": self.attempt_id,
                     "binding": binding.view(), "product": completed["workspace_product"],
                     "receipt": completed["receipt"], "completion": result["completion"],
                     "before_generation": before, "generation": completed["generation"],

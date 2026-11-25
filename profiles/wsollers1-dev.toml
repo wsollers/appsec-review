@@ -1,0 +1,11 @@
+# WSOLLERS1 assessment budget. Inherit the base provider, models and reasoning.
+[jobs.job_owasp_control_assessment.settings]
+max_turns = 8
+
+[jobs.job_owasp_control_assessment.settings.model]
+max_input_tokens = 64000
+max_output_tokens = 8000
+
+[jobs.job_owasp_control_assessment.settings.models.reviewer]
+max_input_tokens = 64000
+max_output_tokens = 8000

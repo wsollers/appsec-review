@@ -18,6 +18,7 @@ from typing import Any
 from appsec_review.runtime import execution_safety as safety
 
 from . import anthropic_api, claude_cli, copilot_sdk, openai_api
+from ._copilot_worker import worker_scope
 from .claude_cli import ModelOutputError, parse_model_payload
 from .errors import ExecutionContractError, ModelCancelled, ModelTimeout, ProviderError
 from .request import Infer, ModelRequest, ModelResult, ReviewModelRequest
@@ -127,4 +128,4 @@ def check_models(provider: str, names: Sequence[str], *, timeout_seconds: int) -
 
 
 __all__ = ["Infer", "MODEL_CHECKS", "ModelOutputError", "ModelRequest", "ModelResult", "PROVIDERS",
-           "ReviewModelRequest", "check_models", "infer", "parse_model_payload"]
+           "ReviewModelRequest", "check_models", "infer", "parse_model_payload", "worker_scope"]

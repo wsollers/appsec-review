@@ -6,6 +6,7 @@ from collections.abc import Mapping
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 
@@ -51,7 +52,7 @@ def compose_environment(environ: dict[str, str] | None = None) -> dict[str, str]
 COPILOT_PROFILES = {"copilot-dev", "copilot-prod", "copilot-carbon-prod",
                    "copilot-dev-astra-6.2", "copilot-dev-gemini"}
 RUNTIME_PROFILES = ("dev", "prod", "copilot-dev", "copilot-prod", "copilot-carbon-prod",
-                   "copilot-dev-astra-6.2", "copilot-dev-gemini")
+                   "copilot-dev-astra-6.2", "copilot-dev-gemini", "wsollers1-dev")
 # Compose launches the application services only by this exact, host-verified image ID.
 IMAGE_VARIABLE = "APPSEC_REVIEW_DAGSTER_IMAGE"
 # Every Compose service that runs IMAGE_VARIABLE; a unit test keeps this equal to the compose files.
@@ -108,7 +109,9 @@ def read_environment(path: Path) -> dict[str, str]:
 
 def deployment_profile(environment: Path) -> str:
     values = read_environment(environment) if environment.is_file() else {}
-    profile = os.environ.get("APPSEC_REVIEW_PROFILE") or values.get("APPSEC_REVIEW_PROFILE") or "dev"
+    profile = os.environ.get("APPSEC_REVIEW_PROFILE") or values.get("APPSEC_REVIEW_PROFILE")
+    if not profile:
+        profile = "wsollers1-dev" if socket.gethostname().partition(".")[0].casefold() == "wsollers1" else "dev"
     if profile not in RUNTIME_PROFILES:
         raise RuntimeError(f"unknown runtime profile: {profile}")
     return profile

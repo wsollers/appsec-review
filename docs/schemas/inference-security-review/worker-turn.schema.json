@@ -489,6 +489,16 @@
                   "minimum": 1,
                   "maximum": 100
                 },
+                "block_limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "edge_limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
                 "cursor": {
                   "type": "string",
                   "maxLength": 4096
@@ -937,8 +947,7 @@
                   "type": "string",
                   "enum": [
                     "backward",
-                    "forward",
-                    "both"
+                    "forward"
                   ]
                 },
                 "max_depth": {

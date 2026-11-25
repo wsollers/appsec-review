@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import PurePosixPath
@@ -143,40 +144,202 @@ def review_tool_catalog(tools: Sequence[str]) -> list[dict[str, Any]]:
     return catalog
 
 
-def review_admission(core: Any, capability: Any) -> dict[str, Any]:
-    """Project only granted indexes and producers resolved by exact in-scope seed identities.
+# These are read routes, not grants. Each selector mirrors the corresponding retrieval
+# reader's index and producer/shard discriminator. Counts refer to backing rows, not
+# matching results for a particular argument, completeness, or confirmed findings.
+@dataclass(frozen=True)
+class _Source:
+    index: str
+    kinds: tuple[str, ...] = ()
+    job: str = ""
+    producer_kind: str = ""
+    query_set: str = ""
+    shard_prefix: str = ""
+    projection: str = ""
+    shard: str = ""
 
-    No inventory query or target-tree walk is used. Unresolved producers stay unknown, rather than
-    copying all same-index shard identities from the run. These metadata reads consume no worker grant.
-    """
+    def accepts(self, row: Mapping[str, Any]) -> bool:
+        producer = row["producer"]
+        return ((not self.job or producer.get("job") == self.job)
+                and (not self.producer_kind or producer.get("kind") == self.producer_kind)
+                and (not self.query_set or producer.get("query_set") == self.query_set)
+                and (not self.shard_prefix or row["shard_id"].startswith(self.shard_prefix))
+                and (not self.shard or row["shard_id"] == self.shard))
+
+    def count(self, row: Mapping[str, Any]) -> int | None:
+        if self.projection:
+            return row.get("projection_counts", {}).get(self.projection)
+        if self.kinds:
+            counts = row.get("kind_counts")
+            return sum(counts.get(kind, 0) for kind in self.kinds) if counts is not None else None
+        return row.get("entity_count")
+
+
+_TREE = "job_tree_sitter_ast"
+_GRAPH_KINDS = ("sink_site", "range_fact", "guard_fact", "call_site", "entry_point", "dataflow_path", "flow_summary")
+_DATASETS = {
+    "source": (_Source("source", ("source_file", "source_span")),),
+    "syntax": (_Source("analysis", job=_TREE, projection="syntax"),),
+    "cfg": (_Source("analysis", job=_TREE, projection="cfg_function"),),
+    "alternate_cpg": (_Source("analysis", shard="alternate-cpg"), _Source("analysis", producer_kind="alternate_cpg")),
+    "code_graph": (_Source("graph", _GRAPH_KINDS),),
+    "codeql_databases": (_Source("graph", ("codeql_database",), producer_kind="codeql_database"),),
+    "codeql_observations": (_Source("observations", ("tool_observation",), shard_prefix="codeql-"),),
+    "scanner_observations": (_Source("observations", ("tool_observation",)),),
+    "artifacts": (_Source("artifacts"),),
+    "build_security": (_Source("build_security"),),
+    "ci_configuration": tuple(_Source(index, shard_prefix="ci_") for index in ("observations", "evidence")),
+    "debug_symbols": (_Source("debug_symbols"),),
+    "binary": (_Source("binary", ("binary_function", "binary_call_site", "binary_import", "binary_string")),),
+    "change_context": (_Source("history", ("change_context_signal",), shard_prefix="change-context"),),
+    "hotspots": (_Source("priority", ("priority_item",)),),
+    "precomputed": (_Source("precomputed", ("precomputed_fact",)),),
+    "dataset_inventory": (_Source("inventory"),),
+    "threat_boundaries": (_Source("precomputed", ("precomputed_fact",), query_set="threat_boundaries"),),
+    "control_evidence": (_Source("precomputed", ("precomputed_fact",), query_set="control_evidence"),),
+    "document_context": (_Source("precomputed", ("precomputed_fact",), query_set="document_context"),
+                         _Source("observations", job="job_document_issue_analysis"),
+                         _Source("observations", shard_prefix="document")),
+    "engineering_signals": (_Source("history"), _Source("priority"),
+                            _Source("precomputed", query_set="history_context"),
+                            *(_Source(index, job=job) for index in ("analysis", "observations", "evidence")
+                              for job in ("job_test_coverage", "job_profile_data"))),
+    "dependency_advisories": (_Source("precomputed", query_set="dependency_advisories"),
+                              *(_Source(index, job="job_dependency_intelligence")
+                                for index in ("observations", "inventory"))),
+    "sanitizer_readiness": tuple(_Source(index, projection="sanitizer_readiness")
+                                for index in ("build_security", "inventory")),
+}
+_TOOL_DATASET = {
+    "read_excerpt": "source", "query_syntax": "syntax", "query_cfg_function": "cfg",
+    "query_guard_dominators": "cfg", "query_cpg_slice": "alternate_cpg", "query_call_paths": "alternate_cpg",
+    "query_code_graph": "code_graph", "list_codeql_databases": "codeql_databases",
+    "query_codeql_neighborhood": "codeql_databases", "query_codeql": "codeql_observations",
+    "query_observations": "scanner_observations", "query_artifacts": "artifacts",
+    "query_build_security": "build_security", "query_ci_configuration": "ci_configuration",
+    "query_debug_symbols": "debug_symbols", "query_change_context": "change_context", "query_hotspots": "hotspots",
+    "query_dataset_inventory": "dataset_inventory", "query_precomputed": "precomputed",
+    "query_threat_boundaries": "threat_boundaries", "query_owasp_gaps": "control_evidence",
+    "query_doc_drift": "document_context", "query_engineering_signals": "engineering_signals",
+    "query_sca_reachability": "dependency_advisories", "query_sanitizer_readiness": "sanitizer_readiness",
+}
+
+
+def _digest(value: Any) -> str:
+    return hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def catalog_digest(catalog: Sequence[Mapping[str, Any]]) -> str:
+    return _digest(catalog)
+
+
+def review_population(core: Any, indexes: Sequence[str]) -> dict[str, dict[str, Any]]:
+    """Verified run-local backing populations. A missing measurement is not a zero count."""
+    admitted = set(indexes)
+    inventory = core.dataset_inventory(sorted(admitted)) if admitted and hasattr(core, "dataset_inventory") else {}
+    populations = {}
+    for name, selectors in {**_DATASETS, "indexed_entities": tuple(_Source(i) for i in sorted(admitted))}.items():
+        sources = [s for s in selectors if s.index in admitted]
+        matches = {(s.index, row["shard_id"]): (row, s.count(row)) for s in sources
+                   for row in inventory.get(s.index, ()) if s.accepts(row)}
+        bindings = [(index, shard, row["sha256"]) for (index, shard), (row, _) in sorted(matches.items())]
+        unknown = any(s.index not in inventory for s in sources) or any(n is None for _, n in matches.values())
+        count = sum(n for _, n in matches.values() if n is not None)
+        gap_count = sum(len(row["coverage_gaps"]) for row, _ in matches.values())
+        state, reason = (
+            ("not_admitted", "index_not_admitted") if not sources else
+            ("partial", "population_unknown") if unknown else
+            ("partial", "producer_coverage_gap") if gap_count else
+            ("unavailable", "no_accepted_shard") if not bindings else
+            ("unavailable", "no_backing_rows") if count == 0 else ("available", None))
+        producers = {row["producer"].get("job") for row, _ in matches.values()}
+        producer = next(iter(producers)) if len(producers) == 1 else None
+        populations[name] = {
+            "name": name, "availability": state, "evidence_authority": "direct" if name == "source" else "context",
+            "row_count": None if unknown or not sources else count, "known_row_count": count,
+            "shard_count": len(bindings), "coverage_gap_count": gap_count, "gap": reason,
+            "producer": producer if isinstance(producer, str) and re.fullmatch(r"job_[a-z0-9_]+", producer) else None,
+            "accepted_sha256": bindings[0][2] if len(bindings) == 1 else None,
+            "bindings_sha256": _digest(bindings) if bindings else None,
+        }
+    return populations
+
+
+def populated_review_tools(candidates: Sequence[str], indexes: Sequence[str], population: Mapping[str, Any]
+                           ) -> tuple[str, ...]:
+    """Only narrow the caller's role allowlist; the capability still enforces every request."""
+    from appsec_review.review.capability import TOOL_INDEXES
+    generic = {"expand", "find", "search", "trace", "resolve_evidence"}
+    return tuple(sorted(tool for tool in set(candidates)
+                        if TOOL_INDEXES.get(tool, frozenset()).issubset(indexes)
+                        and (tool == "coverage" and bool(indexes) or
+                             population[_TOOL_DATASET.get(tool, "indexed_entities")]["known_row_count"] > 0
+                             and (tool in generic or tool in _TOOL_DATASET))))
+
+
+def review_query_sources(tools: Sequence[str], population: Mapping[str, Any]) -> tuple[str, ...]:
+    """Distinct graph/structural routes usable by this role, never inferred from worker text."""
+    from .skills import REVIEW_QUERY_DATASETS
+    return tuple(sorted({source for name in tools if (source := _TOOL_DATASET.get(name)) in REVIEW_QUERY_DATASETS
+                         and population[source]["known_row_count"] > 0}))
+
+
+def review_admission(core: Any, capability: Any) -> dict[str, Any]:
     capability.verify()
     if core.manifest_sha256 != capability.manifest_sha256:
         raise GuidanceError("card manifest differs from the issued capability")
-    manifest = getattr(core, "manifest", {})
-    shards = {(row["name"], row.get("shard_id", "default")): row for row in manifest.get("indexes", ())}
-    resolved: dict[str, list[Mapping[str, Any]]] = {}
-    for identity in sorted(capability.entities)[:MAX_ITEMS] if shards else ():
-        response = core.find(identity=identity, indexes=list(capability.indexes), limit=1)
-        for row in response["results"]:
-            shard = shards.get((row.get("index"), row.get("shard_id", "default")))
-            if shard is not None and row.get("identity") == identity:
-                resolved.setdefault(str(row["index"]), []).append(shard)
-    rows = []
-    for name in sorted(capability.indexes):
-        matching = resolved.get(name, ())
-        if matching:
-            for shard in sorted({row["sha256"]: row for row in matching}.values(), key=lambda row: row["sha256"]):
-                producer = shard.get("producer", {}).get("job")
-                rows.append(dataset(name, available=True, authority="direct" if name == "source" else "context",
-                                    producer=producer if isinstance(producer, str) and
-                                    re.fullmatch(r"job_[a-z0-9_]+", producer) else None,
-                                    accepted_sha256=shard["sha256"]))
-        else:
-            rows.append(dataset(name, available=any(key[0] == name for key in shards)))
-    return {"datasets": rows[:MAX_ITEMS], "manifest_sha256": capability.manifest_sha256,
-            "package_sha256": capability.package_sha256,
-            "producer_lookup_omitted": max(0, len(capability.entities) - MAX_ITEMS),
-            "dataset_rows_omitted": max(0, len(rows) - MAX_ITEMS)}
+    population = review_population(core, capability.indexes)
+    # This is an attribution lookup, not the availability decision. A miss cannot certify
+    # the absence of a dataset. Retain each checked response's own qualification in the hash.
+    seeds = sorted(capability.entities)[:MAX_ITEMS]
+    receipts = {}
+    if seeds and capability.indexes and hasattr(core, "resolve_identities"):
+        resolved = core.resolve_identities(seeds, indexes=capability.indexes)
+        for eid in seeds:
+            response = resolved[eid]
+            rows = response["results"]
+            if rows and rows[0]["identity"] != eid:
+                raise GuidanceError("seed attribution returned a different entity")
+            found = rows[0] if rows else None
+            binding = None
+            if found:
+                shards = [shard for shard in response["indexes"] if (shard["name"], shard["shard_id"]) ==
+                          (found["index"], found["shard_id"])]
+                if len(shards) != 1 or found["index"] not in capability.indexes:
+                    raise GuidanceError("seed attribution has no unique admitted shard")
+                binding = shards[0]["sha256"]
+            receipts[eid] = {"status": response["status"], "shard_sha256": binding,
+                             "content_sha256": _digest(found) if found else None,
+                             "truncated": response["truncated"], "coverage_gap_count": len(response["coverage_gaps"]),
+                             "coverage_gaps_sha256": _digest(response["coverage_gaps"])}
+    return {"datasets": list(population.values()), "manifest_sha256": capability.manifest_sha256,
+            "package_sha256": capability.package_sha256, "seed_receipts": receipts,
+            "seed_receipts_sha256": _digest(receipts),
+            "producer_lookup_omitted": len(capability.entities) - len(receipts)}
+
+
+def _population_row(raw: Mapping[str, Any]) -> dict[str, Any]:
+    name = raw["name"]
+    state = raw["availability"]
+    if name not in {*_DATASETS, "indexed_entities"} or state not in {"available", "unavailable", "not_admitted", "partial"}:
+        raise GuidanceError("invalid review dataset state")
+    row = dataset(name, available=False, authority=raw["evidence_authority"], producer=raw.get("producer"),
+                  accepted_sha256=raw.get("accepted_sha256"))
+    row["availability"] = state
+    bindings = raw["bindings_sha256"]
+    if bindings is not None and not _SHA.fullmatch(str(bindings)):
+        raise GuidanceError("invalid review shard-set digest")
+    row["bindings_sha256"] = bindings
+    for key in ("row_count", "known_row_count", "shard_count", "coverage_gap_count"):
+        value = raw[key]
+        if (value is not None or key != "row_count") and (type(value) is not int or value < 0):
+            raise GuidanceError("invalid review dataset count")
+        row[key] = value
+    if raw["gap"] not in {None, "index_not_admitted", "population_unknown", "producer_coverage_gap",
+                           "no_accepted_shard", "no_backing_rows"}:
+        raise GuidanceError("invalid review dataset gap")
+    row["gap"] = raw["gap"]
+    return row
 
 
 def _operation(name: str, properties: Mapping[str, Any], required: Sequence[str]) -> dict[str, Any]:
@@ -197,6 +360,7 @@ def request_card(request: Any) -> dict[str, Any]:
     citation = "review"
     omissions = 0
     gaps = 0
+    catalog_sha = None
 
     def scope_ids(key: str, values: Sequence[Any]) -> None:
         nonlocal omissions
@@ -217,23 +381,26 @@ def request_card(request: Any) -> dict[str, Any]:
             from appsec_review.review.capability import IN_PROCESS_TOOLS
             granted = set(capability.get("tools", ()))
             expected = {item["name"]: item for item in review_tool_catalog(sorted(granted))}
-            for operation in protocol.get("tool_catalog", ()):
+            catalog = protocol.get("tool_catalog", ())
+            for operation in catalog:
                 if operation["name"] not in granted or operation["name"] not in IN_PROCESS_TOOLS:
                     raise GuidanceError("card operation is not granted to the review cell")
-                if operation["parameters"] != expected[operation["name"]]["parameters"]:
-                    raise GuidanceError("card operation differs from the exact parameter schema")
-                operations.append(expected[operation["name"]])
-            rows = [dataset(row["name"], available=row["availability"] == "available",
-                            authority=row["evidence_authority"], producer=row.get("producer"),
-                            accepted_sha256=row.get("accepted_sha256"))
-                    for row in admission.get("datasets", ())]
-            for key in ("manifest_sha256", "package_sha256"):
+                if operation != expected[operation["name"]]:
+                    raise GuidanceError("card operation differs from the exact tool catalog")
+            if sorted(row["name"] for row in catalog) != sorted(granted):
+                raise GuidanceError("review catalog must identify every granted operation exactly once")
+            catalog_sha = catalog_digest(catalog)
+            rows = [_population_row(row) for row in admission.get("datasets", ())]
+            for key in ("manifest_sha256", "package_sha256", "seed_receipts_sha256"):
                 if _SHA.fullmatch(str(admission.get(key, ""))):
                     scope[key] = admission[key]
-            if _SHA.fullmatch(str(capability.get("capability_sha256", ""))):
-                scope["capability_sha256"] = capability["capability_sha256"]
-            scope_ids("identities", capability.get("entities", ()))
-            scope_ids("graph_scopes", capability.get("graph_scopes", ()))
+            for key in ("capability_sha256", "read_view_sha256"):
+                if _SHA.fullmatch(str(capability.get(key, ""))):
+                    scope[key] = capability[key]
+            for key in ("entities", "entity_prefixes", "graph_scopes", "indexes"):
+                values = sorted(set(capability.get(key, ())))
+                scope[key + "_count"] = len(values)
+                scope[key + "_sha256"] = _digest(values)
             omissions += sum(int(admission.get(key, 0)) for key in
                              ("producer_lookup_omitted", "dataset_rows_omitted"))
             gaps = int(admission.get("material_gap_count", 0))
@@ -409,8 +576,16 @@ def request_card(request: Any) -> dict[str, Any]:
         "citation_contract": {"id": citation, "rule": CITATIONS[citation], "response_schema": request.schema},
         "scope": scope, "limits": limits, "remaining": remaining,
         "coverage": {"named_gap_count": gaps, "omitted_card_items": omissions,
-                     "unbound_dataset_identities": sum(row["accepted_sha256"] is None for row in rows),
+                     "unbound_dataset_identities": sum(not (row["accepted_sha256"] or row.get("bindings_sha256")) for row in rows),
                      "absence_is_not_evidence": True,
                      "raw_protected_artifacts": "not available; only admitted projections"},
     }
+    if catalog_sha is not None:
+        card["catalog_sha256"] = catalog_sha
+        card["operations"] = sorted(granted)
+        populated = {row["name"] for row in rows if row["known_row_count"] > 0}
+        alternatives = ("query_cpg_slice", "query_call_paths", "query_cfg_function",
+                        "query_guard_dominators", "query_syntax", "read_excerpt", "find")
+        card["fallback_tools"] = [tool for tool in alternatives
+                                  if tool in granted and _TOOL_DATASET.get(tool, "indexed_entities") in populated]
     return _bounded_card(card)

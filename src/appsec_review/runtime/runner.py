@@ -100,7 +100,20 @@ class JobRunner:
         atomic_bytes(destination / "resolved.json", self.config.resolved_json)
         if self.config.host_pins is not None:
             atomic_bytes(destination / "host-pins.toml", self.config.host_pins.content)
+        source_layers = []
+        for name, source_path, expected in (("profile", self.config.profile_path, self.config.profile_sha256),
+                                            ("overlay", self.config.overlay_path, self.config.overlay_sha256)):
+            if source_path is None:
+                continue
+            import hashlib
+            content = source_path.read_bytes()
+            if hashlib.sha256(content).hexdigest() != expected:
+                raise ValueError("configuration source layer changed before run admission")
+            filename = name + ".toml"
+            atomic_bytes(destination / filename, content)
+            source_layers.append({"file": filename, "sha256": expected})
         atomic_json(manifest_path, {
+            "source_layers": source_layers,
             "schema": "appsec-review/run-configuration/2",
             "failure_finalization": "appsec-review/split-failure-finalization/1",
             "source_sha256": self.config.source_sha256,
@@ -125,7 +138,10 @@ class JobRunner:
         if "review_policy" not in claim and policy.mode is not AssuranceMode.STRICT:
             raise ValueError("legacy attempt requires strict re-admission before managed assurance")
         if "review_policy" in claim and claim["review_policy"] != policy.view():
-            raise ValueError("attempt claim review policy differs from frozen configuration")
+            from appsec_review.config.operational import configuration_compatible
+            if not configuration_compatible({"review_policy": claim["review_policy"]},
+                                            {"review_policy": policy.view()}):
+                raise ValueError("attempt claim review authority differs from frozen configuration")
         run_root = self.runs.resolve(str(claim["run_id"]))
         if not claim.get("reused") and claim.get("component_identities") != job.identities(
                 self.config.runtime.repository_root, self.config.review_policy.releases):
@@ -203,14 +219,19 @@ class JobRunner:
             "trigger": claim["trigger"], "orchestrator": orchestration.get("system", "application"),
             "dagster_run_id": orchestration.get("run_id", "-"),
         })
+        effective = self.config
+        if claim.get("resolved_config_sha256") != self.config.resolved_sha256:
+            from appsec_review.config import load_config
+            from appsec_review.runtime.configuration import configuration_snapshot
+            effective = load_config(_snapshot=configuration_snapshot(run_root, claim["resolved_config_sha256"]))
         target = claim.get("target_root")
         return JobContext(
             run_id=str(claim["run_id"]), attempt_id=str(claim["attempt_id"]),
             trigger=str(claim["trigger"]), repository_root=self.config.runtime.repository_root,
             run_root=run_root, attempt_root=attempt_root, metadata_root=self.config.runtime.metadata_dir,
-            orchestration=MappingProxyType(orchestration), config=self.config.job(job.job_id), events=events,
-            tools=self.config.tools,
-            review_policy=self.config.review_policy,
+            orchestration=MappingProxyType(orchestration), config=effective.job(job.job_id), events=events,
+            tools=effective.tools,
+            review_policy=effective.review_policy,
             evidence_target_snapshot=claim.get("evidence_target_snapshot"),
             upstream_handoffs=MappingProxyType(dict(claim.get("upstream_handoffs", {}))),
             optional_prior_handoffs=MappingProxyType(dict(claim.get("optional_prior_handoffs", {}))),
@@ -307,6 +328,7 @@ class JobRunner:
             "schema": "appsec-review/attempt-claim/1", "run_id": run_id,
             "job_id": job.job_id, "attempt_id": attempt_id,
             "attempt_path": attempt_root.relative_to(run_root).as_posix(), "trigger": trigger,
+            "recovery_boundary": "whole_job",
             "orchestration": correlation,
             "target_root": str(target_root.resolve()) if target_root else None,
             "source_fingerprint": source_fingerprint,

@@ -66,6 +66,34 @@ def test_operator_and_loader_runtime_profiles_stay_in_parity():
     assert len(values) == 1
     assert set(ast.literal_eval(values[0])) == set(PROFILES)
 
+
+@pytest.mark.parametrize(("hostname", "expected"), [
+    ("wsollers1.example", "wsollers1-dev"), ("HAL5000", "dev"),
+    ("Zarathustra", "dev"), ("unknown", "dev"),
+])
+def test_host_budget_is_selected_before_launch_and_explicit_profile_wins(tmp_path, monkeypatch, hostname, expected):
+    import runpy
+    import socket
+
+    deployment_profile = runpy.run_path(str(ROOT / "deploy/dagster/bin/host.py"))["deployment_profile"]
+    monkeypatch.delenv(PROFILE_ENVIRONMENT, raising=False)
+    monkeypatch.setattr(socket, "gethostname", lambda: hostname)
+    path = tmp_path / ".env"
+    name = deployment_profile(path)
+    assert name == expected
+    settings = load_config(ROOT / "appsec-review.toml", profile=name).job("job_owasp_control_assessment").settings
+    base = load_config(ROOT / "appsec-review.toml", profile="dev").job("job_owasp_control_assessment").settings
+    for role, model in (("model", settings["model"]), ("reviewer", settings["models"]["reviewer"])):
+        reference = base["model"] if role == "model" else base["models"]["reviewer"]
+        assert (model["model"], model["reasoning"]) == (reference["model"], reference["reasoning"])
+        assert model["max_input_tokens"] == (64000 if name == "wsollers1-dev" else reference["max_input_tokens"])
+    assert settings["max_turns"] == (8 if name == "wsollers1-dev" else base["max_turns"])
+    path.write_text("APPSEC_REVIEW_PROFILE=dev\n", encoding="utf-8")
+    assert deployment_profile(path) == "dev"
+    monkeypatch.setenv(PROFILE_ENVIRONMENT, "copilot-dev")
+    assert deployment_profile(path) == "copilot-dev"
+
+
 def test_dev_is_the_default_and_keeps_todays_values(monkeypatch) -> None:
     monkeypatch.delenv(PROFILE_ENVIRONMENT, raising=False)
     config = load_config(ROOT / "appsec-review.toml")

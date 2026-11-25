@@ -70,8 +70,8 @@ TOOL_INDEXES: Mapping[str, frozenset[str]] = {
     QUERY_SYNTAX: frozenset({"analysis"}),
     "query_cfg_function": frozenset({"analysis"}),
     "query_guard_dominators": frozenset({"analysis"}),
-    "query_cpg_slice": frozenset({GRAPH_INDEX}),
-    "query_call_paths": frozenset({GRAPH_INDEX}),
+    "query_cpg_slice": frozenset({"analysis"}),
+    "query_call_paths": frozenset({"analysis"}),
     "query_threat_boundaries": frozenset({"precomputed"}),
     "query_owasp_gaps": frozenset({"precomputed"}),
     "query_doc_drift": frozenset({"observations"}),
@@ -178,14 +178,18 @@ class CellCapability:
     max_depth: int
     max_result_bytes: int
     capability_sha256: str = field(default="")
+    read_view_sha256: str | None = None
 
     @classmethod
     def issue(cls, *, run_id: str, manifest_sha256: str, package_id: str, package_sha256: str,
               role: Role | str, round: int, tools, indexes, entities=(), entity_prefixes=(),
               graph_scopes=(), max_queries: int, max_turns: int, page_size: int, max_depth: int,
-              max_result_bytes: int) -> "CellCapability":
+              max_result_bytes: int, read_view_sha256: str | None = None) -> "CellCapability":
         """Issue a capability; an unknown tool, index, or cap is an application error."""
+        if read_view_sha256 is not None and not re.fullmatch(r"[0-9a-f]{64}", read_view_sha256):
+            raise ValueError("invalid accepted read-view pin")
         values = {
+            "read_view_sha256": read_view_sha256,
             "run_id": str(run_id), "manifest_sha256": str(manifest_sha256),
             "package_id": str(package_id), "package_sha256": str(package_sha256),
             "role": Role(role), "round": int(round),
@@ -225,7 +229,8 @@ class CellCapability:
             item.name: (getattr(self, item.name).value if item.name == "role" else
                         list(getattr(self, item.name)) if isinstance(getattr(self, item.name), tuple)
                         else getattr(self, item.name))
-            for item in fields(self) if item.name != "capability_sha256"}}
+            for item in fields(self) if item.name != "capability_sha256"
+            and not (item.name == "read_view_sha256" and self.read_view_sha256 is None)}}
 
     def compute_sha256(self) -> str:
         return sha256_hex(self.body())
@@ -235,7 +240,7 @@ class CellCapability:
         body = self.body()
         return {key: body[key] for key in ("tools", "indexes", "entities", "entity_prefixes", "graph_scopes",
                                             "max_queries", "max_turns", "page_size", "max_depth",
-                                            "max_result_bytes")}
+                                            "max_result_bytes", "read_view_sha256") if key in body}
 
     def public_view(self) -> dict[str, Any]:
         """The trusted capability/budget receipt shown to the worker."""
@@ -325,7 +330,7 @@ class CellCapability:
                 return deny("invalid_locator", 'a locator is exactly {"path": <relative file path>, "line": <positive integer>}')
             if _PATH_LIKE.search(locator["path"]) or _REGEX_LIKE.search(locator["path"]) or _SQL_LIKE.search(locator["path"]):
                 return deny("path_like_value", "locator path must be a plain relative path named by the package")
-            if locator["path"] not in locator_paths:
+            if self.read_view_sha256 is None and locator["path"] not in locator_paths:
                 return deny("entity_out_of_scope", "locator path is outside the package scope")
             parameters = {key: value for key, value in parameters.items() if key != "locator"}
         label = None
@@ -358,9 +363,14 @@ class CellCapability:
         for key in sorted(set(parameters) & IDENTITY_PARAMETERS):
             if tool == "query_call_paths" and key == "source" and not _LOGICAL_ID.fullmatch(str(parameters[key])):
                 continue
+            # A run-view identity is an address, not yet evidence. Only a verified returned
+            # record makes it into the cell's citation table.
+            if (self.read_view_sha256 is not None and isinstance(parameters[key], str)
+                    and _LOGICAL_ID.fullmatch(parameters[key])):
+                continue
             if not (self.entity_in_scope(parameters[key]) or parameters[key] in granted):
                 return deny("entity_out_of_scope", f"{key} is outside the package entity scope")
-        if tool == QUERY_SYNTAX and parameters["subject"] not in {*self.entities, *granted}:
+        if tool == QUERY_SYNTAX and self.read_view_sha256 is None and parameters["subject"] not in {*self.entities, *granted}:
             return deny("entity_out_of_scope", "syntax navigation requires an exact source or returned AST grant")
         if tool in IDENTITY_TOOLS and "identity" not in parameters:
             return deny("schema_violation", f"{tool} requires an identity")
@@ -402,7 +412,7 @@ class CellCapability:
             return deny("depth_cap_exceeded", "graph closure depth exceeds the cell depth cap")
         if tool == QUERY_CODEQL_NEIGHBORHOOD and int(parameters.get("depth", 0)) > self.max_depth:
             return deny("depth_cap_exceeded", "neighborhood depth exceeds the cell depth cap")
-        if tool in {LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD}:
+        if tool in {LIST_CODEQL_DATABASES, QUERY_CODEQL_NEIGHBORHOOD} and self.read_view_sha256 is None:
             normalized["graph_scopes"] = list(self.graph_scopes)
         if queries_used >= self.max_queries:
             return deny("query_cap_exceeded", "the cell query budget is exhausted")

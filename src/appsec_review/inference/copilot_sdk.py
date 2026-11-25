@@ -5,82 +5,14 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 import json
-import math
 import os
-from pathlib import Path
-import tempfile
-import time
 from typing import Any, Sequence
 
 from .claude_cli import ModelOutputError, _plan_prompt, parse_model_payload
 from .request import ModelRequest, ModelResult, ReviewModelRequest, review_prompt
-from .errors import ExecutionContractError, ModelTimeout, ProviderError, FailureCategory, failure_category
+from .errors import ProviderError
+from ._copilot_worker import _cleanup_failure, _connection, _managed, _private_directory, _run, auth_home
 from .usage import Usage, token_count, total_reported
-
-
-_CLEANUP_SECONDS = 5
-
-
-@asynccontextmanager
-async def _managed(manager, label: str):
-    """Treat an interrupted/failed SDK exit as unconfirmed cleanup, never as success."""
-    entered = False
-    body_error = None
-    try:
-        async with manager as value:
-            entered = True
-            try:
-                yield value
-            except BaseException as error:
-                body_error = error
-                raise
-    except BaseException as error:
-        if not entered or error is body_error:
-            raise
-        failure = _cleanup_failure(f"Copilot {label} teardown failed")
-        cancellation = next((item for item in (body_error, error) if item is not None and
-                             failure_category(item) is FailureCategory.CANCELLED), None)
-        if cancellation is not None:
-            cancellation.add_note(str(failure))
-            raise cancellation from failure
-        raise failure from error
-    if body_error is not None:
-        # An SDK context manager may not suppress cancellation or an application failure.
-        raise body_error
-
-
-def auth_home() -> Path:
-    return Path(os.environ.get("APPSEC_COPILOT_HOME") or
-                Path.home() / ".config" / "appsec-review" / "copilot").expanduser().resolve()
-
-
-@asynccontextmanager
-async def _client():
-    try:
-        from copilot import CopilotClient
-    except ImportError as exc:
-        raise ProviderError("Copilot SDK is unavailable; install appsec-review[copilot]",
-                            code="sdk_unavailable") from exc
-    home = auth_home()
-    if not home.is_dir():
-        raise ProviderError("Copilot worker login is missing", code="authentication_missing")
-    # Git's identity must never become the inference identity, even when inherited from CI.
-    environment = {key: value for key, value in os.environ.items()
-                   if key not in {"GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN",
-                                  "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"}}
-    environment["COPILOT_HOME"] = str(home)
-    environment["COPILOT_SKIP_CLI_DOWNLOAD"] = "1"
-    environment["COPILOT_GITHUB_TELEMETRY_DISABLED"] = "true"
-    with tempfile.TemporaryDirectory(prefix="appsec-copilot-") as working:
-        async with _managed(CopilotClient(
-            mode="empty", base_directory=str(home), working_directory=working,
-            env=environment, use_logged_in_user=True,
-        ), "client") as client:
-            status = await client.get_auth_status()
-            if not status.isAuthenticated:
-                raise ProviderError("Copilot worker subscription login is required in APPSEC_COPILOT_HOME",
-                                    code="authentication_missing")
-            yield client, working
 
 
 def _available(model: Any) -> bool:
@@ -88,35 +20,65 @@ def _available(model: Any) -> bool:
 
 
 async def _models(names: Sequence[str]) -> dict[str, Any]:
-    async with _client() as (client, _working):
-        catalog = {model.id: model for model in await client.list_models()}
-        return {
-            "method": "catalog", "listed": sorted(catalog),
-            "models": {name: {
-                "available": name in catalog and _available(catalog[name]),
-                "detail": ("listed and enabled for the Copilot worker account"
-                           if name in catalog and _available(catalog[name])
-                           else "not listed or not enabled for the Copilot worker account"),
-            } for name in names},
-        }
+    _, catalog = await _connection()
+    return {
+        "method": "catalog", "listed": sorted(catalog),
+        "models": {name: {
+            "available": name in catalog and _available(catalog[name]),
+            "detail": ("listed and enabled for the Copilot worker account"
+                       if name in catalog and _available(catalog[name])
+                       else "not listed or not enabled for the Copilot worker account"),
+        } for name in names},
+    }
+
+
+@asynccontextmanager
+async def _delete_after_use(client, session_id):
+    # SDK disconnect releases handlers but preserves a resumable conversation on disk.
+    try:
+        yield
+    finally:
+        await client.delete_session(session_id)
+
+
+def _prompt_text(request: ModelRequest | ReviewModelRequest) -> str:
+    if not isinstance(request, ReviewModelRequest):
+        return json.dumps(_plan_prompt(request), sort_keys=True)
+
+    prompt = review_prompt(request, include_guidance=True)
+    # Canonicalize nested objects too, without sorting mutable fields to the front of the wire payload.
+    first = {
+        (): ("guidance", "response_schema", "guidance_bundle_sha256", "role", "persona", "stack_profile",
+             "limits", "tool_catalog", "task_input", "capability_artifact_card", "transcript", "repair"),
+        ("task_input",): ("tool_catalog", "turn_protocol", "protocol", "output_schema", "task"),
+        ("task_input", "turn_protocol"): ("tool_catalog",),
+    }
+
+    def encode(value, path=()):
+        priority = first.get(path)
+        if priority is None or not isinstance(value, dict):
+            return json.dumps(value, separators=(",", ":"), sort_keys=True)
+        keys = [key for key in priority if key in value] + sorted(value.keys() - set(priority))
+        return "{" + ",".join(json.dumps(key) + ":" + encode(value[key], (*path, key)) for key in keys) + "}"
+
+    return encode(prompt)
 
 
 async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int) -> ModelResult:
-    async with _client() as (client, working):
+    client, catalog = await _connection()
+    async with _managed(_private_directory("appsec-copilot-turn-"), "turn directory") as working:
         from copilot.session import (
             ModelCapabilitiesOverride, ModelLimitsOverride, PermissionDecisionUserNotAvailable,
         )
         from copilot.session_events import AssistantMessageData, AssistantUsageData
 
-        catalog = {model.id: model for model in await client.list_models()}
         model = catalog.get(request.model)
         if model is None or not _available(model):
             raise ProviderError("Copilot model is unavailable", code="model_unavailable")
         if request.reasoning not in (model.supported_reasoning_efforts or []):
             raise ValueError(f"Copilot model {request.model} does not support reasoning "
                              f"effort {request.reasoning}")
-        prompt = (review_prompt(request, include_guidance=True)
-                  if isinstance(request, ReviewModelRequest) else _plan_prompt(request))
+        prompt = _prompt_text(request)
         usage: list[AssistantUsageData] = []
 
         def observe(event):
@@ -138,11 +100,13 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
                 max_prompt_tokens=request.max_input_tokens, max_output_tokens=request.max_output_tokens)),
             on_event=observe,
         )
-        async with _managed(session, "session"):
+        async with (
+            _managed(_delete_after_use(client, session.session_id), "session deletion"),
+            _managed(session, "session"),
+        ):
             # The outer deadline covers authentication, catalog lookup, creation, and inference.
             try:
-                response = await session.send_and_wait(json.dumps(prompt, sort_keys=True),
-                                                       timeout=timeout_seconds)
+                response = await session.send_and_wait(prompt, timeout=timeout_seconds)
             except (asyncio.CancelledError, TimeoutError) as original:
                 try:
                     # _run owns the single cleanup deadline; wait_for could itself wait forever
@@ -183,88 +147,6 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
                                raw_response=raw, served_model=request.model, served_provider="copilot-sdk",
                                usage_unavailable_reason="invalid_provider_usage" if invalid_usage else None)
             return Usage.from_result(result).normalize(result)
-
-
-def _cleanup_failure(message: str, *, pending_tasks: int = 0) -> ExecutionContractError:
-    from appsec_review.runtime import execution_safety as safety
-    from appsec_review.runtime.resources import quarantine_resources
-    error = ExecutionContractError(message)
-    try:
-        quarantine_resources("copilot_teardown_unconfirmed")
-    except Exception as failure:
-        error.add_note(f"Copilot resource quarantine failed ({type(failure).__name__})")
-    try:
-        safety.retain_failure("copilot.cleanup", error, pending_tasks=pending_tasks, category="contract")
-    except Exception as failure:
-        error.add_note(f"Copilot cleanup evidence publication failed ({type(failure).__name__})")
-    return error
-
-
-def _run(operation, timeout_seconds: int):
-    from appsec_review.runtime import execution_safety as safety
-    if (type(timeout_seconds) not in (int, float) or not math.isfinite(timeout_seconds)
-            or timeout_seconds <= 0):
-        operation.close()
-        raise ExecutionContractError("Copilot timeout_seconds must be finite and positive")
-    try:
-        safety.check_running()
-    except BaseException:
-        operation.close()
-        raise
-
-    loop = asyncio.new_event_loop()
-    task = loop.create_task(operation)
-    deadline = time.monotonic() + timeout_seconds
-    original: BaseException | None = None
-
-    async def bounded():
-        while not task.done():
-            safety.check_running()
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise ModelTimeout("Copilot call timed out")
-            await asyncio.wait({task}, timeout=min(0.1, remaining))
-        safety.check_running()
-        return task.result()
-
-    try:
-        result = loop.run_until_complete(bounded())
-    except TimeoutError:
-        original = ModelTimeout("Copilot call timed out")
-    except ConnectionError:
-        original = ProviderError("Copilot connection failed", code="network", retryable=True)
-    except BaseException as error:
-        original = error
-    finally:
-        try:
-            pending = asyncio.all_tasks(loop)
-            cleanup_error = None
-            if pending:
-                for pending_task in pending:
-                    pending_task.cancel()
-                done, pending = loop.run_until_complete(asyncio.wait(pending, timeout=_CLEANUP_SECONDS))
-                for completed in done:
-                    if completed.cancelled():
-                        try:
-                            completed.result()
-                        except asyncio.CancelledError as cancellation:
-                            if isinstance(cancellation.__cause__, ExecutionContractError):
-                                cleanup_error = cancellation.__cause__
-                    elif completed.exception() is not None:
-                        cleanup_error = _cleanup_failure("Copilot cancellation cleanup failed")
-            if pending:
-                cleanup_error = _cleanup_failure("Copilot teardown exceeded its cancellation bound",
-                                                 pending_tasks=len(pending))
-            if cleanup_error is not None:
-                if original is not None and failure_category(original) is FailureCategory.CANCELLED:
-                    original.add_note(str(cleanup_error))
-                    raise original from cleanup_error
-                raise cleanup_error from original
-        finally:
-            loop.close()
-    if original is not None:
-        raise original
-    return result
 
 
 def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
