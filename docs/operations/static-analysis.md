@@ -195,3 +195,35 @@ runs and code state. They are useful for resolving those claims, but they do not
 current checkout or deployment is healthy. Follow `deploy/dagster/README.md` to verify the live
 workspace and write a fresh bounded receipt when current acceptance evidence is required. Bulk
 scanner output, databases, and application run receipts remain ignored run-owned data.
+
+
+## Tuning and whole-job recovery: `job_evidence_collection`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.max_findings_per_scope` | `5000` | coverage | 1..1000000 |
+| `settings.osv_max_lockfiles_per_invocation` | `50` | coverage | 1..500 |
+| `settings.osv_memory` | `"3g"` | execution | 512m..64g; positive integer m/g |
+| `settings.tool_retries` | `1` | execution | 0..3 |
+
+? The [executing job/parser](../../src/appsec_review/config/evidence_collection.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.secrets.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.source_sast.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.software_inventory.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.vulnerability_matching.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.configuration.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.binary_hardening.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.evidence_publication.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
