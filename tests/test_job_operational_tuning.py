@@ -119,7 +119,7 @@ def test_declarations_do_not_coerce_unsupported_types(shipped, value):
     (("jobs", "job_fixture", "settings", "model", "model"), "model-a", "model-b"),
     (("jobs", "job_fixture", "settings", "model", "provider"), "provider-a", "provider-b"),
     (("jobs", "job_fixture", "settings", "model", "reasoning"), "low", "high"),
-    (("jobs", "job_tree_sitter_ast", "settings", "max_files_per_scope"), 128, 256),
+    (("jobs", "job_codeql_analysis", "settings", "export_queries", "seed_depth"), 3, 4),
     (("jobs", "job_codeql_analysis", "steps", "execution", "workers"), 1, 2),
     (("jobs", "job_codeql_analysis", "steps", "acceptance", "tasks", "publish_handoff", "workers"), 1, 2),
     (("source", "identity"), "source-a", "source-b"),
@@ -665,3 +665,49 @@ def test_analyzer_effective_workers_reach_real_pool(tmp_path, shipped, monkeypat
         result = _handler(module.build_job(), unit_id)(unit)
         assert result["scope_count"] == 0
     assert seen == [1, 3]
+
+
+@pytest.mark.parametrize("job,path,before_value,after_value", [
+    ("job_evidence_collection", ("settings", "osv_memory"), "512m", "3g"),
+    ("job_inference_security_review", ("settings", "retry", "backoff_seconds"), [], [0, 2, 10]),
+    ("job_poc_generation", ("settings", "retry", "retry_on_timeout"), False, True),
+])
+def test_reviewed_memory_backoff_and_retry_value_kinds(job, path, before_value, after_value):
+    before = {"jobs": {job: {}}}
+    node = before["jobs"][job]
+    for part in path[:-1]:
+        node = node.setdefault(part, {})
+    node[path[-1]] = before_value
+    after = deepcopy(before)
+    _set(after, ("jobs", job, *path), after_value)
+    change, = operational_changes(before, after)
+    assert change["before"] == before_value and change["after"] == after_value
+    _set(after, ("jobs", job, *path), {"untyped": after_value})
+    with pytest.raises(MaterialConfigurationChange):
+        operational_changes(before, after)
+
+
+def test_source_layer_tuning_records_provenance_but_rejects_model_changes():
+    before = {"jobs": {CONNECTIVITY: {"settings": {"timeout_seconds": 30}}}}
+    after = deepcopy(before)
+    after["jobs"][CONNECTIVITY]["settings"]["timeout_seconds"] = 60
+    after["configuration_overlay"] = {
+        "path": "capacity.toml", "sha256": "a" * 64,
+        "keys": [f"jobs.{CONNECTIVITY}.settings.timeout_seconds"],
+        "document": {"jobs": {CONNECTIVITY: {"settings": {"timeout_seconds": 60}}}},
+    }
+    changes = operational_changes(before, after)
+    assert {change["category"] for change in changes} == {"execution", "provenance"}
+    after["configuration_overlay"]["document"]["jobs"][CONNECTIVITY]["settings"]["model"] = "different"
+    with pytest.raises(MaterialConfigurationChange):
+        operational_changes(before, after)
+
+
+def test_failed_job_unit_selection_never_imports_prior_cells(tmp_path):
+    from appsec_review.runtime.checkpoints import select_units
+    units = (Unit("read.source", lambda unit: {}),
+             Unit("write.output", lambda unit: {}, dependencies=("read.source",)))
+    job = SimpleNamespace(job_id="job_fixture", units=units)
+    decisions = select_units(tmp_path, job, {"attempt_id": "attempt_0002"})
+    assert set(decisions) == {unit.unit_id for unit in units}
+    assert all(value["action"] == "RUN" and "checkpoint" not in value for value in decisions.values())

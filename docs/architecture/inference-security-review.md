@@ -2783,9 +2783,7 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 | `settings.triage.max_excerpt_lines` | `24` | coverage | positive integer; exact parser/cross-field bounds? |
 | `settings.triage.max_leads` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
 | `settings.triage.max_reason_chars` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
-
 | `settings.retry.retry_on_provider_error` | `true` | coverage | true/false; maximum attempts and deadline still apply |
-
 | `settings.retry.retry_on_invalid_output` | `true` | coverage | true/false; maximum attempts and deadline still apply |
 
 ? The [executing job/parser](../../src/appsec_review/config/inference_review.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.

@@ -199,7 +199,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-177 | [Rebuild and register container images compile CodeQL packs and refresh Dagster pins](#t-177-rebuild-and-register-container-images-compile-codeql-packs-and-refresh-dagster-pins) | images | done (2026-11-17, docs/tasks/2026-11-17-t177-wsl-container-dagster-smoke-readiness.md) |
 | T-5000 | [Hunt packages reference their unit's context once](#t-5000-hunt-packages-reference-their-units-context-once) | review | in-progress |
 | T-5001 | [Bound the run-wide pipeline log and stream its reporting consumers](#t-5001-bound-the-run-wide-pipeline-log-and-stream-its-reporting-consumers) | pipeline | open |
-| T-5002 | [Bind OWASP finding packages to their obligations so a batch fits the model input budget](#t-5002-bind-owasp-finding-packages-to-their-obligations-so-a-batch-fits-the-model-input-budget) | review | open |
+| T-5002 | [Bind OWASP finding packages to their obligations so a batch fits the model input budget](#t-5002-bind-owasp-finding-packages-to-their-obligations-so-a-batch-fits-the-model-input-budget) | review | done (2026-11-25, T-5002 entry) |
 | T-5003 | [Dispatch OWASP validation only for rows with a supported obligation](#t-5003-dispatch-owasp-validation-only-for-rows-with-a-supported-obligation) | review | done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9) |
 | T-5004 | [Make the OWASP job declare, read and report only what it uses](#t-5004-make-the-owasp-job-declare-read-and-report-only-what-it-uses) | pipeline | open |
 | T-5005 | [Fingerprint OWASP shards with the guidance bundle the model actually received](#t-5005-fingerprint-owasp-shards-with-the-guidance-bundle-the-model-actually-received) | review | done (2026-11-21, 9e159ce52eb2a4dc1bb63a7257362c89ce8a8cf8; verified at 9841059dd380eac50f12fdf0002e1fa82787aff9) |
@@ -502,9 +502,9 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 | T-5268 | [Admit shared-artifact retry fixtures through verified stop state](#t-5268-admit-shared-artifact-retry-fixtures-through-verified-stop-state) | testing | open |
 | T-5269 | [Establish the smoke-target evaluator isolation boundary](#t-5269-establish-the-smoke-target-evaluator-isolation-boundary) | testing | open |
 | T-5270 | [Align shipped profile notices and inherited model bindings](#t-5270-align-shipped-profile-notices-and-inherited-model-bindings) | pipeline | open |
-| T-5271 | [Align Alternate CPG transport directions with the core](#t-5271-align-alternate-cpg-transport-directions-with-the-core) | graph | open |
+| T-5271 | [Align Alternate CPG transport directions with the core](#t-5271-align-alternate-cpg-transport-directions-with-the-core) | graph | done (2026-11-25, T-5271 entry) |
 | T-5272 | [Carry authenticated attack paths and standard scores into report inputs](#t-5272-carry-authenticated-attack-paths-and-standard-scores-into-report-inputs) | review | open |
-| T-5273 | [Complete whole-job-safe operational tuning declarations](#t-5273-complete-whole-job-safe-operational-tuning-declarations) | pipeline | open |
+| T-5273 | [Complete whole-job-safe operational tuning declarations](#t-5273-complete-whole-job-safe-operational-tuning-declarations) | pipeline | done |
 
 ## Active entries
 
@@ -3123,7 +3123,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5002 — Bind OWASP finding packages to their obligations so a batch fits the model input budget
 
-- **State:** open
+- **State:** done (2026-11-25, T-5002 entry)
 - **Area:** review
 - **Why:** F1 of `docs/reviews/owasp-process-review-2026-11-14.md`: every finding-package row copies the whole component evidence list (`src/appsec_review/owasp_workbench/engine.py:387-389,402`) and all packages of a batch are serialised into one request (`owasp_workbench/assessment.py:181,195,207-222`). On smoke-cpp run `2026-11-14-0003` the three batches were 389 KB, 389 KB and 778 KB (about 97,000 to 194,000 estimated tokens) against the 24,000-token profile budget (`appsec-review.toml:2700`); no model call happened only because no obligation was supported. On a target with supported obligations every row ends `cannot_verify` with gap `worker: input_budget` and zero model calls, which `tests/test_owasp_assessment_job.py:500-513` currently treats as correct.
 - **Scope:** each package carries only the evidence its obligations bind (`evidence_ids`); shared evidence is serialised once per batch; package assembly refuses a request that cannot fit the selected profile before any model call and records the refusal as a named gap.
@@ -6663,7 +6663,7 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5271 — Align Alternate CPG transport directions with the core
 
-- **State:** open
+- **State:** done (2026-11-25, T-5271 entry)
 - **Area:** graph
 - **Why:** The MCP and generated worker-turn contracts advertise `query_cpg_slice.direction`
   value `both`, while the core accepts only `backward` or `forward`. An advertised request
@@ -6702,19 +6702,16 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 ### T-5273 ? Complete whole-job-safe operational tuning declarations
 
-- **State:** open
+- **State:** done (2026-11-25, all-job tuning implementation and canonical documentation)
 - **Area:** pipeline
-- **Why:** The remaining implementation is now present, but regression execution was explicitly
-  withheld by the owner; effective-pool and end-to-end restart validation is not claimed.
-- **Scope:** Validate the attempt-isolated CodeQL/Tree-sitter/graph outputs, immutable build-iteration
-  revision propagation, analyzer pool consumption and reviewed numeric/global declarations.
-  String/sequence controls, review-policy resource budgets and changed layer metadata remain
-  deliberately unsupported rather than accepted without a bounded semantic review.
-- **Done when:** Requested validation confirms effective settings reach consumers, accepted original
-  bytes/limits/gaps survive retries, whole-job attempts do not salvage earlier cells, and material
-  or invalid changes remain refused without weakening admission.
-- **Refs:** `docs/operations/job-tuning.md`, `docs/architecture/runtime-interchange.md`,
-  `docs/operations/analyzer-attempt-scopes.md`.
+- **Why:** All 48 configured jobs now have explicit tuning/recovery accounting; prior accepted
+  configuration/evidence remains immutable while new attempts receive admitted settings.
+- **Scope:** Shared whole-job unit boundary, attempt-local tool/model/build/index state, exact
+  execution/coverage declarations, typed zero/fractional/memory/backoff support, source-layer
+  provenance and resource-budget admission; 48 job sections across 42 canonical pages.
+- **Done when:** Implementation and all-job documentation are complete. Regression suites and live
+  reviews/restarts were not executed at the owner's direction; no runtime-success claim is made.
+- **Refs:** `docs/operations/job-tuning.md`, `docs/architecture/runtime-interchange.md`.
 
 ## Legacy backlog
 
