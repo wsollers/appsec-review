@@ -675,3 +675,68 @@ then verified whole-job reuse. `query_codeql`
 resolved Java and JavaScript findings from accepted manifest
 `cc436fe9611a8182b7de4073c95995c738998e8de89ceb96ac09b5990e195b57`, including normalized
 code-flow-bearing observations.
+
+
+## Tuning and whole-job recovery: `job_codeql_analysis`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.concurrency` | `2` | execution | 1..16 |
+| `settings.database_bytes_limit` | `8589934592` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.database_file_limit` | `200000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.database_timeout_seconds` | `1800` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.export_queries.compile_ram_mb` | `8192` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.export_queries.compile_threads` | `8` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.export_queries.compile_timeout_seconds` | `3600` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.export_queries.max_bytes` | `268435456` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.export_queries.row_limit` | `200000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.export_queries.timeout_seconds` | `1800` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.inventory_timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.output_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.query_timeout_seconds` | `1800` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.ram_mb` | `4096` | execution | >=2048 MiB |
+| `settings.result_limit` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.sarif_bytes_limit` | `268435456` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.threads` | `2` | execution | 1..32 |
+
+? The [executing job/parser](../../src/appsec_review/config/codeql.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | CodeQL unit/step workers are fixed at 1; use settings.concurrency. |
+| `settings.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.max_paths` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.export_queries.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.export_queries.seed_depth` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.export_queries.max_seed_depth` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.export_queries.seed_limit` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.languages.cpp.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.languages.cpp.extractor_file_count` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.languages.go.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.languages.go.extractor_file_count` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.languages.java.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.languages.java.extractor_file_count` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.languages.csharp.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.languages.csharp.extractor_file_count` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.languages.javascript.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.languages.javascript.extractor_file_count` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.languages.python.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.languages.python.extractor_file_count` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.languages.ruby.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.languages.ruby.extractor_file_count` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.languages.rust.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.languages.rust.extractor_file_count` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `settings.languages.actions.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.languages.actions.extractor_file_count` | Changes query path/seed scope, extractor inventory or pinned query/tool identity; not an execution resource. |
+| `steps.plan.workers` | CodeQL unit/step workers are fixed at 1; use settings.concurrency. |
+| `steps.execution.workers` | CodeQL unit/step workers are fixed at 1; use settings.concurrency. |
+| `steps.acceptance.workers` | CodeQL unit/step workers are fixed at 1; use settings.concurrency. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
