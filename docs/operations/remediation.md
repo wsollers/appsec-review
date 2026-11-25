@@ -153,3 +153,95 @@ and `usage_unavailable_count` distinguish unavailable turns. No completed turns 
 totals, flag `true`, count `0` and reason `no_completed_turns`; missing provider readings use
 `provider_usage_missing`. This is not a measured zero-token invocation or a complete cost bill.
 See [metrics operations](metrics.md) for unknown-usage and integrity/coverage limits.
+
+
+## Tuning and whole-job recovery: `job_remediation_planning`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.bounds.max_candidates` | `16` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_edits` | `32` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_file_bytes` | `262144` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_list_items` | `32` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_packages` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_patch_bytes` | `64000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_patch_files` | `4` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_source_bytes` | `64000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_source_files` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_text_chars` | `4000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_workspace_bytes` | `1073741824` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_workspace_files` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.writer.max_input_tokens` | `64000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.writer.max_output_tokens` | `32000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.writer.max_queries` | `4` | coverage | integer >=0; exact parser/cross-field bounds? |
+| `settings.writer.max_turns` | `6` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.writer.timeout_seconds` | `600` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/config/remediation.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.writer.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.writer.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.writer.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.assess.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acceptance.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
+
+
+## Tuning and whole-job recovery: `job_remediation_validation`
+
+Defaults below are the checked-in base recipe; the admitted profile/overlay may override them.
+Only the exact declared leaves are mutable; unknown and mixed material changes are refused.
+
+| Exact path relative to this job (unless global) | Base default | Category | Bounds |
+| --- | --- | --- | --- |
+| `settings.bounds.max_candidates` | `16` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_edits` | `32` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_file_bytes` | `262144` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_list_items` | `32` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_packages` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_patch_bytes` | `64000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_patch_files` | `4` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_source_bytes` | `64000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_source_files` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_text_chars` | `4000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_workspace_bytes` | `1073741824` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.bounds.max_workspace_files` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.command_timeout_seconds` | `120` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.output_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.reviewer.max_input_tokens` | `64000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.reviewer.max_output_tokens` | `8000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.reviewer.max_queries` | `0` | coverage | integer >=0; exact parser/cross-field bounds? |
+| `settings.reviewer.max_turns` | `2` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.reviewer.timeout_seconds` | `600` | coverage | positive integer; exact parser/cross-field bounds? |
+
+? The [executing job/parser](../../src/appsec_review/config/remediation.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+
+Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
+
+### Specifically excluded candidates
+
+| Exact setting | Technical reason it remains material |
+| --- | --- |
+| `workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `settings.enabled` | Changes dispatch, required evidence, retry policy not explicitly declared, or selected feature behavior; not an execution capacity. |
+| `settings.reviewer.provider` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.reviewer.model` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `settings.reviewer.reasoning` | Model/provider/reasoning or minimum thinking contract changes the reasoning method, not its execution ceiling. |
+| `steps.load.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.assess.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+| `steps.acceptance.workers` | Structural plan metadata, not a job-local pool control; use the listed pool/scheduler settings. |
+
+Source/rule/tool/schema identities, model/provider/reasoning, input selection and signing/authorization remain material even when not numeric.
