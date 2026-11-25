@@ -18,7 +18,7 @@ from appsec_review.retrieval import (EntityKind, EntityRecord, IndexBuilder, Ind
     LogicalIdentity, RelationKind, RelationRecord, index_fingerprint, write_manifest)
 from appsec_review.retrieval.index import INDEX_SCHEMA, load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
+from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff, feed_input_identity
 from appsec_review.provenance import (
     consume_native_references, retain_native_output, validate_observation_provenance,
 )
@@ -44,7 +44,7 @@ from appsec_review.jobs.job_artifact_security_analysis.datasets import CONTRACT,
 
 SCHEMA = "appsec-review/artifact-security-analysis/1"
 OBSERVATION_SCHEMA = "appsec-review/artifact-security-observation/1"
-PARSER_IDENTITY = "appsec-review/artifact-security-parsers/6+" + POLICY_IDENTITY
+PARSER_IDENTITY = "appsec-review/artifact-security-parsers/7+" + POLICY_IDENTITY
 NORMALIZER_IDENTITY = "appsec-review/artifact-security-normalizer/3"
 # The observations shard is a function of the scan results (parser and normalizer identities, which also key the
 # scan checkpoints) and of the splitting of a scan into one summary and per-finding records (``findings.py``).
@@ -862,4 +862,4 @@ def build_job(*, scanner_runner: ScannerRunner | None = None) -> Job:
     return Job("job_artifact_security_analysis", "artifact_security_analysis", UnitExecutor(units).execute,
                input_validators=(_validate_config,), schema_identity=SCHEMA,
                implementation_identity=implementation, validation_identity=implementation, units=units,
-               datasets=DATASETS, contract=CONTRACT)
+               datasets=DATASETS, contract=CONTRACT, external_input_identity=feed_input_identity)

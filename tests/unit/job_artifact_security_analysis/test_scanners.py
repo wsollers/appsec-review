@@ -326,10 +326,11 @@ def test_container_scanner_runner_identity_caching_and_feed_validation(
     # OSV valid
     osv_dir = tmp_path / "osv-db"
     osv_dir.mkdir()
+    monkeypatch.setattr(scanners_module.osv_feed, "consumer_settings", lambda repo, run: "osv-settings")
     monkeypatch.setattr(
-        scanners_module,
-        "verify_current",
-        lambda path, feed: {"snapshot_id": "osv-1", "manifest_sha256": "3" * 64, "directory": str(osv_dir)},
+        scanners_module.osv_feed,
+        "verify",
+        lambda settings: {"snapshot_id": "osv-1", "manifest_sha256": "3" * 64, "directory": str(osv_dir)},
     )
     monkeypatch.setattr(scanners_module, "snapshot_ecosystems", lambda d: {"npm": osv_dir})
     osv_id = runner.identity("osv", {})
@@ -540,3 +541,187 @@ def test_cve_bin_tool_adapter_is_offline_and_mounts_the_verified_snapshot(tmp_pa
         with pytest.raises(RuntimeError, match="verified immutable cve-bin-tool database unavailable"):
             other("cve_bin_tool", binary, {"canonical_identity": "asr:bin", "sha256": "a" * 64}, 30, 4096)
     assert requests == [request]
+
+
+def test_cve_bin_tool_feed_consumption_contract_when_sync_absent_or_seeded(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Regression for run 2026-11-25-0002: real verify_consumer -> verify_current -> observe_external
+    inside input_read_scope succeeds both when job_third_party_data_sync is absent/unseeded and when
+    its local cve-bin-tool snapshot is seeded while job_third_party_data_sync is unselected."""
+    import sqlite3
+    from dataclasses import replace as dc_replace
+    from appsec_review.jobs.job_artifact_security_analysis.datasets import CONTRACT, DATASETS
+    from appsec_review.jobs.job_artifact_security_analysis.job import build_job
+    from appsec_review.jobs.job_third_party_data_sync.steps.cve_bin_tool_db_build import database as cve_db
+    from appsec_review.runtime.contracts import InputChannel
+    from appsec_review.runtime.datasets import dataset_contract
+    from appsec_review.runtime.inputs import feed_input_identity, input_read_scope
+    from appsec_review.storage import atomic_json, file_sha256, shared
+    from tests.fixtures.reference_feeds import nvd_vulnerability, publish_nvd
+    from tests.test_shared_layout_provenance import provenance_scope
+
+    import shutil
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    shutil.copytree(ROOT / "containers", repo / "containers")
+    shutil.copytree(ROOT / "tools", repo / "tools")
+    job = build_job()
+    assert job.external_input_identity is feed_input_identity
+
+    def _make_run(name: str, resolved_jobs: dict, *, contract_override=CONTRACT):
+        run_root = repo / "runs" / name
+        attempt = run_root / "data/jobs/job_artifact_security_analysis/attempts/attempt_0001"
+        cfg_path = run_root / "data/configuration/resolved.json"
+        atomic_json(cfg_path, {"jobs": resolved_jobs})
+        atomic_json(
+            run_root / "data/configuration/manifest.json",
+            {"resolved_sha256": file_sha256(cfg_path)},
+        )
+        claim = {
+            "run_id": name,
+            "job_id": "job_artifact_security_analysis",
+            "attempt_id": "attempt_0001",
+            "attempt_path": attempt.relative_to(run_root).as_posix(),
+            "orchestration": {"system": "dagster", "run_id": f"{name}-1"},
+            "repository_root": str(repo),
+            "resolved_config_sha256": file_sha256(cfg_path),
+            "dataset_contract": dataset_contract(
+                "job_artifact_security_analysis",
+                sorted({d.step for d in DATASETS}),
+                DATASETS,
+            ),
+        }
+        atomic_json(attempt / "claim.json", claim)
+        selection = json.loads(job.external_input_identity(None, run_root, repo))
+        actor = shared.SharedArtifacts.for_job(
+            SimpleNamespace(
+                run_root=run_root,
+                attempt_root=attempt,
+                run_id=name,
+                attempt_id="attempt_0001",
+                orchestration=claim["orchestration"],
+                config=SimpleNamespace(job_id="job_artifact_security_analysis"),
+            )
+        )
+        read_ctx = SimpleNamespace(
+            run_root=run_root,
+            attempt_root=attempt,
+            config=SimpleNamespace(job_id="job_artifact_security_analysis"),
+            contract=contract_override,
+            upstream_handoffs={},
+            external_input_selection=selection,
+        )
+        scanner = ContainerScannerRunner(repo, run_root, attempt / "steps/analyze/tasks/cve_bin_tool")
+        monkeypatch.setattr(scanner.executor, "resolve_image", lambda _tool: "sha256:" + "1" * 64)
+        return actor, read_ctx, scanner, selection
+
+    sync_disabled_cfg = {
+        "job_third_party_data_sync": {
+            "settings": {"enabled": False},
+            "steps": {
+                "cve_bin_tool_db_build": {
+                    "settings": {
+                        "feed_root": "data/feeds/cve-bin-tool",
+                        "image": "appsec-review/cve-bin-tool:3.4",
+                        "tool_version": "3.4",
+                        "build_context": "tools/cve-bin-tool",
+                    }
+                }
+            },
+        }
+    }
+
+    # 1a. job_third_party_data_sync omitted from resolved.json entirely: clean gap, no violation.
+    actor_absent, ctx_absent, scanner_absent, sel_absent = _make_run("absent-sync", {})
+    assert all(row["status"] == "unavailable" for row in sel_absent["inputs"])
+    with provenance_scope(actor_absent), input_read_scope(ctx_absent) as reads_absent:
+        id_absent = scanner_absent.identity("cve_bin_tool", {})
+    assert id_absent["unavailable"] == "verified immutable cve-bin-tool database unavailable: KeyError"
+    assert reads_absent.document()["reads"] == []
+
+    # 1b. job_third_party_data_sync configured (disabled) with unseeded feed dir: clean gap, no violation.
+    actor_unseeded, ctx_unseeded, scanner_unseeded, sel_unseeded = _make_run(
+        "unseeded-sync", sync_disabled_cfg
+    )
+    assert all(row["status"] == "unavailable" for row in sel_unseeded["inputs"])
+    with provenance_scope(actor_unseeded), input_read_scope(ctx_unseeded) as reads_unseeded:
+        id_unseeded = scanner_unseeded.identity("cve_bin_tool", {})
+    assert id_unseeded["unavailable"] == (
+        "verified immutable cve-bin-tool database unavailable: FileNotFoundError"
+    )
+    assert reads_unseeded.document()["reads"] == []
+
+    # 2. Publish a real verified cve-bin-tool snapshot under repo/data/feeds/cve-bin-tool while
+    # job_third_party_data_sync remains disabled/unselected in the run configuration.
+    nvd_root = publish_nvd(tmp_path / "nvd", [nvd_vulnerability("CVE-2026-0001")])
+    nvd_pointer = json.loads((nvd_root / "current.json").read_text(encoding="utf-8"))
+    resolved_nvd = cve_db.resolve_nvd_snapshot(nvd_root, nvd_pointer)
+    cbt_settings = cve_db.CveBinToolSettings.from_mapping(
+        repo, sync_disabled_cfg["job_third_party_data_sync"]["steps"]["cve_bin_tool_db_build"]["settings"]
+    )
+
+    def _build_sqlite(settings, _input_dir: Path, output_dir: Path):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(output_dir / "cve.db") as conn:
+            conn.execute("CREATE TABLE cve_severity(cve_number TEXT, data_source TEXT)")
+            conn.execute("INSERT INTO cve_severity VALUES ('CVE-2026-0001', 'NVD')")
+            conn.execute(
+                "CREATE TABLE cve_range(cve_number TEXT, data_source TEXT, vendor TEXT, "
+                "product TEXT, version TEXT, versionStartIncluding TEXT, versionStartExcluding TEXT, "
+                "versionEndIncluding TEXT, versionEndExcluding TEXT)"
+            )
+        with sqlite3.connect(output_dir / "version_map.db") as conn:
+            conn.execute("CREATE TABLE latest_update_sqlite(datestamp DATETIME PRIMARY KEY)")
+        (output_dir / "build.json").write_text(
+            json.dumps(
+                {
+                    "tool_version": settings.tool_version,
+                    "sources": ["NVD"],
+                    "cve_count": 1,
+                    "range_count": 0,
+                    "layer_records": 1,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return {
+            "image": settings.image,
+            "image_id": "sha256:" + "1" * 64,
+            "tool_version": settings.tool_version,
+        }
+
+    published = cve_db.publish(cbt_settings, cve_db.build(cbt_settings, resolved_nvd, tmp_path / "work", _build_sqlite))
+
+    actor_seeded, ctx_seeded, scanner_seeded, sel_seeded = _make_run("seeded-sync", sync_disabled_cfg)
+    cbt_rows = [row for row in sel_seeded["inputs"] if row["selector"] == "cve-bin-tool"]
+    assert len(cbt_rows) == 1 and cbt_rows[0]["status"] == "available"
+    with provenance_scope(actor_seeded), input_read_scope(ctx_seeded) as reads_seeded:
+        id_seeded = scanner_seeded.identity("cve_bin_tool", {})
+    assert "unavailable" not in id_seeded
+    assert id_seeded["rules"] == {
+        "feed": "cve-bin-tool",
+        "snapshot_id": published["snapshot_id"],
+        "manifest_sha256": published["manifest_sha256"],
+        "nvd_snapshot_id": nvd_pointer["snapshot_id"],
+    }
+    assert [(r["channel"], r["producer"], r["output_kind"]) for r in reads_seeded.document()["reads"]] == [
+        ("external", "job_third_party_data_sync", "feed_snapshot")
+    ]
+
+    # 3. Prove the exact pre-fix failure mode: without feed_snapshot in CONTRACT.inputs,
+    # exiting input_read_scope raises undeclared consumption even though identity() catches ValueError.
+    narrow_contract = dc_replace(
+        CONTRACT,
+        inputs=tuple(i for i in CONTRACT.inputs if i.channel is not InputChannel.EXTERNAL),
+    )
+    actor_bad, ctx_bad, scanner_bad, _ = _make_run(
+        "undeclared-regression", sync_disabled_cfg, contract_override=narrow_contract
+    )
+    with pytest.raises(
+        ValueError,
+        match="undeclared consumption by job_artifact_security_analysis: job_third_party_data_sync/feed_snapshot",
+    ):
+        with provenance_scope(actor_bad), input_read_scope(ctx_bad):
+            scanner_bad.identity("cve_bin_tool", {})

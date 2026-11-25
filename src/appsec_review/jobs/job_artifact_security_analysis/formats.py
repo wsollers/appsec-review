@@ -571,6 +571,98 @@ def inspect_packaged_text_risks(text: str, *, member_path: str) -> list[dict[str
 _CONFIG_SUFFIXES = {".yaml", ".yml", ".json", ".toml", ".ini", ".cfg", ".conf", ".properties", ".env"}
 
 
+def _is_packaged_config_member(name: str) -> bool:
+    member = PurePosixPath(name)
+    return member.suffix.lower() in _CONFIG_SUFFIXES or member.name.lower() in {"dockerfile", ".env"}
+
+
+def _inspect_ar_packaged_configs(
+    stream,
+    size_bytes: int,
+    limits: ArchiveLimits,
+    *,
+    thin: bool,
+    inspect,
+    gaps: list[str],
+    seen: set[str],
+) -> None:
+    """Inspect inline config members in Unix ar archives without dereferencing thin external paths."""
+    offset = 8
+    long_names = b""
+    member_index = 0
+    while offset + _AR_HEADER <= size_bytes:
+        stream.seek(offset)
+        header = stream.read(_AR_HEADER)
+        if len(header) != _AR_HEADER or header[58:60] != b"`\n":
+            raise ValueError("ar archive member header is malformed")
+        raw_name = header[:16].decode("ascii", "replace").rstrip()
+        try:
+            size = int(header[48:58].decode("ascii").strip() or "0")
+        except ValueError as exc:
+            raise ValueError("ar archive member size is malformed") from exc
+        if size < 0:
+            raise ValueError("ar archive member size is negative")
+        data_offset = offset + _AR_HEADER
+        stored = size if (not thin or raw_name in _AR_SPECIAL or raw_name == "//") else 0
+        if data_offset + stored > size_bytes:
+            raise ValueError("ar archive member data is truncated")
+        if raw_name == "//":
+            if size > limits.member_bytes:
+                raise ValueError("ar long-name table exceeds the member byte limit")
+            long_names = stream.read(size)
+        elif raw_name not in _AR_SPECIAL:
+            payload_offset = data_offset
+            payload_size = size
+            if raw_name.startswith("#1/"):
+                try:
+                    bsd_len = int(raw_name[3:])
+                except ValueError as exc:
+                    raise ValueError("ar archive BSD member name is malformed") from exc
+                if bsd_len < 0 or bsd_len > size or (thin and bsd_len > 0):
+                    raise ValueError("ar archive BSD member name length is invalid")
+                name = stream.read(min(bsd_len, 4096)).split(b"\0", 1)[0].decode("utf-8", "replace")
+                payload_offset = data_offset + bsd_len
+                payload_size = size - bsd_len
+            elif raw_name.startswith("/") and raw_name[1:].isdigit():
+                start = int(raw_name[1:])
+                end = long_names.find(b"/\n", start)
+                name = long_names[start:end if end >= 0 else None].decode("utf-8", "replace")
+            else:
+                name = raw_name[:-1] if raw_name.endswith("/") else raw_name
+            if member_index >= limits.members:
+                raise ValueError("packaged member count exceeded")
+            member_index += 1
+            if not _safe_member(name):
+                raise ValueError(f"unsafe packaged member path: {name[:256]}")
+            if _is_packaged_config_member(name):
+                if thin:
+                    if name in seen:
+                        raise ValueError("duplicate packaged member path")
+                    seen.add(name)
+                    gaps.append(f"packaged configuration external thin-archive member not inspected: {name[:256]}")
+                else:
+                    def _read_slice(pos: int = payload_offset, total_len: int = payload_size):
+                        read_pos = 0
+
+                        def _read(limit: int = -1) -> bytes:
+                            nonlocal read_pos
+                            avail = total_len - read_pos
+                            if avail <= 0:
+                                return b""
+                            take = avail if limit < 0 else min(limit, avail)
+                            stream.seek(pos + read_pos)
+                            chunk = stream.read(take)
+                            read_pos += len(chunk)
+                            return chunk
+
+                        return _read
+
+                    inspect(name, payload_size, _read_slice())
+        offset = data_offset + stored + (stored % 2)
+    if offset < size_bytes:
+        raise ValueError("ar archive ends inside a member header")
+
+
 def _packaged_archive_risks(path: Path, limits: ArchiveLimits) -> tuple[list[dict[str, Any]], list[str]]:
     risks: list[dict[str, Any]] = []
     gaps: list[str] = []
@@ -582,8 +674,7 @@ def _packaged_archive_risks(path: Path, limits: ArchiveLimits) -> tuple[list[dic
         if name in seen:
             raise ValueError("duplicate packaged member path")
         seen.add(name)
-        member = PurePosixPath(name)
-        if member.suffix.lower() not in _CONFIG_SUFFIXES and member.name.lower() not in {"dockerfile", ".env"}:
+        if not _is_packaged_config_member(name):
             return
         # Text matching is deliberately narrower than archive inventory; report every selected omission.
         bound = min(limits.member_bytes, remaining, 1024 * 1024)
@@ -602,6 +693,15 @@ def _packaged_archive_risks(path: Path, limits: ArchiveLimits) -> tuple[list[dic
         risks.extend(inspect_packaged_text_risks(text, member_path=name))
 
     try:
+        with path.open("rb") as stream:
+            magic = stream.read(8)
+            if magic in {b"!<arch>\n", b"!<thin>\n"}:
+                stream.seek(0, 2)
+                _inspect_ar_packaged_configs(
+                    stream, stream.tell(), limits,
+                    thin=magic == b"!<thin>\n", inspect=inspect, gaps=gaps, seen=seen,
+                )
+                return risks, gaps
         if zipfile.is_zipfile(path):
             with zipfile.ZipFile(path) as archive:
                 for index, info in enumerate(archive.infolist()):

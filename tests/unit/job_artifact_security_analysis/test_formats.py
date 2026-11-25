@@ -14,6 +14,7 @@ import pytest
 
 from appsec_review.jobs.job_artifact_security_analysis.formats import (
     ArchiveLimits,
+    _packaged_archive_risks,
     _safe_member,
     builtin_observation,
     classify,
@@ -503,3 +504,68 @@ def test_builtin_observation_covers_all_inspector_capabilities_and_fallbacks(tmp
         {},
         ["unsupported format for native: unknown"],
     )
+
+
+def test_packages_observation_and_archive_risks_handle_ar_static_libraries(tmp_path: Path) -> None:
+    """Regression for run 2026-11-25-0002: Unix ar static libraries (.a / .rlib) must not fall
+    through to tarfile.open in _packaged_archive_risks and emit bogus ReadError gaps."""
+    limits = ArchiveLimits()
+    long_table = b"adler32.c.o/\ncompress.c.o/\n"
+    bsd_member = b"crc32.c.o\x00\x00\x7fELFobj"
+    static_lib = tmp_path / "libsmoke_zlib.a"
+    static_lib.write_bytes(
+        b"!<arch>\n"
+        + _ar_entry("/", b"\x00\x00\x00\x00")
+        + _ar_entry("//", long_table)
+        + _ar_entry("/0", b"\x7fELFadler")
+        + _ar_entry("/13", b"\x7fELFcompress")
+        + _ar_entry(f"#1/{len(b'crc32.c.o\x00\x00')}", bsd_member)
+        # Duplicate object basenames from distinct source subdirectories are valid in ar static libs.
+        + _ar_entry("util.o/", b"\x7fELFutil1")
+        + _ar_entry("util.o/", b"\x7fELFutil2")
+    )
+    cls = classify(static_lib, {"kind": "static-library"})
+    assert cls["format"] == "ar-archive" and cls["container"] is True
+    obs, gaps = builtin_observation(static_lib, cls, "packages", limits)
+    assert obs["package_format"] == "ar-archive"
+    assert obs["archive"]["safe"] is True and obs["archive"]["gaps"] == []
+    assert obs["security_risks"] == []
+    assert gaps == ["SBOM/dependency vulnerability matching requires available pinned Syft and vulnerability data"]
+
+    # Inline config member inside a regular !<arch> archive is still scanned for packaged secrets,
+    # and duplicate config member paths still fail closed.
+    secret_cfg = b'JWT_SECRET = "super-secret-production-signing-key-987654"\n'
+    ar_with_cfg = tmp_path / "embedded_cfg.a"
+    ar_with_cfg.write_bytes(b"!<arch>\n" + _ar_entry("app.env/", secret_cfg))
+    cfg_obs, cfg_gaps = builtin_observation(ar_with_cfg, cls, "packages", limits)
+    assert any(item["category"] == "packaged_secret" for item in cfg_obs["security_risks"])
+    assert not any("incomplete" in g for g in cfg_gaps)
+
+    dup_cfg = tmp_path / "dup_cfg.a"
+    dup_cfg.write_bytes(
+        b"!<arch>\n" + _ar_entry("app.env/", b"A=1\n") + _ar_entry("app.env/", b"A=2\n")
+    )
+    risks, risk_gaps = _packaged_archive_risks(dup_cfg, limits)
+    assert risks == [] and any("duplicate packaged member path" in g for g in risk_gaps)
+
+    # Thin !<thin> archives never dereference external files: object members succeed cleanly and
+    # external config-named members report an explicit omission gap without reading host paths.
+    ext_secret = tmp_path / "secret.env"
+    ext_secret.write_bytes(secret_cfg)
+    thin_obj = tmp_path / "libthin.a"
+    thin_obj.write_bytes(b"!<thin>\n" + _ar_entry("adler32.o/", b"", size_text="128"))
+    thin_obs, thin_gaps = builtin_observation(thin_obj, classify(thin_obj, {"kind": "static-library"}), "packages", limits)
+    assert thin_obs["security_risks"] == []
+    assert thin_gaps == [
+        "SBOM/dependency vulnerability matching requires available pinned Syft and vulnerability data"
+    ]
+
+    thin_cfg = tmp_path / "libthin_cfg.a"
+    thin_cfg.write_bytes(
+        b"!<thin>\n" + _ar_entry("secret.env/", b"", size_text=str(len(secret_cfg)))
+    )
+    thin_risks, thin_risk_gaps = _packaged_archive_risks(thin_cfg, limits)
+    assert thin_risks == []
+    assert thin_risk_gaps == [
+        "packaged configuration external thin-archive member not inspected: secret.env"
+    ]

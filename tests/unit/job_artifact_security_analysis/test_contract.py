@@ -35,6 +35,8 @@ from appsec_review.runtime.contracts import (
     MissingPolicy,
     TargetAccess,
 )
+from appsec_review.orchestration.topology import upstream_closure, wave1_dependencies
+from appsec_review.runtime.inputs import feed_input_identity
 from appsec_review.runtime.registry import builtin_registry
 from appsec_review.storage import file_sha256
 
@@ -156,6 +158,13 @@ EXPECTED_INPUTS = (
         Availability.OPTIONAL,
         MissingPolicy.GAP,
     ),
+    (
+        "job_third_party_data_sync",
+        "feed_snapshot",
+        "appsec-review/public-feed-use/1",
+        Availability.OPTIONAL,
+        MissingPolicy.GAP,
+    ),
 )
 
 
@@ -165,11 +174,19 @@ def test_contract_inputs_consumes_and_upstream_producer_parity() -> None:
         for item in CONTRACT.inputs
     )
     assert actual == EXPECTED_INPUTS
-    for item in CONTRACT.inputs:
-        assert item.channel is InputChannel.HANDOFF
+    external = [item for item in CONTRACT.inputs if item.channel is InputChannel.EXTERNAL]
+    assert len(external) == 1
+    assert external[0].producer == "job_third_party_data_sync"
+    assert external[0].output_kind == "feed_snapshot"
+    assert external[0].authority is EvidenceAuthority.REFERENCE
+    assert external[0].coverage is CoveragePolicy.ALLOW_PARTIAL
+    handoff_inputs = [item for item in CONTRACT.inputs if item.channel is InputChannel.HANDOFF]
+    assert len(handoff_inputs) == len(EXPECTED_INPUTS) - 1
+    for item in handoff_inputs:
         assert item.authority is EvidenceAuthority.PRODUCER_EVIDENCE
         assert item.coverage is CoveragePolicy.ALLOW_PARTIAL
-    assert CONSUMES == ("job_artifact_indexing", "job_language_build")
+    assert CONSUMES == CONTRACT.consumes == ("job_artifact_indexing", "job_language_build")
+    assert "job_third_party_data_sync" not in CONSUMES
     assert CONTRACT.schedule_after == ("job_artifact_indexing",)
     assert CONTRACT.dispatch is DispatchClass.REVIEW_GRAPH
     assert CONTRACT.target_access is TargetAccess.CHECKOUT
@@ -177,7 +194,7 @@ def test_contract_inputs_consumes_and_upstream_producer_parity() -> None:
     assert CONTRACT.propagate_handoff is True
 
     registry = builtin_registry()
-    for item in CONTRACT.inputs:
+    for item in handoff_inputs:
         if item.output_kind == "handoff":
             continue
         upstream = registry.build(item.producer)
@@ -185,6 +202,17 @@ def test_contract_inputs_consumes_and_upstream_producer_parity() -> None:
         assert len(matches) == 1
         assert matches[0].schema == item.schema
         assert matches[0].authority is item.authority
+
+    # When maintenance producer job_third_party_data_sync is unselected in a review graph,
+    # job_artifact_security_analysis remains schedulable with no upstream dependency on it.
+    selected_without_sync = set(registry.job_ids()) - {"job_third_party_data_sync"}
+    deps = wave1_dependencies(selected_without_sync)
+    assert deps is not None and "job_artifact_security_analysis" in deps
+    closure = set(
+        upstream_closure("job_artifact_security_analysis", deps, set(deps))
+    )
+    assert set(CONSUMES) <= closure
+    assert "job_third_party_data_sync" not in closure
 
 
 def test_dataset_declarations_and_job_unit_topology() -> None:
@@ -238,6 +266,7 @@ def test_dataset_declarations_and_job_unit_topology() -> None:
     assert job.schema_identity == SCHEMA
     assert job.datasets == DATASETS
     assert job.contract == CONTRACT
+    assert job.external_input_identity is feed_input_identity
     units = {unit.unit_id: unit for unit in job.units}
     assert tuple(units) == (
         "load.accepted_artifacts",
