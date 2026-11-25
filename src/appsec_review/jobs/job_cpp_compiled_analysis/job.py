@@ -51,7 +51,13 @@ def _project_key(root: PurePosixPath) -> str:
 
 
 def _case_root(unit: UnitContext, case_id: str) -> Path:
-    return unit.job.run_root / "data" / "cpp" / "attempts" / unit.job.attempt_id / "projects" / case_id
+    attempt_root = unit.job.run_root / "data" / "cpp" / "attempts" / unit.job.attempt_id / "projects" / case_id
+    if attempt_root.exists():
+        return attempt_root
+    legacy_root = unit.job.run_root / "data" / "cpp" / "projects" / case_id
+    if legacy_root.exists():
+        return legacy_root
+    return attempt_root
 
 
 def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
@@ -196,6 +202,32 @@ def _infer_compile_database(catalog: Mapping[str, Any]) -> list[dict[str, Any]]:
     return container_compile_database(catalog["mapping"]["root"], catalog["compile_commands"])
 
 
+_INFER_SUBPROCESS_SIGNAL_RE = re.compile(
+    r"Subprocess\s+\d+:\s+died after receiving signal number\s+(-?\d+)"
+)
+# OCaml Stdlib.Sys encodes SIGKILL as -7; POSIX wait/signal logs use 9 or -9.
+_INFER_SIGKILL_NUMBERS = frozenset({-7, -9, 9})
+
+
+def _infer_subprocess_signal(infer_run_root: Path) -> int | None:
+    for candidate in (
+        infer_run_root / "raw" / "stderr.bin",
+        infer_run_root / "infer-out" / "logs",
+    ):
+        if candidate.is_symlink() or not candidate.is_file():
+            continue
+        try:
+            if candidate.stat().st_size > 16 * 1024 * 1024:
+                continue
+            text = candidate.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        match = _INFER_SUBPROCESS_SIGNAL_RE.search(text)
+        if match is not None:
+            return int(match.group(1))
+    return None
+
+
 def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
                executor_factory=None) -> Mapping[str, Any]:
     case_root = _case_root(unit, case_id)
@@ -211,20 +243,31 @@ def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
                 ContainerExecutor(tool_catalog, unit.job.run_root))
     result = executor.execute(ExecutionRequest(
         tool_id="tool-infer",
-        argv=("/opt/infer/bin/infer", "run", "--no-progress-bar", "--jobs", "2", "--results-dir",
+        argv=("/opt/infer/bin/infer", "run", "--no-progress-bar", "--jobs", "1", "--results-dir",
               "/scratch/infer-out", "--compilation-database", "/scratch/compile_commands.json"),
         target_root=case_root, scratch_root=scratch, memory="4g",
     ))
     retained = unit.unit_root / f"{case_id}-infer-execution.json"
     retained.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(scratch / "execution.json", retained)
+    subprocess_signal = _infer_subprocess_signal(scratch)
+    oom_killed = bool(result.oom_killed or subprocess_signal in _INFER_SIGKILL_NUMBERS)
     report_path = scratch / "infer-out" / "report.json"
-    value = {"execution": _artifact(unit.job.run_root, retained),
-             "compile_database": _artifact(unit.job.run_root, compile_database),
-             "tool_version": tool_catalog.tool("tool-infer").version if tool_catalog else "injected",
-             "exit_code": result.exit_code, "timed_out": result.timed_out,
-             "oom_killed": result.oom_killed, "image_id": result.image_id,
-             "image_digest": result.image_digest, "argv_identity": result.argv_identity}
+    value: dict[str, Any] = {
+        "execution": _artifact(unit.job.run_root, retained),
+        "compile_database": _artifact(unit.job.run_root, compile_database),
+        "tool_version": tool_catalog.tool("tool-infer").version if tool_catalog else "injected",
+        "exit_code": result.exit_code, "timed_out": result.timed_out,
+        "oom_killed": oom_killed, "image_id": result.image_id,
+        "image_digest": result.image_digest, "argv_identity": result.argv_identity,
+    }
+    if subprocess_signal is not None:
+        value["subprocess_signal"] = subprocess_signal
+    stderr_path = scratch / "raw" / "stderr.bin"
+    if stderr_path.is_file() and not stderr_path.is_symlink() and stderr_path.stat().st_size > 0:
+        retained_stderr = unit.unit_root / f"{case_id}-infer-stderr.bin"
+        shutil.copyfile(stderr_path, retained_stderr)
+        value["stderr"] = _artifact(unit.job.run_root, retained_stderr)
     if report_path.is_file() and not report_path.is_symlink():
         value["report"] = _artifact(unit.job.run_root, report_path)
     return value
@@ -543,7 +586,8 @@ def _new_builder(unit: UnitContext, name: str, case_id: str, branch: str,
         normalizer_identity=f"cpp-{branch}-normalizer/4", mapping_identity="cpp-source-mapping/4")
     shard = f"cpp-{case_id}-{branch}"
     physical_shard = hashlib.sha256(shard.encode()).hexdigest()[:16]
-    path = unit.job.run_root / "data" / "indices" / name / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}-{physical_shard}.sqlite"
+    job_id = getattr(unit.job.config, "job_id", None) or getattr(unit.job, "job_id", "job_cpp_compiled_analysis")
+    path = unit.job.run_root / "data" / "indices" / name / "attempts" / job_id / unit.job.attempt_id / f"{fingerprint}-{physical_shard}.sqlite"
     builder = IndexBuilder(path, name=name, fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     builder.cpp_evidence = evidence
@@ -906,6 +950,7 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
             parsed_units[index] = set()
         locations = _AstLocations(unit, catalog["mapping"], command)
         admitted = set(command.get("ast_linkages", ()))
+        admitted_subtree: set[int] = set()
         excluded: set[int] = set()
         location_gaps: set[str] = set()
         accepted_paths = {"/scratch/" + row["scratch_path"] for row in catalog["mapping"]["files"]}
@@ -919,13 +964,16 @@ def _add_ast_entities(unit: UnitContext, case_id: str, catalog: Mapping[str, Any
                 if linkage and linkage not in admitted:
                     excluded.update(id(child) for child in _walk_ast(node))
                     continue
-                elif not linkage:
+                if not linkage:
                     location_gaps.add("function linkage is absent; neighborhood membership is unresolved")
+                admitted_subtree.update(id(child) for child in _walk_ast(node))
             kind = str(node.get("kind", ""))
             if kind not in AST_ENTITY_KINDS:
                 continue
             if not command.get("ast_filters") and locations.wholly_foreign(accepted_paths):
                 filtered += 1
+                continue
+            if command.get("ast_filters") and id(node) not in admitted_subtree and locations.wholly_foreign(accepted_paths):
                 continue
             if retained >= AST_NODE_LIMIT:
                 gaps.append(f"ast_truncated: {command['target_path']}: node detail cut at {AST_NODE_LIMIT}")
@@ -1099,14 +1147,31 @@ def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
     report_path = root / "analysis" / "infer-run" / "infer-out" / "report.json"
     log_path = root / "analysis" / "infer-run" / "infer-out" / "logs"
     gaps: list[str] = []
+    subprocess_signal = execution.get("subprocess_signal")
+    if subprocess_signal is None:
+        subprocess_signal = _infer_subprocess_signal(root / "analysis" / "infer-run")
+    oom_killed = bool(execution.get("oom_killed") or subprocess_signal in _INFER_SIGKILL_NUMBERS)
     if execution.get("timed_out"):
         gaps.append("Infer timed out before coverage could be established")
-    elif execution.get("oom_killed"):
-        gaps.append("Infer was OOM-killed before coverage could be established")
+    elif oom_killed:
+        if subprocess_signal is not None:
+            gaps.append(
+                f"Infer was OOM-killed (worker subprocess died after signal {subprocess_signal}) "
+                "before coverage could be established"
+            )
+        else:
+            gaps.append("Infer was OOM-killed before coverage could be established")
+    elif subprocess_signal is not None:
+        gaps.append(
+            f"Infer worker subprocess died after signal {subprocess_signal} "
+            "before coverage could be established"
+        )
     elif execution.get("exit_code") != 0:
         gaps.append(f"Infer exited with status {execution.get('exit_code')}")
+    report_valid = False
     try:
         records = _bounded_infer_report(report_path)
+        report_valid = True
     except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         from appsec_review.runtime import execution_safety as safety
         safety.fail(f"Infer output is invalid: {type(exc).__name__}", action="cpp.infer")
@@ -1128,6 +1193,8 @@ def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
     artifacts = [execution["execution"], execution["compile_database"], catalog["compile_database"]]
     if isinstance(execution.get("report"), Mapping):
         artifacts.append(execution["report"])
+    if isinstance(execution.get("stderr"), Mapping):
+        artifacts.append(execution["stderr"])
     if log_path.is_file() and not log_path.is_symlink():
         artifacts.append(_artifact(unit.job.run_root, log_path))
     builder, path, fingerprint, shard = _new_builder(
@@ -1179,12 +1246,19 @@ def _infer_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
                       target_path, line, column)))
         count += 1
     unique_gaps = list(dict.fromkeys(gaps))
-    builder.add_coverage("infer", "partial" if unique_gaps else "complete",
+    infer_failed = bool(execution.get("timed_out") or oom_killed or subprocess_signal is not None or not report_valid)
+    coverage_status = ("unavailable" if (infer_failed and count == 0)
+                       else ("partial" if unique_gaps else "complete"))
+    builder.add_coverage("infer", coverage_status,
                          "; ".join(bounded_gap_messages(unique_gaps, 10)) or None)
     result = dict(_finish_index(unit, builder, path, fingerprint, shard,
                                 "observations", "infer", unique_gaps))
     result.update(observation_count=count, expected_source_files=expected_count,
-                  captured_source_files=captured_count)
+                  captured_source_files=captured_count, oom_killed=oom_killed)
+    if subprocess_signal is not None:
+        result["subprocess_signal"] = subprocess_signal
+    if infer_failed or execution.get("exit_code") not in (None, 0):
+        result["checkpointable"] = False
     return result
 
 
@@ -1658,6 +1732,11 @@ def build_job(*, executor_factory=None) -> Job:
                     result = _build_entities(unit, case_id, cataloged)
                 elif name == "infer":
                     execution = _run_infer(unit, case_id, cataloged, executor_factory)
+                    from appsec_review.runtime import execution_safety as safety
+                    safety.failed_result(execution["timed_out"] or execution["oom_killed"]
+                                         or execution.get("subprocess_signal") is not None
+                                         or execution["exit_code"] != 0,
+                                         f"{case_id} infer execution failed", action="cpp.infer")
                     result = _infer_index(unit, case_id, cataloged, execution)
                 else:
                     tool_mode = "symbols" if name == "binary" else name

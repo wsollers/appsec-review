@@ -1222,3 +1222,81 @@ def test_catalog_invalid_db_and_branch_failure_edges(tmp_path: Path) -> None:
     tfile.write_text("int edge() { return 999; }\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Infer observation source changed after accepted mapping"):
         cpp_job._infer_index(u2, cid, cataloged, exec_meta)
+
+
+def test_infer_runs_single_worker_within_4g_and_classifies_worker_signal_kills(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from appsec_review.container_runtime.catalog import load_catalog
+
+    repo_catalog = load_catalog(ROOT)
+    assert repo_catalog.tool("tool-infer").memory == "1g"
+
+    unit, base_handlers = _prepared_catalog_inputs(tmp_path)
+    unit._store["catalog.projects"] = base_handlers["catalog.projects"](unit)
+    cid = next(iter(unit._store["catalog.projects"]["projects"]))
+    croot = cpp_job._case_root(unit, cid)
+
+    seen_requests: list[Any] = []
+    failed_notices: list[tuple[bool, str, str]] = []
+    monkeypatch.setattr(
+        "appsec_review.runtime.execution_safety.failed_result",
+        lambda failed, msg, *, action="": failed_notices.append((bool(failed), msg, action)),
+    )
+
+    state = {"log_line": "[17][      debug] Subprocess 1: died after receiving signal number -7\n",
+             "in_stderr": False}
+
+    class InferSignalExecutor:
+        def execute(self, req: Any) -> ExecutionResult:
+            seen_requests.append(req)
+            res = _exec_result(unit.job.run_root, req.scratch_root, req.tool_id, exit_code=1, oom_killed=False)
+            infer_out = req.scratch_root / "infer-out"
+            infer_out.mkdir(parents=True, exist_ok=True)
+            (infer_out / "report.json").write_text("[]", encoding="utf-8")
+            if state["in_stderr"]:
+                (req.scratch_root / "raw" / "stderr.bin").write_text(state["log_line"], encoding="utf-8")
+            else:
+                (infer_out / "logs").write_text(
+                    "[10][environment] CWD = /scratch\n" + state["log_line"], encoding="utf-8",
+                )
+            return res
+
+    job_inst = cpp_job.build_job(executor_factory=lambda _u: InferSignalExecutor())
+    handlers = {item.unit_id: item.handler for item in job_inst.units}
+
+    # Case 1: OCaml worker SIGKILL (-7) in infer-out/logs while PID 1 exits 1 with executor oom_killed=False.
+    infer_oom = handlers["infer.projects"](unit)
+    assert len(seen_requests) == 1
+    infer_argv = list(seen_requests[0].argv)
+    jobs_idx = infer_argv.index("--jobs")
+    assert infer_argv[jobs_idx + 1] == "1"
+    assert ("--jobs", "2") not in zip(infer_argv, infer_argv[1:])
+    assert seen_requests[0].memory == "4g"
+
+    proj_oom = infer_oom["projects"][cid]
+    assert proj_oom["oom_killed"] is True
+    assert proj_oom["subprocess_signal"] == -7
+    assert proj_oom["checkpointable"] is False
+    assert not (croot / "checkpoints" / "branch-infer.json").exists()
+    assert proj_oom["observation_count"] == 0
+    import sqlite3
+    with sqlite3.connect(unit.job.run_root / proj_oom["artifact"]["path"]) as db:
+        cov_row = db.execute("select status from coverage where area = 'infer'").fetchone()
+    assert cov_row == ("unavailable",)
+    assert any("OOM-killed" in gap and "signal -7" in gap for gap in proj_oom["gaps"])
+    assert any(failed and action == "cpp.infer" for failed, _, action in failed_notices)
+
+    # Case 2: Non-OOM worker crash (signal -11) in stderr.bin classifies worker crash without false OOM.
+    failed_notices.clear()
+    state["log_line"] = "Uncaught Internal Error: Subprocess 2: died after receiving signal number -11\n"
+    state["in_stderr"] = True
+    infer_sig = handlers["infer.projects"](unit)
+    proj_sig = infer_sig["projects"][cid]
+    assert proj_sig["oom_killed"] is False
+    assert proj_sig["subprocess_signal"] == -11
+    assert proj_sig["checkpointable"] is False
+    with sqlite3.connect(unit.job.run_root / proj_sig["artifact"]["path"]) as db:
+        sig_cov_row = db.execute("select status from coverage where area = 'infer'").fetchone()
+    assert sig_cov_row == ("unavailable",)
+    assert any("Infer worker subprocess died after signal -11" in gap for gap in proj_sig["gaps"])
