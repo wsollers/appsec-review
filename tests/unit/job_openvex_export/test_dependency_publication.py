@@ -441,7 +441,7 @@ def test_dependency_inventory_is_in_verified_inputs_and_input_telemetry(tmp_path
 
 
 @pytest.mark.parametrize("bound", ["max_bindings", "max_total_input_bytes"])
-def test_dependency_inputs_share_the_configured_aggregate_bound(tmp_path, monkeypatch, bound):
+def test_dependency_inputs_count_bindings_without_rejecting_aggregate_bytes(tmp_path, monkeypatch, bound):
     baseline = tmp_path / "baseline"
     baseline.mkdir()
     disk = AcceptedInputDisk(baseline, monkeypatch, buckets=())
@@ -458,10 +458,16 @@ def test_dependency_inputs_share_the_configured_aggregate_bound(tmp_path, monkey
     _, accepted = dependency(disk, document=produced_reachability(disk, scenario="empty"))
     units = ExportUnits(disk)
     with admitted(disk, accepted):
-        with pytest.raises(c.ExportError) as error:
-            units.execute("load.verify_inputs")
-    assert error.value.reason == c.ExportFailureReason.BOUND_EXCEEDED
-    assert not (units.context.attempt_root / "steps/load/tasks/verify_inputs/verified-inputs.json").exists()
+        if bound == "max_bindings":
+            with pytest.raises(c.ExportError) as error:
+                units.execute("load.verify_inputs")
+            assert error.value.reason == c.ExportFailureReason.BOUND_EXCEEDED
+            assert not (units.context.attempt_root / "steps/load/tasks/verify_inputs/verified-inputs.json").exists()
+        else:
+            loaded = units.execute("load.verify_inputs")
+            verified = c.VerifiedInputs.from_mapping(
+                json.loads((disk.root / loaded["artifact"]["path"]).read_bytes()))
+            assert verified.total_input_bytes > limit
 
 
 def test_complete_dependency_inventory_fits_its_exact_unique_binding_bound(tmp_path, monkeypatch):

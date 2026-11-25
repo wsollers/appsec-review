@@ -174,7 +174,7 @@ def test_declared_common_artifact_size_is_not_trusted(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("surface", ["result_run_path", "shared_receipt"])
-def test_common_accounting_transitive_references_are_bounded_before_authority(tmp_path, monkeypatch, surface):
+def test_large_common_accounting_references_are_reproved_before_authority(tmp_path, monkeypatch, surface):
     disk = AcceptedInputDisk(tmp_path, monkeypatch)
     handoff = deepcopy(disk.gate_handoff)
     large = disk.put("retained.bin", b"x" * 100000)
@@ -189,11 +189,12 @@ def test_common_accounting_transitive_references_are_bounded_before_authority(tm
     reference["size_bytes"] = (disk.root / name).stat().st_size
     handoff["artifacts"] = [raw for raw in handoff["artifacts"] if raw["path"] != name] + [reference]
     repin_gate_handoff(disk, handoff)
-    spy = Mock(side_effect=AssertionError("transitive accounting must be bounded before shared authority"))
+    (disk.root / large["path"]).write_bytes(b"y" * 100000)
+    spy = Mock(side_effect=AssertionError("transitive accounting must be verified before shared authority"))
     monkeypatch.setattr(inputs, "accepted_handoff", spy)
     settings = replace(disk.settings, max_artifact_bytes=50000)
     assert_failure(lambda: inputs._accepted(inputs.BoundedInputReader(disk.root, settings), inputs.GATE_JOB),
-                   c.ExportFailureReason.BOUND_EXCEEDED)
+                   c.ExportFailureReason.INPUT_TAMPERED)
     spy.assert_not_called()
 
 
@@ -212,6 +213,11 @@ def test_common_envelope_accounting_counts_once_and_obeys_lowered_limits(tmp_pat
     assert exact.inventory == inventory
     settings = replace(settings, **({"max_bindings": len(inventory) - 1} if kind == "bindings" else
                                    {"max_total_input_bytes": settings.max_total_input_bytes - 1}))
+    if kind == "bytes":
+        reader = inputs.BoundedInputReader(disk.root, settings)
+        inputs._accepted(reader, inputs.GATE_JOB)
+        assert reader.inventory == inventory
+        return
     spy = Mock(side_effect=AssertionError("lowered envelope bound must fail before authority"))
     monkeypatch.setattr(inputs, "accepted_handoff", spy)
     assert_failure(lambda: inputs._accepted(inputs.BoundedInputReader(disk.root, settings), inputs.GATE_JOB),
@@ -604,7 +610,12 @@ def test_reader_exact_lowered_thresholds_and_unique_accounting(tmp_path, kind):
     reader = inputs.BoundedInputReader(root, bad_settings)
     if kind != "artifact":
         reader.read(ref)
-    assert_failure(lambda: reader.read(bad_ref), c.ExportFailureReason.BOUND_EXCEEDED)
+    if kind == "bindings":
+        assert_failure(lambda: reader.read(bad_ref), c.ExportFailureReason.BOUND_EXCEEDED)
+    else:
+        assert reader.read(bad_ref) == payload
+        reader.reprove()
+        assert sum(item.size_bytes for item in reader.inventory) == (17 if kind == "artifact" else 34)
 
 
 def test_bound_inventory_cannot_be_substituted_for_filesystem_reproof(tmp_path, monkeypatch):
@@ -729,10 +740,16 @@ def test_conflicting_path_hashes_rejected_independently_of_byte_count(tmp_path):
 
 @pytest.mark.parametrize("overrides", [{"max_artifact_bytes": 1}, {"max_bindings": 1},
                                      {"max_artifact_bytes": 1, "max_total_input_bytes": 1}])
-def test_configured_lower_input_limits_apply_to_real_verification(tmp_path, monkeypatch, overrides):
+def test_real_verification_preserves_binding_limits_without_input_byte_rejection(tmp_path, monkeypatch, overrides):
     disk = AcceptedInputDisk(tmp_path, monkeypatch, settings=enabled_settings(**overrides))
-    assert_failure(disk.verify, c.ExportFailureReason.BOUND_EXCEEDED)
-    assert disk.calls == []
+    if "max_bindings" in overrides:
+        assert_failure(disk.verify, c.ExportFailureReason.BOUND_EXCEEDED)
+        assert disk.calls == []
+    else:
+        verified = disk.verify()
+        assert verified.total_input_bytes > disk.settings.max_artifact_bytes
+        assert len(verified.findings) == 1
+        assert disk.calls
 
 
 def test_configuration_manifest_cannot_repoint_frozen_resolved_bytes(tmp_path, monkeypatch):
@@ -956,7 +973,7 @@ def test_durable_inventory_survives_new_gate_pointer_but_current_reproof_is_stal
 
 @pytest.mark.parametrize("pointer", ["data/jobs/job_example/latest.json", "data/indices/accepted.json"])
 @pytest.mark.parametrize("bound", ["bindings", "bytes"])
-def test_operational_pointer_bytes_and_references_still_count_toward_bounds(tmp_path, pointer, bound):
+def test_operational_pointer_bytes_remain_measured_and_binding_count_stays_bounded(tmp_path, pointer, bound):
     path = tmp_path / pointer
     path.parent.mkdir(parents=True)
     path.write_bytes(b"pointer")
@@ -966,7 +983,12 @@ def test_operational_pointer_bytes_and_references_still_count_toward_bounds(tmp_
     reader = inputs.BoundedInputReader(tmp_path, settings)
     reader.pin(pointer)
     assert inputs._durable_inventory(reader.inventory) == ()
-    assert_failure(lambda: reader.pin("immutable.json"), c.ExportFailureReason.BOUND_EXCEEDED)
+    if bound == "bindings":
+        assert_failure(lambda: reader.pin("immutable.json"), c.ExportFailureReason.BOUND_EXCEEDED)
+    else:
+        reference = reader.pin("immutable.json")
+        assert sum(item.size_bytes for item in reader.inventory) == 16
+        assert inputs._durable_inventory(reader.inventory) == (reference,)
 
 
 def test_only_exact_operational_pointer_families_are_omitted(tmp_path):

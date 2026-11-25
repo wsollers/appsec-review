@@ -223,8 +223,12 @@ See the [handler](../../src/appsec_review/jobs/job_openvex_export/job.py),
 1. In `load.verify_inputs`, require enabled typed settings and a valid attempt deadline.
    Verify accepted gate/review identities, source scope, frozen configuration, finding partitions
    and every certified binding through the bounded input reader.
-2. Measure the input inventory and reprove it. Missing, stale, tampered, escaping or oversized
-   inputs fail closed; no package is skipped to make the export fit.
+2. Measure the input inventory and reprove it. Missing, stale, tampered or escaping inputs fail
+   closed. Input-byte ceilings are not enforced: the legacy `max_artifact_bytes` and
+   `max_total_input_bytes` settings remain in frozen configurations, but do not reject larger
+   admitted inputs. Hash-only inventory checks stream their bytes rather than retain whole
+   artifacts in memory. Binding/package counts, deadlines and output-size limits still apply;
+   no package is skipped to make the export fit.
 3. Verify and copy the pinned offline schema resources, upstream lock and license into this
    attempt. Write immutable `openvex_verified_inputs`; no network schema lookup occurs.
 

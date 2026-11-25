@@ -555,11 +555,12 @@ must be nonblank while enabled; empty role is optional, and empty repository sel
 snapshot identity whether enabled or disabled. Require gate and review enabled
 when automatic export is enabled; fail configuration explicitly if prerequisites are absent.
 
-Displayed numeric defaults are schema hard maxima; operators may lower positive bounds.
-Require `max_packages <= 10000`, individual input bound <= total input bound, and validate
-actual UTF-8 byte sizes, unique reference count and aggregate unique input bytes.
-No silent truncation. Enforce fixed local JSON depth <= 32 and bounded parsing before
-unrestricted recursive schema work; reject duplicate keys/non-finite values in new documents.
+Package/reference counts and output sizes retain their typed bounds. The legacy
+`max_artifact_bytes` and `max_total_input_bytes` fields remain readable in frozen configurations,
+but no longer reject admitted input files or aggregate input inventories by size. Record actual
+byte sizes and stream hash-only verification without retaining entire artifacts in memory.
+No silent truncation. Enforce fixed local JSON depth <= 32 and reject duplicate keys/non-finite
+values in new documents.
 Existing upstream readers remain the authority for their established schemas.
 
 Use monotonic deadlines checked between bounded reads/validation/assembly phases and existing
@@ -763,7 +764,7 @@ in-memory strict contracts from a real accepted run/certificate boundary.
 | Inputs/products | Re-prove certified `/2` snapshot, capabilities/attachments and nested certified refs without live discovery; both package-manifest, ledger/scores/policy/scope/config pins; automatic snapshot namespace with bound acquisition but no external URL inference; strict explicit IRI/acquisition match; no guessed release/artifact/purl or target access. |
 | Selection/accounting | Mixed publishable confirmed, supported backlog, confirmed withheld: each counted once, only publishable affected; state/bucket contradiction fails; missing severity/distinct verification and incomplete review retain original limitations without altering eligibility. |
 | Unsupported statuses | Refuted/contradicted/unreachable observations, PoC absence/failure/compile success or failed/skipped coverage never create not_affected/fixed/under_investigation; supported does not become affected. No PoC/chain/dossier prerequisite. |
-| Empty/limits | Zero packages/all backlog/all withheld yield accepted no_statements, null ref, absent VEX file, explicit gap and exact zeros/reasons. Invalid config is not no_statements. Output/input/ref/timeout boundary failures create no accepted subset or empty success. |
+| Empty/limits | Zero packages/all backlog/all withheld yield accepted no_statements, null ref, absent VEX file, explicit gap and exact zeros/reasons. Invalid config is not no_statements. Output-byte/reference-count/timeout boundary failures create no accepted subset or empty success; input-byte quantities are measured without a rejection ceiling. |
 | Identity/replay | Permute input list/map/binding order and runtime scheduling; same pins produce identical bytes/IDs; valid UTC normalization, trailing LF/UTF-8; changed advice/author/product/gate timestamp/release changes identity; old ID not overwritten; no self-hash cycle or duplicate statements. |
 | Integrity | Tamper gate pointer/doc, review handoff, lead/hunt manifests, scope, accepted manifest, ledger/projection, package/score/policy, frozen configuration, schema pin and each output separately. Cross-run/symlink/escape, changed pointer between load/accept and stale gate after review rerun fail closed; no broad skip or stale fallback. |
 | Export-reader/CLI/topology units | Disabled excluded/refused manually; enabled completion producers precede one gate; report depends on gate only, independent of export; standalone upstream sets exact; current available/empty/not-run/stale views and historical immutable readers verified separately; corrupt export fails its reader, not gate-only report; no changed-input fallback or review/ship-block changes. |

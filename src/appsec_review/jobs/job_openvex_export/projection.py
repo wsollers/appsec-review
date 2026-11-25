@@ -32,9 +32,7 @@ def _check_inputs(inputs: c.VerifiedInputs, settings: OpenVexExportSettings) -> 
             or inputs.source.repository_iri != c.snapshot_repository_iri(inputs.source.target_snapshot)):
         _fail("automatic repository identity does not match the accepted source snapshot",
               c.ExportFailureReason.IDENTITY_CONFLICT)
-    if (len(inputs.findings) > settings.max_packages or len(inputs.input_inventory) > settings.max_bindings
-            or any(ref.size_bytes > settings.max_artifact_bytes for ref in inputs.input_inventory)
-            or inputs.total_input_bytes > settings.max_total_input_bytes):
+    if len(inputs.findings) > settings.max_packages or len(inputs.input_inventory) > settings.max_bindings:
         _fail("verified input inventory exceeds configured export bounds", c.ExportFailureReason.BOUND_EXCEEDED)
     gate = inputs.gate
     counts = Counter(finding.bucket.value for finding in inputs.findings)

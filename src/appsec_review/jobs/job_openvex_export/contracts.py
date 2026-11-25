@@ -281,9 +281,10 @@ def canonical_bytes(value: Any) -> bytes:
     return canonical_json(json_body(freeze_json(value)))
 
 
-def parse_json_bytes(payload: bytes, *, max_bytes: int) -> dict[str, Any]:
-    """Bound new local JSON before recursive parsing; reject duplicate keys and nonfinite numbers."""
-    if type(payload) is not bytes or type(max_bytes) is not int or max_bytes <= 0 or len(payload) > max_bytes:
+def parse_json_bytes(payload: bytes, *, max_bytes: int | None) -> dict[str, Any]:
+    """Parse input or bounded output JSON; reject duplicate keys and nonfinite numbers."""
+    if type(payload) is not bytes or (max_bytes is not None and (
+            type(max_bytes) is not int or max_bytes <= 0 or len(payload) > max_bytes)):
         raise ValueError("JSON payload exceeds its byte bound or has an invalid bound")
     text = payload.decode("utf-8")
     depth, quoted, escaped = 0, False, False
@@ -402,8 +403,8 @@ class SizedArtifactRef(ArtifactRef):
 
     def __post_init__(self) -> None:
         super(SizedArtifactRef, self).__post_init__()
-        if type(self.size_bytes) is not int or not 0 <= self.size_bytes <= MAX_TOTAL_INPUT_BYTES:
-            raise ValueError("artifact size must be a bounded nonnegative integer")
+        if type(self.size_bytes) is not int or self.size_bytes < 0:
+            raise ValueError("artifact size must be a nonnegative integer")
 
     @property
     def reference(self) -> ArtifactRef:
@@ -606,9 +607,7 @@ class VerifiedInputs:
             raise ValueError("verified inventory must contain measured immutable references")
         inventory = tuple(sorted(self.input_inventory, key=lambda ref: (ref.path, ref.sha256)))
         if (not inventory or len(inventory) > MAX_BINDINGS
-                or len({item.path for item in inventory}) != len(inventory)
-                or any(item.size_bytes > MAX_ARTIFACT_BYTES for item in inventory)
-                or sum(item.size_bytes for item in inventory) > MAX_TOTAL_INPUT_BYTES):
+                or len({item.path for item in inventory}) != len(inventory)):
             raise ValueError("verified input inventory exceeds bounds or repeats paths")
         bound = {item.reference for item in inventory}
         required = set(self.provenance.references)
@@ -757,7 +756,7 @@ def output_reference(output_prefix: str, filename: str, payload: bytes) -> Sized
 # Exact resources consumed by the offline validator, including transitive accepted-gate definitions.
 SCHEMA_SHA256: Mapping[str, str] = MappingProxyType({
     "openvex-dependencies.schema.json": "d91daa2be595fd3d1aa640ccfb7b733b0e7a113cfd0e615019d532ca8b9028a2",
-    "common.schema.json": "a90bbf40647f6652d2439885b9e446471aadbc6c534d342881ea34f85f737f29",
+    "common.schema.json": "78e25d46161a3e4addf796ddbd9a964e73ee54c22c56f9d8f648f7f88303b6fc",
     "manifest.schema.json": "64aed63dd5cc0df74d8d0b332c8a9a532d3764fcb7f100594174fa3f0f7dbfd9",
     "result.schema.json": "b5321b7f4e736e55149ca3fce67b073c460e1f3473fc9b45eb40c0db0ace018a",
     "../final-report/common.schema.json": "5a81b5d22f8b55c5261e9b00b683f313a66e30f4263412815c2e22c70129add5",

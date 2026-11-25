@@ -31,8 +31,8 @@ from .validation import schema_registry, schema_validator, validate_export
 
 
 def read_output(run_root: Path, reference: ArtifactRef, settings: OpenVexExportSettings, *,
-                max_bytes: int, phase: ExportPhase = ExportPhase.ACCEPT) -> bytes:
-    """Read one output with its own limit; manifests may exceed an individual input limit."""
+                max_bytes: int | None, phase: ExportPhase = ExportPhase.ACCEPT) -> bytes:
+    """Read a bound output, or an input binding without an input-byte ceiling."""
     reader = BoundedInputReader(run_root, settings, phase=phase)
     path = reader.path(reference.path)
     with path.open("rb") as stream:
@@ -40,13 +40,13 @@ def read_output(run_root: Path, reference: ArtifactRef, settings: OpenVexExportS
         if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
             raise ExportError("export artifact is not a private regular file", reason=Reason.INPUT_TAMPERED,
                               phase=phase)
-        if before.st_size > max_bytes:
+        if max_bytes is not None and before.st_size > max_bytes:
             raise ExportError("export artifact exceeds its byte bound", reason=Reason.BOUND_EXCEEDED, phase=phase)
-        payload = stream.read(max_bytes + 1)
+        payload = stream.read() if max_bytes is None else stream.read(max_bytes + 1)
         after = os.fstat(stream.fileno())
     current = reader.path(reference.path).stat()
     if (after.st_nlink != 1 or current.st_nlink != 1
-            or len(payload) > max_bytes or len(payload) != before.st_size
+            or (max_bytes is not None and len(payload) > max_bytes) or len(payload) != before.st_size
             or before.st_size != after.st_size or before.st_mtime_ns != after.st_mtime_ns
             or (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
             != (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns)
@@ -60,7 +60,7 @@ def frozen_configuration(run_root: Path) -> tuple[dict[str, Any], ArtifactRef]:
     reader = BoundedInputReader(run_root, OpenVexExportSettings(), phase=ExportPhase.LOAD)
     manifest = reader.json(reader.pin("data/configuration/manifest.json").reference)
     reference = ArtifactRef("data/configuration/resolved.json", manifest["resolved_sha256"])
-    document = parse_json_bytes(reader.read(reference), max_bytes=reader.settings.max_artifact_bytes)
+    document = reader.json(reference)
     return document, reference
 
 
@@ -125,8 +125,7 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
         raise ExportError("accepted OpenVEX common envelope is invalid", reason=Reason.SCHEMA_INVALID,
                           phase=ExportPhase.ACCEPT) from exc
     settings = _recorded_settings(reader, accepted)
-    if (len(accepted["artifacts"]) > settings.max_bindings
-            or sum(item["size_bytes"] for item in accepted["artifacts"]) > settings.max_total_input_bytes):
+    if len(accepted["artifacts"]) > settings.max_bindings:
         raise ExportError("accepted runtime artifact inventory exceeds its bounds", reason=Reason.BOUND_EXCEEDED,
                           phase=ExportPhase.ACCEPT)
     outputs = accepted.get("outputs", {})
@@ -141,7 +140,7 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
         raise ExportError("accepted export uses different settings", reason=Reason.IDENTITY_CONFLICT,
                           phase=ExportPhase.ACCEPT)
     for reference in verified.input_inventory:
-        reader.read(reference)
+        reader.verify(reference)
     reader.reprove()
     result_reference = ArtifactRef.from_mapping(published["artifact"])
     result, result_bytes = _json_output(run_root, result_reference, settings, max_bytes=MAX_RESULT_BYTES)
@@ -189,18 +188,17 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
             raise ExportError("runtime and export inventories disagree", reason=Reason.IDENTITY_CONFLICT,
                               phase=ExportPhase.ACCEPT)
         admitted[reference.path] = reference
-    if (len(admitted) > settings.max_bindings
-            or sum(reference.size_bytes for reference in admitted.values()) > settings.max_total_input_bytes):
+    if len(admitted) > settings.max_bindings:
         raise ExportError("accepted export inventory exceeds its bounds", reason=Reason.BOUND_EXCEEDED,
                           phase=ExportPhase.ACCEPT)
     for item in accepted["artifacts"]:
         reference = SizedArtifactRef.from_mapping(item)
-        read_output(run_root, reference, settings, max_bytes=bounds.get(reference.path, settings.max_artifact_bytes))
+        read_output(run_root, reference, settings, max_bytes=bounds.get(reference.path))
     verify_handoff_integrity(run_root, accepted)
     reader.reprove()
     for item in accepted["artifacts"]:
         reference = SizedArtifactRef.from_mapping(item)
-        read_output(run_root, reference, settings, max_bytes=bounds.get(reference.path, settings.max_artifact_bytes))
+        read_output(run_root, reference, settings, max_bytes=bounds.get(reference.path))
     for reference in (verified_ref, bundle.result_ref, bundle.manifest_ref, bundle.document_ref):
         if reference is not None and artifacts.get(reference.path) != reference.sha256:
             raise ExportError("export artifact is not bound by its accepted handoff", reason=Reason.INPUT_TAMPERED,
@@ -275,7 +273,7 @@ def _read_accepted_dependency_export(
             "dependency companion source was not admitted by the accepted export")
     with upstream_scope(run_root, JOB_ID, pins, contract=CONTRACT):
         for item in verified.input_inventory:
-            reader.read(item)
+            reader.verify(item)
         loaded = dependencies.read_dependency_inputs(
             reader, repository_root, resolved_config_sha256=verified.provenance.resolved_config_sha256,
             target_snapshot=verified.source.target_snapshot)
@@ -293,8 +291,7 @@ def _read_accepted_dependency_export(
         require(item.path not in inventory or inventory[item.path] == item,
                 "historical dependency inventories disagree")
         inventory[item.path] = item
-    require(len(inventory) <= settings.max_bindings
-            and sum(item.size_bytes for item in inventory.values()) <= settings.max_total_input_bytes,
+    require(len(inventory) <= settings.max_bindings,
             "historical dependency inventory exceeds its bounds", Reason.BOUND_EXCEEDED)
     counts = dict.fromkeys(result["statements_by_status"], 0)
     if result["document"] is not None:

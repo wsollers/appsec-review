@@ -101,11 +101,11 @@ def build_job(*, repository_root: Path | None = None) -> Job:
             if create:
                 _write(unit, unit.job.run_root / name, payload)
             else:
-                read_output(unit.job.run_root, reference, settings, max_bytes=settings.max_artifact_bytes)
+                read_output(unit.job.run_root, reference, settings, max_bytes=len(payload))
             references.append(reference)
         measured = BoundedInputReader(unit.job.run_root, settings, phase=ExportPhase.ACCEPT)
         for reference in (*verified.input_inventory, *references):
-            measured.read(reference)
+            measured.verify(reference)
         measured.reprove()
         return replace(verified, input_inventory=measured.inventory)
 

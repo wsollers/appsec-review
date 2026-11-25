@@ -104,7 +104,6 @@ class BoundedInputReader:
         self.deadline = time.monotonic() + settings.timeout_seconds if deadline is None else deadline
         self._inventory: dict[str, SizedArtifactRef] = {}
         self._accepted_refs: dict[str, ArtifactRef] = {}
-        self._total = 0
 
     def check_deadline(self) -> None:
         _require(time.monotonic() < self.deadline, "OpenVEX input verification timed out",
@@ -130,7 +129,8 @@ class BoundedInputReader:
                          "run-owned path contains a link", Reason.INPUT_TAMPERED, phase=self.phase)
             return candidate
 
-    def _read(self, relative: str, digest: str | None) -> tuple[bytes, SizedArtifactRef]:
+    def _read(self, relative: str, digest: str | None, *,
+              retain_bytes: bool = True, declared_size: int | None = None) -> tuple[bytes, SizedArtifactRef]:
         with _errors(self.phase, Reason.INPUT_TAMPERED):
             path = self.path(relative)
             before = path.stat()
@@ -142,39 +142,37 @@ class BoundedInputReader:
                          Reason.IDENTITY_CONFLICT, phase=self.phase)
             _require(old is not None or len(self._inventory) < self.settings.max_bindings,
                      "unique input binding bound exceeded", Reason.BOUND_EXCEEDED, phase=self.phase)
-            remaining = self.settings.max_total_input_bytes - self._total + (old.size_bytes if old else 0)
-            limit = min(self.settings.max_artifact_bytes, remaining)
-            _require(before.st_size <= limit, "input byte bound exceeded",
-                     Reason.BOUND_EXCEEDED, phase=self.phase)
             chunks: list[bytes] = []
             size = 0
+            hasher = hashlib.sha256()
             with path.open("rb") as stream:
                 opened = os.fstat(stream.fileno())
                 _require(stat.S_ISREG(opened.st_mode) and self._stamp(opened) == self._stamp(before),
                          "input changed while opening", Reason.INPUT_TAMPERED, phase=self.phase)
                 while True:
                     self.check_deadline()
-                    chunk = stream.read(min(65536, limit - size + 1))
+                    chunk = stream.read(65536)
                     if not chunk:
                         break
-                    chunks.append(chunk)
+                    if retain_bytes:
+                        chunks.append(chunk)
+                    hasher.update(chunk)
                     size += len(chunk)
-                    _require(size <= limit, "input byte bound exceeded",
-                             Reason.BOUND_EXCEEDED, phase=self.phase)
                 after = os.fstat(stream.fileno())
             _require(self._stamp(before) == self._stamp(after)
                      == self._stamp(self.path(relative).stat()) and size == after.st_size,
                      "input changed while reading", Reason.INPUT_TAMPERED, phase=self.phase)
             payload = b"".join(chunks)
-            actual = hashlib.sha256(payload).hexdigest()
+            actual = hasher.hexdigest()
             _require(digest is None or actual == digest, "input digest does not match accepted bytes",
+                     Reason.INPUT_TAMPERED, phase=self.phase)
+            _require(declared_size is None or declared_size == size, "declared input size disagrees with bytes",
                      Reason.INPUT_TAMPERED, phase=self.phase)
             measured = SizedArtifactRef(relative, actual, size)
             _require(old is None or old == measured, "input changed during verification",
                      Reason.INPUT_TAMPERED, phase=self.phase)
             if old is None:
                 self._inventory[relative] = measured
-                self._total += size
             self.check_deadline()
             return payload, measured
 
@@ -184,19 +182,20 @@ class BoundedInputReader:
         return value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns
 
     def pin(self, relative: str) -> SizedArtifactRef:
-        return self._read(relative, None)[1]
+        return self._read(relative, None, retain_bytes=False)[1]
 
     def read(self, reference: ArtifactRef) -> bytes:
-        payload, measured = self._read(reference.path, reference.sha256)
-        if isinstance(reference, SizedArtifactRef):
-            _require(reference.size_bytes == measured.size_bytes, "declared input size disagrees with bytes",
-                     Reason.INPUT_TAMPERED, phase=self.phase)
-        return payload
+        return self._read(reference.path, reference.sha256, declared_size=(
+            reference.size_bytes if isinstance(reference, SizedArtifactRef) else None))[0]
+
+    def verify(self, reference: ArtifactRef) -> None:
+        self._read(reference.path, reference.sha256, retain_bytes=False, declared_size=(
+            reference.size_bytes if isinstance(reference, SizedArtifactRef) else None))
 
     def json(self, reference: ArtifactRef) -> dict[str, Any]:
         payload = self.read(reference)
         with _errors(self.phase, Reason.SCHEMA_INVALID):
-            return parse_json_bytes(payload, max_bytes=self.settings.max_artifact_bytes)
+            return parse_json_bytes(payload, max_bytes=None)
 
     @property
     def inventory(self) -> tuple[SizedArtifactRef, ...]:
@@ -204,7 +203,7 @@ class BoundedInputReader:
 
     def reprove(self) -> None:
         for reference in self.inventory:
-            self.read(reference)
+            self.verify(reference)
         for job, reference in self._accepted_refs.items():
             with _errors(self.phase, Reason.INPUT_TAMPERED):
                 current = accepted_upstream(self.root, job)
@@ -222,7 +221,7 @@ def _preflight_handoff(reader: BoundedInputReader, handoff: Mapping[str, Any]) -
     """Bound envelope accounting before the shared authority follows any of its references."""
     pinned = {raw["path"]: SizedArtifactRef.from_mapping(raw) for raw in handoff["artifacts"]}
     for reference in pinned.values():
-        reader.read(reference)
+        reader.verify(reference)
     attempt = handoff["resolving_paths"]["attempt"]
     require_run_path(attempt)
     pending = [attempt + "/claim.json", handoff["resolving_paths"]["result"], handoff["outcomes"]["path"]]
@@ -239,7 +238,7 @@ def _preflight_handoff(reader: BoundedInputReader, handoff: Mapping[str, Any]) -
                  Reason.IDENTITY_CONFLICT)
         document = reader.json(pinned[name])
         for reference in _references(document, accounting=True):
-            reader.read(reference)
+            reader.verify(reference)
         if name == attempt + "/claim.json":
             outcomes = reader.json(pinned[handoff["outcomes"]["path"]])
             unit_ids = document.get("unit_ids", [unit["unit_id"] for unit in outcomes["units"]])

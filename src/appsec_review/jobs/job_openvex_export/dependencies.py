@@ -57,7 +57,7 @@ def dependency_projection(
 ) -> tuple[dict[str, Any] | None, bytes | None]:
     reader = BoundedInputReader(run_root, settings)
     for reference in verified.input_inventory:
-        reader.read(reference)
+        reader.verify(reference)
     loaded = read_dependency_inputs(
         reader, repository_root, resolved_config_sha256=verified.provenance.resolved_config_sha256,
         target_snapshot=verified.source.target_snapshot,

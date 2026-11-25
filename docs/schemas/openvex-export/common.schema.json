@@ -11,7 +11,7 @@
       "properties": {
         "path": {"$ref": "../final-report/common.schema.json#/$defs/run_path"},
         "sha256": {"$ref": "#/$defs/sha256"},
-        "size_bytes": {"type": "integer", "minimum": 0, "maximum": 536870912}
+        "size_bytes": {"type": "integer", "minimum": 0}
       }
     },
     "document_ref": {
