@@ -35,6 +35,7 @@ class ComputationAdmission:
     deployment: Mapping[str, Any]
     job_id: str
     schema_identity: str
+    allow_development_tainted: bool = False
     candidate_configuration: AppConfig | None = field(default=None, repr=False, compare=False)
     _importers: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
     _input_handoffs: dict[tuple[str, str], tuple[Mapping[str, Any], Path]] = field(
@@ -48,8 +49,12 @@ class ComputationAdmission:
         release = validate_claim_release(root, claim)
         if release is None:
             raise ValueError("repair computation admission requires measured implementation evidence")
+        allow_tainted = bool(
+            claim.get("development_tainted") is True or claim.get("development_input_overrides")
+        )
         return cls(release, claim["review_policy"]["releases"], claim["resolved_config_sha256"],
-                   claim["deployment_identity"], claim["job_id"], claim["component_identities"]["schema"])
+                   claim["deployment_identity"], claim["job_id"], claim["component_identities"]["schema"],
+                   allow_development_tainted=allow_tainted)
 
     def _configuration_matches(self, root: Path, producer_sha256: str) -> bool:
         from appsec_review.runtime.configuration import configuration_matches, configurations_compatible
@@ -72,6 +77,13 @@ class ComputationAdmission:
         if value.get("layout") == "public-feed" or value.get("mode") != "computed":
             return
         producer = read_document(verify_reference(root, value["actor"]["claim"]))
+        producer_tainted = bool(
+            producer.get("development_tainted") is True or producer.get("development_input_overrides")
+        )
+        if producer_tainted and not self.allow_development_tainted:
+            raise IncompatibleComputation(
+                f"cached computation from {producer['job_id']}/{producer['attempt_id']} "
+                "was produced with development-tainted inputs")
         original = validate_claim_release(root, producer)
         if original is None:
             raise IncompatibleComputation("cached computation has no measured implementation")
@@ -632,36 +644,7 @@ def _plan_repair_in_scope(config: AppConfig, run_root: Path, jobs: Sequence[Job]
                     # The widened contract belongs to a fresh attempt; nothing may reuse the old one.
                     reasons.append(f"dataset contract of {job.job_id} changed but its accepted attempt would be reused")
         from appsec_review.runtime.checkpoints import select_units
-        from appsec_review.runtime.resume import job_config_sha256
-        from appsec_review.runtime.dependencies import input_projection
-        checkpoint_reason = None
-        components = job.identities(config.runtime.repository_root, config.review_policy.releases)
-        if historical or successor:
-            checkpoint_reason = "historical/successor evidence is not imported as success"
-        elif not claims:
-            checkpoint_reason = "no predecessor attempt has successful checkpoints"
-        elif claim.get("component_identities") != components:
-            checkpoint_reason = "checkpoint implementation identity changed"
-        elif (claims[-1].parent / "status.json").is_file() and read_document(
-                claims[-1].parent / "status.json").get("status") not in {"FAILED", "RUNNING"}:
-            checkpoint_reason = "completed predecessor does not supply failed-attempt checkpoints"
-        if checkpoint_reason is not None:
-            unit_decisions[job.job_id] = {
-                unit.unit_id: {"action": "RUN", "reason": checkpoint_reason} for unit in job.units}
-            continue
-        hashes = {item.job_id: item.handoff_sha256 for item in decisions if item.action == "REUSE"}
-        candidate = {
-            "job_id": job.job_id, "resolved_config_sha256": config.resolved_sha256,
-            "job_config_sha256": job_config_sha256(config, job.job_id),
-            "component_identities": components,
-            "source_fingerprint": ResumePlanner(config, run_root, (job,), source_fingerprint).job_fingerprint(job),
-            "upstream_handoffs": input_projection(job, hashes, dependencies,
-                                                 {item.job_id for item in jobs if item.propagate_handoff}),
-            "input_identity": job.probe_input_identity(
-                target_root, run_root, repository_root=config.runtime.repository_root),
-            "deployment_identity": deployment_identity(config.runtime.repository_root),
-        }
-        unit_decisions[job.job_id] = select_units(run_root, job, candidate)
+        unit_decisions[job.job_id] = select_units(run_root, job, {})
     value = {
         "schema": PLAN_SCHEMA, "compatibility": COMPATIBILITY, "run_id": run_root.name,
         "base_binding_sha256": digest(current), "resolved_config_sha256": config.resolved_sha256,

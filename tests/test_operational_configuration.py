@@ -160,3 +160,52 @@ def test_revision_integrity_is_not_waived_for_compatible_settings(tmp_path, dama
     path.write_text(json.dumps(document))
     with pytest.raises(ValueError, match="hash mismatch|deltas|original run"):
         configuration_snapshot(root, changed.resolved_sha256)
+
+
+def test_first_party_managed_graph_reuse_signs_original_resolved_config_sha256(tmp_path):
+    from appsec_review.runtime import GraphRunner
+
+    config, jobs, calls = configured(tmp_path, "first_party_managed")
+    downstream_calls = []
+    downstream = replace(
+        jobs[1],
+        consumes=("job_fixture",),
+        units=(Unit("work.only", lambda unit: downstream_calls.append(unit.job.attempt_id) or {"value": 1}),),
+    )
+    graph_jobs = (jobs[0], downstream)
+    dependencies = {"job_fixture": (), "job_openvex_export": ("job_fixture",)}
+    first = GraphRunner(config, graph_jobs, dependencies=dependencies).run(
+        target_root=tmp_path, source_fingerprint="a" * 64,
+    )
+    run_id = first["run_id"]
+    root = config.runtime.runs_dir / run_id
+    changed = increased(config)
+    plan = plan_repair(changed, root, graph_jobs, "a" * 64, target_root=tmp_path,
+                       dependencies=dependencies, force_from="job_openvex_export")
+    assert plan["admissible"], plan["refusals"]
+    assert {row["job_id"]: row["action"] for row in plan["decisions"]} == {
+        "job_fixture": "REUSE", "job_openvex_export": "RUN",
+    }
+    admit_repair(changed, root, graph_jobs, plan, target_root=tmp_path, dependencies=dependencies)
+    second = GraphRunner(changed, graph_jobs, dependencies=dependencies).run(
+        run_id=run_id, target_root=tmp_path, source_fingerprint="a" * 64,
+        force_from="job_openvex_export",
+    )
+    assert second["jobs"]["job_fixture"]["decision"]["action"] == "REUSE"
+    assert second["jobs"]["job_fixture"]["attempt_id"] == "attempt_0001"
+    assert second["jobs"]["job_openvex_export"]["decision"]["action"] == "RUN"
+    assert second["jobs"]["job_openvex_export"]["status"]["attempt_id"] == "attempt_0002"
+    reused_claim = json.loads(
+        (root / "data/jobs/job_fixture/attempts/attempt_0001/claim.json").read_bytes()
+    )
+    explicit_reused = JobRunner(changed).begin_or_reuse_attempt(
+        jobs[0], run_id=run_id, target_root=tmp_path, source_fingerprint="a" * 64,
+    )
+    assert explicit_reused["reused"] is True
+    assert explicit_reused["resolved_config_sha256"] == config.resolved_sha256 != changed.resolved_sha256
+    verify_claim(root, reused_claim)
+    verify_claim(root, explicit_reused)
+    assert [call for call in calls if call[0] == "job_fixture"] == [
+        ("job_fixture", "work.only", "attempt_0001"),
+    ]
+    assert downstream_calls == ["attempt_0001", "attempt_0002"]

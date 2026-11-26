@@ -1,4 +1,4 @@
-"""Uniform, conservative admission of portable successful units from failed attempts."""
+"""Per-unit execution checkpoint receipts; recovery is whole-job only."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,9 +6,9 @@ import re
 from typing import Any, Mapping
 
 from appsec_review.runtime.job import Job
-from appsec_review.runtime.release import digest, read_document
+from appsec_review.runtime.release import digest
 from appsec_review.storage import canonical_json
-from appsec_review.storage.shared import immutable_bytes, reference, safe_path, verify_reference
+from appsec_review.storage.shared import immutable_bytes, reference, safe_path
 
 SCHEMA = "appsec-review/unit-checkpoint/1"
 _REFERENCE_KEYS = {"path", "sha256", "size_bytes"}
@@ -55,18 +55,6 @@ def portable(value: Any) -> bool:
     return not isinstance(value, str) or not any(char in value for char in ("/", "\\"))
 
 
-def _verify_artifacts(run_root: Path, value: Any) -> None:
-    if isinstance(value, Mapping):
-        if _artifact_reference(value):
-            verify_reference(run_root, value)
-        else:
-            for child in value.values():
-                _verify_artifacts(run_root, child)
-    elif isinstance(value, list):
-        for child in value:
-            _verify_artifacts(run_root, child)
-
-
 def publish_checkpoint(run_root: Path, unit_root: Path, claim: Mapping[str, Any], unit_id: str,
                        result: Mapping[str, Any]) -> None:
     value = {"schema": SCHEMA, "unit_id": unit_id, "input_key": input_key(claim),
@@ -76,49 +64,6 @@ def publish_checkpoint(run_root: Path, unit_root: Path, claim: Mapping[str, Any]
              "portable": portable(result) and len(canonical_json(result)) <= 1024 * 1024}
     immutable_bytes(run_root, (unit_root / "checkpoint.json").relative_to(run_root).as_posix(),
                     canonical_json(value))
-
-
-def admitted_output(run_root: Path, entry: Mapping[str, Any], claim: Mapping[str, Any],
-                    unit_id: str) -> dict[str, Any]:
-    checkpoint = read_document(verify_reference(run_root, entry["checkpoint"]))
-    if "undeclared" in claim.get("component_identities", {}).values():
-        raise ValueError("unit checkpoint lacks measured implementation provenance")
-    if (checkpoint.get("schema") != SCHEMA or checkpoint["unit_id"] != unit_id
-            or checkpoint["input_key"] != input_key(claim)):
-        raise ValueError("unit checkpoint input/implementation/portability changed")
-    original = read_document(verify_reference(run_root, checkpoint["claim"]))
-    if original.get("attempt_id") != claim.get("attempt_id"):
-        raise ValueError("cross-attempt unit salvage is not a whole-job recovery")
-    if input_key(original) != input_key(claim):
-        raise ValueError("checkpoint claim differs from the admitted fresh attempt")
-    status = read_document(verify_reference(run_root, checkpoint["status"]))
-    result_path = verify_reference(run_root, checkpoint["result"])
-    if (status.get("status") != "SUCCEEDED" or status.get("unit_id") != unit_id
-            or status.get("result_sha256") != checkpoint["result"]["sha256"]):
-        raise ValueError("checkpoint has no committed successful unit")
-    result = read_document(result_path, limit=1024 * 1024)
-    if not portable(result):
-        raise ValueError("checkpoint result is coupled to its original attempt")
-    _verify_artifacts(run_root, result)
-    return result
-
-
-def _reusable_predecessor(run_root: Path, previous: Path, claim: Mapping[str, Any]) -> bool:
-    state = read_document(previous / "status.json")["status"]
-    if state == "FAILED":
-        return True
-    if state != "RUNNING":
-        return False
-    from appsec_review.runtime.repair import WORKER_PROTOCOL, read_verified_dispatch_stop
-    original = read_document(previous / "claim.json")
-    orchestration = original.get("orchestration", {})
-    if original.get("worker_protocol") != WORKER_PROTOCOL or orchestration.get("system") != "dagster":
-        return False
-    dispatch = orchestration.get("run_id")
-    if dispatch == claim.get("orchestration", {}).get("run_id"):
-        raise ValueError("checkpoint predecessor belongs to the current dispatch")
-    read_verified_dispatch_stop(run_root, dispatch)
-    return True
 
 
 def select_units(run_root: Path, job: Job, claim: Mapping[str, Any]) -> dict[str, Any]:

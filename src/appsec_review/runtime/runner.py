@@ -163,9 +163,13 @@ class JobRunner:
             from appsec_review.runtime.configuration import configuration_snapshot
             if hashlib.sha256(self.config.resolved_json).hexdigest() != self.config.resolved_sha256:
                 raise ValueError("candidate configuration bytes do not match their identity")
-            configuration_matches_current = development_only_change(
-                configuration_snapshot(run_root, claim["resolved_config_sha256"]).document,
-                json.loads(self.config.resolved_json))
+            try:
+                claimed_snapshot = configuration_snapshot(run_root, claim["resolved_config_sha256"])
+            except ValueError:
+                configuration_matches_current = False
+            else:
+                configuration_matches_current = development_only_change(
+                    claimed_snapshot.document, json.loads(self.config.resolved_json))
         if (claim.get("job_id") != job.job_id
                 or claim.get("repository_root") != str(self.config.runtime.repository_root)
                 or not configuration_matches_current):
@@ -384,14 +388,8 @@ class JobRunner:
             for unit in job.units}
         if binding["repair"]:
             from appsec_review.runtime.release import read_document
-            admission = read_document(verify_reference(run_root, binding["repair"]))
-            inspected = admission["unit_decisions"].get(job.job_id, {})
-            for unit_id, decision in select_units(run_root, job, claim).items():
-                if decision == inspected.get(unit_id):
-                    claim["unit_reuse"][unit_id] = decision
-                else:
-                    claim["unit_reuse"][unit_id] = {
-                        "action": "RUN", "reason": "checkpoint was not eligible in the inspected repair plan"}
+            read_document(verify_reference(run_root, binding["repair"]))
+            claim["unit_reuse"] = select_units(run_root, job, claim)
         context = self._context(job, claim)
         from appsec_review.runtime.scope import review_scope
         from appsec_review.storage.admission import admit_upstreams, resolve_evidence_target, sign_claim
@@ -405,12 +403,22 @@ class JobRunner:
                 claim["evidence_target_snapshot"] = snapshot
                 context = replace(context, evidence_target_snapshot=snapshot)
                 admit_upstreams(context, claim["upstream_handoffs"])
-                from appsec_review.runtime.inputs import admit_inputs
+                from appsec_review.config.development import DEVELOPMENT_PROFILES
+                from appsec_review.runtime.inputs import admit_inputs, upstream_development_tainted
                 claim["input_admission"] = admit_inputs(context, enabled_inputs)
                 # Development overrides are resolved and snapshotted once, for this fresh attempt only.
                 development_inputs = job.resolve_development_inputs(context)
+                upstream_tainted = upstream_development_tainted(
+                    run_root, claim["upstream_handoffs"], claim.get("optional_prior_handoffs"))
+                development_tainted = bool(development_inputs) or upstream_tainted
+                if development_tainted and self.config.profile not in DEVELOPMENT_PROFILES:
+                    raise ValueError(
+                        "development-tainted inputs require an explicitly selected development profile, "
+                        f"not {self.config.profile}")
                 if development_inputs:
                     claim["development_input_overrides"] = [dict(item) for item in development_inputs]
+                if development_tainted:
+                    claim["development_tainted"] = True
                 input_manifest_path, input_manifest_sha = materialize_attempt_input_manifest(
                     run_root=run_root, attempt_root=attempt_root, run_id=str(run_id),
                     target_snapshot=source_fingerprint, target_root=target_root,
@@ -442,7 +450,8 @@ class JobRunner:
         context.events.write("JOB_STARTED", job_id=job.job_id, run_id=run_id, attempt_id=attempt_id,
                              trigger=trigger, orchestration=correlation)
         try:
-            with publication_scope(context):
+            from appsec_review.runtime.inputs import attempt_input_scope
+            with publication_scope(context), attempt_input_scope(context):
                 admit_upstreams(context, claim["upstream_handoffs"])
                 for validator in job.input_validators:
                     validator(context, None)
@@ -469,6 +478,13 @@ class JobRunner:
             if contract is not None:
                 from appsec_review.jobs.job_build_environment_analysis.job import load_environment
                 load_environment(run_root, source_fingerprint, contract)
+            from appsec_review.config.development import DEVELOPMENT_PROFILES
+            from appsec_review.runtime.inputs import upstream_development_tainted
+            if self.config.profile not in DEVELOPMENT_PROFILES and upstream_development_tainted(
+                    run_root, required_upstream, optional_prior):
+                raise ValueError(
+                    "development-tainted inputs require an explicitly selected development profile, "
+                    f"not {self.config.profile}")
             reasons, handoff_hash = ResumePlanner(
                 self.config, run_root, (job,), source_fingerprint,
                 target_root=kwargs.get("target_root"),
@@ -542,7 +558,8 @@ class JobRunner:
                 if contract is not None:
                     claim["orchestration"]["build_environment_contract"] = canonical_json(contract).decode()
                 for key in ("configuration", "evidence_target_snapshot", "input_manifest_path", "input_manifest_sha256",
-                            "external_input_selection", "optional_prior_handoffs", "development_input_overrides"):
+                            "external_input_selection", "optional_prior_handoffs", "development_input_overrides",
+                            "development_tainted"):
                     if key in original_claim:
                         claim[key] = original_claim[key]
                 if "review_policy" in original_claim:
@@ -552,7 +569,7 @@ class JobRunner:
                     claim.update(
                         evidence_target_snapshot=original_claim["evidence_target_snapshot"],
                         repository_root=str(self.config.runtime.repository_root),
-                        resolved_config_sha256=self.config.resolved_sha256,
+                        resolved_config_sha256=original_claim["resolved_config_sha256"],
                     )
                     for key in ("input_manifest_path", "input_manifest_sha256"):
                         if key in original_claim:
@@ -741,8 +758,8 @@ class JobRunner:
         input_reads = None
         try:
             from appsec_review.runtime.consume import upstream_scope
-            from appsec_review.runtime.inputs import input_read_scope
-            with input_read_scope(context) as input_reads, \
+            from appsec_review.runtime.inputs import attempt_input_scope, input_read_scope
+            with attempt_input_scope(context), input_read_scope(context) as input_reads, \
                     operation_span(context.events, "unit.execute", unit_id=unit_id), \
                     publication_scope(context), unit_scope(run_root=context.run_root, job_id=job.job_id,
                             repository_root=context.repository_root, target_root=context.target_root), \
@@ -753,13 +770,9 @@ class JobRunner:
                 for validator in unit.input_validators:
                     validator(unit_context, None)
                 reuse = claim.get("unit_reuse", {}).get(unit_id, {})
-                if reuse.get("action") == "REUSE":
-                    from appsec_review.runtime.checkpoints import admitted_output
-                    result = admitted_output(context.run_root, reuse, claim, unit_id)
-                    context.events.write("TASK_REUSED", unit_id=unit_id,
-                                         details={"checkpoint": reuse["checkpoint"]})
-                else:
-                    result = dict(unit.handler(unit_context))
+                if reuse.get("action") not in {None, "RUN"}:
+                    raise ValueError("cross-attempt unit salvage is not a whole-job recovery")
+                result = dict(unit.handler(unit_context))
                 for validator in unit.output_validators:
                     validator(unit_context, result)
                 input_consumption = input_reads.document() if input_reads is not None else None
@@ -769,11 +782,10 @@ class JobRunner:
                        "result_sha256": file_sha256(result_path),
                        "producer": result.get("tool_id"), "disposition": result.get("terminal_status"),
                        "shard_identity": result.get("index_identity")}
-            if reuse.get("action") == "REUSE":
-                receipt["reused_checkpoint"] = reuse["checkpoint"]
             if input_consumption is not None:
                 receipt["input_consumption"] = input_consumption
-            atomic_json(status_path, receipt)
+            self._with_lock(context.attempt_root / "failure.lock",
+                            lambda: atomic_json(status_path, receipt))
             from appsec_review.runtime.checkpoints import publish_checkpoint
             publish_checkpoint(context.run_root, unit_root, claim, unit_id, result)
             disposition = result.get("terminal_status")
@@ -791,11 +803,13 @@ class JobRunner:
             (unit_root / "traceback.txt").write_text(traceback.format_exc(), encoding="utf-8")
             duration = max(0, int((datetime.fromisoformat(failed) -
                                   datetime.fromisoformat(started)).total_seconds() * 1000))
-            atomic_json(status_path, {**running, "status": "FAILED", "completed_at": failed,
-                                      "duration_ms": duration,
-                                      **({"input_consumption": input_reads.document()}
-                                         if input_reads is not None else {}),
-                                      "error": {"type": type(exc).__name__, "message": str(exc)}})
+            failed_receipt = {**running, "status": "FAILED", "completed_at": failed,
+                              "duration_ms": duration,
+                              **({"input_consumption": input_reads.document()}
+                                 if input_reads is not None else {}),
+                              "error": {"type": type(exc).__name__, "message": str(exc)}}
+            self._with_lock(context.attempt_root / "failure.lock",
+                            lambda: atomic_json(status_path, failed_receipt))
             context.events.write("TASK_FAILED", unit_id=unit_id, error_type=type(exc).__name__,
                                  duration_ms=duration)
             try:
@@ -904,6 +918,8 @@ class JobRunner:
         }
         if accepted:
             handoff["resolving_paths"]["result"] = attempt + "/result.json"
+        if claim.get("development_tainted") is True:
+            handoff["development_tainted"] = True
         handoff["input_set_sha256"] = input_set_sha256(handoff_input_projection(handoff))
         if accepted:
             # Evidence-body identity (docs/architecture/job-interchange.md): absent, never guessed, when a
@@ -1034,7 +1050,8 @@ class JobRunner:
                 receipts[unit.unit_id] = receipt
                 outputs[unit.unit_id] = json.loads(result_path.read_text(encoding="utf-8"))
             result = UnitExecutor.summarize(job.units, receipts, outputs)
-            with publication_scope(context):
+            from appsec_review.runtime.inputs import attempt_input_scope
+            with publication_scope(context), attempt_input_scope(context):
                 from appsec_review.storage.admission import admit_upstreams
                 admit_upstreams(context, claim.get("upstream_handoffs", {}))
                 result = dict(job.finalize_result(context, result))
