@@ -2,7 +2,8 @@
 
 from collections import Counter
 from collections.abc import Mapping
-from dataclasses import asdict
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass
 import hashlib
 import json
 from pathlib import Path
@@ -13,8 +14,9 @@ from appsec_review.config.cbmc import CbmcSettings
 from appsec_review.config.seeding import SeededSettings
 from appsec_review.interchange import GapCode, ProducerStatus, producer_gap
 from appsec_review.indexing.store import ShardSet
-from appsec_review.jobs.cpp_index_scopes import accepted_cpp_scopes
-from appsec_review.jobs.cpp_seeded import project_of, select
+from appsec_review.jobs.cpp_index_scopes import (
+    IndexScope, accepted_cpp_scopes, container_compile_database, partition_compile_commands, project_prefix,
+)
 from appsec_review.provenance import common_metadata, json_selector, retain_native_output, select_native
 from appsec_review.retrieval import EntityKind, EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, SourceLocation, write_manifest
 from appsec_review.retrieval.core import resolve_context_manifest
@@ -24,10 +26,11 @@ from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
 from appsec_review.runtime.consume import accepted_upstream
 from appsec_review.runtime.handoff import collect_artifacts
 from appsec_review.runtime.inputs import input_shard_owner, observe_output
+from appsec_review.seeding import units as unit_selection
 from appsec_review.storage import atomic_json, canonical_json, file_sha256, run_artifact, verify_run_artifact
 from .analysis import Analysis, stage_source
 from .datasets import CONTRACT, DATASETS, JOB_ID, SUMMARY_SCHEMA
-from .protocol import CompileRejected, IMPLEMENTATION
+from .protocol import CompileRejected, IMPLEMENTATION, compile_argv
 
 TOPOLOGY = {"load": ("accepted_inputs",), "analyze": ("bounded_checks",),
             "acceptance": ("publish_handoff",)}
@@ -123,35 +126,166 @@ def _inputs(context: Any):
     return bound, scopes, unavailable, shards
 
 
+@dataclass(frozen=True, slots=True)
+class _ScopeCompilePartition:
+    admissible_rows: tuple[dict[str, Any], ...]
+    admissible_container_rows: tuple[dict[str, Any], ...]
+    rejected_rows: tuple[dict[str, Any], ...]
+    rejected_only_reasons: Mapping[str, str]
+    clang_unsupported_rels: frozenset[str]
+    admissible_project: seeding.ProjectScope
+    rejected_project: seeding.ProjectScope | None
+
+
+def _partition_scope(scope: IndexScope) -> _ScopeCompilePartition:
+    prefix = project_prefix(scope.root)
+    clang_supported, clang_unsupported = partition_compile_commands(scope.compile_commands)
+    container_rows = container_compile_database(scope.root, clang_supported)
+    admissible_rows: list[dict[str, Any]] = []
+    admissible_container_rows: list[dict[str, Any]] = []
+    admissible_rels: set[str] = set()
+    rejected_rows: list[dict[str, Any]] = []
+    rejected_reasons: dict[str, str] = {}
+    for cmd, container_row in zip(clang_supported, container_rows, strict=True):
+        rel = str(cmd["target_path"])[len(prefix):]
+        scratch_row = dict(cmd, file=f"/scratch/source/{rel}")
+        try:
+            compile_argv(container_row)
+        except CompileRejected as exc:
+            rejected_rows.append(scratch_row)
+            rejected_reasons.setdefault(rel, str(exc))
+        else:
+            admissible_rows.append(scratch_row)
+            admissible_container_rows.append(container_row)
+            admissible_rels.add(rel)
+    rejected_only = {rel: reason for rel, reason in sorted(rejected_reasons.items()) if rel not in admissible_rels}
+    clang_unsupported_rels = (
+        frozenset(str(item.path)[len(prefix):] for item in clang_unsupported)
+        - admissible_rels
+        - set(rejected_only)
+    )
+    rejected_targets = {f"{prefix}{rel}" for rel in rejected_only}
+    admissible_files = tuple(
+        {"path": str(item["target_path"])}
+        for item in scope.files
+        if str(item["target_path"]) not in rejected_targets
+    )
+    rejected_files = tuple(
+        {"path": str(item["target_path"])}
+        for item in scope.files
+        if str(item["target_path"]) in rejected_targets
+    )
+    return _ScopeCompilePartition(
+        admissible_rows=tuple(admissible_rows),
+        admissible_container_rows=tuple(admissible_container_rows),
+        rejected_rows=tuple(rejected_rows),
+        rejected_only_reasons=rejected_only,
+        clang_unsupported_rels=clang_unsupported_rels,
+        admissible_project=seeding.ProjectScope(scope.case_id, scope.root, admissible_files),
+        rejected_project=seeding.ProjectScope(scope.case_id, scope.root, rejected_files) if rejected_files else None,
+    )
+
+
 def plan(context: Any, settings: CbmcSettings) -> dict[str, Any]:
     manifest, scopes, unavailable, shards = _inputs(context)
-    seeds = seeding.extract_seeds(context.run_root, [], [project_of(scope) for scope in scopes],
-                                 seed_limit=settings.max_seeds_per_scope, extra_observation_shards=shards)
+    partitions = {scope.case_id: _partition_scope(scope) for scope in scopes}
+    seeds = seeding.extract_seeds(
+        context.run_root, [], [partitions[scope.case_id].admissible_project for scope in scopes],
+        seed_limit=settings.max_seeds_per_scope, extra_observation_shards=shards,
+    )
+    rejected_projects = [
+        part.rejected_project for scope in scopes
+        if (part := partitions[scope.case_id]).rejected_project is not None
+    ]
+    rejected_seeds = (
+        seeding.extract_seeds(
+            context.run_root, [], rejected_projects,
+            seed_limit=max(settings.max_seeds_per_scope, 4096), extra_observation_shards=shards,
+        )
+        if rejected_projects else seeding.SeedPlan()
+    )
     bounds = SeededSettings(mode="seeded", seed_limit=settings.max_seeds_per_scope,
                             unit_limit=settings.max_translation_units, include_scan_files=settings.max_source_files)
     work = []
     gaps = [_gap(reason, scope=scope, code=GapCode.INPUT_UNAVAILABLE) for scope, reason in sorted(unavailable.items())]
     omitted = {"scopes": 0, "translation_units": 0, "seeds": 0}
     selected_scopes = sorted(
-        (scope for scope in scopes if seeds.for_scope(scope.case_id).seeds),
-        key=lambda scope: (min(seed.rank for seed in seeds.for_scope(scope.case_id).seeds), scope.scope_id),
+        (
+            scope for scope in scopes
+            if seeds.for_scope(scope.case_id).seeds or rejected_seeds.for_scope(scope.case_id).seeds
+        ),
+        key=lambda scope: (
+            min(
+                seed.rank for seed in (
+                    *seeds.for_scope(scope.case_id).seeds,
+                    *rejected_seeds.for_scope(scope.case_id).seeds,
+                )
+            ),
+            scope.scope_id,
+        ),
     )
     omitted["scopes"] = max(0, len(selected_scopes) - settings.max_scopes)
     for scope in selected_scopes[:settings.max_scopes]:
+        part = partitions[scope.case_id]
         scope_seeds = seeds.for_scope(scope.case_id)
         omitted["seeds"] += scope_seeds.dropped
-        selection = select(scope, scope_seeds, bounds)
-        gaps.extend(_gap(reason, scope=scope.scope_id) for reason in selection.gaps)
-        for raw, row in zip(selection.rows, selection.container_rows, strict=True):
-            relative = str(raw["file"]).removeprefix("/scratch/source/")
-            selected = [
-                {"path": seed.path, "start_line": seed.start_line, "end_line": seed.end_line,
-                 "rank": seed.rank, "observation_ids": sorted(source.observation_id for source in seed.sources)}
-                for seed in scope_seeds.seeds if relative in selection.by_seed.get(seed.key, ())
-            ]
-            if selected:
-                work.append({"scope_id": scope.scope_id, "case_id": scope.case_id,
-                             "compile_database": dict(scope.compile_database), "row": row, "seeds": selected})
+        seeded_rejected = {
+            seed.path for seed in rejected_seeds.for_scope(scope.case_id).seeds
+            if seed.path in part.rejected_only_reasons
+        }
+        selection_gaps: list[str] = []
+        if scope_seeds.seeds:
+            reader = seeding.source_reader(scope.case_root / "source")
+            chosen = unit_selection.select_units(
+                part.admissible_rows, scope_seeds.seeds,
+                unit_limit=bounds.unit_limit, include_scan_files=bounds.include_scan_files, read_text=reader,
+            )
+            rejected_covered: set[tuple[str, int, int]] = set()
+            if chosen.uncovered and part.rejected_rows:
+                uncovered_keys = set(chosen.uncovered)
+                uncovered_seeds = [seed for seed in scope_seeds.seeds if seed.key in uncovered_keys]
+                rej_chosen = unit_selection.select_units(
+                    part.rejected_rows, uncovered_seeds,
+                    unit_limit=len(part.rejected_rows), include_scan_files=bounds.include_scan_files, read_text=reader,
+                )
+                for key, indexes in rej_chosen.by_seed.items():
+                    rejected_covered.add(key)
+                    for idx in indexes:
+                        rel = unit_selection.relative_source(part.rejected_rows[idx])
+                        if rel in part.rejected_only_reasons:
+                            seeded_rejected.add(rel)
+            selection_gaps = list(chosen.gaps)
+            non_missing = {
+                key for key in chosen.uncovered
+                if key in rejected_covered or key[0] in part.clang_unsupported_rels
+            }
+            if non_missing:
+                selection_gaps = [g for g in selection_gaps if not g.startswith(unit_selection.NO_UNIT_FOR_SEED)]
+                missing = len(chosen.uncovered) - len(non_missing)
+                if missing:
+                    selection_gaps.append(
+                        f"{unit_selection.NO_UNIT_FOR_SEED}: {missing} seed location(s) lie in no analyzed "
+                        "translation unit; their diagnostics are not covered"
+                    )
+            by_seed = {
+                key: tuple(unit_selection.relative_source(part.admissible_rows[idx]) for idx in indexes)
+                for key, indexes in chosen.by_seed.items()
+            }
+            for idx in chosen.selected:
+                raw = part.admissible_rows[idx]
+                row = part.admissible_container_rows[idx]
+                relative = str(raw["file"]).removeprefix("/scratch/source/")
+                selected = [
+                    {"path": seed.path, "start_line": seed.start_line, "end_line": seed.end_line,
+                     "rank": seed.rank, "observation_ids": sorted(source.observation_id for source in seed.sources)}
+                    for seed in scope_seeds.seeds if relative in by_seed.get(seed.key, ())
+                ]
+                if selected:
+                    work.append({"scope_id": scope.scope_id, "case_id": scope.case_id,
+                                 "compile_database": dict(scope.compile_database), "row": row, "seeds": selected})
+        for rel in sorted(seeded_rejected):
+            gaps.append(_gap(f"CompileRejected ({rel}): {part.rejected_only_reasons[rel]}", scope=scope.scope_id))
+        gaps.extend(_gap(reason, scope=scope.scope_id) for reason in selection_gaps)
     unique = {}
     for item in work:
         key = (item["scope_id"], canonical_json(item["row"]))
@@ -238,7 +372,7 @@ def publish(unit: UnitContext, document: Mapping[str, Any], plan_ref: Mapping[st
         shard_id = f"cbmc-{label}-{unit.job.attempt_id}"
         fingerprint = hashlib.sha256(canonical_json({"implementation": IMPLEMENTATION, "label": label,
                                                      "analysis": analysis_ref["sha256"]})).hexdigest()
-        path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{shard_id}.sqlite"
+        path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / getattr(unit.job.config, "job_id", JOB_ID) / unit.job.attempt_id / f"{shard_id}.sqlite"
         builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                                target_snapshot=snapshot, shard_id=shard_id)
         if label == "results":

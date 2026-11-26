@@ -12,7 +12,7 @@ from appsec_review.container_runtime.executor import ExecutionResult
 from appsec_review.jobs.cpp_index_scopes import IndexScope
 from appsec_review.jobs.job_cbmc_analysis.analysis import Analysis, stage_source
 from appsec_review.jobs.job_cbmc_analysis.protocol import (
-    CompileRejected, OutputRejected, compile_argv, function_entries, judgment, native_json,
+    CompileRejected, OutputRejected, compile_argv, function_entries, goto_functions_output, judgment, native_json,
 )
 from appsec_review.storage import file_sha256, run_artifact
 
@@ -35,6 +35,19 @@ def functions(names=("f",)):
         {"name": name, "isBodyAvailable": True, "isInternal": False,
          "instructions": [{"sourceLocation": {"file": "/target/source/main.c", "line": str(line)}}
                           for line in (1, 3)]} for name in names]}]
+
+
+def goto_functions_text(names=("f",), *, file="/target/source/main.c", lines=(1, 3)) -> bytes:
+    sep = "^" * 44
+    chunks = ["Reading GOTO program from '/inputs/unit.goto'"]
+    for name in names:
+        chunks.extend([sep, "", f"{name} /* {name} */"])
+        for idx, line in enumerate(lines):
+            chunks.append(f"        // {idx} file {file} line {line} function {name}")
+            chunks.append("        SKIP")
+        chunks.append(f"        // {len(lines)} file {file} line {lines[-1]} function {name}")
+        chunks.append("        END_FUNCTION")
+    return ("\n".join(chunks) + "\n").encode("utf-8")
 
 
 SEED = {"path": "main.c", "start_line": 2, "end_line": 2, "rank": 0,
@@ -67,7 +80,7 @@ class FakeExecutor:
         self.responses = list(responses or [(0, outcome())])
         self.timed_out = timed_out
         self.wrong_image = wrong_image
-        self.discovery_response = discovery_response or (0, functions())
+        self.discovery_response = discovery_response or (0, goto_functions_text())
         self.requests = []
 
     def execute(self, request):
@@ -549,7 +562,7 @@ def runtime_fixture(tmp_path, *, responses=None, planning_gap=False, no_work=Fal
         source.write_bytes((scope.case_root / "source/main.c").read_bytes())
         commands = [{"target_path": "native/main.c", "directory": "/scratch/source",
                      "arguments": ["clang", "-c", "/scratch/source/main.c", "-o", "old.o"]}]
-        database = case / "build/compile_commands.json"
+        database = case / "compile_commands.json"
         atomic_json(database, commands)
         catalog = {"terminal_status": "SUCCEEDED", "compile_commands": commands,
                    "compile_database": run_artifact(root, database),
@@ -827,3 +840,290 @@ def test_discovery_failure_retains_goto_and_execution_artifacts(tmp_path):
         harness.job, harness.upstream)
     assert reasons and any("artifact" in reason or "integrity" in reason for reason in reasons)
     assert len(harness.executor.requests) == 2
+
+
+@pytest.mark.parametrize("source,args", [
+    ("/target/source/session.cpp", ["clang++", "-std=gnu++17", "-c", "/target/source/session.cpp"]),
+    ("/target/source/request.cpp", ["clang++", "-std=c++17", "-c", "/target/source/request.cpp"]),
+    ("/target/source/synthetic.cc", ["clang++", "-std=c++11", "-c", "/target/source/synthetic.cc"]),
+    ("/target/source/modern.cxx", ["clang++", "-std=c++20", "-c", "/target/source/modern.cxx"]),
+    ("/target/source/unflagged.cpp", ["clang++", "-c", "/target/source/unflagged.cpp"]),
+    ("/target/source/c_flag.cpp", ["clang++", "-std=c11", "-c", "/target/source/c_flag.cpp"]),
+    ("/target/source/cpp_flag.c", ["clang", "-std=c++98", "-c", "/target/source/cpp_flag.c"]),
+])
+def test_compile_admission_rejects_modern_or_unflagged_cpp_standards(source, args):
+    with pytest.raises(CompileRejected):
+        compile_argv({"file": source, "arguments": args})
+
+
+@pytest.mark.parametrize("flag", ["-std=c++98", "-std=c++03", "-std=gnu++98", "-std=gnu++03"])
+def test_compile_admission_allows_explicit_legacy_cpp98(flag):
+    argv, _ = compile_argv({"file": "/target/source/legacy.cpp",
+                            "arguments": ["clang++", flag, "-c", "/target/source/legacy.cpp", "-o", "legacy.o"]})
+    assert argv == ("/usr/bin/goto-cc", "-c", flag, "/target/source/legacy.cpp", "-o", "/scratch/unit.goto")
+
+
+def test_compact_goto_functions_parses_large_multi_function_table_without_json_truncation(tmp_path):
+    sep = "^" * 44
+    blocks = [
+        "Reading GOTO program from '/inputs/unit.goto'",
+        sep, "", "__CPROVER__start /* __CPROVER__start */",
+        "        // 0 no location",
+        "        // Labels: __CPROVER_HIDE",
+        "        CALL __CPROVER_initialize()",
+        "        END_FUNCTION",
+    ]
+    for fn_idx in range(120):
+        fn_name = f"helper_{fn_idx:03d}"
+        start_line = 10 + fn_idx * 10
+        blocks.extend([sep, "", f"{fn_name} /* {fn_name} */"])
+        blocks.append("        // 0 file /usr/include/stdlib.h line 42")
+        blocks.append("        SKIP")
+        for step in range(1, 200):
+            line_no = start_line + (step % 8)
+            blocks.append(f"        // {step} file /target/source/main.c line {line_no} column 5 function {fn_name}")
+            blocks.append("        // Labels: L_BODY")
+            blocks.append(f"        x = {step};")
+        blocks.append(f"        // 200 file /target/source/main.c line {start_line + 8} function {fn_name}")
+        blocks.append("        END_FUNCTION")
+    compact_bytes = ("\n".join(blocks) + "\n").encode("utf-8")
+    assert len(compact_bytes) < settings().max_output_bytes
+
+    scope, row, unit = fixture(tmp_path)
+    (scope.case_root / "source/main.c").write_text("\n".join(f"int line_{i};" for i in range(1, 1300)) + "\n")
+    accepted = {"target_path": "native/main.c", "scratch_path": "source/main.c",
+                "sha256": file_sha256(scope.case_root / "source/main.c")}
+    scope = replace(scope, files=(accepted,))
+    target = tmp_path / "staged"
+    stage_source(scope, target, settings())
+    seed = {"path": "main.c", "start_line": 514, "end_line": 514, "rank": 0,
+            "observation_ids": SEED["observation_ids"]}
+    executor = FakeExecutor(
+        unit.job.run_root,
+        [(0, [{"result": [{"property": "helper_050.bounds.1", "description": "array bounds",
+                           "status": "SUCCESS", "sourceLocation": {"file": "/target/source/main.c", "line": "514"}}]},
+              {"cProverStatus": "success"}])],
+        discovery_response=(0, compact_bytes),
+    )
+    engine = Analysis(unit, settings(unwind_limits=(8,)), executor_factory=lambda *_: executor)
+    results = engine.translation_unit(scope, row, [seed], target)
+    assert len(results) == 1
+    assert results[0]["function"] == "helper_050"
+    assert results[0]["judgment"] == "bounded_pass"
+    assert executor.requests[1].argv[4:] == (
+        "/usr/bin/goto-instrument", "--show-goto-functions", "/inputs/unit.goto"
+    )
+    assert "--json-ui" not in executor.requests[1].argv
+    assert "--drop-unused-functions" in executor.requests[2].argv
+    assert "--object-bits" in executor.requests[2].argv
+
+    with pytest.raises(OutputRejected, match="missing program header"):
+        goto_functions_output(b"not goto-instrument output\n", 4096, max_instructions=100)
+    with pytest.raises(OutputRejected, match="incomplete GOTO function body"):
+        goto_functions_output(
+            f"Reading GOTO program from '/inputs/unit.goto'\n{sep}\n\nf /* f */\n        // 0 no location\n".encode(),
+            4096, max_instructions=100,
+        )
+    with pytest.raises(OutputRejected, match="instruction bound"):
+        goto_functions_output(compact_bytes, settings().max_output_bytes, max_instructions=100)
+
+
+def test_plan_rejects_cpp17_units_without_starving_c_units_or_seeds(tmp_path):
+    from appsec_review.config import load_config
+    from appsec_review.indexing.store import ShardSet
+    from appsec_review.jobs.job_cbmc_analysis.job import build_job
+    from appsec_review.jobs.job_cpp_compiled_analysis.datasets import DATASETS as CPP_DATASETS
+    from appsec_review.jobs.job_evidence_collection.datasets import DATASETS as SAST_DATASETS
+    from appsec_review.retrieval import (
+        EntityRecord, IndexBuilder, IndexIdentity, LogicalIdentity, SourceLocation, write_manifest,
+    )
+    from appsec_review.runtime import Job, JobRunner, Unit
+    from appsec_review.storage import atomic_json
+    from tests.capture_fakes import build_capture_toml
+    from tests.host_pins_support import write_host_pins
+    from tests.release_support import write_release
+
+    write_release(tmp_path, ("job_cpp_compiled_analysis", "job_evidence_collection", "job_cbmc_analysis"))
+    config_path = tmp_path / "appsec-review.toml"
+    config_path.write_text(
+        '[runtime]\nruns_dir = "runs"\ndata_dir = "data"\n'
+        + build_capture_toml()
+        + '\n[review_policy.releases]\nplatform = "fixture-1"\nvalidation = "fixture-1"\n'
+        '[jobs.job_cpp_compiled_analysis]\nname = "fixture_cpp"\n'
+        '[jobs.job_cpp_compiled_analysis.settings]\nlane = "cpp"\n'
+        '[jobs.job_cpp_compiled_analysis.steps.prepare]\n'
+        '[jobs.job_evidence_collection]\nname = "fixture_sast"\n'
+        '[jobs.job_cbmc_analysis]\nname = "cbmc_analysis"\n'
+        f'[jobs.job_cbmc_analysis.settings]\nenabled = true\ntag = "{settings().tag}"\n'
+        'max_translation_units = 5\nmax_seeds_per_scope = 6\nunwind_limits = [4]\n'
+        '[jobs.job_cbmc_analysis.steps.load.tasks.accepted_inputs]\n'
+        '[jobs.job_cbmc_analysis.steps.analyze.tasks.bounded_checks]\n'
+        '[jobs.job_cbmc_analysis.steps.acceptance.tasks.publish_handoff]\n'
+    )
+    pins = write_host_pins(tmp_path / "host-pins.toml", images={settings().tag: IMAGE})
+    config = load_config(config_path, host_pins=pins)
+    runner = JobRunner(config)
+
+    cpp_rels = ["src/session.cpp", "src/request.cpp", "src/main.cpp", "src/synthetic.cpp"]
+    c_rels = ["src/util.c", "third_party/bzlib.c", "third_party/compress.c",
+              "third_party/cJSON.c", "third_party/lz4frame.c"]
+    hdr_rel = "src/cpp_only.hpp"
+    file_hashes: dict[str, str] = {}
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    def cpp_catalog(unit):
+        root = unit.job.run_root
+        case = root / "data/cpp/projects/case"
+        files = []
+        commands = []
+        artifacts = []
+        hdr = case / "source" / hdr_rel
+        hdr.parent.mkdir(parents=True, exist_ok=True)
+        hdr.write_text("inline int only_cpp(int x) { return x + 1; }\n")
+        file_hashes[hdr_rel] = file_sha256(hdr)
+        files.append({"target_path": f"native/{hdr_rel}", "scratch_path": f"source/{hdr_rel}",
+                      "sha256": file_hashes[hdr_rel]})
+        artifacts.append(run_artifact(root, hdr))
+
+        for rel in cpp_rels:
+            src = case / "source" / rel
+            src.parent.mkdir(parents=True, exist_ok=True)
+            src.write_text('#include "cpp_only.hpp"\nint bad_cpp(int *p) {\n  return *p;\n}\n')
+            file_hashes[rel] = file_sha256(src)
+            files.append({"target_path": f"native/{rel}", "scratch_path": f"source/{rel}",
+                          "sha256": file_hashes[rel]})
+            artifacts.append(run_artifact(root, src))
+            commands.append({
+                "target_path": f"native/{rel}",
+                "directory": "/scratch/source",
+                "arguments": ["clang++", "-std=gnu++17", "-I/scratch/source/src", "-c",
+                              f"/scratch/source/{rel}", "-o", f"{rel}.o"],
+            })
+        for rel in c_rels:
+            src = case / "source" / rel
+            src.parent.mkdir(parents=True, exist_ok=True)
+            src.write_text("int ok_c(int *p) {\n  return *p;\n}\n")
+            file_hashes[rel] = file_sha256(src)
+            files.append({"target_path": f"native/{rel}", "scratch_path": f"source/{rel}",
+                          "sha256": file_hashes[rel]})
+            artifacts.append(run_artifact(root, src))
+            commands.append({
+                "target_path": f"native/{rel}",
+                "directory": "/scratch/source",
+                "arguments": ["clang", "-std=gnu11", "-c", f"/scratch/source/{rel}", "-o", f"{rel}.o"],
+            })
+        database = case / "compile_commands.json"
+        atomic_json(database, commands)
+        artifacts.append(run_artifact(root, database))
+        catalog = {"terminal_status": "SUCCEEDED", "compile_commands": commands,
+                   "compile_database": run_artifact(root, database),
+                   "mapping": {"project_id": "native", "root": "native", "case_snapshot": "f" * 64, "files": files}}
+        return {"projects": {"case": catalog}, "artifacts": artifacts}
+
+    def cpp_publish(unit):
+        root = unit.job.run_root
+        summary = unit.unit_root / "summary.json"
+        atomic_json(summary, {"schema": "appsec-review/cpp-compiled-analysis/2"})
+        manifest = root / "data/indices/manifests/cpp.json"
+        write_manifest(manifest, run_id=unit.job.run_id, target_snapshot="f" * 64,
+                       target_root=target_dir, indexes=[])
+        return {"artifact": run_artifact(root, summary), "index_manifest": run_artifact(root, manifest)}
+
+    cpp = Job("job_cpp_compiled_analysis", "fixture_cpp", lambda _: {},
+              units=(Unit("catalog.projects", cpp_catalog),
+                     Unit("acceptance.publish_handoff", cpp_publish, ("catalog.projects",))),
+              datasets=tuple(d for d in CPP_DATASETS if d.output_kind in {
+                  "cpp_plan_and_summary", "cpp_case_material"}))
+    accepted_cpp = runner.run(cpp, target_root=target_dir, source_fingerprint="f" * 64)
+    run_id = accepted_cpp["status"]["run_id"]
+
+    def sast_publish(unit):
+        root = unit.job.run_root
+        shard = root / "data/indices/observations/seeds.sqlite"
+        builder = IndexBuilder(shard, name="observations", fingerprint="a" * 64,
+                               target_snapshot="f" * 64, shard_id="seeds")
+        seeded = (
+            [(rel, "critical", 2) for rel in cpp_rels]
+            + [(hdr_rel, "high", 1)]
+            + [(rel, "medium", 2) for rel in c_rels]
+        )
+        for idx, (rel, sev, line) in enumerate(seeded):
+            obs_id = f"asr:tool_observation:{idx:064x}"
+            loc = SourceLocation("f" * 64, f"native/{rel}", file_hashes[rel],
+                                 0, 10, line, line, 1, 1, producer_location={},
+                                 mapping_method="fixture", confidence=1.0)
+            builder.add_entity(EntityRecord(
+                LogicalIdentity.parse(obs_id), f"seed-{idx}", "ptr", "finding",
+                {"tool_id": "tool-cppcheck", "category": "source_sast",
+                 "native_rule_id": "nullPointer", "native_severity": sev}, loc))
+        digest = builder.build()
+        index = IndexIdentity("observations", "appsec-review/retrieval-index/2", digest, "a" * 64,
+                              shard.relative_to(root).as_posix(), {"job": "job_evidence_collection"}, (), "seeds")
+        manifest = root / "data/indices/manifests/sast.json"
+        write_manifest(manifest, run_id=run_id, target_snapshot="f" * 64,
+                       target_root=target_dir, indexes=[index])
+        return {"index_manifest": run_artifact(root, manifest)}
+
+    sast = Job("job_evidence_collection", "fixture_sast", lambda _: {},
+               units=(Unit("evidence_publication.publish", sast_publish),),
+               datasets=tuple(d for d in SAST_DATASETS if d.output_kind == "static_tool_observations"))
+    accepted_sast = runner.run(sast, run_id=run_id, target_root=target_dir, source_fingerprint="f" * 64)
+    run_root = config.runtime.runs_dir / run_id
+
+    class MultiCExecutor(FakeExecutor):
+        def execute(self, request):
+            self.requests.append(request)
+            command = request.argv[4]
+            if command == "/usr/bin/goto-cc":
+                source_arg = request.argv[-3]
+                assert source_arg.endswith(".c"), f"unexpected non-C compile: {source_arg}"
+                self._last_source = source_arg
+                (request.scratch_root / "unit.goto").write_bytes(b"fixture goto")
+                code, data = 0, b""
+            elif command == "/usr/bin/goto-instrument":
+                code, data = 0, goto_functions_text(("ok_c",), file=self._last_source, lines=(1, 3))
+            else:
+                code, data = 0, [
+                    {"result": [{"property": "ok_c.pointer_dereference.1", "description": "pointer check",
+                                 "status": "SUCCESS",
+                                 "sourceLocation": {"file": self._last_source, "line": "2"}}]},
+                    {"cProverStatus": "success"},
+                ]
+            stdout, stderr, receipt = [request.scratch_root / n for n in ("stdout.bin", "stderr.bin", "execution.json")]
+            stdout.write_bytes(data if isinstance(data, bytes) else json.dumps(data).encode())
+            stderr.write_text("")
+            receipt.write_text(json.dumps({"argv": list(request.argv), "exit_code": code}))
+            rel = lambda p: p.relative_to(self.run).as_posix()
+            return ExecutionResult("appsec-review/container-execution/1", "tool-cbmc", "fixture", IMAGE,
+                                   IMAGE, "argv", (), {}, "start", "end", code, False, False, False, False,
+                                   rel(stdout), rel(stderr), rel(receipt))
+
+    executor = MultiCExecutor(run_root)
+    job = build_job(executor_factory=lambda *_: executor)
+    upstream = {"job_cpp_compiled_analysis": accepted_cpp["handoff_sha256"],
+                "job_evidence_collection": accepted_sast["handoff_sha256"]}
+    claim = runner.begin_attempt(job, run_id=run_id, upstream_handoffs=upstream)
+    for unit_def in job.units:
+        runner.execute_or_reuse_unit(job, claim, unit_def.unit_id)
+    accepted = runner.finalize_attempt(job, claim)
+
+    assert accepted["handoff"]["completion_status"] == "COMPLETED_WITH_GAPS"
+    summary_ref = accepted["result"]["outputs"]["acceptance.publish_handoff"]["artifact"]
+    summary = json.loads((run_root / summary_ref["path"]).read_bytes())
+    plan_doc = json.loads((run_root / summary["plan"]["path"]).read_bytes())
+
+    selected_files = [item["row"]["file"] for item in plan_doc["work"]]
+    assert sorted(selected_files) == sorted(f"/target/source/{rel}" for rel in c_rels)
+    assert plan_doc["omitted"]["translation_units"] == 0
+    assert summary["counts"] == {"bounded_pass": 5}
+
+    reasons = [gap["reason"] for gap in summary["gaps"]]
+    for rel in cpp_rels:
+        assert any(f"CompileRejected ({rel}):" in reason for reason in reasons), reasons
+    assert not any("seed_without_translation_unit" in reason for reason in reasons), reasons
+
+    manifest = json.loads((run_root / accepted["result"]["outputs"]["acceptance.publish_handoff"]["index_manifest"]["path"]).read_bytes())
+    cov_shards = [s for s in manifest["indexes"] if str(s.get("shard_id", "")).startswith("cbmc-coverage-")]
+    cov_rows = list(ShardSet(run_root, cov_shards).coverage(cov_shards))
+    assert any("CompileRejected (src/session.cpp)" in (row["gap"] or "") for row in cov_rows)
