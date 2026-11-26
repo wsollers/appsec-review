@@ -295,11 +295,12 @@ No listed cause is automatically approved for a walk; missing applicable coverag
 
 ## Resume and invalidation
 
-Per-unit shards bind report identities, source snapshot, parser/normalizer/mapping versions and
-upstream artifact manifest; changed reports rebuild that unit without replacing unrelated indices.
-The handler's local fingerprint does not explicitly bind bounds or family settings, so a settings
-change alone is not a documented guarantee of shard invalidation. Runtime receipt reuse has the
-separate [configuration boundary](../architecture/jobs-and-runtime.md#wave-1-resumability).
-The accepted reader verifies both document and full manifest. Generated task binding omissions
-remain [T-147](../TODO.md);
-they do not authorize interpreting this producer as a test runner.
+Job is the atomic recovery boundary: accepted upstream handoffs allow reusing the entire accepted
+job when source snapshot, configuration (up to compatible `[operational.*]` tuning), dataset
+contract, and implementation/schema/validation identities match, while any failed, invalidated, or
+forced job re-executes all units in a fresh `attempts/<attempt_id>/` workspace without salvaging
+prior unit receipts ([jobs and runtime](../architecture/jobs-and-runtime.md#wave-1-resumability)).
+Content-addressed unit shards bind report identities, source snapshot, parser/normalizer/mapping
+versions and upstream artifact manifest, and the accepted reader verifies both document and full
+manifest. Generated task binding omissions remain [T-147](../TODO.md) and never authorize running
+target tests here; see [job-local operational tuning](job-tuning.md) and [test-coverage-ingestion](test-coverage-ingestion.md#tuning-and-whole-job-recovery-job_test_coverage).

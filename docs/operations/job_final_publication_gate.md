@@ -460,16 +460,14 @@ bytes or failed enabled-input admission are errors, not withheld-success substit
 
 ## Resume and invalidation
 
-There is no model or gate-specific semantic cache. Exact accepted handoffs, frozen configuration,
-component identities and bindings govern [runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability).
-Changing review evidence, commissioned producer identity or enablement requires recertification;
-unchanged upstream computation need not be rerun just to rebuild this projection. The publication
-unit rechecks the snapshot rather than trusting its earlier classification. Artifact-bearing
-results are not portable failed-attempt checkpoints.
-Snapshot consumers rehash the retained unit contexts along with the other certified bindings.
-Later removal or changed bytes invalidate the certificate without consulting current review or
-optional-producer pointers or reloading live configuration. These checks preserve declared
-unavailability and coverage limitations; they do not upgrade assurance.
-The public gate remains `/2`; the [current report `/4`](final-report.md#domain-coverage-and-unknown-measurements-t-5088)
-changes metric representation, not gate certification. Audit data adds certified bindings and
-sanitized limitations, not a new finding state or a public audit-record endpoint.
+There is no model, gate-specific semantic cache, or sub-job unit salvage. Exact accepted handoffs,
+frozen configuration (up to compatible `[operational.*]` tuning), dataset contract, component
+identities and certified bindings govern whole-job
+[runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability); any failed or invalidated
+gate re-executes in full inside a fresh `attempts/<attempt_id>/` workspace and rechecks the
+snapshot at publication. Snapshot consumers rehash retained unit contexts and certified bindings so
+missing or altered bytes fail closed without consulting live pointers; development-tainted upstream
+handoffs are refused certification here even in `-dev` profiles. The public gate remains `/2`; the
+[current report `/4`](final-report.md#domain-coverage-and-unknown-measurements-t-5088) changes
+metric representation, not gate certification. See
+[job-local operational tuning](job-tuning.md) and [final-report](final-report.md#tuning-and-whole-job-recovery-job_final_publication_gate).

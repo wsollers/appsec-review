@@ -71,10 +71,15 @@ with any retained gap completes with `COMPLETED_WITH_GAPS`, even when its docume
 Positive statements retain the original upstream reasons in their coverage notes.
 
 Dependency handoff, publication and SCA bytes join the same unique-path/hash input inventory
-as gate/review/configuration and schema snapshots. `max_bindings` and
-`max_total_input_bytes` apply to that union during load and reproof, not separate subtotals.
-`OPENVEX_INPUTS_VERIFIED` reports this complete inventory. The dependency document uses
-`max_document_bytes`; its accounting result uses the existing 1 MiB result bound.
+as gate/review/configuration and the ten run-owned schema/license/lock snapshots (eight local,
+final-report, and upstream OpenVEX JSON schemas plus `upstream.lock.json` and `upstream/LICENSE`).
+`max_bindings` applies to that union during load and reproof, while hash-only verification streams
+through `reader.verify()` without `max_artifact_bytes` or `max_total_input_bytes` input rejection
+ceilings (parsed JSON still uses bounded `BoundedInputReader.json()`), resolves revision-compatible
+`configuration_snapshot` artifacts across operational revisions, and refuses any
+`development_tainted` upstream handoff. `OPENVEX_INPUTS_VERIFIED` reports this complete inventory.
+The dependency document uses `max_document_bytes`; its accounting result uses the existing 1 MiB
+result bound.
 Both limits apply before the respective file is written and when acceptance rereads it.
 
 After output reproof, `OPENVEX_EXPORT_COMPLETED` exposes separate
@@ -179,8 +184,6 @@ action_statement = "Review and remediate the confirmed findings using the accomp
 repository_iri = ""
 max_packages = 10000
 max_bindings = 30000
-max_artifact_bytes = 67108864
-max_total_input_bytes = 536870912
 max_document_bytes = 33554432
 max_manifest_bytes = 134217728
 max_action_bytes = 8192
@@ -195,8 +198,7 @@ Enabled export still requires the publication gate and inference review enabled.
 
 The numeric values above are checked-in defaults and hard maxima; positive lower bounds
 are permitted. They are UTF-8 byte
-limits where named as bytes, not character counts. Individual input size cannot exceed total
-input size. JSON depth is bounded to 32, and result JSON has a fixed 1 MiB limit.
+limits where named as bytes, not character counts. Input hash verification streams through `reader.verify()` without per-file or aggregate input byte rejection ceilings, while parsed JSON uses bounded `BoundedInputReader.json()` with depth <= 32 and result JSON has a fixed 1 MiB limit.
 Unique references/aggregate input bytes are measured rather than silently truncated.
 The job enforces its attempt deadline at unit boundaries, with monotonic checks during
 bounded reads and processing. Exceeding a bound or timeout fails the attempt.
@@ -429,8 +431,8 @@ Focused offline unit files cover settings/contracts, input custody, projection/v
 handler deadlines, export consumers, topology/wiring and metrics. The certified `/2` reader,
 verifier and projector are implemented at this base; exact combined focused results and final
 source proof belong in the [verification record](../reviews/openvex-export-implementation.md).
-The coordinator's isolated installed-only wheel proof at `212f21a8` verifies all nine resource
-pins, the transitive report-item definition, canonical assembly and semantic validation using
+The coordinator's isolated installed-only wheel proof at `212f21a8` verified the earlier nine resource
+pins (now ten with `openvex-dependencies.schema.json`), the transitive report-item definition, canonical assembly and semantic validation using
 synthetic gate `/2` context, not a real accepted run. That historical proof predates the
 automatic-source/common-schema repin; current wheel/source proof is recorded separately,
 not inferred from it. It does not establish a self-contained

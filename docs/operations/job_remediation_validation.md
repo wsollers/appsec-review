@@ -329,24 +329,20 @@ this compile-only job does not implement that verdict.
 
 ## Resume and invalidation
 
-No standalone validation semantic cache is implemented. [Runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability)
-binds review/planning/build handoffs, source, settings and component identities. A changed patch,
-baseline, reviewer guidance or adapter policy invalidates its validation, not the original
-finding. The job reloads accepted inputs at publication and refuses to overwrite attempt-owned
-artifacts. Scratch workspaces must be recreated and cleaned; artifact/check receipts are not
-portable failed-attempt checkpoints.
+No standalone validation semantic cache or sub-job unit salvage is implemented. Whole-job
+[runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) binds accepted
+review/planning/build handoffs, source, configuration (up to compatible `[operational.*]` tuning),
+dataset contract, and implementation/schema/validation identities. Any failed or invalidated job
+re-executes in a fresh `attempts/<attempt_id>/` workspace with clean scratch trees, reloads
+accepted inputs at publication, and refuses to overwrite attempt-owned artifacts.
 
-The capture serializer `src/appsec_review/jobs/job_language_build/native.py` is application
-source: the production [Dagster Dockerfile](../../deploy/dagster/Dockerfile) uses
-`PYTHONPATH=/opt/app/src`, supplied by the read-only source mounts in
-[`compose.yaml`](../../deploy/dagster/compose.yaml). Its cwd-retention change therefore requires
-the authorized source-signing/reload lifecycle, not an application-image rebuild. Existing
-accepted compile rows are immutable and are not rewritten to add a missing cwd.
-This module is distinct from `containers/tools/native-cpp/native.py`, copied into
-`tool-native-cpp` by its [Dockerfile](../../containers/tools/native-cpp/Dockerfile).
-Changes to that separate baked tool require the corresponding tooling-image rollout; offline
-validation of this application change neither performs nor clears any pending native-tool rollout.
-
+The capture serializer `src/appsec_review/jobs/job_language_build/native.py` is mounted application
+source (`PYTHONPATH=/opt/app/src` in [`deploy/dagster/Dockerfile`](../../deploy/dagster/Dockerfile)
+and [`compose.yaml`](../../deploy/dagster/compose.yaml)), deployed via signed-source reload at an
+explicit run boundary without rewriting immutable compile rows, whereas changes to
+`containers/tools/native-cpp/native.py` ([Dockerfile](../../containers/tools/native-cpp/Dockerfile))
+require a `tool-native-cpp` image rollout. See [job-local operational tuning](job-tuning.md) and
+[remediation](remediation.md#tuning-and-whole-job-recovery-job_remediation_validation).
 ## In-memory patch checks
 
 C++ numeric digit separators are recognized as numeric tokens rather than character quotes;

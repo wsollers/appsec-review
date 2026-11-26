@@ -131,11 +131,11 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.max_file_bytes` | `1048576` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_files` | `128` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_observations_per_tool` | `5000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_file_bytes` | `1048576` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_files` | `128` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_observations_per_tool` | `5000` | coverage | positive integer; exact parser/cross-field bounds† |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_ci_configuration_analysis/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

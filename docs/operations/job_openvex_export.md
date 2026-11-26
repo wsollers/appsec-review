@@ -326,8 +326,11 @@ export for corrupted inputs. Interpret canonical
 
 ## Resume and invalidation
 
-There is no exporter-specific semantic cache. [Runtime admission](../architecture/jobs-and-runtime.md#wave-1-resumability)
-and repeated input reproof bind accepted gate/review, source/configuration, settings, schema pins
-and exporter release. A new accepted pointer invalidates current reuse without changing historical
-immutable evidence. Exclusive writes allow identical existing bytes, never replacement with
-different content. Artifact-bearing outputs are not portable failed-attempt checkpoints.
+There is no exporter-specific semantic cache or sub-job unit salvage. Whole-job
+[runtime admission](../architecture/jobs-and-runtime.md#wave-1-resumability) and streaming input
+reproof bind accepted gate/review handoffs, source/configuration (including compatible operational
+configuration revisions), dataset contract, settings, ten pinned schema/license/lock digests and
+exporter release; any failed or invalidated export re-executes in full inside a fresh
+`attempts/<attempt_id>/` workspace, refusing development-tainted inputs and never overwriting
+different historical bytes. See [job-local operational tuning](job-tuning.md) and
+[openvex-export](../architecture/openvex-export.md#tuning-and-whole-job-recovery-job_openvex_export).

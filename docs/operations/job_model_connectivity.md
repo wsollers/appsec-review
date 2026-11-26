@@ -149,12 +149,13 @@ accounting is separate from the provider's report; see [job interchange](../arch
 
 ## Resume and invalidation
 
-`always_execute=True` makes this a fresh gate on every graph dispatch, including resume.
-Its target-independent fingerprint is `none`; it does not cache yesterday's provider
-availability. `propagate_handoff=False` prevents a new gate report alone from invalidating
-target-analysis jobs. Frozen configuration and normal implementation/validator checks still
-apply under [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
-
+`always_execute=True` makes this a fresh gate on every graph dispatch, including resume, running in
+a fresh `attempts/<attempt_id>/` workspace without caching prior provider availability. Its
+target-independent fingerprint is `none`, and `propagate_handoff=False` prevents a new gate report
+alone from invalidating target-analysis jobs. Frozen configuration (up to compatible
+`[operational.*]` timeout tuning) and normal implementation/validator checks apply under
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability); see
+[job-local operational tuning](job-tuning.md) and [jobs-and-runtime](../architecture/jobs-and-runtime.md#tuning-and-whole-job-recovery-job_model_connectivity).
 ## Model usage
 
 This job does call providers: the injected availability checker issues tool-disabled

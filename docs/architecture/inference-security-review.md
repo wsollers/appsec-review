@@ -415,7 +415,7 @@ every cell.
 Roles express responsibility and authority ceilings:
 
 `hypothesis_hunter`, `red_team_analyst`, `blue_team_refuter`, `independent_verifier`,
-`independent_scorer`, `poc_designer`, `poc_verifier`, `attack_chain_analyst`,
+`independent_scorer`, `poc_designer`, `poc_verifier`, `attack_chain_analyst` (dormant in active runs; `attack_chains` runs model-free deterministic `finding_paths` verification),
 `finding_adjudicator`, and `completeness_reviewer`, plus `adjudication_judge`, which decides which of two shuffled
 sides is correct and sets no state ([judge and PoC design](review-judge-and-poc.md); R4, R5 and R6 are unchanged).
 
@@ -1524,7 +1524,7 @@ reason/evidence delta between them.
 
 Physical outputs are immutable, independently fingerprinted shards—scope/evidence maps, packages,
 red results, normalized hypotheses, blue results, blind verifier results, adjudications, scores,
-PoC plans/attempts/results, chain proposals/refutations, audits, and ledger events. A shard receipt
+PoC plans/attempts/results, deterministic `finding_paths` chain manifests (plus historical chain proposals/refutations when replaying legacy ledgers), audits, and ledger events. A shard receipt
 contains schema, producer step/task/attempt, fingerprint, content hash, row count, dependency hashes,
 coverage/gaps, and validator version. The accepted job manifest composes only reverified shards,
 then a serialized publisher writes the claim-ledger head, package manifests, `handoff.json`, and
@@ -1532,6 +1532,15 @@ finally advances `latest.json`. A manifest is a cacheable description, not autho
 reader re-hashes and revalidates it.
 
 ## Attack-chain composition and refutation
+
+**Current active runtime (`attack_chains`):** the production `attack_chains` step runs model-free
+deterministic static path verification on the `application` pool (without `max_challenge_cells`,
+`max_queries`, or `max_turns` step settings). `attack_chains.compose_candidates`, `refute_edges`, and
+`verify_weakest_links` resolve adjudicated findings' cited `dataflow_path` facts against the pinned
+code-graph shard, record explicit sink mismatches and anchor limitations, and publish `finding_paths`
+on the protected chain manifest without launching LLM composer, refuter, or weakest-link cells. The
+multi-claim continuity and refutation rules below govern historical chain records and future
+re-enabled composition contracts.
 
 Composition starts after claim adjudication. A chain link must reference a `confirmed` claim or an
 explicitly qualified `supported` claim whose missing predicate is recorded. Supported links cap the
@@ -2692,19 +2701,16 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.attack_chains.max_candidates_per_composition` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.attack_chains.max_challenge_cells` | `100` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.attack_chains.max_evidence_per_obligation` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.attack_chains.max_expansions` | `100` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.attack_chains.max_links` | `6` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.attack_chains.max_queries` | `12` | coverage | 0..10000; cross-field checks apply |
-| `settings.attack_chains.max_result_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.attack_chains.max_turns` | `4` | coverage | 1..1000; cross-field checks apply |
-| `settings.budgets.budget_team_packages` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.attack_chains.max_candidates_per_composition` | `8` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.attack_chains.max_evidence_per_obligation` | `8` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.attack_chains.max_expansions` | `100` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.attack_chains.max_links` | `6` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.attack_chains.max_result_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.budgets.budget_team_packages` | `200` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.budgets.max_input_tokens` | `480000000` | coverage | 1..2000000; cross-field checks apply |
-| `settings.budgets.max_model_turns` | `12000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.budgets.max_model_turns` | `12000` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.budgets.max_output_tokens` | `48000000` | coverage | 1..1000000; cross-field checks apply |
-| `settings.budgets.max_retrieval_queries` | `40000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.budgets.max_retrieval_queries` | `40000` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.budgets.timeout_seconds` | `28800` | coverage | 1..86400; cross-field checks apply |
 | `settings.decision_audit.max_input_bytes` | `67108864` | coverage | 4096..67108864; cross-field checks apply |
 | `settings.decision_audit.max_page_size` | `200` | coverage | 1..100; cross-field checks apply |
@@ -2712,11 +2718,11 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 | `settings.decision_audit.page_size` | `50` | coverage | 1..200; cross-field checks apply |
 | `settings.decision_audit.shard_bytes` | `8388608` | coverage | 4096..8388608; cross-field checks apply |
 | `settings.decision_audit.shard_records` | `5000` | coverage | 1..5000; cross-field checks apply |
-| `settings.hunting.agents` | `4` | execution | positive integer; exact parser/cross-field bounds? |
-| `settings.hunting.brief_bounds.max_files` | `120` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.hunting.brief_bounds.max_functions` | `400` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.hunting.brief_bounds.max_leads` | `60` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.hunting.max_areas` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.hunting.agents` | `4` | execution | positive integer; exact parser/cross-field bounds† |
+| `settings.hunting.brief_bounds.max_files` | `120` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.hunting.brief_bounds.max_functions` | `400` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.hunting.brief_bounds.max_leads` | `60` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.hunting.max_areas` | `8` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.lanes.hunt_max_claims_per_package` | `5` | coverage | 1..100; cross-field checks apply |
 | `settings.lanes.hunt_max_units` | `10` | coverage | 0..100000; cross-field checks apply |
 | `settings.lanes.lead_max_claims_per_package` | `3` | coverage | 1..100; cross-field checks apply |
@@ -2741,52 +2747,52 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 | `settings.models.verifier.max_turns` | `4` | coverage | 1..1000; cross-field checks apply |
 | `settings.models.verifier.timeout_seconds` | `600` | coverage | 1..86400 seconds |
 | `settings.packages.caller_depth` | `2` | coverage | 1..4; cross-field checks apply |
-| `settings.packages.max_behavior_artifact_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.packages.max_behavior_artifact_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.packages.max_callers` | `16` | coverage | 1..1000; cross-field checks apply |
 | `settings.packages.max_context_entries` | `64` | coverage | 1..10000; cross-field checks apply |
 | `settings.packages.max_depth` | `4` | coverage | 1..8; cross-field checks apply |
 | `settings.packages.max_memory_context_entries` | `24` | coverage | 1..1000; cross-field checks apply |
-| `settings.packages.max_operation_records` | `2000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.packages.max_operation_records` | `2000` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.packages.max_package_bytes` | `65536` | coverage | 1..16777216; cross-field checks apply |
 | `settings.packages.max_page_size` | `20` | coverage | 1..100; cross-field checks apply |
 | `settings.packages.max_pages` | `5` | coverage | 1..100; cross-field checks apply |
 | `settings.packages.max_slice_lines` | `120` | coverage | 1..2000; cross-field checks apply |
-| `settings.packages.max_slice_lines_per_function` | `40` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.packages.max_slice_lines_per_function` | `40` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.packages.max_view_bytes` | `49152` | coverage | 4096..1048576; cross-field checks apply |
 | `settings.packages.max_view_source_lines` | `160` | coverage | 10..2000; cross-field checks apply |
 | `settings.packages.max_view_type_declarations` | `6` | coverage | 0..32; cross-field checks apply |
 | `settings.packages.unit_max_files` | `200` | coverage | 1..100000; cross-field checks apply |
-| `settings.red_output.max_chain_seeds` | `4` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.red_output.max_chain_steps` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.red_output.max_evidence_refs` | `64` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.red_output.max_evidence_requests` | `16` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.red_output.max_gaps` | `32` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.red_output.max_obligations` | `48` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.red_output.max_path_nodes` | `16` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.red_output.max_proposals` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.red_output.max_result_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.red_output.max_taint_paths` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.red_output.max_text_chars` | `2000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.red_output.max_chain_seeds` | `4` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.red_output.max_chain_steps` | `8` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.red_output.max_evidence_refs` | `64` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.red_output.max_evidence_requests` | `16` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.red_output.max_gaps` | `32` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.red_output.max_obligations` | `48` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.red_output.max_path_nodes` | `16` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.red_output.max_proposals` | `8` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.red_output.max_result_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.red_output.max_taint_paths` | `8` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.red_output.max_text_chars` | `2000` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.result_cache.connect_timeout_seconds` | `0.5` | execution | 0.05..10 seconds |
 | `settings.retry.backoff_seconds` | `[2, 10]` | coverage | 0..16 nondecreasing integer delays; each 0..3600 seconds |
 | `settings.retry.max_attempts` | `2` | coverage | 1..10 |
 | `settings.retry.retry_on_timeout` | `true` | coverage | true or false; existing retry validation |
-| `settings.roles.adjudication_judge.max_cited_row_chars` | `400` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.roles.adjudication_judge.max_cited_rows_per_side` | `12` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.roles.adjudication_judge.max_why_chars` | `600` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.roles.adjudication_judge.max_cited_row_chars` | `400` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.roles.adjudication_judge.max_cited_rows_per_side` | `12` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.roles.adjudication_judge.max_why_chars` | `600` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.roles.adjudication_judge.workers` | `4` | execution | 1..64; cross-field checks apply |
 | `settings.roles.independent_verifier.workers` | `4` | execution | 1..64; cross-field checks apply |
 | `settings.rounds.max_active_claims` | `500` | coverage | 1..100000; cross-field checks apply |
 | `settings.rounds.max_attack_chains` | `50` | coverage | 0..10000; cross-field checks apply |
 | `settings.rounds.max_rounds` | `1` | coverage | 1..16; cross-field checks apply |
-| `settings.triage.batch_size` | `20` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.triage.max_excerpt_lines` | `24` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.triage.max_leads` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.triage.max_reason_chars` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.triage.batch_size` | `20` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.triage.max_excerpt_lines` | `24` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.triage.max_leads` | `200` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.triage.max_reason_chars` | `200` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.retry.retry_on_provider_error` | `true` | coverage | true/false; maximum attempts and deadline still apply |
 | `settings.retry.retry_on_invalid_output` | `true` | coverage | true/false; maximum attempts and deadline still apply |
 
-? The [executing job/parser](../../src/appsec_review/config/inference_review.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/config/inference_review.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Each new attempt owns fresh cell receipts, triage cache, memo namespace and budget; prior attempt spending and gaps are not rewritten. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

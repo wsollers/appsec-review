@@ -209,7 +209,7 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 | `settings.osv_memory` | `"3g"` | execution | 512m..64g; positive integer m/g |
 | `settings.tool_retries` | `1` | execution | 0..3 |
 
-? The [executing job/parser](../../src/appsec_review/config/evidence_collection.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/config/evidence_collection.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

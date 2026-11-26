@@ -594,20 +594,22 @@ No known cause automatically belongs on the walk's approved expected list.
 
 ## Resume and invalidation
 
-Runtime units follow [receipt reuse](../architecture/jobs-and-runtime.md#wave-1-resumability);
-the job also declares external feed-input identity. Native inference receipts bind input document,
-bounds, model settings, guidance hashes and result identity; they are provenance, not permission
-to reuse an unrelated candidate answer. SBOM computation binds accepted identities, native/SBOM
-bounds, discovery/merge/schema identities, inference artifacts and conversion identities/status.
-The inventory fingerprint includes upstream pins and resolved context, gaps, Scorecard API and
+Job is the atomic recovery boundary: accepted upstream handoffs and external feed-input identities
+allow reusing the entire accepted job when configuration (up to compatible `[operational.*]`
+tuning), dataset contract, and implementation/schema/validation identities match, while any failed,
+invalidated, or forced job re-executes all units in a fresh `attempts/<attempt_id>/` workspace
+without cross-attempt unit salvage or persistent `Scorecard` response caching. Native inference
+receipts bind input document, bounds, model settings, guidance hashes and result identity as
+attempt provenance; SBOM computation binds accepted identities, native/SBOM bounds,
+discovery/merge/schema identities, inference artifacts and conversion identities/status; and the
+inventory fingerprint binds upstream pins, resolved context, gaps, live Scorecard observations and
 SBOM fingerprint/hash.
 
-Scorecard caching is a distinct age/identity-validated repository cache; a valid hit avoids HTTP,
-but does not prove a fresh upstream scan. Changing accepted dependencies, model/guidance,
-normalizers, conversion or feed identities must be reconciled at their own boundaries rather
-than treating a warm cache as accepted job output. Shared tool launch uses
-[image pins](image-pin-verification.md) and [signing](signing.md).
-
+Changing accepted dependencies, model/guidance, normalizers, conversion or feed identities
+invalidates the job as a whole under
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability). Shared tool launch
+uses [image pins](image-pin-verification.md) and [signing](signing.md); see
+[job-local operational tuning](job-tuning.md) and [dependency-intelligence](dependency-intelligence.md#tuning-and-whole-job-recovery-job_dependency_intelligence).
 ## Model usage
 
 The [native SBOM investigator role](../generated/guidance.md#roles-native_sbom_investigator) with

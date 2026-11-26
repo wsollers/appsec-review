@@ -1220,6 +1220,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "operations",
+      "path": "docs/operations/analyzer-attempt-scopes.md",
+      "reason": "Attempt-owned scratch, checkpoints, caches, and shard re-attestation across static and compiled analyzers.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
       "path": "docs/operations/artifact-indexing.md",
       "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
       "subsystem": "scanners and evidence collection"
@@ -1398,6 +1406,14 @@
       "kind": "operations",
       "path": "docs/operations/job-test-selection.md",
       "reason": "Retain the source-reconciled current documentation at the docs/docs-sync.json boundary; historical decisions and validation limits remain unchanged.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/job-tuning.md",
+      "reason": "Execution versus coverage operational tuning compatibility, global scheduler bounds, and whole-job recovery summary.",
       "subsystem": "testing and operations"
     },
     {
@@ -1953,6 +1969,14 @@
       "subsystem": "testing and operations"
     },
     {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
+      "path": "docs/operations/run-monitor.md",
+      "reason": "Bounded five-minute one-shot run monitor over pipeline.jsonl, epoch/dispatch denominators, and usage caveats.",
+      "subsystem": "reporting and metrics"
+    },
+    {
       "decision_record": true,
       "disposition": "keep",
       "kind": "operations",
@@ -2188,6 +2212,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "process",
+      "path": "docs/processes/commit-review-prompt.md",
+      "reason": "Reusable multi-agent commit-range code, test, and documentation parity review prompt.",
+      "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "process",
       "path": "docs/processes/integration-tier-walk-prompt.md",
       "reason": "Keep Integration-tier walk: the per-job session brief for a review host (T-113) as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
       "subsystem": "testing and operations"
@@ -2207,6 +2239,14 @@
       "path": "docs/processes/local-dagster-parity.md",
       "reason": "Keep Local and Dagster parity, one job at a time as a bounded procedure, preserving recorded decisions and linking the forward testing contract.",
       "subsystem": "testing and operations"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "process",
+      "path": "docs/processes/monitoring-report.md",
+      "reason": "Five-minute monitoring template, physical job-output verification rules, isolated FIX worktrees off main, and epoch reload.",
+      "subsystem": "reporting and metrics"
     },
     {
       "decision_record": false,
@@ -2910,6 +2950,14 @@
       "kind": "schema",
       "path": "docs/schemas/inference-security-review/finding-package.schema.json",
       "reason": "Keep finding-package.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "review inference and guidance"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/inference-security-review/finding-path.schema.json",
+      "reason": "JSON Schema for deterministic static path assessments on adjudicated findings.",
       "subsystem": "review inference and guidance"
     },
     {

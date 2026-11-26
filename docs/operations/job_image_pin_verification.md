@@ -166,12 +166,12 @@ walk's terms; image repair and re-pinning are not actions performed by this job.
 
 ## Resume and invalidation
 
-The gate always executes, is target-independent (`none`), and does not propagate its handoff
-into downstream semantic identity. Per-call tag deduplication is not a persistent image cache.
-A resumed dispatch re-inspects the daemon; changed host bindings do not rewrite the frozen
-run configuration. Follow [host bindings](image-pin-verification.md#frozen-configuration) for
-configuration changes and [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability)
-for accepted-job identity. Signing and launch enforcement are unchanged. Successful inspection
-does not establish compiled-query readiness or replace separately authorized native acceptance.
-The operator's bulk-signing command may report an absent declared ID-only image as `skipped_absent`;
-that separate policy never makes a missing image pass this readiness gate.
+The gate always executes (`always_execute=True`), is target-independent (`none`), and does not
+propagate its handoff into downstream semantic identity; each dispatch runs in a fresh
+`attempts/<attempt_id>/` workspace without persistent image caching or unit salvage. A resumed
+dispatch re-inspects the daemon; changed host bindings do not rewrite a frozen run configuration.
+Follow [host bindings](image-pin-verification.md#frozen-configuration) for configuration changes,
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability) for accepted-job
+identity, [job-local operational tuning](job-tuning.md) and [image-pin-verification](image-pin-verification.md#tuning-and-whole-job-recovery-job_image_pin_verification). Signing and launch
+enforcement are unchanged, and bulk-signing `skipped_absent` policy never makes a missing image
+pass this readiness gate.

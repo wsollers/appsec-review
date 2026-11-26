@@ -223,18 +223,16 @@ The walk must separately approve any expected cause and its lost binary coverage
 
 ## Resume and invalidation
 
-There is no scanner checkpoint here. A binary shard fingerprint binds target snapshot, binary and
-publication identities, manifest hash, Ghidra tool/image/export metadata, parser/normalizer and
+There is no scanner or cross-attempt unit checkpoint here: whole-job reuse binds accepted upstream
+handoffs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities, while a failed or invalidated job re-executes in a
+fresh `attempts/<attempt_id>/` workspace. A binary shard fingerprint binds target snapshot, binary
+and publication identities, manifest hash, Ghidra tool/image/export metadata, parser/normalizer and
 mapping limits. The binary-ID shard suffix separates identical bytes reviewed under different IDs.
-Publications and pseudo-C are re-verified even when a shard file already exists. Changing one
-publication or limit rebuilds its shard; unrelated binary shards can remain usable under the
-[accepted-index contract](../architecture/python-and-retrieval.md#accepted-index-sets).
-The repaired normalizer and line-mapping identities invalidate older binary shards.
-The export script is copied into `tool-ghidra`, not supplied by an application source reload.
-Exporting explicit library identities requires an operator-authorized image rebuild (including
-its Java API compile check), new publication and intake pin. These rollout and real-Ghidra checks
-were **NOT RUN** for the T-5106/T-5107 unit repair; Python fixtures verify the publication,
-indexing and retrieval path, not Ghidra runtime behavior.
-Generated task/tool bindings remain incomplete under
-[T-147](../TODO.md);
-the source boundary is indexing, not a Ghidra invocation.
+Publications and pseudo-C are re-verified even when a content-addressed shard file already exists
+under the [accepted-index contract](../architecture/python-and-retrieval.md#accepted-index-sets).
+The export script is copied into `tool-ghidra`, not supplied by an application source reload;
+exporting explicit library identities requires an operator-authorized image rebuild, new
+publication and intake pin. Generated task/tool bindings remain incomplete under
+[T-147](../TODO.md); the source boundary is indexing, not a Ghidra invocation. See
+[job-local operational tuning](job-tuning.md) and [binary-decompilation](binary-decompilation.md#tuning-and-whole-job-recovery-job_binary_evidence_indexing).

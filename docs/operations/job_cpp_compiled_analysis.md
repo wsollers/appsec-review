@@ -391,9 +391,11 @@ or skip filename-state advancement: accepted descendants can still use the detai
 ### `binary`
 
 1. Invoke `tool-native-cpp` symbol inspection for usable projects. Per-artifact `nm`/`readelf`
-   receipts retain exit, timeout, bounded stderr and truncation. Exit 2 permits partial inspection
-   results; other failed execution produces unavailable coverage. Missing/invalid records,
-   missing subcommand receipts and omitted accepted artifacts produce named reasons.
+   receipts must carry a valid `"tools"` subcommand mapping (and replay/catalog records validate
+   `compile_unit_id` fail-closed), retaining exit, timeout, bounded stderr and truncation. Exit 2
+   permits partial inspection results; other failed execution produces unavailable coverage.
+   Missing/invalid `"tools"` or `compile_unit_id` records, missing subcommand receipts and omitted
+   accepted artifacts fail closed into named reasons rather than empty clean coverage.
 2. Index retained artifact metadata and bounded native symbol-table rows with containment edges.
    Do not assign original-source locations merely from symbol names.
 3. Record/symbol/output cuts are explicit gaps. Failed inspection is not reusable complete empty
@@ -469,22 +471,21 @@ does not approve analysis loss.
 
 ## Resume and invalidation
 
-Catalog and branch checkpoints bind project/stage, tool pin and declared platform/validation/tool
-releases. Branch inputs include compile database, accepted mapping, mode/bounds and semantic
-branch/parser identity; non-Infer branches also bind artifact/link catalogs, seeded IR/AST bind
-seed policy and AST binds IR neighborhood identity. Physical index identity includes retained
-compiler-output bytes and final semantic outcomes, so a healthy retry cannot accidentally reuse a
-failed shard with an unchanged execution receipt. Compiler evidence and ledgers are
-content-addressed; prior published bytes are not overwritten.
+Job is the atomic recovery boundary: accepted upstream handoffs allow reusing the entire accepted
+job when inputs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities match, whereas any failed, invalidated, or forced job
+re-executes `prepare.projects` and all enabled compiler/analyzer branches in a fresh
+`attempts/<attempt_id>/` workspace without salvaging branch or unit checkpoints from prior
+attempts. Attempt-local branch records bind project/stage, tool pin, declared
+platform/validation/tool releases, compile database, accepted mapping, mode/bounds, artifact/link
+catalogs and seeded policy. Physical index identity includes retained compiler-output bytes and
+final semantic outcomes, and content-addressed compiler evidence/ledgers never overwrite prior
+published bytes.
 
-Only success or explicitly checkpointable intentional partial results qualify; explicit
-`checkpointable=false` always vetoes reuse, including apparently successful results. Parse, replay
-and missing-CFG failures are not checkpointed. Stale/invalid referenced artifacts cause a local
-checkpoint miss. Re-running `prepare.projects` clears local checkpoints but preserves retained
-evidence: selective branch reuse assumes its prepared staging survives runtime unit reuse.
 Historical catalogs cannot retroactively recover lost cwd/link context; regenerate them from
-accepted build receipts. See [runtime resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
-
+accepted build receipts. See
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [cpp-compiled-analysis](cpp-compiled-analysis.md#tuning-and-whole-job-recovery-job_cpp_compiled_analysis).
 ## Deployment boundary
 
 The Python job and scope normalizers are source-mounted; application-code deployment follows the

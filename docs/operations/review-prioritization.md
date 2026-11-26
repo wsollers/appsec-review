@@ -251,22 +251,22 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.index.max_evidence_links_per_item` | `50` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.index.max_graph_neighbors` | `5000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.index.max_indexed_items` | `5000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_file_bytes` | `2097152` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.index.max_evidence_links_per_item` | `50` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.index.max_graph_neighbors` | `5000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.index.max_indexed_items` | `5000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_file_bytes` | `2097152` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.max_files` | `50000` | coverage | 1..1000000; cross-field checks apply |
 | `settings.max_flow_steps_per_path` | `128` | coverage | 2..10000; cross-field checks apply |
 | `settings.max_functions` | `500000` | coverage | 1..5000000; cross-field checks apply |
 | `settings.max_import_records` | `500000` | coverage | 1..5000000; cross-field checks apply |
 | `settings.max_semantic_paths` | `5000` | coverage | 0..1000000; cross-field checks apply |
 | `settings.max_signals_per_file` | `200` | coverage | 1..100000; cross-field checks apply |
-| `settings.syntax_metrics_reservation.admission_timeout_seconds` | `3600` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.syntax_metrics_reservation.admission_timeout_seconds` | `3600` | execution | positive integer; exact parser/cross-field bounds† |
 | `settings.syntax_metrics_reservation.cpu` | `1` | execution | 1..256; cross-field checks apply |
 | `settings.syntax_metrics_reservation.io_slots` | `0` | execution | 0..256; cross-field checks apply |
-| `settings.syntax_metrics_reservation.memory_mb` | `2048` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.syntax_metrics_reservation.memory_mb` | `2048` | execution | positive integer; exact parser/cross-field bounds† |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_review_prioritization/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_review_prioritization/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

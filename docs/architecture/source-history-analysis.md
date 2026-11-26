@@ -57,9 +57,11 @@ GitHub only adds review-process facts on top of it.
   the ref the snapshot was taken from and is empty when `HEAD` is not that tip.
 - The ranking is the SII over relative churn, revision frequency, author entropy, and complexity,
   with weights in TOML. Every other signal is published alongside it, unweighted.
-- Generated code, lockfiles, fixtures, documentation, vendored code, bulk changes, and formatting
-  changes are excluded from ranking by explicit rules, and their metrics and exclusion reasons are
-  kept.
+- Non-code/tooling assets, generated code, lockfiles, fixtures, documentation, vendored code, bulk
+  changes, and formatting changes are excluded from ranking by explicit rules over accepted
+  `catalog_documents` (while `Dockerfile*`, `.S`/`.s`/`.asm` assembly, and `.ipp`/`.inl`/`.tpp` C++
+  implementation headers remain SII-eligible code), and excluded files' metrics and exclusion reasons
+  are kept.
 - This lane does not compute PR/deployment timing signals. Accepted GitHub enrichment does retain
   review timestamps for change-context analysis; those facts do not populate history's
   unavailable timing metrics or authorize inference from commit timestamps.

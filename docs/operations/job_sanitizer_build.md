@@ -256,14 +256,13 @@ the cost of each actual cause; unsupported or ignored flags are never clean cove
 
 ## Resume and invalidation
 
-There is no custom per-unit sanitizer checkpoint or independent input-identity probe.
-Whole-job reuse binds target, accepted language-build handoff, frozen job/configuration,
-implementation/schema/validation and retained artifact identities through
-[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability). The summary also
-records receipt fingerprints, sanitizer settings identity and output-policy identity.
-Changing flags, required evidence, selection bounds, upstream recipes/images or source requires
-new computation under the appropriate frozen configuration. A fresh execution uses
-`data/sanitizer/attempts/<attempt-id>/<build-unit-id>/` and replays commands; it neither replaces
-an earlier attempt's bytes (including the historical non-attempt-qualified layout) nor resumes a
-half-instrumented tree. Existing current-attempt directories are refused rather than reused.
-An accepted partial result is not automatically retried solely because its nested rebuild failed.
+There is no custom per-unit sanitizer checkpoint or independent input-identity probe: whole-job
+reuse binds target, accepted language-build handoff, configuration (up to compatible
+`[operational.*]` tuning), dataset contract, implementation/schema/validation and retained artifact
+identities through [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
+The summary records receipt fingerprints, sanitizer settings identity and output-policy identity.
+Changing flags, required evidence, material selection bounds, upstream recipes/images or source
+requires a fresh whole-job execution under `data/sanitizer/attempts/<attempt-id>/<build-unit-id>/`,
+which neither overwrites an earlier attempt's bytes nor resumes a half-instrumented tree, and an
+accepted partial result is not automatically retried solely because a nested rebuild failed. See
+[job-local operational tuning](job-tuning.md) and [sanitizer-build](sanitizer-build.md#tuning-and-whole-job-recovery-job_sanitizer_build).

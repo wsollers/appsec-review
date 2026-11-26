@@ -434,8 +434,9 @@ Shared admission and provenance rules live in
    configuration inputs to Trivy and GitHub workflows to offline zizmor.
 2. Stage only selected Trivy inputs and use embedded checks without update downloads. Retain
    embedded-rule and stderr limitations.
-3. Parse native configuration diagnostics; preserve Checkov parsing errors and explicit
-   unreported/unsupported-input decisions separately from successful checks.
+3. Parse native configuration diagnostics; accept valid Checkov `3.3.19` empty-summary outputs when
+   supported inputs yield zero checks without parser/runtime errors, while preserving Checkov
+   parsing errors and explicit unreported/unsupported-input decisions separately from successful checks.
 4. Normalize/hash-bind locations and publish tool shards; no configuration content executes as
    workflow code.
 
@@ -528,16 +529,19 @@ a particular walk's user-approved expected list.
 
 ## Resume and invalidation
 
-Tool checkpoint identity binds target/catalog/scope, image, adapter/parser/normalizer/validator,
-mounted input/rule identities, declared component releases and job/task settings. Only successful
-or partial results are saved; failures set a retry-required marker. Reuse verifies retained
-artifacts/native references and required releases; disabled Grype bypasses it. OSV grouping and
-feed identities therefore affect the tool result, not an unbound external cache.
+Job is the atomic recovery boundary: accepted upstream handoffs allow reusing the entire accepted
+job when target/catalog/scope, configuration (up to compatible `[operational.*]` tuning), dataset
+contract, and implementation/schema/validation identities match, whereas any failed, invalidated,
+or forced job re-executes all configured scanners and indexing in a fresh `attempts/<attempt_id>/`
+workspace without salvaging per-tool or per-unit checkpoints from prior attempts. Attempt-local
+scanner runs bind target/catalog/scope, image, adapter/parser/normalizer/validator, mounted
+input/rule identities, OSV grouping/feed identities, declared component releases and settings;
+content-addressed index shards bind normalized evidence, snapshot and mapping/normalizer identities
+and verify indexed file hashes without overwriting prior bytes.
 
-Index reuse is separately keyed by normalized evidence, snapshot and mapping/normalizer identities
-and verifies the indexed file hash. Changed normalization can re-index retained evidence without
-claiming a new scan. See [runtime receipts](../architecture/jobs-and-runtime.md#wave-1-resumability),
-[image pins](image-pin-verification.md), [signing](signing.md) and
-[accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
-Generated task and language/applicability declarations remain incomplete under
-[T-147](../TODO.md) and [T-157](../TODO.md); absence of those bindings is not proof of nonexecution.
+See [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[image pins](image-pin-verification.md), [signing](signing.md),
+[accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets),
+[job-local operational tuning](job-tuning.md) and [static-analysis](static-analysis.md#tuning-and-whole-job-recovery-job_evidence_collection). Generated task and
+language/applicability declarations remain incomplete under [T-147](../TODO.md) and
+[T-157](../TODO.md); absence of those bindings is not proof of nonexecution.

@@ -1038,9 +1038,11 @@ or unaccepted document anchors fail publication instead of producing successful 
 
 ## Resume and invalidation
 
-Package identity includes accepted manifest/shards, partition, entity context and assembly rule.
-The admission projection additionally binds run ID, manifest hash and page size; published files
-are content-addressed and reverified, never edited in place. A changed input manifest, membership
-rule or page bound requires new packages. [Runtime resume](../architecture/jobs-and-runtime.md#wave-1-resumability)
-still requires exact configuration/component/upstream identities; this artifact-bearing unit is
-not a portable failed-attempt checkpoint. No model is dispatched.
+Whole-job [runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) requires
+matching accepted upstream manifest/shards, configuration (up to compatible `[operational.*]`
+tuning), dataset contract, and implementation/schema/validation identities; any failed or
+invalidated assembly re-executes as a whole in a fresh `attempts/<attempt_id>/` workspace without
+failed-attempt unit salvage. Package identity binds accepted manifest/shards, partition, entity
+context and assembly rule, and admission projections bind run ID, manifest hash and page size into
+content-addressed reverified files that are never edited in place. No model is dispatched; see
+[job-local operational tuning](job-tuning.md) and [review-package-contract](../architecture/review-package-contract.md#tuning-and-whole-job-recovery-job_review_package_assembly).

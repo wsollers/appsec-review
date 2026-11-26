@@ -350,12 +350,13 @@ not establish live linter or pipeline execution.
 
 ## Resume and invalidation
 
-This job has no bespoke external-linter checkpoint; replay follows
-[runtime unit receipts](../architecture/jobs-and-runtime.md#wave-1-resumability).
-Observation fingerprints bind snapshot, normalized artifact, hierarchy, provider/tool/framework,
-ruleset, settings and parser/normalizer/mapping identities. Canonical evidence fingerprints bind
-the exact correlation document. Changed definitions, hierarchy, mappings or rules must not be
-treated as unchanged observations. Fresh unit execution builds the shards; a matching filename
-alone is not a scanner execution receipt. Shared [image pins](image-pin-verification.md),
-[signing](signing.md) and [retrieval manifests](../architecture/python-and-retrieval.md#accepted-index-sets)
-remain independent verification boundaries.
+Job is the atomic recovery boundary: an accepted job is reused only as a whole when upstream
+handoffs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities match, while a failed or invalidated job re-executes
+every unit in a fresh `attempts/<attempt_id>/` workspace without cross-attempt unit-receipt or
+external-linter salvage. Observation fingerprints bind snapshot, normalized artifact, hierarchy,
+provider/tool/framework, ruleset, settings and parser/normalizer/mapping identities; canonical
+evidence fingerprints bind the exact correlation document. Shared
+[image pins](image-pin-verification.md), [signing](signing.md),
+[retrieval manifests](../architecture/python-and-retrieval.md#accepted-index-sets),
+[job-local operational tuning](job-tuning.md) and [ci-configuration-analysis](ci-configuration-analysis.md#tuning-and-whole-job-recovery-job_ci_configuration_analysis) remain independent boundaries.

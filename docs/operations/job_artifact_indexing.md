@@ -289,21 +289,22 @@ does not imply approval by the current walk.
 
 ## Resume and invalidation
 
-All shard fingerprints bind the dependency fingerprint plus complete entity/relation records
-before duplicate coalescing, with the writer's bounded payload sanitization applied, coverage,
-published gap reasons and physical shard ID. Canonical row ordering preserves reuse for reordered
-equivalent inputs. The dependency fingerprint retains snapshot, artifact path/hash/size/family,
-producing actions/invocations, dependencies, toolchain/image and parser/extractor/normalizer/mapping
+Whole-job reuse requires matching accepted upstream handoffs, configuration (up to compatible
+`[operational.*]` settings), dataset contract, and implementation/schema/validation identities; a
+failed, invalidated, or forced job re-executes all units in a fresh `attempts/<attempt_id>/`
+workspace without salvaging prior unit checkpoints. All shard fingerprints bind the dependency
+fingerprint plus complete entity/relation records before duplicate coalescing, with the writer's
+bounded payload sanitization applied, coverage, published gap reasons and physical shard ID.
+Canonical row ordering preserves content-addressed shard identity for reordered equivalent inputs.
+The dependency fingerprint retains snapshot, artifact path/hash/size/family, producing
+actions/invocations, dependencies, toolchain/image and parser/extractor/normalizer/mapping
 identities; member/relationship batches also bind packing limits and target-intake shards bind
 accepted intake records.
 
 Changed metadata, member manifests, relationship observations or coverage therefore select a new
-path even when row counts and artifact bytes stay equal. A batch moving to another ordinal gets a
-new fingerprint rather than opening valid old bytes with mismatched shard metadata. An unchanged
-batch at the same ordinal still reuses its verified shard when later batches are added or removed.
-Old shards remain untouched; neither accepted bytes nor custody/hash verification is bypassed.
-Pre-content-binding shards remain readable by their accepted manifests but are not reused under
-the new fingerprint. See
-[accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets) and
-[input read receipts](../architecture/job-input-contracts.md#admission-and-read-receipts) for the
-shared boundaries.
+path even when row counts and artifact bytes stay equal. Content-addressed immutable shards still
+verify hashes and custody before re-attestation and never overwrite prior bytes. See
+[accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets),
+[input read receipts](../architecture/job-input-contracts.md#admission-and-read-receipts),
+[job-local operational tuning](job-tuning.md) and
+[artifact-indexing](artifact-indexing.md#tuning-and-whole-job-recovery-job_artifact_indexing).

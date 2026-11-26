@@ -3,7 +3,7 @@ title: "Jobs and runtime"
 kind: "architecture"
 subsystem: "runtime interchange"
 status: "current"
-jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection", "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification", "job_inference_security_review", "job_language_build", "job_model_connectivity", "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync", "job_threat_model_generation", "job_tree_sitter_ast"]
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_cbmc_analysis", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection", "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification", "job_inference_security_review", "job_language_build", "job_model_connectivity", "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync", "job_threat_model_generation", "job_tree_sitter_ast"]
 last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Jobs and runtime
@@ -42,7 +42,16 @@ The [typed job input and dispatch contract](job-input-contracts.md) on each fact
 authority for accepted producer/output/schema requirements, dispatch class and target access.
 It never treats time as proof of freshness.
 The graph holds a kernel-backed per-run claim lock across planning and execution so two resume
-processes cannot claim the same run concurrently.
+processes cannot claim the same run concurrently. Job is the atomic recovery boundary: failed or
+invalidated jobs re-execute as a whole inside a fresh `attempts/<attempt_id>/` workspace without
+salvaging partial unit checkpoints. In explicitly selected `-dev` profiles only (refused in base
+`appsec-review.toml`, overlays, and non-`-dev` profiles), per-job `development.input_overrides`
+binds attempt-local replacement snapshots through `runtime.inputs.input_file` across validation,
+execution, and finalization, stamps `development_tainted: true` on the resulting `handoff.json`,
+and propagates `development_tainted` across downstream consumers so `-dev` testing runs up to
+`job_final_publication_gate`, `job_dossier_publication`, and `job_openvex_export` (which refuse
+tainted inputs); deleting the override and running a clean top-level or targeted restart recomputes
+untainted handoffs and clears all `development_tainted` flags.
 
 The direct CLI runs the same enabled jobs as Dagster's `wave1_review`, in a topological order derived
 from `orchestration.topology.wave1_dependencies`; Dagster executes independent branches concurrently
@@ -712,7 +721,7 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 | --- | --- | --- | --- |
 | `settings.timeout_seconds` | `120` | execution | 1..600 seconds |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_model_connectivity/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_model_connectivity/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. The readiness gate remains always-executed rather than reusable. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 
@@ -734,23 +743,23 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `[global] binary_decompilation.analysis_timeout_seconds` | `3600` | coverage | positive integer; exact parser/cross-field bounds? |
-| `[global] binary_decompilation.cpus` | `4` | execution | finite number >0; exact parser/cross-field bounds? |
-| `[global] binary_decompilation.decompile_timeout_seconds` | `60` | coverage | positive integer; exact parser/cross-field bounds? |
-| `[global] binary_decompilation.max_binary_bytes` | `536870912` | coverage | positive integer; exact parser/cross-field bounds? |
-| `[global] binary_decompilation.max_function_bytes` | `262144` | coverage | positive integer; exact parser/cross-field bounds? |
-| `[global] binary_decompilation.max_functions` | `50000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.analysis_timeout_seconds` | `3600` | coverage | positive integer; exact parser/cross-field bounds† |
+| `[global] binary_decompilation.cpus` | `4` | execution | finite number >0; exact parser/cross-field bounds† |
+| `[global] binary_decompilation.decompile_timeout_seconds` | `60` | coverage | positive integer; exact parser/cross-field bounds† |
+| `[global] binary_decompilation.max_binary_bytes` | `536870912` | coverage | positive integer; exact parser/cross-field bounds† |
+| `[global] binary_decompilation.max_function_bytes` | `262144` | coverage | positive integer; exact parser/cross-field bounds† |
+| `[global] binary_decompilation.max_functions` | `50000` | coverage | positive integer; exact parser/cross-field bounds† |
 | `[global] binary_decompilation.max_heap` | `"6g"` | execution | positive integer m/g; memory/headroom admission |
-| `[global] binary_decompilation.max_pcode_ops` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `[global] binary_decompilation.max_strings` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.max_pcode_ops` | `20000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `[global] binary_decompilation.max_strings` | `100000` | coverage | positive integer; exact parser/cross-field bounds† |
 | `[global] binary_decompilation.memory` | `"8g"` | execution | positive integer m/g; memory/headroom admission |
-| `[global] binary_decompilation.output_file_bytes` | `2147483648` | coverage | positive integer; exact parser/cross-field bounds? |
-| `[global] binary_decompilation.pids_limit` | `1024` | execution | positive integer; exact parser/cross-field bounds? |
-| `[global] binary_decompilation.timeout_seconds` | `7200` | coverage | positive integer; exact parser/cross-field bounds? |
-| `[global] inventory.max_file_bytes` | `12582912` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] binary_decompilation.output_file_bytes` | `2147483648` | coverage | positive integer; exact parser/cross-field bounds† |
+| `[global] binary_decompilation.pids_limit` | `1024` | execution | positive integer; exact parser/cross-field bounds† |
+| `[global] binary_decompilation.timeout_seconds` | `7200` | coverage | positive integer; exact parser/cross-field bounds† |
+| `[global] inventory.max_file_bytes` | `12582912` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.model_preflight.timeout_seconds` | `120` | execution | 1..600 seconds |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_review_intake/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_review_intake/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

@@ -1260,7 +1260,7 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 No independent mutable job setting: the immutable transaction request defines its inputs and authority. It executes the parent language-build transaction with that parent?s admitted command/evidence settings.
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_build_iteration/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_build_iteration/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Build-workspace transaction admission and immutable prior products remain enforced; new whole-job language attempts rerun selected nodes rather than recycling their old receipts. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 
@@ -1282,20 +1282,20 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.artifact_count_limit` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.command_timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds? |
-| `settings.go.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.jvm.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.jvm.provenance_count_limit` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.jvm.trace_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.node.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.output_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.php.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.python.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.rust.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.wasm.workspace_file_limit` | `100000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.artifact_count_limit` | `10000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.command_timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds† |
+| `settings.go.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.jvm.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.jvm.provenance_count_limit` | `20000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.jvm.trace_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.node.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.output_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.php.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.python.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.rust.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.wasm.workspace_file_limit` | `100000` | coverage | positive integer; exact parser/cross-field bounds† |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_language_build/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_language_build/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Build-workspace transaction admission and immutable prior products remain enforced; new whole-job language attempts rerun selected nodes rather than recycling their old receipts. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

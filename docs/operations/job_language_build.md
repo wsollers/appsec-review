@@ -399,23 +399,17 @@ actual cause and its cost, including deterministic capability limitations.
 
 ## Resume and invalidation
 
-The global controller binds source/topology, selected recipe, image, configuration, releases,
-execution/output policy and upstream product hashes. It verifies committed products and
-receipt artifacts before reuse; changing a producer invalidates dependent nodes while retaining
-admissible unrelated checkpoints.
+Whole-job reuse binds source/topology, accepted upstream handoffs, selected recipes, images,
+configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities under
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability); any failed,
+invalidated, or forced job re-executes in a fresh `attempts/<attempt_id>/` workspace without
+salvaging failed unit checkpoints across attempts. When shared `BuildIterations` state or the
+non-shared verified-product receipt cache applies, `NodeBinding` and receipt fingerprints bind
+dependency files, preparation, project handoff, capture/executor identity, processing
+facts/decisions/modes, family options, toolchain/provenance/layout and upstream product hashes,
+requiring verified complete capture and artifacts (project-owned native execution disables the
+executor's private cache).
 
-The generic private build fingerprint additionally includes dependency files, preparation,
-project handoff, capture/executor identity, processing facts/decisions/modes, family options and
-execution bounds; exact interfaces are added to the key. This generic private cache is used only
-outside the shared-workspace path and requires success, complete capture and verified artifacts.
-Project-owned native execution disables that private cache. JVM/Wasm fingerprints also bind
-their specialized toolchain/provenance/layout or producer selections and upstream dependencies.
-That generic cache's completeness rule is not a blanket claim about every family adapter or
-controller product checkpoint. Whole-job admission rechecks
-topology and immutable artifacts under
-[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
-
-The ELF parser identity labels freshly interpreted facts; it does not itself invalidate the
-generic private receipt cache, whose key does not include that label. Reused receipts may retain
-older loader facts. This repair neither reparses nor purges stored receipts, and unit validation
-does not establish that reuse across a parser change is appropriate.
+The ELF parser identity labels freshly interpreted facts and does not rewrite immutable stored
+receipts. See [job-local operational tuning](job-tuning.md) and [language-build](language-build.md#tuning-and-whole-job-recovery-job_language_build).

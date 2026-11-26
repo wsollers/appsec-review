@@ -500,24 +500,24 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `steps.cve_bin_tool_db_build.settings.build_timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds? |
-| `steps.cve_bin_tool_db_build.settings.run_timeout_seconds` | `3600` | execution | positive integer; exact parser/cross-field bounds? |
-| `steps.epss_sync.settings.timeout_seconds` | `120` | execution | positive integer; exact parser/cross-field bounds? |
-| `steps.grype_db_sync.settings.download_timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds? |
+| `steps.cve_bin_tool_db_build.settings.build_timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds† |
+| `steps.cve_bin_tool_db_build.settings.run_timeout_seconds` | `3600` | execution | positive integer; exact parser/cross-field bounds† |
+| `steps.epss_sync.settings.timeout_seconds` | `120` | execution | positive integer; exact parser/cross-field bounds† |
+| `steps.grype_db_sync.settings.download_timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds† |
 | `steps.grype_db_sync.settings.memory` | `"6g"` | execution | positive integer m/g; memory/headroom admission |
-| `steps.grype_db_sync.settings.run_timeout_seconds` | `900` | execution | positive integer; exact parser/cross-field bounds? |
-| `steps.kev_sync.settings.timeout_seconds` | `120` | execution | positive integer; exact parser/cross-field bounds? |
-| `steps.mitre_sync.settings.timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds? |
-| `steps.nvd_sync.settings.download_timeout_seconds` | `90` | execution | finite number >0; exact parser/cross-field bounds? |
-| `steps.nvd_sync.settings.max_attempts` | `6` | execution | positive integer; exact parser/cross-field bounds? |
-| `steps.nvd_sync.settings.request_delay_with_key_seconds` | `0.6` | execution | finite number >=0; exact parser/cross-field bounds? |
-| `steps.nvd_sync.settings.request_delay_without_key_seconds` | `6.0` | execution | finite number >=0; exact parser/cross-field bounds? |
-| `steps.nvd_sync.settings.request_timeout_seconds` | `120` | execution | finite number >0; exact parser/cross-field bounds? |
-| `steps.nvd_sync.settings.retry_delay_seconds` | `5` | execution | finite number >=0; exact parser/cross-field bounds? |
-| `steps.nvd_sync.settings.retry_max_delay_seconds` | `60` | execution | finite number >=0; exact parser/cross-field bounds? |
-| `steps.osv_sync.settings.timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds? |
+| `steps.grype_db_sync.settings.run_timeout_seconds` | `900` | execution | positive integer; exact parser/cross-field bounds† |
+| `steps.kev_sync.settings.timeout_seconds` | `120` | execution | positive integer; exact parser/cross-field bounds† |
+| `steps.mitre_sync.settings.timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds† |
+| `steps.nvd_sync.settings.download_timeout_seconds` | `90` | execution | finite number >0; exact parser/cross-field bounds† |
+| `steps.nvd_sync.settings.max_attempts` | `6` | execution | positive integer; exact parser/cross-field bounds† |
+| `steps.nvd_sync.settings.request_delay_with_key_seconds` | `0.6` | execution | finite number >=0; exact parser/cross-field bounds† |
+| `steps.nvd_sync.settings.request_delay_without_key_seconds` | `6.0` | execution | finite number >=0; exact parser/cross-field bounds† |
+| `steps.nvd_sync.settings.request_timeout_seconds` | `120` | execution | finite number >0; exact parser/cross-field bounds† |
+| `steps.nvd_sync.settings.retry_delay_seconds` | `5` | execution | finite number >=0; exact parser/cross-field bounds† |
+| `steps.nvd_sync.settings.retry_max_delay_seconds` | `60` | execution | finite number >=0; exact parser/cross-field bounds† |
+| `steps.osv_sync.settings.timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds† |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_third_party_data_sync/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_third_party_data_sync/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Feed publication remains an independent maintenance operation; tuning does not refresh or replace a review?s pinned feed snapshot. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

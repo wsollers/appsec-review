@@ -101,10 +101,12 @@ Opaque cursors are bound to the accepted manifest and complete request identity.
 shard identities and shard-local gaps, and concurrent readers open every SQLite shard read-only and
 immutable.
 
-Every MCP transport call records exactly one `MCP_TOOL_STARTED`/`MCP_TOOL_COMPLETED` pair. Nested
-`find`/`trace` work used by `read_excerpt` and `resolve_evidence` is recorded as child
-`RETRIEVAL_SUBOP_COMPLETED` spans with the top-level invocation id, so tool-use metrics do not
-double-count. For direct calls, `RETRIEVAL_QUERY` is the logical operation. `resolve_identities`
+Every MCP transport call records exactly one `MCP_TOOL_STARTED`/`MCP_TOOL_COMPLETED` pair, binding
+caller attribution through `retrieval_caller(...)` and reporting both inclusive (top-level plus
+nested sub-operations) and self shard/cache/work measurements (`inclusive (self)` telemetry) alongside
+domain-tool `shards_considered` accounting. Nested `find`/`trace` work used by `read_excerpt` and
+`resolve_evidence` is recorded as child `RETRIEVAL_SUBOP_COMPLETED` spans with the top-level
+invocation id, so tool-use metrics neither lose nested shard touches nor double-count invocations. For direct calls, `RETRIEVAL_QUERY` is the logical operation. `resolve_identities`
 counts once per batch, not once per identity; application `expand` counts once, not once per
 `find` or `trace`. Child events carry `parent_tool` and `parent_query_sha256`. Parent duration
 and shard/cache counters **include** nested work: never add the child measurements to them.

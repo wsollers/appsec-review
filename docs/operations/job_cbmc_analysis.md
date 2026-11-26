@@ -167,13 +167,16 @@ These are the charter checks for a separately authorized walk, not a claim they 
 
 ## Resume and invalidation
 
-Runtime reuse requires matching admitted implementation/configuration/upstream identities and
-an intact accepted artifact closure. Missing or changed source copies, GOTO, discovery/solver
-output or receipts invalidate reuse even when summary bytes remain unchanged. Changed code
-requires normal repair admission; changed host settings require an appropriate newly resolved
-configuration, not edits to a frozen run. Application-code reload and tool-image provisioning
-remain separate, per-host operations; [T-5263](../TODO.md) tracks native rollout/acceptance.
-
+Whole-job reuse requires matching admitted implementation/schema/validation, upstream handoffs, and
+configuration identities (up to compatible `[operational.*]` tuning) plus an intact accepted
+artifact closure; any failed, invalidated, or forced job re-executes all selected harnesses in a
+fresh `attempts/<attempt_id>/` workspace without salvaging partial solver or unit checkpoints from
+prior attempts. Missing or changed source copies, GOTO, discovery/solver output or receipts
+invalidate reuse even when summary bytes remain unchanged. Changed code requires normal repair
+admission; changed host settings require an appropriate newly resolved configuration, not edits to
+a frozen run. Application-code reload and tool-image provisioning remain separate, per-host
+operations; [T-5263](../TODO.md) tracks native rollout/acceptance. See
+[job-local operational tuning](job-tuning.md) and [job_cbmc_analysis](#tuning-and-whole-job-recovery-job_cbmc_analysis).
 ## Manual validation boundary
 
 Focused units fake only external container/upstream service boundaries and exercise parsing,
@@ -357,7 +360,7 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 | `settings.max_translation_units` | `8` | coverage | 1..64; cross-field checks apply |
 | `settings.total_timeout_seconds` | `300` | coverage | 1..3600; cross-field checks apply |
 
-? The [executing job/parser](../../src/appsec_review/config/cbmc.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/config/cbmc.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

@@ -303,7 +303,9 @@ See [project-build operations](project-build.md) for operator context and
 1. For native actions, identify graph-connected units and leave them for the shared-workspace
    iteration owner. For isolated units, preserve failed preparation as an empty blocked receipt.
 2. Execute admitted isolated native units once through the language-build captured executor,
-   binding its input to the accepted plan. Retain real commands, outputs and native enforcement.
+   binding its input to the accepted plan while preserving native Make optimization/hardening flags
+   (such as `-O2` and `_FORTIFY_SOURCE`) and transitive CMake `PUBLIC`/`INTERFACE` header search
+   paths. Retain real commands, outputs and native enforcement.
    An unexpected native execution error writes `failure.json` and raises `ProjectBuildFailed`.
 3. In the .NET family, execute Unity once through its configured engine capability; do not
    infer or replay generated project files through a generic SDK.
@@ -386,15 +388,16 @@ No image build, repair or native limitation is automatically a walk's expected g
 ## Resume and invalidation
 
 Whole-job reuse binds the accepted plan and its revalidated environment/topology, target,
-configuration and implementation. `guard_build_cache` rechecks recipe-bound refinement rather
-than trusting an old result. Project-image identity binds recipe, dependency-file hashes,
-profile/base image and component releases; cache reads also resolve the image and retained
-definition/preparation receipt. Accepted repair reuse needs the same base recipe and validated
-repair/image identity. Native execution owned here disables the language executor's private
-cache: the accepted job receipt owns its reuse. Changed selected recipes/images or target proof
-cannot reuse an earlier native result. See [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability)
-and [signing](signing.md); this page changes neither launch enforcement nor image policy.
-
+configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities; any failed, invalidated, or forced job re-executes as
+a whole in a fresh `attempts/<attempt_id>/` workspace without salvaging failed unit checkpoints.
+`guard_build_cache` rechecks recipe-bound refinement rather than trusting stale state; verified
+project-image cache lookups bind recipe, dependency-file hashes, profile/base image, retained
+definition/preparation receipts and component releases, and accepted repair reuse requires matching
+base recipe and validated repair/image identity. Native execution owned here disables the language
+executor's private cache so the accepted job receipt owns reuse. See
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[signing](signing.md), [job-local operational tuning](job-tuning.md) and [project-build](project-build.md#tuning-and-whole-job-recovery-job_project_build).
 ## Model usage
 
 The current `build_job` handlers do **not** call `infer`. `_infer_repair` is reached only from
