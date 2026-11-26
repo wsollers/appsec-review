@@ -46,9 +46,7 @@ def attach_querying_skill_to_bundle(
     force: bool = False,
 ) -> dict[str, Any]:
     """Append querying guidance once, preserving the role/persona/binary selection, and reseal."""
-    eligible = force or role in DEFAULT_QUERYING_SKILL_ROLES or (
-        role is Role.BLUE_TEAM_REFUTER and task == "chain_refuter"
-    )
+    eligible = force or role in DEFAULT_QUERYING_SKILL_ROLES
     if not eligible:
         return bundle
     procedures = next((sec for sec in bundle["sections"] if sec["name"] == "procedures"), None)

@@ -34,7 +34,7 @@ from appsec_review.guidance.routing import unit_sources
 from appsec_review.indexing.store import open_shard
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
 from appsec_review.jobs.job_security_tagging.taxonomy import load_vocabulary
-from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest
+from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest, retrieval_caller
 from appsec_review.retrieval.observations import SEVERITY_ORDER
 from appsec_review.review import hunt_plan, obligations, ship_block, tool_rules
 from appsec_review.review.budget import JobBudget
@@ -330,7 +330,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                              manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
 
         def read_excerpt(lead):
-            located, reason = core.read_source_lines(identity=lead.observation_id)
+            with retrieval_caller(job_id=JOB_ID, caller_kind="lead_triage", if_unset=True):
+                located, reason = core.read_source_lines(identity=lead.observation_id)
             return (located["lines"] if located is not None else None), reason
 
         outcome = run_triage(
@@ -376,10 +377,11 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
                              manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
         collection = sorted_collection(triaged_collection(unit, scope))
         package_settings = PackageSettings.from_review_settings(settings)
-        candidates = rank_hunt_candidates(scope, package_settings, collection, behavior_core=core)
-        admitted = {lead.observation_id for lead in admitted_leads(collection, package_settings)}
-        inputs = hunt_plan.gather_inputs(scope, collection, candidates.ranked, GraphContext(scope),
-                                         admitted_ids=admitted, rank_weights=package_settings.rank_weights)
+        with retrieval_caller(job_id=JOB_ID, caller_kind="hunt_planning", if_unset=True):
+            candidates = rank_hunt_candidates(scope, package_settings, collection, behavior_core=core)
+            admitted = {lead.observation_id for lead in admitted_leads(collection, package_settings)}
+            inputs = hunt_plan.gather_inputs(scope, collection, candidates.ranked, GraphContext(scope),
+                                             admitted_ids=admitted, rank_weights=package_settings.rank_weights)
         brief = hunt_plan.build_brief(inputs, settings.hunting.brief_bounds, agents=settings.hunting.agents,
                                       max_areas=settings.hunting.max_areas,
                                       hunt_max_units=settings.lanes.hunt_max_units)
@@ -416,11 +418,12 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             # The hunting campaign plan orders both lanes' hunt selection (the lead lane's manifest carries the
             # same hunted flags, so excluded-leads.json agrees); disabled or fallen back, the rank selects.
             plan_doc = _read(unit.job.run_root, unit.output("packages.plan_hunt_campaign")["artifact"])
-            assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings),
-                                         collection=collection, cwe_reference=reference,
-                                         slice_sources=AcceptedSliceSources(scope, core=core), behavior_core=core,
-                                         hunt_selection=hunt_plan.selection_from_document(plan_doc),
-                                         document_navigation=True)
+            with retrieval_caller(job_id=JOB_ID, caller_kind="package_assembly", if_unset=True):
+                assembly = assemble_packages(scope, PackageSettings.from_review_settings(settings),
+                                             collection=collection, cwe_reference=reference,
+                                             slice_sources=AcceptedSliceSources(scope, core=core), behavior_core=core,
+                                             hunt_selection=hunt_plan.selection_from_document(plan_doc),
+                                             document_navigation=True)
             manifest_path = publish_packages(assembly, unit.unit_root / "assembly", run_root=unit.job.run_root)
             excluded = _excluded(scope)
             mine = [package for package in assembly.packages if package.lane == lane.value]
@@ -607,7 +610,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             core = RetrievalCore(Path(unit.job.run_root).parent, unit.job.run_id,
                                  manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
                                  manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
-            entity_paths = {entity: stages.locate_entity_path(core, entity) for entity in affected}
+            with retrieval_caller(job_id=JOB_ID, caller_kind="claim_merge", if_unset=True):
+                entity_paths = {entity: stages.locate_entity_path(core, entity) for entity in affected}
         merged = stages.merge_claims(lanes, shards, entities, unit.output("scope.assemble_scope")["components"],
                                      entity_paths=entity_paths, package_paths=package_paths)
         return {"artifact": _write(unit, "merge.json", merged), "claim_count": len(merged["claims"]),
@@ -652,12 +656,13 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         # impact_class is derived from the run-pinned MITRE CWE catalog (decision 11); an unpinned or
         # mismatched catalog derives nothing, and a stale one derives with the stale gap recorded.
         catalog = ImpactCatalog.from_reference(load_cwe_reference(unit.job.run_root))
-        document = stages.score_claims(adjudications["adjudications"], projection,
-                                       settings.scoring.cwe_impact_overrides, unit.unit_root / "scores", ledger_path,
-                                       unit.unit_id, SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
-                                       references=stages.claim_references(merged, documents),
-                                       scoring=settings.scoring, evidence=evidence, cwe_catalog=catalog,
-                                       warrants=lane_warrants(unit))
+        with retrieval_caller(job_id=JOB_ID, caller_kind="claim_scoring", if_unset=True):
+            document = stages.score_claims(adjudications["adjudications"], projection,
+                                           settings.scoring.cwe_impact_overrides, unit.unit_root / "scores", ledger_path,
+                                           unit.unit_id, SchemaSet(repo(unit) / SCHEMA_DIRECTORY),
+                                           references=stages.claim_references(merged, documents),
+                                           scoring=settings.scoring, evidence=evidence, cwe_catalog=catalog,
+                                           warrants=lane_warrants(unit))
         gaps: list[str] = []
         return {"artifact": _write(unit, "scores.json", document),
                 "ledger_shard": _artifact(unit.job.run_root, ledger_path), "score_count": len(document["scores"]),
@@ -677,31 +682,11 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         ctx = chain_context(unit)
         projection = project(stages.merge_verified(shard_paths(unit, LEDGER_UNITS[:4])).events)
         adjudications = _read(unit.job.run_root, unit.output("adjudicate.apply_policy")["artifact"])["adjudications"]
-        scores = _read(unit.job.run_root, unit.output("scoring.score_claims")["artifact"])["scores"]
-        merged = _read(unit.job.run_root, unit.output("merge.claims")["artifact"])
-        documents = package_documents(unit)
-        references = stages.claim_references(merged, documents)
-        families = stages.claim_lead_families(merged, documents)
-        extra: set[str] = set()
-        component_severities: dict[str, str] = {}
-        for record in adjudications:
-            claim_id = record["claim_id"]
-            inputs, _display = stages._ship_block_inputs(
-                ClaimState(record["state"]), [item for item in scores if item["claim_id"] == claim_id],
-                references.get(claim_id, {}), families.get(claim_id, ()), False)
-            if inputs.technical_severity:
-                component_severities[claim_id] = inputs.technical_severity
-            decision = ship_block.decide(inputs, ctx.settings.ship_block,
-                                          require_distinct_model=ctx.settings.verification.require_distinct_model_for_ship_blocking)
-            if (decision.conditions["technical_severity_qualifies"]
-                    or decision.conditions["kev_dependency_qualifies"]):
-                extra.add(claim_id)
         seeds = [seed for lane in lane_documents(unit) if lane.get("chain_seeds")
                  for seed in _read(unit.job.run_root, lane["chain_seeds"])["seeds"]]
         ledger_path = unit.unit_root / "ledger.jsonl"
-        document = chains.compose(ctx, projection, adjudications, extra_verifier_claims=extra, seeds=seeds,
-                                  out_dir=unit.unit_root / "proposals", ledger_path=ledger_path, stream=unit.unit_id,
-                                  component_severities=component_severities)
+        document = chains.compose(ctx, projection, adjudications, seeds=seeds,
+                                  out_dir=unit.unit_root / "proposals", ledger_path=ledger_path, stream=unit.unit_id)
         unit.job.events.write("INFERENCE_REVIEW_ATTACK_CHAIN_COMPOSITION_COMPLETED",
                               **document["accounting"], expanded=document["exploration"]["expanded"],
                               frontier_truncated=document["exploration"]["frontier_truncated"],

@@ -47,6 +47,11 @@ async def _managed(manager, label: str):
         if cancellation is not None:
             cancellation.add_note(str(failure))
             raise cancellation from failure
+        if isinstance(body_error, _UnconfirmedTeardown):
+            body_error.add_note(f"{failure}: {error}")
+            raise body_error
+        if body_error is not None:
+            failure.add_note(f"Primary failure ({type(body_error).__name__}): {body_error}")
         raise failure from error
     if body_error is not None:
         # An SDK context manager may not suppress cancellation or an application failure.
@@ -192,26 +197,35 @@ class _Worker:
         self.loop, self.client, self.catalog = None, None, {}
         self.transport_tasks.clear()
         stack, self.stack = self.stack, AsyncExitStack()
+        close_error: BaseException | None = None
         try:
             close = loop.create_task(stack.aclose())
             done, _ = loop.run_until_complete(asyncio.wait({close}, timeout=max(0, deadline - time.monotonic())))
             if not done:
+                close.cancel()
                 raise _cleanup_failure("Copilot client teardown exceeded its cancellation bound")
             close.result()
-        except _UnconfirmedTeardown:
+        except _UnconfirmedTeardown as error:
             self.poisoned = True
-            raise
+            close_error = error
         except BaseException as error:
             self.poisoned = True
-            raise _cleanup_failure("Copilot client teardown failed") from error
+            failure = _cleanup_failure("Copilot client teardown failed")
+            failure.__cause__ = error
+            close_error = failure
+        cancel_deadline = max(deadline, time.monotonic() + min(1.0, _CLEANUP_SECONDS))
+        try:
+            _cancel_tasks(loop, asyncio.all_tasks(loop), cancel_deadline)
+        except BaseException as cancel_error:
+            self.poisoned = True
+            if close_error is not None:
+                cancel_error.add_note(f"Prior client teardown failure: {close_error}")
+                raise cancel_error from close_error
+            raise
         finally:
-            try:
-                _cancel_tasks(loop, asyncio.all_tasks(loop), deadline)
-            except BaseException:
-                self.poisoned = True
-                raise
-            finally:
-                loop.close()
+            loop.close()
+        if close_error is not None:
+            raise close_error
 
     def run(self, operation, timeout_seconds, *, one_shot=False):
         from appsec_review.runtime import execution_safety as safety

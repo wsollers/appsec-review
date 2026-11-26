@@ -445,7 +445,7 @@
                 "max_hops": {
                   "type": "integer",
                   "minimum": 1,
-                  "maximum": 12
+                  "maximum": 16
                 },
                 "limit": {
                   "type": "integer",
@@ -953,7 +953,7 @@
                 "max_depth": {
                   "type": "integer",
                   "minimum": 1,
-                  "maximum": 12
+                  "maximum": 16
                 },
                 "edge_kinds": {
                   "type": "array",

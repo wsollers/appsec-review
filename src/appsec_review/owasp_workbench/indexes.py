@@ -32,9 +32,17 @@ def _fingerprint(value: Any) -> str:
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
 
+def _attempt_segment(attempt_id: str | None) -> str | None:
+    if isinstance(attempt_id, str) and attempt_id and attempt_id != "-":
+        return attempt_id
+    from appsec_review.storage.shared import current as _current_shared
+    active = _current_shared()
+    return active.attempt_id if active is not None else None
+
+
 def publish_shard(run_root: Path, *, family: str, shard_id: str,
                   records: Sequence[Mapping[str, Any]], fingerprint_inputs: Mapping[str, Any],
-                  gaps: Sequence[str] = ()) -> dict[str, Any]:
+                  gaps: Sequence[str] = (), attempt_id: str | None = None) -> dict[str, Any]:
     if family not in FAMILIES:
         raise ValueError(f"unknown OWASP index family: {family}")
     logical_shard_id = str(shard_id)
@@ -47,7 +55,12 @@ def publish_shard(run_root: Path, *, family: str, shard_id: str,
     document["records_sha256"] = _fingerprint(document["records"])
     fingerprint = _fingerprint({**document, "inputs": fingerprint_inputs})
     document["fingerprint"] = fingerprint
-    relative = Path("data") / "indexes" / "owasp" / family / storage_key / f"{fingerprint}.json"
+    seg = _attempt_segment(attempt_id)
+    relative = (
+        Path("data") / "indexes" / "owasp" / family / seg / storage_key / f"{fingerprint}.json"
+        if seg is not None
+        else Path("data") / "indexes" / "owasp" / family / storage_key / f"{fingerprint}.json"
+    )
     path = Path(run_root) / relative
     from appsec_review.storage.shared import publish_named, safe_path
     safe_path(Path(run_root), path.relative_to(run_root).as_posix())
@@ -63,7 +76,8 @@ def publish_shard(run_root: Path, *, family: str, shard_id: str,
 def publish_manifest(run_root: Path, *, run_id: str, shards: Sequence[Mapping[str, Any]],
                      accepted_upstream_manifest: Mapping[str, Any],
                      configuration_sha256: str, assessment_mode: str = "qualification",
-                     assessment_bounds: Mapping[str, int] | None = None) -> dict[str, Any]:
+                     assessment_bounds: Mapping[str, int] | None = None,
+                     attempt_id: str | None = None) -> dict[str, Any]:
     if assessment_mode not in {"qualification", "assessment"}:
         raise ValueError("OWASP publication requires an explicit execution mode")
     identities = sorted((dict(value) for value in shards),
@@ -77,7 +91,12 @@ def publish_manifest(run_root: Path, *, run_id: str, shards: Sequence[Mapping[st
     if assessment_bounds is not None:
         manifest["assessment_bounds"] = dict(assessment_bounds)
     manifest["fingerprint"] = _fingerprint(manifest)
-    relative = Path("data") / "indexes" / "owasp" / "manifests" / f"{manifest['fingerprint']}.json"
+    seg = _attempt_segment(attempt_id)
+    relative = (
+        Path("data") / "indexes" / "owasp" / "manifests" / seg / f"{manifest['fingerprint']}.json"
+        if seg is not None
+        else Path("data") / "indexes" / "owasp" / "manifests" / f"{manifest['fingerprint']}.json"
+    )
     path = Path(run_root) / relative
     from appsec_review.storage.shared import publish_named
     publish_named(Path(run_root), path, canonical_json(manifest), namespace="owasp-shard",
