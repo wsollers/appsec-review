@@ -140,3 +140,94 @@ def test_deterministic_and_degenerate_inputs(tmp_path: Path) -> None:
     blocks = job_sections(replace(inputs, summary={}, events=(), jobs=spans))
     assert len([b for b in blocks if isinstance(b, Heading) and b.level == 2]) == MAX_JOBS
     assert isinstance(blocks[-1], Note) and blocks[-1].text.startswith("5 more jobs")
+
+
+def test_inclusive_retrieval_metrics_subop_exclusion_and_cache_write_columns(tmp_path: Path) -> None:
+    import hashlib
+    import json
+    from .fixture import MODEL
+
+    run_dir = build_telemetry_run(tmp_path, write_summary=False)
+    events_path = run_dir / "data" / "logs" / "pipeline.jsonl"
+    records = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    insert_at = next(
+        idx for idx, rec in enumerate(records)
+        if rec["job_id"] == JOBS[2] and rec["event_type"] == "JOB_SUCCEEDED"
+    )
+    stamp = records[insert_at - 1]["timestamp"]
+    injected = [
+        ("RETRIEVAL_QUERY", "review", "q-1", {
+            "shards_candidate": 6, "shards_opened": 2,
+            "snapshot_cache_hits": 3, "snapshot_cache_misses": 1, "route_cache_hit": True,
+        }),
+        ("RETRIEVAL_QUERY", "review", "q-2", {
+            "shards_candidate": 4, "shards_opened": 1,
+            "snapshot_cache_hits": 2, "snapshot_cache_misses": 0, "route_cache_hit": False,
+        }),
+        ("RETRIEVAL_QUERY", "review", "q-legacy", {}),
+        ("RETRIEVAL_SUBOP_COMPLETED", "review", "subop-fts", {"duration_ms": 450000}),
+        ("MODEL_CALL_STARTED", "review", "m-replay-1", {
+            "model_invocation_id": "m-replay-1", "provider": "anthropic", "model": MODEL, "role": "blue",
+        }),
+        ("MODEL_CALL_COMPLETED", "review", "m-replay-1", {
+            "model_invocation_id": "m-replay-1", "provider": "anthropic", "model": MODEL, "role": "blue",
+            "duration_ms": 500, "retry_count": 0, "terminal_status": "succeeded",
+            "execution_mode": "replay", "usage_source": "replay",
+            "input_tokens": 9000, "output_tokens": 1500, "cache_tokens": 8192, "cache_write_tokens": 512,
+        }),
+    ]
+    extra_records = [
+        {
+            "schema": "appsec-review/telemetry-event/1",
+            "sequence": 1,
+            "timestamp": stamp,
+            "level": "INFO",
+            "event_type": ev_type,
+            "run_id": run_dir.name,
+            "job_id": JOBS[2],
+            "attempt_id": "a1",
+            "step_id": step,
+            "task_id": task,
+            "process": {"pid": 1, "name": "fixture"},
+            "trigger": "manual",
+            "orchestrator": "dagster",
+            "message": ev_type.lower(),
+            "details": details,
+            "event_id": "0" * 64,
+        }
+        for ev_type, step, task, details in injected
+    ]
+    merged = records[:insert_at] + extra_records + records[insert_at:]
+    for seq, rec in enumerate(merged, 1):
+        rec["sequence"] = seq
+        rec["event_id"] = hashlib.sha256(f"{run_dir.name}:{seq}:{rec['event_type']}".encode()).hexdigest()
+    events_path.write_bytes(
+        b"".join((json.dumps(rec, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8") for rec in merged)
+    )
+
+    inputs = load_inputs(run_dir)
+    assert inputs.summary_source == "recomputed"
+    assert inputs.summary["retrieval_queries"] == {
+        "count": 3,
+        "route_hits": 1,
+        "route_lookups": 2,
+        "shards_candidate": 10,
+        "shards_candidate_measured_queries": 2,
+        "shards_opened": 3,
+        "shards_opened_measured_queries": 2,
+        "snapshot_cache_hits": 5,
+        "snapshot_cache_hits_measured_queries": 2,
+        "snapshot_cache_misses": 1,
+        "snapshot_cache_misses_measured_queries": 2,
+    }
+
+    blocks = job_sections(inputs)
+    review = _job(blocks, JOBS[2])
+    tasks = _table(review, "Steps and tasks")
+    assert all("subop-fts" not in row[0].text for row in tasks.rows)
+    calls = _table(review, "Model calls")
+    assert calls.headers[6:8] == ("Cache read", "Cache write")
+    assert [c.text for c in _row(calls, "m-replay-1")[3:9]] == [
+        "500 ms", "9,000", "1,500", "8,192", "512", "Succeeded",
+    ]
+    assert _row(calls, "m-red-1")[7].text == "n/a"

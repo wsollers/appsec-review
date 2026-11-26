@@ -360,33 +360,29 @@ def test_exact_output_byte_limits_and_one_below(field: str) -> None:
 
 
 def test_measured_input_sizes_above_legacy_ceilings_survive_projection():
+    legacy_ceiling = 256 * 1024 * 1024
     inputs = make_verified_inputs()
     inventory = list(inputs.input_inventory)
-    inventory[0] = replace(inventory[0], size_bytes=c.MAX_TOTAL_INPUT_BYTES + 1)
+    inventory[0] = replace(inventory[0], size_bytes=legacy_ceiling + 1)
     inputs = replace(inputs, input_inventory=tuple(inventory))
     restored = c.VerifiedInputs.from_mapping(inputs.to_json())
     bundle = assemble(restored)
     v.validate_export(bundle, restored, enabled_settings())
-    assert restored.total_input_bytes > c.MAX_TOTAL_INPUT_BYTES
+    assert restored.total_input_bytes > legacy_ceiling
     assert bundle.result["statement_count"] == 1
 
 
-@pytest.mark.parametrize("field", ["max_packages", "max_bindings", "max_artifact_bytes", "max_total_input_bytes"])
+@pytest.mark.parametrize("field", ["max_packages", "max_bindings"])
 def test_input_count_limits_remain_without_rejecting_input_bytes(field: str) -> None:
     inputs = make_verified_inputs(("publishable", "publishable"))
-    maximum = max(ref.size_bytes for ref in inputs.input_inventory)
-    limits = {"max_packages": len(inputs.findings), "max_bindings": len(inputs.input_inventory),
-              "max_artifact_bytes": maximum, "max_total_input_bytes": inputs.total_input_bytes}
+    inventory = list(inputs.input_inventory)
+    inventory[0] = replace(inventory[0], size_bytes=512 * 1024 * 1024)
+    inputs = replace(inputs, input_inventory=tuple(inventory))
+    limits = {"max_packages": len(inputs.findings), "max_bindings": len(inputs.input_inventory)}
     settings = replace(enabled_settings(), **limits)
     bounded = replace(inputs, settings_sha256=settings.settings_sha256())
     v.validate_export(assemble(bounded, settings), bounded, settings)
     smaller = replace(settings, **{field: limits[field] - 1})
-    if field in {"max_artifact_bytes", "max_total_input_bytes"}:
-        inputs = replace(inputs, settings_sha256=smaller.settings_sha256())
-        bundle = assemble(inputs, smaller)
-        v.validate_export(bundle, inputs, smaller)
-        assert bundle.result["statement_count"] == len(inputs.findings)
-        return
     with pytest.raises(c.ExportError) as error:
         assemble(replace(inputs, settings_sha256=smaller.settings_sha256()), smaller)
     assert error.value.reason == c.ExportFailureReason.BOUND_EXCEEDED

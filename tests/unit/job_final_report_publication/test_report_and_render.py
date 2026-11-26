@@ -602,3 +602,50 @@ def test_attachments_filtering_poc_handoff_withheld_and_rendering_branches() -> 
     empty = build_report(empty_gate, gate_handoff={"path": "data/gate-handoff.json", "sha256": HASH},
                          gate_document={"path": "data/gate.json", "sha256": HASH})
     assert empty["attack_chains"]["reason"].startswith("No candidate attack chain was proposed")
+
+
+def test_unverified_link_trust_boundary_renders_domain_transition_and_preserves_v2_v4_schemas(
+    tmp_path: Path,
+) -> None:
+    verified = _serialized_review(tmp_path, (("confirmed", "high"), ("confirmed", "medium")))
+    members = [row["claim_id"] for row in verified["packages"][:2]]
+    chain_id = f"chain-{sha256_hex('unverified-boundary')}"
+    chain_ref = {"path": "data/chain-unverified.json", "sha256": HASH}
+    manifest = {"path": "data/chains.json", "sha256": HASH}
+    verified["attachments"]["attack_chains"] = [
+        {
+            "chain_id": chain_id,
+            "status": "confirmed",
+            "component_claim_ids": members,
+            "artifact": chain_ref,
+            "gap_count": 0,
+            "disposition": "assessed",
+        }
+    ]
+    verified["capabilities"]["attack_chains"] = capability(True, summary=manifest, count=1)
+    verified["bindings"].extend([manifest, chain_ref])
+
+    _gate, report = _gate_and_report(verified)
+    assert report_schema_name(report) == "final-report-v4"
+    assert report["attack_chain_cards"][0]["trust_boundary_crossed"] == "[unverified link]"
+
+    md_unverified = render_markdown(report, evidence_ids=8, gap_ids=16)
+    assert "reported domain transition (not a source-resolved boundary)" in md_unverified
+    assert "source-resolved boundary `[unverified link]`" not in md_unverified
+
+    resolved_card_report = deepcopy(report)
+    resolved_card_report["attack_chain_cards"][0]["trust_boundary_crossed"] = "edge_gateway -> auth_db"
+    md_resolved = render_markdown(resolved_card_report, evidence_ids=8, gap_ids=16)
+    assert "source-resolved boundary `edge_gateway -> auth_db`" in md_resolved
+    assert "reported domain transition (not a source-resolved boundary)" not in md_resolved
+
+    # final-report-v4 rejects non-'[unverified link]' trust_boundary_crossed, while historical final-report (v2) keeps its contract.
+    assert SchemaSet(SCHEMAS).errors("final-report-v4", resolved_card_report) != []
+    v2_schema = json.loads((SCHEMAS / "final-report.schema.json").read_text(encoding="utf-8"))
+    v2_card_def = v2_schema["$defs"]["attack_chain_card"]
+    assert v2_card_def["properties"]["trust_boundary_crossed"] == {"type": "string", "minLength": 1}
+    assert v2_card_def["properties"]["steps"]["items"]["properties"]["role"]["enum"] == ["entry", "hop", "sink"]
+    v4_schema = json.loads((SCHEMAS / "final-report-v4.schema.json").read_text(encoding="utf-8"))
+    v4_card_def = v4_schema["$defs"]["attack_chain_card"]
+    assert v4_card_def["properties"]["trust_boundary_crossed"] == {"const": "[unverified link]"}
+    assert "component" in v4_card_def["properties"]["steps"]["items"]["properties"]["role"]["enum"]

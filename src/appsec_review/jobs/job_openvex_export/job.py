@@ -116,7 +116,10 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         return VerifiedInputs.from_mapping(parse_json_bytes(payload, max_bytes=_settings(unit).max_manifest_bytes))
 
     def reprove(unit: UnitContext, verified: VerifiedInputs) -> None:
-        reprove_inputs(unit.job.run_root, upstream_inputs(verified), _settings(unit), repo(unit))
+        reprove_inputs(
+            unit.job.run_root, upstream_inputs(verified), _settings(unit), repo(unit),
+            resolved_config_sha256=unit.job.resolved_config_sha256,
+        )
         current = schemas(unit, upstream_inputs(verified), create=False)
         if canonical_bytes(current.to_json()) != canonical_bytes(verified.to_json()):
             raise ExportError("verified inputs changed before acceptance", reason=Reason.INPUT_STALE,
@@ -124,7 +127,14 @@ def build_job(*, repository_root: Path | None = None) -> Job:
 
     def load(unit: UnitContext) -> Mapping[str, Any]:
         unit.job.events.write("OPENVEX_EXPORT_STARTED", invocation_id=unit.job.attempt_id)
-        verified = schemas(unit, verify_inputs(unit.job.run_root, _settings(unit), repo(unit)), create=True)
+        verified = schemas(
+            unit,
+            verify_inputs(
+                unit.job.run_root, _settings(unit), repo(unit),
+                resolved_config_sha256=unit.job.resolved_config_sha256,
+            ),
+            create=True,
+        )
         reference = _write(unit, unit.unit_root / VERIFIED_INPUTS_NAME, canonical_bytes(verified.to_json()))
         dependency_result, _ = dependencies.dependency_projection(
             unit.job.run_root, verified, _settings(unit), repo(unit), _release(unit))

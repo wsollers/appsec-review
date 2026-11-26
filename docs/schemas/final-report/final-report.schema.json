@@ -838,7 +838,6 @@
               },
               "role": {
                 "enum": [
-                  "component",
                   "entry",
                   "hop",
                   "sink"

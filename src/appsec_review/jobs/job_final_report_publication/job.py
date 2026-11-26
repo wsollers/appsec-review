@@ -34,8 +34,10 @@ from appsec_review.reporting.executive_report import render_executive_html
 from appsec_review.reporting.sarif_contracts import SARIF_DOCUMENT_NAME, SARIF_RESULT_NAME
 from appsec_review.review.models import IntegrityError
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
+from appsec_review.runtime.configuration import configuration_snapshot
 from appsec_review.storage import atomic_bytes, atomic_json
 
+from .contracts import FINAL_REPORT_SCHEMA_SHA256
 from .datasets import CONTRACT, DATASETS
 from .pdf import (
     ExecutorFactory, bind_dossiers, render_executive_latex, render_executive_pdf, template_dir, valid_pdf,
@@ -57,10 +59,13 @@ REPORT_HTML = "final-report.html"
 PDF_RECEIPT = "final-report-pdf-receipt"
 
 
-def _configuration_profile(run_root: Path) -> Mapping[str, Any]:
-    """The runtime profile (name and layer hash) the run was configured with, from its verified resolved configuration."""
-    resolved_configuration_identity(run_root)
-    record = json.loads((run_root / "data" / "configuration" / "resolved.json").read_text(encoding="utf-8"))
+def _configuration_profile(run_root: Path, resolved_config_sha256: str | None = None) -> Mapping[str, Any]:
+    """The runtime profile (name and layer hash) the attempt was configured with, from its verified snapshot."""
+    base_sha = resolved_configuration_identity(run_root)
+    if resolved_config_sha256 is not None and resolved_config_sha256 != base_sha:
+        record = configuration_snapshot(run_root, resolved_config_sha256).document
+    else:
+        record = json.loads((run_root / "data" / "configuration" / "resolved.json").read_text(encoding="utf-8"))
     profile = record.get("configuration_profile") or {"name": "dev", "sha256": None}
     return {"name": profile["name"], "sha256": profile.get("sha256")}
 
@@ -99,7 +104,16 @@ def build_job(*, repository_root: Path | None = None,
         return Path(repository_root or unit.job.repository_root).resolve()
 
     def _schemas(unit: UnitContext) -> SchemaSet:
-        return SchemaSet(_root(unit) / SCHEMA_ROOT)
+        schema_dir = _root(unit) / SCHEMA_ROOT
+        for filename, expected in FINAL_REPORT_SCHEMA_SHA256.items():
+            path = schema_dir / filename
+            try:
+                actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            except OSError as exc:
+                raise IntegrityError(f"final report schema unavailable: {filename}") from exc
+            if actual != expected:
+                raise IntegrityError(f"final report schema digest mismatch: {filename}")
+        return SchemaSet(schema_dir)
 
     def load(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
@@ -120,7 +134,8 @@ def build_job(*, repository_root: Path | None = None,
         loaded = unit.output("load.accepted_gate")
         gate = read_bound_json(unit.job.run_root, loaded["gate_document"])
         report = build_report(gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"],
-                              configuration_profile=_configuration_profile(unit.job.run_root),
+                              configuration_profile=_configuration_profile(
+                                  unit.job.run_root, unit.job.resolved_config_sha256),
                               chain_manifest_items=chain_manifest_items(unit.job.run_root, gate))
         _check(_schemas(unit), report_schema_name(report), report)
         path = unit.unit_root / REPORT_JSON
@@ -230,7 +245,7 @@ def build_job(*, repository_root: Path | None = None,
             raise IntegrityError("final report is not bound to the accepted gate handoff")
         expected_report = build_report(
             gate, gate_handoff=loaded["gate_handoff"], gate_document=loaded["gate_document"],
-            configuration_profile=_configuration_profile(run_root),
+            configuration_profile=_configuration_profile(run_root, unit.job.resolved_config_sha256),
             chain_manifest_items=chain_manifest_items(run_root, gate))
         if report != expected_report:
             raise IntegrityError("final-report.json is not the projection of the accepted gate")
