@@ -31,7 +31,7 @@ flowchart LR
     GOTO["goto-cc<br/>original translation unit"]
     FUN["goto-instrument<br/>source-located GOTO functions"]
     BMC["CBMC function-entry analysis<br/>recorded safety checks and unwind bounds"]
-    RAW["Verified raw closure: staged source, GOTO,<br/>function JSON, stdout/stderr and receipts"]
+    RAW["Verified raw closure: staged source, GOTO,<br/>function tables, stdout/stderr and receipts"]
     ACCEPT["Accepted publication / reuse<br/>reverify nested raw artifact identities"]
     INDEX["Normalized CBMC judgments<br/>seed links, assumptions and coverage"]
     DATA["Review-data indexing<br/>accepted dataset inventory"]
@@ -68,10 +68,13 @@ semantic compiler arguments; reject unknown semantic flags, response files, comp
 external include roots and incompatible target modes rather than silently ignoring them.
 Build-output flags are replaced by the job-owned GOTO output path. Do not execute a target
 build script, copy a model's replacement implementation, or synthesize stubs to make compilation
-succeed. Missing headers or unsupported C++ features are coverage gaps.
+succeed. C standards and explicit legacy `-std=c++98`/`-std=c++03` flags are admitted; C++11+ and
+unflagged modern-C++ translation units are rejected before unit-budget selection and recorded
+as explicit `CompileRejected` coverage gaps so supported C units are not starved.
 
-Read `goto-instrument --show-goto-functions --json-ui` to map seeds to actual GOTO function
-identifiers. The selected function must have an available body and an accepted, source-hash-bound
+Read compact `goto-instrument --show-goto-functions` output to map seeds to actual GOTO function
+identifiers without verbose per-instruction JSON truncation, and run function-entry CBMC checks
+with `--drop-unused-functions` and `--object-bits 16`. The selected function must have an available body and an accepted, source-hash-bound
 location. Ambiguous source mappings are not resolved by guessing a similarly named function.
 This avoids treating a compiler-specific C++ mangled name as a CBMC function identifier.
 

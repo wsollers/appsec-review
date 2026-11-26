@@ -16,7 +16,7 @@ from appsec_review.jobs.cpp_index_scopes import IndexScope
 from appsec_review.signing.core import SignatureVerificationError
 from appsec_review.storage import file_sha256, run_artifact, verify_run_artifact
 from .protocol import (
-    ASSUMPTIONS, CHECKS, CompileRejected, OutputRejected, compile_argv, function_entries, judgment, native_json,
+    ASSUMPTIONS, CHECKS, CompileRejected, OutputRejected, compile_argv, function_entries, goto_functions_output, judgment, native_json,
 )
 
 TOOL_ID = "tool-cbmc"
@@ -205,11 +205,13 @@ class Analysis:
             goto = run_artifact(self.unit.job.run_root, binary)
             self.calls[-1]["goto"] = goto
             result, data, _, _ = self.execute(target, (
-                "/usr/bin/goto-instrument", "--show-goto-functions", "--json-ui", "/inputs/unit.goto"), goto=goto)
+                "/usr/bin/goto-instrument", "--show-goto-functions", "/inputs/unit.goto"), goto=goto)
             if result.exit_code != 0:
                 raise ExecutionIncomplete(f"GOTO function discovery failed with exit {result.exit_code}")
-            entries, unresolved = function_entries(native_json(data, self.settings.max_output_bytes),
-                                                   seeds, max_instructions=self.settings.max_instructions)
+            entries, unresolved = function_entries(
+                goto_functions_output(data, self.settings.max_output_bytes,
+                                      max_instructions=self.settings.max_instructions),
+                seeds, max_instructions=self.settings.max_instructions)
         except (CompileRejected, OutputRejected, ExecutionIncomplete, BudgetExhausted,
                 ImageUnavailableError, SignatureVerificationError, OSError) as exc:
             kind = "not_attempted" if isinstance(exc, (CompileRejected, BudgetExhausted)) else "inconclusive"
@@ -237,6 +239,7 @@ class Analysis:
                 try:
                     result, data, _, output = self.execute(
                         target, ("/usr/bin/cbmc", "/inputs/unit.goto", "--function", entry["function"],
+                                 "--drop-unused-functions", "--object-bits", "16",
                                  "--unwind", str(bound), *CHECKS, "--trace", "--json-ui"),
                         goto=goto, expected_counterexample=True)
                     parsed = judgment(native_json(data, self.settings.max_output_bytes), result.exit_code,
