@@ -242,13 +242,28 @@ class _BoundReader:
         return document
 
 
+def _cell_artifact_path(store: _BoundReader, cell_id: str, filename: str) -> str:
+    attempt_scoped = f"{store.attempt.as_posix()}/cells/{cell_id}/{filename}"
+    legacy = f"data/jobs/{REVIEW_JOB}/cells/{cell_id}/{filename}"
+    if attempt_scoped in store.pins:
+        return attempt_scoped
+    if legacy in store.pins:
+        return legacy
+    if (store.root / attempt_scoped).exists() and not (store.root / legacy).exists():
+        return attempt_scoped
+    attempt_prefix = f"{store.attempt.as_posix()}/cells/"
+    if any(path.startswith(attempt_prefix) for path in store.pins):
+        return attempt_scoped
+    return legacy
+
+
 def _authority_sources(store: _BoundReader, outputs: Mapping[str, Any], scope: Mapping[str, Any],
                        projection: Mapping[str, Any]) -> None:
     # Shared receipts are selected by the accepted projection, not by an audit-provided path.
     for cell_id, cells in projection.get("cells", {}).items():
         for cell in cells:
             if cell.get("receipt_sha256") is not None:
-                path = f"data/jobs/{REVIEW_JOB}/cells/{cell_id}/attempt-{cell['attempts']}.json"
+                path = _cell_artifact_path(store, cell_id, f"attempt-{cell['attempts']}.json")
                 store.admit({"path": path, "sha256": cell["receipt_sha256"]})
                 store.cell_receipts[(path, cell["receipt_sha256"])] = cell_id
                 store.receipts_by_cell.setdefault(cell_id, set()).add((path, cell["receipt_sha256"]))
@@ -297,7 +312,7 @@ def _authority_sources(store: _BoundReader, outputs: Mapping[str, Any], scope: M
                     _require(isinstance(check, Mapping) and set(check) == {"path", "sha256"}
                              and all(isinstance(value, str) for value in check.values()),
                              "accepted audit request check reference is malformed")
-                    paths = {f"data/jobs/{REVIEW_JOB}/cells/{cell_id}/independence-attempt-{cell['attempts']}.json"
+                    paths = {_cell_artifact_path(store, cell_id, f"independence-attempt-{cell['attempts']}.json")
                              for cell in projection["cells"].get(cell_id, ())}
                     _require(check["path"] in paths, "audit request check belongs to another cell")
                     store.admit(check)
@@ -426,7 +441,7 @@ def _membership(records: Sequence[c.Product], continued: Mapping[str, Sequence[c
 
 def _cell_receipt(store: _BoundReader, source: c.SourceRef, cell_id: str,
                   projection: Mapping[str, Any], *, record_id: str | None = None) -> Mapping[str, Any]:
-    candidates = {(f"data/jobs/{REVIEW_JOB}/cells/{cell_id}/attempt-{row['attempts']}.json",
+    candidates = {(_cell_artifact_path(store, cell_id, f"attempt-{row['attempts']}.json"),
                    row["receipt_sha256"]): row for row in projection["cells"].get(cell_id, ())}
     cell = candidates.get((source.path, source.sha256))
     _require(cell is not None and source.record_id.value == (cell_id if record_id is None else record_id),

@@ -581,3 +581,23 @@ def test_verifier_receipt_counts_resolved_predicate_citations(tmp_path, declared
                                            "gap_citation_count": int(add_gap),
                                            "disposition_downgraded_on_gap": downgrade}
     assert "verifier_metrics" not in receipt["result"]
+
+
+def test_poc_basis_accepts_intraprocedural_dataflow_path_and_sink_site_hops() -> None:
+    """seq=19: intra-procedural packages without call_site entities retain dataflow_path/sink_site hops and drop guard_fact."""
+    flow = _id("dataflow_path", "9")
+    intraproc_labels = LabelTable(
+        {"L1": LEAD, "E1": ENTRY, "P1": flow, "K1": SINK, "G1": GUARD, "S1": FUNCTION},
+        texts={"X1": "build_provenance: unavailable: no compile command for src/a.c"},
+    )
+    expansion = expand_red(
+        {"claims": [claim(poc_basis=basis(entry=["E1"], path=["P1", "K1", "G1"]))]},
+        intraproc_labels,
+        invocation=invocation(),
+        schema_errors=SCHEMAS.errors,
+    )
+    proposal = assert_admitted(expansion)["proposals"][0]
+    assert proposal["poc_basis"]["entry"] == [ENTRY]
+    assert proposal["poc_basis"]["path"] == [flow, SINK]
+    assert any("1 other identities were dropped" in note for note in expansion.feedback)
+    assert not any("no call-site path is cited" in g.get("scope", "") for g in proposal.get("gaps", ()))

@@ -53,8 +53,10 @@ def _ledger_cells(attempt_root: Path) -> dict[str, dict[str, Any]]:
     return cells
 
 
-def _attempt_receipts(job_root: Path):
-    for path in sorted(job_root.glob("cells/*/attempt-*.json")):
+def _attempt_receipts(attempt_root: Path, job_root: Path):
+    scoped = sorted((attempt_root / "cells").glob("*/attempt-*.json"))
+    paths = scoped if scoped or (attempt_root / "cells").is_dir() else sorted(job_root.glob("cells/*/attempt-*.json"))
+    for path in paths:
         yield json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -89,7 +91,7 @@ def summarize(run_root: Path, attempt_id: str = "attempt_0001") -> dict[str, Any
         "attempts": 0, "cells": set(), "outcomes": Counter(), "reasons": Counter(), "output_tokens": 0,
         "turns": [], "queries": [], "retrieval_errors": Counter()})
     packages: dict[str, Counter] = defaultdict(Counter)
-    for receipt in _attempt_receipts(job_root):
+    for receipt in _attempt_receipts(attempt_root, job_root):
         cell_id = receipt["cell_id"]
         meta = ledger.get(cell_id)
         role = (meta or {}).get("role") or UNATTRIBUTED

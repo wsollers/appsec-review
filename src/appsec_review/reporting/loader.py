@@ -240,7 +240,7 @@ def _int(value: Any) -> int:
 
 def _all_receipts(reader: RunReader) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    for path in sorted((reader.data / "jobs" / JOB / "cells").glob("cell-*/attempt-*.json")):
+    for path in sorted(reader.cells_dir().glob("cell-*/attempt-*.json")):
         value = reader.read_cell_receipt(path)
         if isinstance(value, dict):
             out.append(value)

@@ -305,6 +305,9 @@ def expand_judge(compact: Mapping[str, Any], labels: LabelTable, *, claim_id: st
 # Red wrapper
 
 
+POC_PATH_KINDS = frozenset({"call_site", "dataflow_path", "sink_site"})
+
+
 def _kind(ref: str) -> str:
     return ref.split(":", 2)[1]
 
@@ -314,7 +317,7 @@ def expand_poc_basis(brief: Any, labels: LabelTable, expansion: Expansion, owner
     """``(poc_basis, closed preconditions, attacker entry identity)`` of a claim\'s optional proof-of-concept brief.
 
     The brief is not code and not evidence. Entry labels must resolve to ``entry_point`` identities and path
-    labels to ``call_site`` identities in order; ``unknowns`` are material-gap labels, kept as the gap text. A label
+    labels to ``call_site``, ``dataflow_path`` or ``sink_site`` identities in order; ``unknowns`` are material-gap labels, kept as the gap text. A label
     that does not resolve is dropped with feedback. Free text is bounded; ``preconditions`` that name a member of
     the closed ``preconditions/1`` vocabulary also fill the claim\'s closed precondition field.
     """
@@ -323,14 +326,14 @@ def expand_poc_basis(brief: Any, labels: LabelTable, expansion: Expansion, owner
     entry, dropped = labels.resolve_all(brief.get("entry", ()))
     wrong = [ref for ref in entry if _kind(ref) != "entry_point"]
     path, more = labels.resolve_all(brief.get("path", ()))
-    wrong += [ref for ref in path if _kind(ref) != "call_site"]
+    wrong += [ref for ref in path if _kind(ref) not in POC_PATH_KINDS]
     for token in (*dropped, *more):
         expansion.note(f"{owner}: poc_basis label {token} does not resolve and was dropped")
     if wrong:
-        expansion.note(f"{owner}: poc_basis entries must be entry points and path hops call sites; "
-                       f"{len(wrong)} other identities were dropped")
+        expansion.note(f"{owner}: poc_basis entries must be entry points and path hops call sites, "
+                       f"dataflow paths or sink sites; {len(wrong)} other identities were dropped")
     entry = [ref for ref in entry if _kind(ref) == "entry_point"]
-    path = [ref for ref in path if _kind(ref) == "call_site"]
+    path = [ref for ref in path if _kind(ref) in POC_PATH_KINDS]
     unknowns: list[str] = []
     for token in brief.get("unknowns", ()):
         found = labels.text_of(token)

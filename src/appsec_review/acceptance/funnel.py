@@ -370,7 +370,12 @@ class _Run:
     def receipts(self, cell_id: str) -> list[dict[str, Any]]:
         if cell_id not in self._receipts:
             found = []
-            for path in (self.job_root / "cells" / cell_id).glob("attempt-*.json"):
+            cells_root = (
+                self.attempt / "cells"
+                if self.attempt is not None and (self.attempt / "cells").is_dir()
+                else self.job_root / "cells"
+            )
+            for path in (cells_root / cell_id).glob("attempt-*.json"):
                 document = _json(path)
                 if isinstance(document, dict):
                     found.append(document)

@@ -36,9 +36,10 @@ class Fixture:
     def __init__(self, base: Path, *, settings: DecisionAuditSettings | None = None, receipt_changes=None,
                  scores=False, chain_cell=False, cell_package="package-1", proposal=False, proposal_count=1,
                  discovery_results=None, capture_items=None, other_claim=False, discovery_status="succeeded",
-                 qualification_cell="blue-1", second_proposal_package="original-red-2", config_padding_bytes=0):
+                 qualification_cell="blue-1", second_proposal_package="original-red-2", config_padding_bytes=0, attempt_scoped_cells=False):
         self.root = base.resolve() / "run-1"
         self.attempt = f"data/jobs/{REVIEW_JOB}/attempts/attempt_0001"
+        cells_root = f"{self.attempt}/cells" if attempt_scoped_cells else f"data/jobs/{REVIEW_JOB}/cells"
         self.audit_root = self.attempt + "/artifacts/decision-audit"
         self.settings = settings or DecisionAuditSettings(enabled=True)
         self.artifacts = {}
@@ -63,7 +64,7 @@ class Fixture:
         self.claim = {"claim_id": "claim-1", "package_id": "package-1", "state": "confirmed",
                       "statement": "accepted synthetic statement", "weakness_cwe": "CWE-20",
                       "security_predicate": "memory_corruption", "preconditions": [], "state_history": []}
-        self.receipt_ref = self.write(f"data/jobs/{REVIEW_JOB}/cells/cell-1/attempt-1.json", {
+        self.receipt_ref = self.write(f"{cells_root}/cell-1/attempt-1.json", {
             "schema": "appsec-review/cell-attempt-receipt/1", "cell_id": "cell-1", "attempt": 1,
             "status": "succeeded", "seen_identities": ["entity-support"],
             "result": {"raw_private_payload": "DO_NOT_COPY_PRIVATE_WORKER_DICTIONARY"}, **(receipt_changes or {})})
@@ -88,7 +89,7 @@ class Fixture:
         if chain_cell:
             self.projection["cells"]["chain-1"][0].update(claim_id=None, package_id="chain-package")
         if proposal:
-            self.proposal_receipt = self.write(f"data/jobs/{REVIEW_JOB}/cells/red-1/attempt-1.json", {
+            self.proposal_receipt = self.write(f"{cells_root}/red-1/attempt-1.json", {
                 "schema": "appsec-review/cell-attempt-receipt/1", "cell_id": "red-1", "attempt": 1,
                 "status": discovery_status, "seen_identities": [],
                 "result": discovery_results[0] if discovery_results is not None else {
@@ -97,7 +98,7 @@ class Fixture:
                 claim_id=None, package_id="original-red-package", receipt_sha256=self.proposal_receipt["sha256"],
                 status=discovery_status)
             if proposal_count == 2:
-                self.second_proposal_receipt = self.write(f"data/jobs/{REVIEW_JOB}/cells/red-2/attempt-1.json", {
+                self.second_proposal_receipt = self.write(f"{cells_root}/red-2/attempt-1.json", {
                     "schema": "appsec-review/cell-attempt-receipt/1", "cell_id": "red-2", "attempt": 1,
                     "status": "succeeded", "seen_identities": [],
                     "result": discovery_results[1] if discovery_results is not None else {"proposals": [{"local_id": "p1"}]}})
@@ -311,7 +312,7 @@ def source_declarations(attempt):
                       "Synthetic findings", artifacts=(attempt + "/steps/publication/handoff/**",
                                                        attempt + "/steps/scoring/**"), reason="fixture"),
         protected("review_cells", "lead_review", "inference_review", "appsec-review/cell-attempt-receipt/1",
-                  "Synthetic cells", artifacts=(f"data/jobs/{REVIEW_JOB}/cells/**",
+                  "Synthetic cells", artifacts=(f"data/jobs/{REVIEW_JOB}/cells/**", attempt + "/cells/**",
                                                  attempt + "/steps/lead_review/**"), reason="fixture",
                   authority=EvidenceAuthority.PROVISIONAL),
     )

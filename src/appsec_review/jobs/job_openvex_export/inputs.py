@@ -479,6 +479,9 @@ def _preflight_review(reader: BoundedInputReader, handoff: Mapping[str, Any]
             reader.json(reference)
         else:
             reader.verify(reference)
+    pinned_paths = {raw["path"] for raw in handoff["artifacts"]}
+    attempt_prefix = handoff["resolving_paths"]["attempt"]
+    require_run_path(attempt_prefix)
     for view in chains.values():
         actors = [view["proposal"]["composer"], *(item["actor"] for item in view["challenges"])]
         for actor in actors:
@@ -489,7 +492,14 @@ def _preflight_review(reader: BoundedInputReader, handoff: Mapping[str, Any]
                 if record["receipt_sha256"] is not None:
                     _require(type(record["attempts"]) is int and record["attempts"] > 0,
                              "unsafe chain receipt attempt", Reason.IDENTITY_CONFLICT)
-                    name = f"data/jobs/{REVIEW_JOB}/cells/{cell_id}/attempt-{record['attempts']}.json"
+                    attempt_cell = f"{attempt_prefix}/cells/{cell_id}/attempt-{record['attempts']}.json"
+                    legacy_cell = f"data/jobs/{REVIEW_JOB}/cells/{cell_id}/attempt-{record['attempts']}.json"
+                    if attempt_cell in pinned_paths or (
+                        legacy_cell not in pinned_paths and (reader.root / attempt_cell).is_file()
+                    ):
+                        name = attempt_cell
+                    else:
+                        name = legacy_cell
                     reader.json(ArtifactRef(name, record["receipt_sha256"]))
     reader.json(_ref(review["coverage_matrix"]))
     for shard in review["shards"]:

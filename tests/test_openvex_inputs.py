@@ -1406,3 +1406,38 @@ def test_final_report_schema_sha256_pins_stay_in_sync_across_report_and_openvex_
     assert dict(FINAL_REPORT_SCHEMA_SHA256) == on_disk
     assert SCHEMA_SHA256["../final-report/final-report.schema.json"] == FINAL_REPORT_SCHEMA_SHA256["final-report.schema.json"]
     assert SCHEMA_SHA256["../final-report/final-report.schema.json"] == on_disk["final-report.schema.json"]
+
+
+def test_chain_preflight_resolves_attempt_scoped_actor_cell_receipts(tmp_path, monkeypatch):
+    """seq=17b: OpenVEX chain preflight resolves attempt-scoped actor cell receipts."""
+    disk = AcceptedInputDisk(tmp_path, monkeypatch)
+    artifact = disk.put("data/review/chains/chain.json", {"synthetic": "chain"})
+    proposal = disk.put("data/review/chains/proposal.json", {"synthetic": "proposal"})
+    challenge = disk.put("data/review/chains/challenge-receipt.json", {"synthetic": "challenge"})
+    cell_id = "cell-attempt-scoped-composer"
+    attempt_rel = disk.review_handoff["attempt_id"]
+    composer = disk.put(
+        f"data/jobs/{inputs.REVIEW_JOB}/attempts/{attempt_rel}/cells/{cell_id}/attempt-1.json",
+        {"synthetic": "composer"},
+    )
+    disk.chain_manifest["items"] = [{"artifact": artifact}]
+    disk.review["attack_chain_manifest"] = disk.put(disk.chain_manifest_ref["path"], disk.chain_manifest)
+    disk.projection["attack_chains"] = {"synthetic": {
+        "proposal": {"composer": {"conversation_id": cell_id}, "edges": []},
+        "proposal_artifact": proposal,
+        "challenges": [{"actor": {"conversation_id": "cell-synthetic-challenge"}, "receipt": challenge}],
+        "decision": {"artifact": artifact},
+    }}
+    disk.projection["cells"] = {
+        cell_id: [{"task": "chain_composer", "attempts": 1, "receipt_sha256": composer["sha256"]}],
+    }
+    projection_ref = disk.put(disk.projection_ref["path"], disk.projection)
+    receipt = json.loads((disk.root / disk.receipt_ref["path"]).read_bytes())
+    receipt["projection_file_sha256"] = projection_ref["sha256"]
+    disk.review_handoff["outputs"]["publication.publish_claim_ledger"]["artifact"] = disk.put(
+        disk.receipt_ref["path"], receipt)
+    disk.review_handoff["outputs"]["publication.publish_handoff"]["artifact"] = disk.put(
+        disk.review_ref["path"], disk.review)
+    reader = inputs.BoundedInputReader(disk.root, disk.settings)
+    inputs._preflight_review(reader, disk.review_handoff)
+    assert composer["path"] in {ref.path for ref in reader.inventory}

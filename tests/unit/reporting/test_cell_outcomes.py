@@ -156,3 +156,15 @@ def test_hunt_planner_is_reported_under_its_own_role_from_the_plan_artifact(tmp_
     document = summarize(run)
     assert "hunt_planner" not in document["roles"] and document["hunt_plan"] is None
     assert "hunt plan" not in render(document)
+
+
+def test_summary_reads_attempt_scoped_cells_directory(tmp_path: Path) -> None:
+    """seq=17c: cell_outcomes resolves attempts/<attempt_id>/cells/ when job-level cells/ is absent."""
+    import shutil
+
+    run = _build_run(tmp_path)
+    job = run / "data" / "jobs" / REVIEW_JOB
+    shutil.move(str(job / "cells"), str(job / "attempts" / ATTEMPT / "cells"))
+    document = summarize(run)
+    assert document["roles"]["red_team_analyst"]["attempts"] == 3
+    assert document["roles"][UNATTRIBUTED]["attempts"] == 1

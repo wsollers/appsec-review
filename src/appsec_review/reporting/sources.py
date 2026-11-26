@@ -151,10 +151,35 @@ class RunReader:
             return None
         return self.read_json(path, "cell receipt")
 
+    def cells_dir(self) -> Path:
+        accepted_ptr = self.data / "jobs" / JOB / "accepted.json"
+        if accepted_ptr.is_file():
+            try:
+                ptr = json.loads(accepted_ptr.read_text(encoding="utf-8"))
+                handoff_rel = ptr.get("handoff_path") or ptr.get("path")
+                if isinstance(handoff_rel, str):
+                    handoff = json.loads((self.run_dir / handoff_rel).read_text(encoding="utf-8"))
+                    attempt_rel = (handoff.get("resolving_paths") or {}).get("attempt")
+                    if isinstance(attempt_rel, str):
+                        scoped = self.run_dir / attempt_rel / "cells"
+                        if scoped.is_dir():
+                            return scoped
+                attempt_id = ptr.get("attempt_id")
+                if isinstance(attempt_id, str) and _SAFE_SEGMENT.match(attempt_id):
+                    scoped = self.data / "jobs" / JOB / "attempts" / attempt_id / "cells"
+                    if scoped.is_dir():
+                        return scoped
+            except (OSError, ValueError, TypeError, AttributeError):
+                pass
+        attempt_dirs = sorted((self.data / "jobs" / JOB / "attempts").glob("*/cells"))
+        if attempt_dirs:
+            return attempt_dirs[-1]
+        return self.data / "jobs" / JOB / "cells"
+
     def cell_receipts(self, cell_id: str) -> list[tuple[Path, dict[str, Any]]]:
         if not _SAFE_SEGMENT.match(cell_id):
             return []
-        directory = self.data / "jobs" / JOB / "cells" / cell_id
+        directory = self.cells_dir() / cell_id
         receipts: list[tuple[Path, dict[str, Any]]] = []
         for path in sorted(directory.glob("attempt-*.json")):
             value = self.read_cell_receipt(path)

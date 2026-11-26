@@ -162,3 +162,36 @@ def test_reused_request_sidecar_does_not_invent_full_marker_inspection(tmp_path)
     assert row.blindness.passed.value is None
     assert row.confirmation_eligible.value is None
     assert "audit:verifier_request_bytes_not_observed" in row.context.gap_ids
+
+
+def test_optional_receipt_keys_and_attempt_scoped_cells_root(tmp_path):
+    """seq=16 + seq=17: optional cell receipt keys and attempt-scoped cells/ + independence checks publish cleanly."""
+    import json
+    import shutil
+    from appsec_review.storage import canonical_json
+    from .helpers import ATTEMPT, CELLS, VERIFIER, sha256_hex
+
+    f = fixture(
+        tmp_path,
+        receipt_change={
+            "admission": {"admitted": True, "stage": "red_discovery"},
+            "verifier_metrics": {"queries": 3, "turns": 2},
+        },
+    )
+    legacy_cells = f.root / CELLS
+    attempt_cells = f.root / ATTEMPT / "cells"
+    shutil.move(str(legacy_cells), str(attempt_cells))
+    assert not legacy_cells.exists()
+    # Update lane.json's verifier request_check path to match attempt-scoped cells/
+    lane_ref = f.refs.lanes[0]
+    lane_doc = json.loads((f.root / lane_ref["path"]).read_bytes())
+    for rows in lane_doc["independence"].values():
+        for row in rows:
+            chk = (row.get("audit") or {}).get("request_check")
+            if chk is not None:
+                chk["path"] = f"{ATTEMPT}/cells/{VERIFIER}/independence-attempt-1.json"
+    raw_lane = canonical_json(lane_doc)
+    (f.root / lane_ref["path"]).write_bytes(raw_lane)
+    lane_ref["sha256"] = sha256_hex(lane_doc)
+    manifest = f.publish()
+    assert manifest is not None and manifest.path.endswith("/manifest.json")

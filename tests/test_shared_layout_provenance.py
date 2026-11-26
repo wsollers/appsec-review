@@ -302,3 +302,24 @@ def test_runtime_executors_cannot_drop_publication_scope():
             if (raw_import or raw_attribute) and path.relative_to(root).as_posix() not in allowed:
                 violations.append(f"{path.relative_to(root).as_posix()}:{node.lineno}")
     assert not violations, "use PublicationThreadPoolExecutor: " + ", ".join(violations)
+
+
+def test_attempt_scoped_cell_and_judge_check_layouts_are_distinct(tmp_path: Path) -> None:
+    """seq=18: attempt-scoped review-cell and cell-check accept judge-request-check-*.json cleanly."""
+    one, two = actor(tmp_path, 1), actor(tmp_path, 2)
+    cell_dir = tmp_path / "data/jobs/job_inference_security_review/attempts/attempt_0002/cells/cell-abc"
+    receipt = cell_dir / "attempt-1.json"
+    indep = cell_dir / "independence-attempt-1.json"
+    judge_chk = cell_dir / "judge-request-check-1.json"
+
+    with provenance_scope(one):
+        shared.publish_named(tmp_path, receipt, b"{}\n", namespace="review-cell")
+        shared.publish_named(tmp_path, indep, b"{}\n", namespace="cell-check")
+        shared.publish_named(tmp_path, judge_chk, b"{}\n", namespace="cell-check")
+        with pytest.raises(ValueError, match="belongs to another run|layout"):
+            shared.publish_named(tmp_path, judge_chk, b"{}\n", namespace="review-cell")
+        with pytest.raises(ValueError, match="belongs to another run|layout"):
+            shared.publish_named(tmp_path, receipt, b"{}\n", namespace="cell-check")
+    with provenance_scope(two):
+        shared.consume_named(tmp_path, judge_chk, namespace="cell-check")
+    assert receipts(two, "cell-check")[0]["mode"] == "reused"

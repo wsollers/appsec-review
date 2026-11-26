@@ -34,7 +34,7 @@ from appsec_review.review.models import (
 from appsec_review.review.package_view import PackageView
 from tests.fixtures.inference_review.acceptance import ROOT
 from tests.fixtures.inference_review.fake_infer import ScriptedInfer
-from tests.review.test_team_handler import Recording, prepared  # noqa: F401  (the shared review fixture)
+from tests.review.test_team_handler import Recording, _prepared_template, prepared  # noqa: F401  (the shared review fixture)
 
 SCHEMAS = SchemaSet(ROOT / "docs" / "schemas" / "inference-security-review")
 MANIFEST = "7" * 64
@@ -549,3 +549,21 @@ def test_a_finding_package_carries_the_judge_verdict_beside_its_state() -> None:
     assert split["verdict"] == "unresolved" and len(split["judges"]) == 2
     schema = json.loads((ROOT / "docs/schemas/inference-security-review/common.schema.json").read_text())
     assert "finding_judge_verdict" in schema["$defs"]
+
+
+def test_judge_blindness_check_publishes_under_attempt_scoped_provenance(prepared) -> None:
+    """seq=18: run_team inside provenance scope with attempts/attempt_0002/cells records judge_verdicts with 0 worker_gap."""
+    from appsec_review.storage import shared
+    from tests.test_shared_artifacts import actor
+
+    run_root = prepared.fixture.run_root
+    owner = actor(run_root, 2)
+    attempt_cells = run_root / "data/jobs/job_inference_security_review/attempts/attempt_0002/cells"
+    ctx = replace(prepared.context(prepared.infer, attempt="attempt_0002"), receipts_root=attempt_cells)
+    with shared.publication_scope_for_owner(owner):
+        result = run_team(ctx, prepared.work("lead", "sast_critical"), launch=True)
+    assert [g for g in result.gaps if g.gap_class is GapClass.WORKER_GAP] == []
+    assert len(result.judge_verdicts) == 1
+    assert result.judge_verdicts[0].verdict is JudgeVerdictValue.RED_CORRECT
+    checks = list(attempt_cells.glob("*/judge-request-check-1.json"))
+    assert len(checks) == 1

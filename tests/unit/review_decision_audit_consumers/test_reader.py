@@ -309,3 +309,18 @@ def test_reference_population_also_consumes_record_budget(tmp_path):
     fixture.publish(products, continuations=payloads)
     with pytest.raises(AuditBoundExceeded, match="max_records"):
         fixture.load()
+
+
+def test_reader_resolves_attempt_scoped_cell_receipts(tmp_path):
+    """seq=17a: reader resolves attempt-scoped cell receipts when legacy job-level cells/ is absent."""
+    from .test_proposals import proposal_products
+
+    fixture = Fixture(tmp_path, proposal=True, attempt_scoped_cells=True)
+    assert not (fixture.root / f"data/jobs/{REVIEW_JOB}/cells").exists()
+    assert (fixture.root / fixture.attempt / "cells").is_dir()
+    products = proposal_products(fixture)
+    fixture.publish(products=products)
+    audit = fixture.load()
+    assert audit.available
+    proposals = audit.origin_proposals(products[-1])
+    assert len(proposals) == 1

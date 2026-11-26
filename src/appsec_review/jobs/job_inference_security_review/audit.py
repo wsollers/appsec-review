@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 from appsec_review.config.inference_review import DecisionAuditSettings, semantic_settings_sha256
-from appsec_review.review.cells import RECEIPT_SCHEMA, _RECEIPT_KEYS, _valid_reused_from
+from appsec_review.review.cells import RECEIPT_SCHEMA, _OPTIONAL_RECEIPT_KEYS, _RECEIPT_KEYS, _valid_reused_from
 from appsec_review.review.decision_audit import contracts as c
 from appsec_review.review.decision_audit.metadata import policy_document
 from appsec_review.review.decision_audit.projection import (
@@ -256,11 +256,17 @@ def _publish(*, run_root, attempt_root, origin, scope, collection, inputs, setti
             if record.attempts != 0:
                 raise IntegrityError("attempted cell lacks an original receipt")
             continue
-        path = f"{attempt}/cells/{cell_id}/attempt-{record.attempts}.json"
+        cells_prefix = (
+            f"{attempt}/cells"
+            if (Path(run_root) / attempt / "cells").is_dir()
+            or not (Path(run_root) / "data/jobs/job_inference_security_review/cells").is_dir()
+            else "data/jobs/job_inference_security_review/cells"
+        )
+        path = f"{cells_prefix}/{cell_id}/attempt-{record.attempts}.json"
         receipt = document({"path": path, "sha256": record.receipt_sha256}, RECEIPT_SCHEMA,
                            namespace="review-cell", owned=False)
         value = receipt.value
-        if (set(value) - {"reused_from"} != _RECEIPT_KEYS or value["cell_id"] != cell_id
+        if (set(value) - _OPTIONAL_RECEIPT_KEYS != _RECEIPT_KEYS or value["cell_id"] != cell_id
                 or type(value["attempt"]) is not int or value["attempt"] != record.attempts or value["status"] != record.status
                 or value["attempt_id"] != f"{cell_id}/attempt-{record.attempts}"):
             raise IntegrityError("cell receipt does not match accepted terminal record")
@@ -286,7 +292,13 @@ def _publish(*, run_root, attempt_root, origin, scope, collection, inputs, setti
                     continue
                 cell_id = row["verifier_cell_id"]
                 cell = projection.cells[cell_id][0]
-                expected = f"{attempt}/cells/{cell_id}/independence-attempt-{cell.attempts}.json"
+                cells_prefix = (
+                    f"{attempt}/cells"
+                    if (Path(run_root) / attempt / "cells").is_dir()
+                    or not (Path(run_root) / "data/jobs/job_inference_security_review/cells").is_dir()
+                    else "data/jobs/job_inference_security_review/cells"
+                )
+                expected = f"{cells_prefix}/{cell_id}/independence-attempt-{cell.attempts}.json"
                 if ref["path"] != expected:
                     raise IntegrityError("request check belongs to another cell or attempt")
                 found = document(ref, "appsec-review/verifier-request-check/1", namespace="cell-check", owned=False)

@@ -136,11 +136,15 @@ NAMED_LAYOUTS = {
 def _named_layout(namespace: str, relative: str) -> bool:
     if relative.startswith(NAMED_LAYOUTS[namespace]):
         return True
-    if namespace not in {"review-cell", "cell-check"}:
-        return False
-    return re.fullmatch(
-        r"data/jobs/job_inference_security_review/attempts/attempt_[0-9]{4}/cells/[^/]+/"
-        r"(?:independence-)?attempt-[1-9][0-9]*\.json", relative) is not None
+    if namespace == "review-cell":
+        return re.fullmatch(
+            r"data/jobs/job_inference_security_review/attempts/attempt_[0-9]{4}/cells/[^/]+/"
+            r"attempt-[1-9][0-9]*\.json", relative) is not None
+    if namespace == "cell-check":
+        return re.fullmatch(
+            r"data/jobs/job_inference_security_review/attempts/attempt_[0-9]{4}/cells/[^/]+/"
+            r"(?:independence-attempt|judge-request-check)-[1-9][0-9]*\.json", relative) is not None
+    return False
 
 
 def _hash(value: str) -> str:
