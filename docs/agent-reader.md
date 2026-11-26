@@ -40,6 +40,9 @@ Relevant bounded procedures and design references:
 - [`architecture/testing.md`](architecture/testing.md) — test tiers, the unit harness, test standards and the working loop.
 - [`processes/walk-charter.md`](processes/walk-charter.md) — standing agreement for a job-by-job walk of a review: roles, the four checks, stops, fresh sessions; each walk's terms and state are under `walks/`.
 - [`processes/system-review-prompt.md`](processes/system-review-prompt.md) — orchestrator prompt for a component-by-component review of the whole system: the eighteen-component map with every registered job assigned, the per-component sub-agent brief and return format, and the merge into one report under `reviews/`.
+- [`processes/commit-review-prompt.md`](processes/commit-review-prompt.md) — commit-range audit prompt for multi-agent code quality, unit-test isolation, and documentation parity review.
+- [`processes/monitoring-report.md`](processes/monitoring-report.md) and [`operations/run-monitor.md`](operations/run-monitor.md) — five-minute run monitoring, parallel physical job-output verification, isolated per-fix worktrees off `main`, and epoch-boundary reload.
+- [`operations/job-tuning.md`](operations/job-tuning.md) and [`operations/analyzer-attempt-scopes.md`](operations/analyzer-attempt-scopes.md) — operational setting compatibility across jobs and attempt-scoped tool/index recovery.
 - [`operations/review-startup.md`](operations/review-startup.md) — required review inputs, full-review launch examples, startup flags and TOML-only feature gates.
 - [`operations/wave1-review.md`](operations/wave1-review.md) — direct CLI scope, resume behavior, and the Dagster entrypoint.
 - [`operations/operator-scripts.md`](operations/operator-scripts.md) — `scripts/` for the Dagster stack, starting, watching and ending reviews, cleaning `test/tmp` and running named test suites, with the active-run guard.

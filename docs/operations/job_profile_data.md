@@ -313,11 +313,13 @@ workload or sample population recorded.
 
 ## Resume and invalidation
 
-There is no converter or model checkpoint. Runtime unit reuse follows
-[jobs and runtime](../architecture/jobs-and-runtime.md#wave-1-resumability). Per-unit shard identity
-binds snapshot, report paths/hashes, parser/normalizer/mapping identities and upstream artifact
-manifest, plus a digest of normalized rows/report metadata/coverage. Changed reports or normalized
-meaning rebuild the affected shard; identical normalized inputs reuse it without rewriting.
-Frozen run configuration still prevents same-run bounds edits. Existing files are attested before
-local reuse. The accepted loader verifies the publication, semantic tag and complete
-[retrieval manifest](../architecture/python-and-retrieval.md#accepted-index-sets).
+There is no converter, model, or cross-attempt unit checkpoint: whole-job reuse follows
+[jobs and runtime](../architecture/jobs-and-runtime.md#wave-1-resumability) across accepted
+upstream handoffs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities, while any failed or invalidated job re-executes all
+units in a fresh `attempts/<attempt_id>/` workspace. Content-addressed shard fingerprints bind
+snapshot, report paths/hashes, parser/normalizer/mapping identities, upstream artifact manifest,
+and normalized row/metadata/coverage digests, attesting existing shard bytes before re-attestation
+and verifying the complete
+[retrieval manifest](../architecture/python-and-retrieval.md#accepted-index-sets). See
+[job-local operational tuning](job-tuning.md) and [profile-data](profile-data.md#tuning-and-whole-job-recovery-job_profile_data).

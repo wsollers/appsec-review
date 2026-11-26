@@ -118,8 +118,9 @@ Vendor the schema unchanged at
 `upstream.lock.json` records upstream repository, commit, URLs, source hashes and license
 attribution. Check licensing before redistribution. Pin updates are reviewed changes, not
 runtime downloads. The unchanged upstream license is CC0-1.0. The strict offline closure is
-**seven schemas plus license and lock = nine run-owned snapshots**: local
-common/manifest/result, upstream OpenVEX, and final-report common/gate/report schemas.
+**eight schemas plus license and lock = ten run-owned snapshots**: local
+`openvex-dependencies`/common/manifest/result, upstream OpenVEX, and final-report
+common/gate/report schemas.
 `final-report.schema.json` is needed only for PoC-item definitions referenced by gate `/2`,
 not for report data discovery. Preserve exact pinned bytes.
 
@@ -501,7 +502,7 @@ Dataset declarations use family `inference_review`, disposition `protected`, sen
 
 | `output_kind` | Claimed files |
 | --- | --- |
-| `openvex_verified_inputs` | Load-unit artifacts and nine run-local pinned schema/license/lock snapshots. |
+| `openvex_verified_inputs` | Load-unit artifacts and ten run-local pinned schema/license/lock snapshots (eight schemas plus upstream license and lock). |
 | `openvex_documents` | Only assembled `openvex.json`. |
 | `openvex_export_accounting` | Manifest/result and acceptance artifacts. |
 
@@ -527,13 +528,11 @@ action_statement = "Review and remediate the confirmed findings using the accomp
 repository_iri = ""
 max_packages = 10000
 max_bindings = 30000
-max_artifact_bytes = 67108864
-max_total_input_bytes = 536870912
 max_document_bytes = 33554432
 max_manifest_bytes = 134217728
 max_action_bytes = 8192
 max_identifier_bytes = 2048
-timeout_seconds = 120
+timeout_seconds = 1800
 
 [jobs.job_openvex_export.steps.load]
 workers = 1
@@ -555,10 +554,12 @@ must be nonblank while enabled; empty role is optional, and empty repository sel
 snapshot identity whether enabled or disabled. Require gate and review enabled
 when automatic export is enabled; fail configuration explicitly if prerequisites are absent.
 
-Package/reference counts and output sizes retain their typed bounds. The legacy
-`max_artifact_bytes` and `max_total_input_bytes` fields remain readable in frozen configurations,
-but no longer reject admitted input files or aggregate input inventories by size. Record actual
-byte sizes and stream hash-only verification without retaining entire artifacts in memory.
+Package/reference counts and output sizes retain their typed bounds. Input files are hash-verified by streaming `reader.verify()` without `max_artifact_bytes` or
+`max_total_input_bytes` settings in `[jobs.job_openvex_export.settings]` (legacy frozen snapshots
+carrying those keys remain readable for historical replay), parsed JSON inputs stay bounded through
+`BoundedInputReader.json()`, `configuration_snapshot` resolves revision-compatibly across admitted
+operational configuration revisions, and any `development_tainted` upstream handoff is refused at
+admission.
 No silent truncation. Enforce fixed local JSON depth <= 32 and reject duplicate keys/non-finite
 values in new documents.
 Existing upstream readers remain the authority for their established schemas.
@@ -745,8 +746,7 @@ added. Default generation or an author override does not authorize external dist
 Common advice is fixed default or explicit override plain text, but the companion stays internal:
 paths, evidence, scores/policies are not appended to the small OpenVEX file.
 
-Reject oversized inputs/outputs before acceptance. Count unique references and aggregate
-bytes; do not repeatedly scan a target or unbounded run tree during inference/export.
+Reject oversized outputs and reference-count overflows (`max_packages`, `max_bindings`, `max_document_bytes`, `max_manifest_bytes`) before acceptance while streaming input hash verification via `reader.verify()`; count unique references and actual aggregate bytes; do not repeatedly scan a target or unbounded run tree during inference/export.
 Missing/skipped/failed review coverage is a named limitation, not evidence that a target is
 unaffected. A hash authenticates bytes, not scope correctness or issuer authority.
 
@@ -860,8 +860,8 @@ Exact focused results, policy-change landing and final wheel/source proof are tr
 [the implementation record](../reviews/openvex-export-implementation.md).
 Do not treat this status update or its commands as a final combined result.
 
-The coordinator's isolated installed-only wheel proof at `212f21a8` verifies the seven
-schemas plus lock/license, the transitive report-item definition, canonical assembly and
+The coordinator's isolated installed-only wheel proof at `212f21a8` verified the earlier seven
+schemas plus lock/license (now eight schemas plus lock/license = ten snapshots), the transitive report-item definition, canonical assembly and
 semantic validation with synthetic gate `/2` context, not a real accepted run. Exact
 wheel/source proof belongs in the implementation record; that historical pin predates the
 automatic-source enum/common-schema repin and does not qualify the new profile. This does not establish a
@@ -879,17 +879,15 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.max_action_bytes` | `8192` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_artifact_bytes` | `67108864` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_bindings` | `30000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_document_bytes` | `33554432` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_identifier_bytes` | `2048` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_manifest_bytes` | `134217728` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_packages` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_total_input_bytes` | `536870912` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.max_action_bytes` | `8192` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_bindings` | `30000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_document_bytes` | `33554432` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_identifier_bytes` | `2048` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_manifest_bytes` | `134217728` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_packages` | `10000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds† |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_openvex_export/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_openvex_export/contracts.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

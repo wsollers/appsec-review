@@ -378,9 +378,10 @@ The job reads binaries as bytes; it does not execute them or launch a new native
 
 ### `inference`
 
-1. Assemble registered guidance and a structured request containing normalized actions, inspected
-   artifacts, deterministic checks and admitted evidence IDs. Keep target/raw command text outside
-   the worker's authority.
+1. Assemble registered guidance and compact the structured request via `_compact_inference_request`
+   over normalized actions, inspected artifacts, deterministic checks and admitted evidence IDs,
+   recording raw versus submitted topology counts and routing structured compaction omissions into
+   unit/case gaps while keeping target/raw command text outside the worker's authority.
 2. For a not-applicable case, publish zero-call results. For no actions/artifacts, an over-budget
    request, disabled model or absent injected client, publish zero-call results with reasons.
 3. Otherwise run bounded inference/retries. Supply and enforce the closed response shape with
@@ -422,14 +423,18 @@ flowchart LR
   provenance --> inspect["inspection.native_units: hash-verified bounded binary facts"]
   inspect --> checks["deterministic.native_units"]
   provenance --> checks
-  checks --> model["inference.native_units: optional bounded proposals"]
+  provenance --> compact["inference._compact_inference_request: bounded payload + raw/submitted topology counts"]
+  inspect --> compact
+  checks --> compact
+  compact --> model["inference.native_units: optional bounded proposals"]
   model --> index["index.native_units: stage-content-bound build_security shards"]
   provenance --> index
   inspect --> index
   checks --> index
   index --> publish["publication.publish_handoff"]
-  provenance -. "missing capture / attribution / artifact" .-> gaps["case reasons"]
+  provenance -. "missing capture / attribution / artifact" .-> gaps["unit / case gaps"]
   inspect -. "unsupported / malformed / incomplete decoding" .-> gaps
+  compact -. "structured compaction gaps (omitted actions / artifacts / checks / gaps)" .-> gaps
   model -. "disabled / unavailable / bounded / rejected" .-> gaps
   gaps --> publish
   job -. "missing family handoff" .-> loadgap["load-unit canonical outcome"]
@@ -477,24 +482,23 @@ No gap is automatically expected for a particular walk.
 
 ## Resume and invalidation
 
-Case-stage reuse follows [runtime receipts](../architecture/jobs-and-runtime.md#wave-1-resumability).
-Local shard reuse hashes protected commands, binary contents, tool identities, parser/normalizer/
-rule versions, model identity including guidance hash, guidance identity and upstream manifest,
-plus verified content hashes of provenance, inspection, deterministic and inference documents,
-family selection, complete model settings and target snapshot. The
-[fingerprint helper](../../src/appsec_review/jobs/job_post_build_security_assessment/assessment.py)
-therefore invalidates on changed model results even when commands and binaries are unchanged.
-Identical document content can reuse a shard across attempts; changed stage content gets a new
-immutable path. `source_artifacts` identifies the verified documents used by that invocation.
+Job is the atomic recovery boundary: accepted upstream handoffs allow reusing the entire accepted
+job when inputs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities match, whereas any failed, invalidated, or forced job
+re-executes all cases and stages in a fresh `attempts/<attempt_id>/` workspace without salvaging
+per-case unit receipts from prior attempts. Content-addressed shard fingerprints
+([assessment.py](../../src/appsec_review/jobs/job_post_build_security_assessment/assessment.py))
+hash protected commands, binary contents, tool identities, parser/normalizer/rule versions, model
+and guidance identities, upstream manifest, verified provenance/inspection/deterministic/inference
+documents, family selection, complete model settings and target snapshot, verifying custody rather
+than overwriting prior paths.
 
-The final summary is intentionally narrower than the union of originating unit outcomes; read the
-verified outcome artifact for admission. Source metadata also contains fixed producer/configuration
-labels in indexed binary/model payloads; use actual case and execution provenance rather than
-assuming every family was built with those labels. Generated task/dataset binding and applicability
-limitations remain [T-147](../TODO.md) and [T-157](../TODO.md). Shared manifest and launch semantics
-live in [retrieval](../architecture/python-and-retrieval.md#accepted-index-sets),
-[image pins](image-pin-verification.md) and [signing](signing.md).
-
+Read the verified outcome artifact for admission (the final summary is narrower than the union of
+unit outcomes) and actual case provenance rather than fixed binary/model labels. Generated
+task/dataset binding and applicability limitations remain [T-147](../TODO.md) and
+[T-157](../TODO.md). See [retrieval](../architecture/python-and-retrieval.md#accepted-index-sets),
+[image pins](image-pin-verification.md), [signing](signing.md),
+[job-local operational tuning](job-tuning.md) and [post-build-security-assessment](post-build-security-assessment.md#tuning-and-whole-job-recovery-job_post_build_security_assessment).
 ## Model usage
 
 The [build security assessor role](../generated/guidance.md#roles-build_security_assessor) interprets

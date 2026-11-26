@@ -346,16 +346,17 @@ Canonical outcome semantics are in [job interchange](../architecture/job-interch
 
 ## Resume and invalidation
 
-Whole-job admission binds catalog/history/environment, target and frozen configuration; planner
-reuse additionally compares current environment availability with the stored plan.
-`bounded_feedback` keys include the actual request/allowlists, accepted units, source,
-guidance/model identity, whole evidence bundle, environment, profiles, rules, feedback limits
-and call timeout. Complete-cache reads revalidate evidence, scopes, redaction and proposal;
-partial/abstained/failed conversations are not reusable finals. The analysis shard binds the
-accepted plan artifact plus parser/normalizer/mapping identities. A source change need not
-rebuild unrelated jobs, but changed semantic inputs invalidate their downstream closure under
-[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
-
+Whole-job admission binds accepted catalog/history/environment handoffs, target, configuration (up
+to compatible `[operational.*]` tuning), dataset contract, and implementation/schema/validation
+identities, additionally comparing current environment availability with the stored plan; any
+failed, invalidated, or forced job re-executes planning and indexing as a whole in a fresh
+`attempts/<attempt_id>/` workspace without salvaging partial or failed `bounded_feedback` unit
+conversations across attempts. Within an attempt, complete `bounded_feedback` verification binds
+request/allowlists, accepted units, source, guidance/model identity, evidence bundle, environment,
+profiles, rules, feedback limits and call timeout, revalidating evidence, scopes, redaction and
+proposal; the analysis shard binds the accepted plan artifact plus parser/normalizer/mapping
+identities. See [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [target-analysis-planning](target-analysis-planning.md#tuning-and-whole-job-recovery-job_target_analysis_plan).
 ## Model usage
 
 `build_planning` selects the [DevOps persona](../generated/guidance.md#personas-devops_engineer)

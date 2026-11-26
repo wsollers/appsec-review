@@ -44,17 +44,17 @@ values can differ from the base defaults; immutable revisions retain their exact
 | `job_final_publication_gate` | 1 | [final-report](final-report.md#tuning-and-whole-job-recovery-job_final_publication_gate) |
 | `job_final_report_publication` | 7 | [final-report](final-report.md#tuning-and-whole-job-recovery-job_final_report_publication) |
 | `job_image_pin_verification` | 0 | [image-pin-verification](image-pin-verification.md#tuning-and-whole-job-recovery-job_image_pin_verification) |
-| `job_inference_security_review` | 93 | [inference-security-review](../architecture/inference-security-review.md#tuning-and-whole-job-recovery-job_inference_security_review) |
+| `job_inference_security_review` | 90 | [inference-security-review](../architecture/inference-security-review.md#tuning-and-whole-job-recovery-job_inference_security_review) |
 | `job_language_build` | 12 | [language-build](language-build.md#tuning-and-whole-job-recovery-job_language_build) |
 | `job_model_connectivity` | 1 | [jobs-and-runtime](../architecture/jobs-and-runtime.md#tuning-and-whole-job-recovery-job_model_connectivity) |
-| `job_openvex_export` | 9 | [openvex-export](../architecture/openvex-export.md#tuning-and-whole-job-recovery-job_openvex_export) |
+| `job_openvex_export` | 7 | [openvex-export](../architecture/openvex-export.md#tuning-and-whole-job-recovery-job_openvex_export) |
 | `job_owasp_control_assessment` | 20 | [owasp-control-assessment](owasp-control-assessment.md#tuning-and-whole-job-recovery-job_owasp_control_assessment) |
 | `job_poc_generation` | 22 | [poc-generation](poc-generation.md#tuning-and-whole-job-recovery-job_poc_generation) |
 | `job_post_build_security_assessment` | 4 | [post-build-security-assessment](post-build-security-assessment.md#tuning-and-whole-job-recovery-job_post_build_security_assessment) |
 | `job_profile_data` | 5 | [profile-data](profile-data.md#tuning-and-whole-job-recovery-job_profile_data) |
 | `job_project_build` | 8 | [project-build](project-build.md#tuning-and-whole-job-recovery-job_project_build) |
-| `job_remediation_planning` | 17 | [remediation](remediation.md#tuning-and-whole-job-recovery-job_remediation_planning) |
-| `job_remediation_validation` | 19 | [remediation](remediation.md#tuning-and-whole-job-recovery-job_remediation_validation) |
+| `job_remediation_planning` | 15 | [remediation](remediation.md#tuning-and-whole-job-recovery-job_remediation_planning) |
+| `job_remediation_validation` | 15 | [remediation](remediation.md#tuning-and-whole-job-recovery-job_remediation_validation) |
 | `job_review_data_indexing` | 8 | [review-data-indexing](review-data-indexing.md#tuning-and-whole-job-recovery-job_review_data_indexing) |
 | `job_review_intake` | 15 | [jobs-and-runtime](../architecture/jobs-and-runtime.md#tuning-and-whole-job-recovery-job_review_intake) |
 | `job_review_package_assembly` | 1 | [review-package-contract](../architecture/review-package-contract.md#tuning-and-whole-job-recovery-job_review_package_assembly) |
@@ -118,5 +118,6 @@ No individual failed cells are imported into a new job attempt. The model readin
 check remains always-executed; feed maintenance and pre-review binary publication remain
 separate explicitly requested operations.
 
-No regression suites or live reviews/restarts were run during this pass. Syntax,
-metadata, exact-path/accounting and scoped Git checks do not establish live review quality.
+Focused unit regressions cover operational compatibility, layer provenance, and
+attempt-local whole-job re-execution; live reviews and targeted restarts remain manual
+operator validation.

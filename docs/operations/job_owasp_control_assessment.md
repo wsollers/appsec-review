@@ -713,15 +713,16 @@ does not close it.
 
 ## Resume and invalidation
 
-The assessment receipt key binds mode, semantic packages, guidance hash, model policy,
-result-rule version and typed limits. Reuse rebinds every cited reference and revalidates the
-proposal; changed scope/content denies reuse. Worker and reviewer roles have distinct guidance
-and receipt identities. Component classification, applicability and validation-work fingerprints
-support scoped shard reuse; global inputs bind standards, retrieval/configuration and parsers.
-Changed controls, subjects or evidence invalidate their dependent batches, not unrelated results.
-[Runtime admission](../architecture/jobs-and-runtime.md#wave-1-resumability) and external feed
-identity still apply; artifact-bearing unit checkpoints are not generally portable.
-
+Job is the atomic recovery boundary: accepted upstream handoffs and external feed identities allow
+reusing the entire accepted job when configuration (up to compatible `[operational.*]` tuning),
+dataset contract, and implementation/schema/validation identities match, whereas any failed,
+invalidated, or forced job re-executes all component classification, package batching, worker/
+reviewer turns, and indexing inside attempt-scoped `attempts/<attempt_id>/` receipts and shards
+without salvaging partial batches or unit checkpoints from prior attempts. Within-attempt receipts
+bind mode, per-component semantic packages, guidance hash, model policy, result-rule/parser
+versions (`"2"`/`"5"`) and typed limits, revalidating every cited reference. See
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [owasp-control-assessment](owasp-control-assessment.md#tuning-and-whole-job-recovery-job_owasp_control_assessment).
 ## Model usage
 
 Only [control_assessor](../generated/guidance.md#roles-control_assessor) and

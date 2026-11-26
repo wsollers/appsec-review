@@ -772,15 +772,19 @@ All expected coverage costs require the particular walk's approval.
 
 ## Resume and invalidation
 
-Database identity binds scope/source/build environment, exact replay, runtime/assets and relevant
-releases; its entire bounded database tree must still verify. Query identity binds database tree,
-profile material/settings and query release, so query changes need not rebuild the database.
-Export identity binds database, export pack/settings, runner/export releases and seed rows; export
-changes do not authorize reuse of incompatible query/export bytes. Normalizer-release changes
-re-index retained SARIF without requiring a new query. Missing release declarations disable
-eligible checkpoint reuse rather than guessing compatibility.
+Whole-job reuse binds accepted upstream handoffs, source/build identities, configuration (up to
+compatible `[operational.*]` tuning), dataset contract, and implementation/schema/validation
+identities; any failed, invalidated, or forced job re-executes as a whole in a fresh
+`attempts/<attempt_id>/` workspace without salvaging partial unit cells from failed attempts.
+Database identity binds scope/source/build environment, exact replay, runtime/assets and declared
+releases; query identity binds the verified database tree, profile material/settings and query
+release; export identity binds database, export pack/settings, runner/export releases and seed
+rows; normalizer-release changes re-index retained SARIF without claiming a new query. Missing
+release declarations disable reuse rather than guessing compatibility.
 
-Predecessor reuse is an explicit admission path, not automatic discovery. Runtime selection,
-host pins and launch verification live in [image-pin verification](image-pin-verification.md) and
-[signing](signing.md); observation retention lives in
-[native-result provenance](../architecture/job-interchange.md#native-result-and-common-observation).
+Explicit predecessor reuse remains an operator-admitted boundary, never automatic cross-attempt
+salvage. Runtime selection, host pins and launch verification live in
+[image-pin verification](image-pin-verification.md) and [signing](signing.md); observation
+retention lives in
+[native-result provenance](../architecture/job-interchange.md#native-result-and-common-observation);
+tuning lives in [job-local operational tuning](job-tuning.md) and [codeql-analysis](codeql-analysis.md#tuning-and-whole-job-recovery-job_codeql_analysis).

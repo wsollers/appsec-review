@@ -277,8 +277,11 @@ After the configured inference retries, individually validated
 sibling recipes are retained and each unresolved unit has a marker/hash-resolving planning gap;
 one missing recipe does not erase the other projects' valid recipes.
 
-Native version queries, Make dry runs, and Autotools bootstrap/configuration commands alone do
-not establish a compile/build step. A standalone proposal may retain bootstrap commands as
+Native Make capture preserves configured optimization and hardening flags (such as `-O2` and
+`_FORTIFY_SOURCE`) rather than overriding Make variables in a way that strips target flags, and
+CMake normalization propagates transitive `PUBLIC`/`INTERFACE` target include directories into
+dependent compile units. Native version queries, Make dry runs, and Autotools
+bootstrap/configuration commands alone do not establish a compile/build step. A standalone proposal may retain bootstrap commands as
 configure-stage preparation when it also proposes an actual build; normalization never invents
 the missing build command. A `Makefile.am` fragment without its own accepted `configure.ac` or
 `configure.in` is a named nonstandalone gap, not an independently buildable product. Generated
@@ -364,16 +367,16 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.artifact_count_limit` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.command_timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds? |
-| `settings.image_build_timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds? |
-| `settings.model.max_input_tokens` | `16000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.model.max_output_tokens` | `2000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.model.timeout_seconds` | `180` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.output_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.repair_attempts` | `3` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.artifact_count_limit` | `10000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.command_timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds† |
+| `settings.image_build_timeout_seconds` | `1800` | execution | positive integer; exact parser/cross-field bounds† |
+| `settings.model.max_input_tokens` | `16000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.model.max_output_tokens` | `2000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.model.timeout_seconds` | `180` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.output_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.repair_attempts` | `3` | coverage | positive integer; exact parser/cross-field bounds† |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_project_build/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_project_build/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Build-workspace transaction admission and immutable prior products remain enforced; new whole-job language attempts rerun selected nodes rather than recycling their old receipts. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

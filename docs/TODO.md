@@ -6704,14 +6704,18 @@ explicit context/deferred dispositions rather than silently dropping them or sch
 
 - **State:** done (2026-11-25, all-job tuning implementation and canonical documentation)
 - **Area:** pipeline
-- **Why:** All 48 configured jobs now have explicit tuning/recovery accounting; prior accepted
+- **Why:** All 48 configured jobs now have explicit tuning/recovery accounting (45 jobs with mutable
+  operational leaves and 3 target-independent gates with zero mutable keys); prior accepted
   configuration/evidence remains immutable while new attempts receive admitted settings.
-- **Scope:** Shared whole-job unit boundary, attempt-local tool/model/build/index state, exact
-  execution/coverage declarations, typed zero/fractional/memory/backoff support, source-layer
-  provenance and resource-budget admission; 48 job sections across 42 canonical pages.
-- **Done when:** Implementation and all-job documentation are complete. Regression suites and live
-  reviews/restarts were not executed at the owner's direction; no runtime-success claim is made.
-- **Refs:** `docs/operations/job-tuning.md`, `docs/architecture/runtime-interchange.md`.
+- **Scope:** Shared whole-job unit boundary, attempt-local tool/model/build/index state (removing
+  retired cross-attempt unit salvage and unused `ScorecardCache` / `ScorecardActionResult` /
+  `ScorecardResult` dead scaffolding), exact execution/coverage declarations, typed
+  zero/fractional/memory/backoff support, source-layer provenance and resource-budget admission;
+  48 job sections across 42 companion pages plus canonical `job_*.md` resume alignment.
+- **Done when:** Implementation, focused unit regressions, and all-job documentation are reconciled.
+  Live reviews/restarts remain manual operator validation.
+- **Refs:** `docs/operations/job-tuning.md`, `docs/operations/analyzer-attempt-scopes.md`,
+  `docs/architecture/runtime-interchange.md`.
 
 ## Legacy backlog
 

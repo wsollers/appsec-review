@@ -1041,11 +1041,11 @@ mapping gaps. Compare every canonical outcome with the walk's expected causes be
 
 ## Resume and invalidation
 
-The shared `document-issues` cache binds both manifest hashes, source snapshot, bounded settings,
-schema and component releases. Missing release identities prevent lookup. A hit still rechecks
-source inputs and the immutable ledger, so unchanged settings cannot excuse changed bytes.
-An upstream package/index or bound change rebuilds this ledger, not the upstream producers.
-The [runtime resume rules](../architecture/jobs-and-runtime.md#wave-1-resumability) still apply;
-an artifact-bearing unit result is not a portable failed-attempt checkpoint.
-
-This job dispatches no model. The helper's optional review arguments do not commission reviewers.
+Whole-job reuse binds accepted upstream manifest hashes, source snapshot, configuration (up to
+compatible `[operational.*]` tuning), dataset contract, and implementation/schema/validation
+identities under [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability);
+missing release identities disable reuse, and any failed, invalidated, or forced job re-executes in
+full inside a fresh `attempts/<attempt_id>/` workspace without cross-attempt `document-issues` or
+unit-checkpoint salvage. An upstream package/index or material bound change rebuilds this job's
+immutable ledger without rerunning accepted upstream producers. This job dispatches no model; see
+[job-local operational tuning](job-tuning.md) and [document-issue-analysis](document-issue-analysis.md#tuning-and-whole-job-recovery-job_document_issue_analysis).

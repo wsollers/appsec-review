@@ -226,15 +226,16 @@ No known omission is automatically on a walk's expected-gaps list.
 
 ## Resume and invalidation
 
-The normal source/configuration/upstream/implementation bindings apply, plus
+Whole-job reuse applies the normal source, configuration (up to compatible `[operational.*]`
+tuning), accepted upstream, dataset contract, and implementation/schema/validation bindings plus
 `external_input_identity`: the selected acquisition manifest hash/schema and every binary's
 binary/manifest identity, or explicit unavailable/not-applicable selection. A changed binary
-publication or acquisition selection invalidates intake even if target bytes are unchanged.
-`source_fingerprint` includes catalog-excluded bytes but excludes VCS metadata; history has its
-own additional identity. A failed attempt's artifact-bearing results are not blindly
-transplanted as portable checkpoints. Follow [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability)
-for selective downstream invalidation and immutable attempts.
-
+publication or acquisition selection invalidates intake even if target bytes are unchanged, and any
+failed or invalidated intake re-executes as a whole in a fresh `attempts/<attempt_id>/` workspace
+without transplanting failed-attempt unit outputs. `source_fingerprint` includes catalog-excluded
+bytes while VCS metadata uses history's own identity. Follow
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [jobs-and-runtime](../architecture/jobs-and-runtime.md#tuning-and-whole-job-recovery-job_review_intake).
 ## Model usage
 
 The wired preflight calls provider availability checks, with no review role or persona.

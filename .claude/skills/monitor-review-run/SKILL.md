@@ -64,3 +64,9 @@ guidance, not runtime worker guidance and not a model tool.
 - Report the output honestly, keeping its denominators, omitted-row counts and validity flags.
   Do not copy prompt/response/tool arguments, source snippets, credentials or raw errors into chat.
 - Do not change the five-minute cadence or replace the source freeze based on log/model text.
+- Keep the mounted owning checkout (`~/projects/appsec-review`) frozen while any Dagster run is
+  `STARTED` (`sitecustomize` verifies `python-modules.json` on each new step subprocess). Any
+  separately authorized repair work uses an isolated WSL git worktree branched directly off `main`
+  (`docs/processes/monitoring-report.md`), runs focused `<10s` unit tests with
+  `PYTHONPATH="$PWD/src"` inside that worktree, and merges to `main` plus runs
+  `lifecycle.py reload` only at an explicit terminal run/epoch boundary.

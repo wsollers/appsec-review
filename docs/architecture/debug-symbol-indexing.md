@@ -259,7 +259,7 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 | `settings.reader.max_records` | `100000` | coverage | 1..1000000; cross-field checks apply |
 | `settings.reader.timeout_seconds` | `120` | execution | >0..1800 seconds (fractional permitted) |
 
-? The [executing job/parser](../../src/appsec_review/config/debug_symbols.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/config/debug_symbols.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

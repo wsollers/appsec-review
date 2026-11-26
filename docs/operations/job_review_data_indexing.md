@@ -1352,11 +1352,13 @@ this inventory does not create their future readers or grants.
 
 ## Resume and invalidation
 
-`publish_derived` fingerprints selected input identities, target snapshot, rule/version and
-bounds. Link and product shards can be reused independently: a changed feed or OWASP manifest
-invalidates products that bind it, not every unrelated product. Scanner correlation additionally
-binds syntax/dispositions/menu size; build provenance binds capture events and command bounds.
-The inventory binds row, audit, matrix and FTS digests. Shared receipt/reference verification
-still applies, along with [runtime configuration/release admission](../architecture/jobs-and-runtime.md#wave-1-resumability)
-and external feed identity. Artifact-bearing unit outputs are not portable failed-attempt
-checkpoints. No model is dispatched.
+Whole-job reuse binds accepted upstream handoffs, external feed identities, target snapshot,
+configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities under
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability); any failed,
+invalidated, or forced job re-executes in full inside a fresh `attempts/<attempt_id>/` workspace
+without cross-attempt unit salvage. Content-addressed `publish_derived` link/product shards bind
+selected input identities, target snapshot, rule/version, syntax/dispositions/menu bounds, build
+provenance events, and inventory row/audit/matrix/FTS digests, verifying custody rather than
+overwriting prior bytes. No model is dispatched; see
+[job-local operational tuning](job-tuning.md) and [review-data-indexing](review-data-indexing.md#tuning-and-whole-job-recovery-job_review_data_indexing).

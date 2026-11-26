@@ -12,7 +12,7 @@ last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 `job_target_analysis_plan`, in both the direct review graph and Dagster's `wave1_review`. It reads
 the eligible local Git sources discovered for the target and can enrich them from GitHub. It then:
 
-- scores files and functions with the 0–100 Security Instability Index (SII);
+- scores eligible code files (including `Dockerfile*`, `.S`/`.s`/`.asm` assembly, and `.ipp`/`.inl`/`.tpp` C++ headers, while excluding non-code/tooling, generated, vendored, fixture, documentation, and lockfile paths from ranking) and functions with the 0–100 Security Instability Index (SII);
 - assigns review tiers; and
 - publishes a bounded hotspot index.
 
@@ -445,7 +445,7 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.blame_max_file_bytes` | `1048576` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.blame_max_file_bytes` | `1048576` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.blame_max_files` | `50` | coverage | 0..10000; cross-field checks apply |
 | `settings.changelog.max_entries` | `100000` | coverage | 1..1000000; cross-field checks apply |
 | `settings.changelog.max_file_bytes` | `16777216` | coverage | 1..16777216; cross-field checks apply |
@@ -453,15 +453,15 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 | `settings.changelog.max_line_bytes` | `4096` | coverage | 64..65536; cross-field checks apply |
 | `settings.changelog.max_paths_per_entry` | `2000` | coverage | 1..100000; cross-field checks apply |
 | `settings.co_change_top_k` | `10` | coverage | 1..100; cross-field checks apply |
-| `settings.git.max_changed_paths` | `1000000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.git.max_message_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.git.max_output_bytes` | `268435456` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.git.max_record_bytes` | `1048576` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.github.max_pages` | `50` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.github.max_records` | `5000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.github.max_requests` | `2000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.github.per_page` | `100` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.github.timeout_seconds` | `30` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.git.max_changed_paths` | `1000000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.git.max_message_bytes` | `65536` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.git.max_output_bytes` | `268435456` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.git.max_record_bytes` | `1048576` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.github.max_pages` | `50` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.github.max_records` | `5000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.github.max_requests` | `2000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.github.per_page` | `100` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.github.timeout_seconds` | `30` | execution | positive integer; exact parser/cross-field bounds† |
 | `settings.hotspot_count` | `10` | coverage | 1..100; cross-field checks apply |
 | `settings.line_history.max_file_bytes` | `1048576` | coverage | 1..16777216; cross-field checks apply |
 | `settings.line_history.max_files` | `50` | coverage | 1..256; cross-field checks apply |
@@ -471,7 +471,7 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 | `settings.symbols.max_files` | `200` | coverage | 1..256; cross-field checks apply |
 | `settings.symbols.max_nodes_per_file` | `200000` | coverage | 1..500000; cross-field checks apply |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_source_history_analysis/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_source_history_analysis/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

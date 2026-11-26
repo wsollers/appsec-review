@@ -328,14 +328,14 @@ The walk must separately approve any expected coverage loss.
 
 ## Resume and invalidation
 
-Checkpoint identity includes scope/source/compile state, link commands, adapter, settings and tool
-identity. A changed link topology invalidates that scope even with unchanged source. Matching
-checkpoints verify raw plans, compile databases, run/driver JSON, receipts, stdout/stderr and index
-metadata. Missing, changed or symlinked matching evidence fails closed. Checkpoints are retained
-per identity, so returning from identity A to B to A verifies and reuses A. Every cache miss,
-including a removed or invalidated checkpoint, allocates a fresh scratch generation; it never
-overwrites a prior generation. Checkpoints may retain failed/partial results,
-so an unchanged retry need not rerun SVF. Manifest composition follows
-[accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
-Task binding omissions remain [T-147](../TODO.md);
-no model makes the points-to decisions.
+Job is the atomic recovery boundary: accepted upstream handoffs allow reusing the entire accepted
+job when scope/source/compile state, link commands, configuration (up to compatible
+`[operational.*]` tuning), dataset contract, and implementation/schema/validation identities match,
+whereas any failed, invalidated, or forced job re-executes all scopes in fresh attempt-owned
+scratch generations under `attempts/<attempt_id>/` without salvaging failed or prior-attempt scope
+checkpoints. Within-attempt verification checks raw plans, compile databases, run/driver JSON,
+receipts, stdout/stderr and index metadata, failing closed on missing, changed or symlinked
+evidence without overwriting prior generations. Manifest composition follows
+[accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets); task binding
+omissions remain [T-147](../TODO.md), and no model makes points-to decisions. See
+[job-local operational tuning](job-tuning.md) and [svf-alias-analysis](svf-alias-analysis.md#tuning-and-whole-job-recovery-job_svf_alias_analysis).

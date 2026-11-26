@@ -131,7 +131,7 @@ Complete short HTTP modules retain their policy context; a route function extrac
 oversized module cannot establish external middleware/authorization prerequisites. Evidence
 projection and obligation construction use the same configured evidence set, including settings
 above the former hard-coded 100-reference cut. The binding and acceptance identities are
-`owasp-evidence-binding/4` and `owasp-assessment-acceptance/4` (subject selection
+`owasp-evidence-binding/5` and `owasp-assessment-acceptance/4` (subject selection
 `owasp-complete-source-subjects/2` carries the subject `language`); no runtime adapter is implied. See the [design and unit record](../tasks/2026-11-13-behavior-oriented-review.md).
 
 The `MASVS-NETWORK-1` obligation records what runtime evidence would require, but **has no accepted
@@ -188,7 +188,7 @@ gap on the row, not a missing independent review. `select_profiles` records a
 `parser_versions` must equal the versions the code implements (`owasp_workbench/versions.py`); the
 job refuses to start otherwise.
 
-`owasp-request-assembly/1` applies a second bound to the fully assembled request, including
+`owasp-request-assembly/2` applies a second bound to the fully assembled request, including
 actual guidance, contracts and limits. It hoists shared evidence/component context per request
 and common procedure fields across each row's obligations, not all procedure text across rows.
 Oversized multi-row batches bisect recursively. An oversized singleton trims graph context,

@@ -291,19 +291,17 @@ the expected-gaps list. See [job interchange](../architecture/job-interchange.md
 
 ## Resume and invalidation
 
-The maintenance contract is target-independent (`none`) and `always_execute=True`: a new
-dispatch refreshes rather than reusing a target-review handoff. Feed-level reuse is narrower.
-NVD reuses verified yearly downloads only against fresh upstream metadata, or extends a
-verified parent cursor/index/metadata chain; corrupt or changed bytes cannot become a
-successful incremental update. Interrupted unverified downloads are not accepted snapshots.
-Other feed snapshots are content-addressed from manifest/source/index identities; identical
-publication bytes can reuse the immutable directory after verification, not skip validation.
+The maintenance contract is target-independent (`none`) and `always_execute=True`: each dispatch
+executes as a whole in a fresh `attempts/<attempt_id>/` workspace rather than reusing a
+target-review handoff or salvaging failed-stage unit checkpoints. Feed-level artifact verification
+is narrower: NVD reuses verified yearly downloads only against fresh upstream metadata or extends a
+verified parent cursor/index/metadata chain (never unverified or corrupt bytes), and other feed
+snapshots are content-addressed from manifest/source/index identities after full verification.
 
 Shared producer provenance binds configuration, publisher release, manifest inputs and the
 producing claim; consuming attempts pin exact snapshots rather than following later pointer
-movement. cve-bin-tool additionally binds NVD snapshot/manifest and tool identity; Grype binds
-validated tool/version/schema/build identity and freshness. A failed stage leaves earlier
-published branches intact but is not a reusable accepted job. Path/pointer-bearing work is not
-a generic portable failed-attempt checkpoint. See
-[immutable publication provenance](third-party-data-sync.md#immutable-publication-provenance)
-and [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
+movement, with cve-bin-tool binding NVD snapshot/manifest and tool identity and Grype binding
+validated tool/version/schema/build identity and freshness. See
+[immutable publication provenance](third-party-data-sync.md#immutable-publication-provenance),
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [third-party-data-sync](third-party-data-sync.md#tuning-and-whole-job-recovery-job_third_party_data_sync).

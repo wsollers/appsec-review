@@ -191,9 +191,10 @@ The [retrieval architecture](../architecture/python-and-retrieval.md) defines re
 
 1. Build `source` only for source-in-scope files, retaining path/hash/byte locations and bounded
    decodable text. Preserve decode failures and upstream inventory gaps.
-2. Build `analysis` from the bounded declaration regex, not a compiler or AST. Stop at the
-   symbol-count ceiling; name oversize or undecodable symbol sources. Derive exact byte spans
-   from hash-verified raw UTF-8, preserving CRLF. Upstream inventory omissions keep declaration
+2. Build `analysis` from the bounded declaration scanner and dedicated C/C++ entity extractor
+   (`c_symbols.py`, `catalog-parser` version `3`), not a compiler or full AST. Stop at the
+   configured symbol-count ceiling (default `50,000` symbols); name oversize or undecodable symbol
+   sources. Derive exact byte spans from hash-verified raw UTF-8, preserving CRLF. Upstream inventory omissions keep declaration
    coverage partial even when every retained file parsed successfully.
 3. Build `components` from catalog component identities.
 4. Select target documents from the accepted inventory; enforce configured file, byte, record,
@@ -282,12 +283,14 @@ exceptions, not successful partial coverage. See [interchange](../architecture/j
 
 ## Resume and invalidation
 
-The job binds the target snapshot, intake admission, configured exclusions/bounds and normal
-implementation/schema/validator identities. Source/symbol/component/build index fingerprints
-bind their producer artifact hashes and catalog parser, retrieval normalizer, delivery policy
-and mapping identities. The document fingerprint additionally binds extraction limits and the
-target-document release/parser identity. The corrected raw-symbol/coverage catalog uses
-`catalog-parser/2`; JSON-aware interface parsing uses `target-documents/5`. A changed input therefore selects different shards;
-an existing path is not a license to accept altered bytes. Whole-job reuse and selective
-downstream invalidation follow [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability);
-artifact-bearing units are not generic portable failed-attempt checkpoints.
+Whole-job reuse binds the target snapshot, intake admission, configured exclusions/bounds (up to
+compatible `[operational.*]` tuning), dataset contract, and implementation/schema/validation
+identities under [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability);
+any failed, invalidated, or forced catalog run re-executes all discovery and indexing units in a
+fresh `attempts/<attempt_id>/` workspace without failed-attempt unit salvage. Content-addressed
+source/symbol/component/build index fingerprints bind their producer artifact hashes and catalog
+parser, retrieval normalizer, delivery policy and mapping identities, while the document
+fingerprint binds extraction limits and target-document release/parser identity (`catalog-parser`
+version `3` raw-symbol/C-entity/`50,000`-symbol boundary rules and `target-documents/5` JSON-aware
+interface parsing), verifying hashes rather than trusting existing paths. See
+[job-local operational tuning](job-tuning.md) and [target-analysis-planning](target-analysis-planning.md#tuning-and-whole-job-recovery-job_target_catalog).

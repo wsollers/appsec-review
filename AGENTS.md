@@ -143,9 +143,9 @@ agents that inspect or change the repository. It is not a prompt for review work
   inference. Every retrieved result retains source identity and resolving evidence.
 - Add tests for behavior that survives the refactor. Do not restore archived tests merely to retain
   old coverage counts.
-- Preserve unrelated new work. When requested, commit coherent changes on the assigned branch,
-  integrate into local `main`, and push without waiting for a designated integration owner.
-  Do not push unless the user asks.
+- Preserve unrelated new work. Commit coherent changes on the assigned branch and integrate
+  completed work into local `main` through its designated owner when no active Dagster run holds
+  the mounted checkout; do not push unless the user asks.
 - Pushing to the remote (`origin/main`, `https://github.com/wsollers/appsec-review.git`) is done
   from the WSL checkout on host `WSOLLERS1`, as user `wsollers`, from `~/projects/appsec-review`
   on `main`, with a plain `git push` (the branch tracks `origin/main`; no `-u`, no force):
@@ -164,9 +164,10 @@ agents that inspect or change the repository. It is not a prompt for review work
   branch; they are informational, not a push failure, and are not permission to land Dependabot
   pull requests. Agents on other machines (for example a Windows checkout under `F:\repos`) hand
   ready commits to that WSL checkout rather than pushing from their own clone.
-- Do not leave completed work stranded in a worktree. Complete the requested integration and
-  report the exact commit and any concrete blocker. Report tests only as actually run or not run.
-  Handle actual Git conflicts without imposing serialization or source-freeze gates.
+- Do not leave completed work stranded in a worktree. Hand the integration owner the exact ready
+  commit, touched files, focused `<10s` unit-test results (or explicit `NOT RUN` status), and any
+  concrete blocker. Integrate ready branches serially into `main` at an explicit run/epoch boundary
+  after resolving any Git conflict or dirty checkout explicitly.
 - Container images are tooling only. The Dagster application image holds the interpreter, pinned
   dependencies, the Docker client, provider CLIs and the signing verifier; the repository checkout
   (`src`, configuration, schemas, guidance, rules, scripts, tool assets) is bind-mounted read-only
@@ -176,15 +177,18 @@ agents that inspect or change the repository. It is not a prompt for review work
   After an application-code change, deploy with `lifecycle.py reload` (which re-signs the mounted
   sources and recreates the image services); never rebuild the image for a code change, and never
   copy application code into an image. Rebuild an image only when its dependencies, tools, or the
-  verifier changed; do not rebuild unrelated tooling. The signed envelope can reject edited
-  modules until the next authorized reload, and attempts pin their own measured source identity
-  separately from the image identity. Preserve those checks and provenance, but do not freeze
-  development edits or commits while a review is active. Do not describe a deployment behaviour
-  as implemented without verifying it against `deploy/`.
-- Other agent sessions work concurrently. Coordinate only concrete overlapping edits or useful
-  handoffs; do not wait for a source lock or peer approval before ordinary work. Relevant details
-  in `.claude/skills/multi-session-coordination/SKILL.md` are subject to the owner-directed
-  development workflow above.
+  verifier changed; do not rebuild unrelated tooling. Keep the mounted checkout
+  (`~/projects/appsec-review`) **frozen** while any Dagster run is `STARTED`: `sitecustomize`
+  verifies `python-modules.json` on each new step subprocess and fails closed on edited modules
+  until the next reload, and attempts pin their own measured source identity separately from the
+  image identity. Do repair and feature work in an isolated WSL git worktree branched directly off
+  `main`, run focused `<10s` unit tests inside that worktree (`PYTHONPATH="$PWD/src"`), commit one
+  coherent commit on the fix branch, and merge to `main` plus run `lifecycle.py reload` only at an
+  explicit run/epoch boundary when no run is `STARTED`. Do not describe a deployment behaviour as
+  implemented without verifying it against `deploy/`.
+- Other agent sessions work on this repository at the same time. Follow
+  `.claude/skills/multi-session-coordination/SKILL.md` before starting a change, before building or
+  testing on a shared host, and when handing work to another session.
 - Keep directly related docs true to the code. For a requested cumulative documentation refresh,
   use `.claude/skills/docs-sync/SKILL.md`; do not add a broad documentation campaign to a small fix.
 - After a CodeQL image or release change, or any change to graph-export or custom QL, recompile

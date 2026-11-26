@@ -343,12 +343,14 @@ Compare both surfaces; none is automatically on a walk's approved expected list.
 
 ## Resume and invalidation
 
-Scope fingerprints bind snapshot, component/translation membership, file hashes and delivery/source
-backing, exclusions, grammar lock, image, normalizer, syntax-projection schema and parser limits.
-Verify both JSONL and SQLite hashes before reuse; stale/missing shard pairs are reparsed.
-Chunk-membership changes invalidate affected scopes. Attempt-level dynamic results and unit
-checkpoints remain governed by [runtime resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
-not by the mere existence of a parser artifact.
-Generated task and language/applicability metadata limitations remain
-[T-147](../TODO.md) and [T-157](../TODO.md);
-the source route/lock determines actual coverage.
+Whole-job reuse follows
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability) across accepted
+upstream handoffs, source snapshot, configuration (up to compatible `[operational.*]` tuning),
+dataset contract, and implementation/schema/validation identities; any failed, invalidated, or
+forced job re-executes all scopes in a fresh `attempts/<attempt_id>/` workspace without salvaging
+unit checkpoints from prior attempts. Content-addressed scope fingerprints bind snapshot,
+component/translation membership, file hashes, delivery/source backing, exclusions, grammar lock,
+image, normalizer, syntax-projection schema and parser limits, verifying both JSONL and SQLite
+hashes before re-attestation. Generated task and language/applicability metadata limitations remain
+[T-147](../TODO.md) and [T-157](../TODO.md); see [job-local operational tuning](job-tuning.md) and
+[tree-sitter-ast](tree-sitter-ast.md#tuning-and-whole-job-recovery-job_tree_sitter_ast).

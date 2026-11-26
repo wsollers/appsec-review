@@ -551,10 +551,12 @@ resolution, API diffs, conditional/macro flow and additional language mappings.
 
 ## Resume and invalidation
 
-The priority-shard fingerprint binds the four computation artifacts, target snapshot, settings,
-score/rule identities, accepted Tree-sitter parser, language/delivery mapping and import-graph
-mapping. An upstream syntax, semantic or history change changes its inputs; a weight or selection
-change invalidates ranking/index publication without requiring scanner reruns.
-[Runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) additionally pins
-configuration, component and handoff identities. Artifact-bearing intermediate results are not
-portable failed-attempt checkpoints.
+Whole-job [runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) pins accepted
+upstream handoffs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities; any failed or invalidated run re-executes all
+computation and ranking steps in a fresh `attempts/<attempt_id>/` workspace without salvaging
+intermediate unit checkpoints. Content-addressed priority-shard fingerprints bind the four
+computation artifacts, target snapshot, settings, score/rule identities, accepted Tree-sitter
+parser, language/delivery mapping and import-graph mapping, invalidating ranking/index publication
+on material weight or selection changes without rerunning upstream scanners. See
+[job-local operational tuning](job-tuning.md) and [review-prioritization](review-prioritization.md#tuning-and-whole-job-recovery-job_review_prioritization).

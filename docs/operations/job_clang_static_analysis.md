@@ -376,14 +376,16 @@ coverage. None of these reasons is automatically expected in a walk.
 
 ## Resume and invalidation
 
-Scope checkpoints include accepted source/compile identities, adapter version, central settings,
-tool identity and seeded identities. Changing engine settings, tool pin, source, compile rows,
-seeds or neighborhood invalidates the affected scope. Matching checkpoints verify referenced
-evidence; seeded failed engines are deliberately retried rather than reused. Full-mode partial
-results may be reused only when per-file outcome records are complete. Checkpoints bind raw wrapper
-documents and streams, and verify detached native objects, execution references and retention
-receipts with the public provenance verifier. Missing/changed native evidence is an integrity
-failure, never a successful reuse. Runtime unit-level reuse is separate
-([resumability](../architecture/jobs-and-runtime.md#wave-1-resumability)).
-Generated task/tool bindings remain [T-147](../TODO.md);
-this is deterministic tool execution, not model inference.
+Job is the atomic recovery boundary: accepted upstream handoffs allow reusing the entire accepted
+job when inputs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities match, whereas any failed, invalidated, or forced job
+re-executes all selected scopes inside attempt-local directories
+(`data/clang-static/<scope-id>/attempts/<attempt-id>/`) without reading another attempt's or a
+run-wide scope checkpoint ([analyzer attempt scopes](analyzer-attempt-scopes.md)). Within-attempt
+scope verification still binds accepted source/compile identities, adapter version, central
+settings, tool identity, seeded identities, raw wrapper documents/streams, and detached native
+provenance; missing or changed native evidence fails closed without overwriting prior attempt
+bytes. Generated task/tool bindings remain [T-147](../TODO.md); this is deterministic tool
+execution, not model inference. See
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [clang-static-analysis](clang-static-analysis.md#tuning-and-whole-job-recovery-job_clang_static_analysis).

@@ -55,9 +55,15 @@ do not automatically select a side.
 
 ## 4. Stay current
 
+- Keep the mounted checkout serving Dagster (`~/projects/appsec-review`) **frozen** while any run
+  is `STARTED` (`sitecustomize` verifies `python-modules.json` on each new step subprocess).
+  Branch each independent repair or feature worktree directly off `main` (never chaining a second
+  fix worktree onto an unmerged fix branch), run focused `<10s` unit tests inside that worktree
+  (`PYTHONPATH="$PWD/src"`), and commit one coherent commit on the fix branch.
 - Coordinate base changes and serialized local integration with the designated integration owner.
-  Do not move a checkout serving an active run. A dirty integration checkout, conflict or source
-  freeze needs explicit resolution before integration.
+  Merge ready fix branches into `main` and run `deploy/dagster/bin/lifecycle.py reload` only at an
+  explicit run/epoch boundary when no Dagster run is `STARTED`, resolving any conflict or dirty
+  state explicitly.
 - Never rebase or force-push a branch another session may have pulled.
 - After integration, select verification under root `AGENTS.md` for the affected behavior.
 

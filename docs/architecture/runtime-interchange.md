@@ -59,10 +59,18 @@ When an ancestor runs, consumers whose own identities, configuration, dataset co
 handoff still match are planned as `REVALIDATE` (`appsec-review/repair-plan/2`) and reused at
 dispatch (`appsec-review/attempt-revalidation/1`, `REVALIDATED`) only if every pinned producer is
 the identical handoff or carries equal `content_sha256` (`appsec-review/handoff-content/2`, T-161).
-Generic [unit checkpoints](../../src/appsec_review/runtime/checkpoints.py) admit only bounded,
-successful, portable values whose inputs/implementation and predecessor reuse remain valid.
-Path-, workspace-, process-, budget- and side-effect-bound results are not generic portable
-successes. [Repair admission](../operations/recovery-repair.md) handles an explicitly approved
+Job is the atomic recovery boundary: any failed, invalidated, or forced job re-executes all units
+inside a fresh `attempts/<attempt_id>/` workspace without salvaging partial unit, scope, or cell
+checkpoints from prior attempts. In explicitly selected `-dev` profiles (base `appsec-review.toml`,
+capacity overlays, and non-`-dev` profiles reject the setting), per-job
+`development.input_overrides` snapshots edited upstream data artifacts into
+`<attempt>/inputs/development/` for `runtime.inputs.input_file` reads, marks the resulting handoff
+`development_tainted: true`, and temporarily propagates `development_tainted` across downstream
+consumers so end-to-end `-dev` testing proceeds until certification/export gates
+(`job_final_publication_gate`, `job_dossier_publication`, `job_openvex_export`), which refuse
+tainted inputs; removing the override and running a clean restart/rerun clears all
+`development_tainted` flags across newly computed attempts.
+[Repair admission](../operations/recovery-repair.md) handles an explicitly approved
 implementation change — including strictly additive dataset or typed-input contract widenings that
 force the widened job to `RUN` (`compatible_dataset_change`, T-162) — without rewriting earlier
 attempts. Mutable pointers, workspaces and
@@ -119,22 +127,28 @@ records their exact scope. No worker/MCP authority is added.
 flowchart TD
   declarations["Typed Job.contract + dataset declarations"] --> admission["Dispatch admission"]
   available["Available accepted publications"] --> admission
-  admission --> claim["Claim: exact supplied upstream pins"]
-  claim --> read["accepted_upstream: declared and pinned reads"]
-  read --> receipts["Actual input read receipts; citation not inferred"]
-  read --> units["Bounded semantic units"]
+  devoverride["development.input_overrides (-dev profiles only)"] --> admission
+  nondev["Base config / overlays / non-dev profiles"] -. "override table refused" .-> rejected["Rejected diagnostics / config refusal"]
+  admission --> claim["Claim: exact supplied upstream pins + attempt dev snapshots"]
+  claim --> read["accepted_upstream + runtime.inputs.input_file"]
+  read --> receipts["Actual input read receipts (+ development_replacement when active)"]
+  read --> units["Whole-job execution in attempts/<attempt_id>/"]
   units --> results["Result artifacts + declared status/gaps"]
   results --> validation["Publication and byte validation"]
   receipts --> validation
-  validation --> rejected["Rejected diagnostics: no accepted pointer"]
+  validation --> rejected
   validation --> handoff["Accepted handoff + canonical outcomes"]
+  handoff -. "-dev override or tainted upstream" .-> taint["development_tainted=true inherited downstream in -dev"]
+  taint -. "blocked at gate / dossier / OpenVEX" .-> rejected
+  taint -. "override removed + clean restart/rerun" .-> cleared["Fresh untainted handoffs clear all development_tainted flags"]
+  cleared --> handoff
   handoff --> manifest["Verified retrieval manifest / shard identities"]
   manifest --> consumer["Admitted application or capability-scoped query"]
-  handoff --> resume["Identity-checked reuse or explicitly admitted repair"]
+  handoff --> resume["Whole-job identity-checked reuse or explicitly admitted repair"]
 ```
 
 
-## Operational configuration compatibility and attempt ownership
+### Operational configuration compatibility and attempt ownership
 
 `config/operational.py` is the single exact-path declaration/comparison mechanism.
 All 48 configured jobs are accounted for in their canonical job pages, linked from
@@ -143,7 +157,7 @@ inherited controls; artifact indexing, image-pin verification and the internal b
 transaction have no independent mutable job setting. Their input contracts and
 inherited scheduling/build settings are documented, not silently omitted.
 
-### Compatibility categories
+#### Compatibility categories
 
 * **Execution**: tool/transport/admission waits, actual worker pools, resource capacity
   and diagnostic intervals. Accepted prior results keep their original limits and gaps.
@@ -165,7 +179,7 @@ backoff arrays (0..16 nondecreasing integer delays of 0..3600 seconds). Job pars
 remain authoritative for tighter ranges and cross-field constraints. No suffix,
 name, table, profile or arbitrary numeric-field exemption exists.
 
-### Immutable effective configuration
+#### Immutable effective configuration
 
 The original snapshot and hashes never change. Admission writes a full immutable
 revision with exact deltas and original binding, and retains changed profile/overlay
@@ -184,7 +198,7 @@ review authority. New attempts use the new budget; retained claims retain the ol
 Existing active/persistent/quarantined lease compatibility checks still reject unsafe
 resizing. Resource admission, memory headroom, signing and sandbox grants are unchanged.
 
-### Whole-job recovery boundary
+#### Whole-job recovery boundary
 
 `runtime.checkpoints.select_units` plans every unit as RUN for a new job attempt;
 `admitted_output` rejects cross-attempt cell salvage, including old repair decisions.
@@ -216,7 +230,7 @@ not refresh a review's immutable feed inputs. Pre-review binary-decompilation li
 apply only to explicitly requested new publications, never reinterpret old binary
 outputs. No reload, restart or live action is authorized by configuration admission.
 
-### Validation record
+#### Validation record
 
 The all-job pass used source, syntax, metadata and Git checks only. Regression suites,
 provider/tool invocations and live review/restart validation were not run, as requested.

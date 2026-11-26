@@ -643,13 +643,14 @@ to run these generated functions; this job's compile-only policy is unchanged.
 
 ## Resume and invalidation
 
-There is no standalone PoC result cache. [Runtime admission](../architecture/jobs-and-runtime.md#wave-1-resumability)
-binds accepted review/build, configuration, target/input and component identities. Candidate
-provenance additionally pins basis, package, brief, source, settings, guidance and image.
-A changed verdict, source/compile context, writer or validator setting invalidates downstream
-PoC artifacts without modifying the finding. Scratch stages are recreated, immutable candidate
-files are not overwritten, and artifact-bearing unit results are not portable checkpoints.
-
+There is no standalone PoC result cache or sub-job unit salvage. Whole-job
+[runtime admission](../architecture/jobs-and-runtime.md#wave-1-resumability) binds accepted
+review/build handoffs, configuration (up to compatible `[operational.*]` tuning), dataset contract,
+target/input and component identities; candidate provenance additionally pins basis, package,
+brief, source, settings, guidance and image. Any failed or invalidated job re-executes all
+candidates in a fresh `attempts/<attempt_id>/` workspace with clean scratch stages and never
+overwrites immutable candidate files. See [job-local operational tuning](job-tuning.md) and
+[poc-generation](poc-generation.md#tuning-and-whole-job-recovery-job_poc_generation).
 ## Model usage
 
 Only [poc_writer](../generated/guidance.md#roles-poc_writer) is selected here, with no persona

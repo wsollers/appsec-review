@@ -326,15 +326,15 @@ Apply the [four walk checks](../processes/walk-charter.md#5-accepting-a-job-the-
 
 ## Resume and invalidation
 
-The decision binds source and upstream identities, settings, reader identity and the frozen
-execution plan. The shard fingerprint additionally binds observed probes and, in production,
-retained execution receipts so new attempts do not cite an older attempt's evidence by alias.
-Changes to compiler target, accepted artifact bytes, source snapshot, input handoffs, reader
-identity, declared release, image or typed policy invalidate the corresponding identity.
-Missing declared release identity prevents accepted-job reuse. The runtime still verifies
-accepted publication hashes and repair admission; see [resume](../architecture/jobs-and-runtime.md),
-[input contracts](../architecture/job-input-contracts.md) and
-[retrieval identity](../architecture/python-and-retrieval.md).
-Reader contract `/4` includes the bounded interval lookup and repaired parser associations.
-These offline unit checks do not certify a deployed LLVM package, container export or live corpus;
-those remain separately authorized manual validation.
+Whole-job reuse binds source and accepted upstream identities, configuration (up to compatible
+`[operational.*]` tuning), dataset contract, reader identity, declared component releases and the
+frozen execution plan; any failed, invalidated, or forced job re-executes as a whole in a fresh
+`attempts/<attempt_id>/` workspace without salvaging partial unit checkpoints across attempts. The
+shard fingerprint binds observed probes and retained execution receipts so new attempts never cite
+an older attempt's evidence by alias. Changes to compiler target, accepted artifact bytes, source
+snapshot, input handoffs, reader identity, declared release, image or material policy invalidate
+whole-job reuse, and missing declared release identity disables reuse. See
+[resume](../architecture/jobs-and-runtime.md),
+[input contracts](../architecture/job-input-contracts.md),
+[retrieval identity](../architecture/python-and-retrieval.md),
+[job-local operational tuning](job-tuning.md) and [debug-symbol-indexing](../architecture/debug-symbol-indexing.md#tuning-and-whole-job-recovery-job_debug_symbol_indexing).

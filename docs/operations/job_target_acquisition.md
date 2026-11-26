@@ -206,11 +206,13 @@ Apply the [four walk checks](../processes/walk-charter.md#5-accepting-a-job-the-
 
 ## Resume and invalidation
 
-The job is `always_execute` and does not propagate its handoff as ordinary downstream evidence.
-It re-verifies existing component bytes, recorded specification and artifact hashes instead of
-fetching newer source. The composed manifest is rewritten only when its canonical contents
-change; invocation time/actions go into the separate verification record. Intake binds the
-composed tree and acquisition record, so unchanged re-verification does not manufacture a new
-source identity. Changed bytes/specifications require an explicit acquisition/review decision,
-not mutation of a pinned checkout. See [runtime resume](../architecture/jobs-and-runtime.md)
-and [accepted-input contracts](../architecture/job-input-contracts.md).
+The job is `always_execute=True` and does not propagate its handoff as ordinary downstream
+evidence, running each dispatch as a whole in a fresh `attempts/<attempt_id>/` workspace without
+sub-job unit salvage. It re-verifies existing component bytes, recorded specification and artifact
+hashes instead of fetching newer source; the composed manifest is rewritten only when its canonical
+contents change while invocation timestamps/actions go into the verification record. Intake binds
+the composed tree and acquisition record, so unchanged re-verification does not manufacture a new
+source identity, and changed bytes/specifications require an explicit acquisition/review decision.
+See [runtime resume](../architecture/jobs-and-runtime.md),
+[accepted-input contracts](../architecture/job-input-contracts.md),
+[job-local operational tuning](job-tuning.md) and [target-acquisition](target-acquisition.md#tuning-and-whole-job-recovery-job_target_acquisition).
