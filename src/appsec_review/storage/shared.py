@@ -149,7 +149,7 @@ def _hash(value: str) -> str:
     return value
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=32768)
 def _path_components(root: Path, relative: str) -> tuple[Path, ...]:
     """Cache immutable path parsing, never filesystem state or access decisions."""
     parts = PurePosixPath(relative).parts
@@ -169,10 +169,14 @@ def safe_path(root: Path, relative: str) -> Path:
     """Reject noncanonical paths and every symlink, including links within the run."""
     paths = _path_components(Path(root).absolute(), relative)
     root, path = paths[0], paths[-1]
-    for path in paths[1:]:
-        if path.is_symlink():
+    for candidate in paths[1:]:
+        if candidate.is_symlink():
             raise ValueError(f"shared artifact symlink: {relative}")
-    if root.is_symlink() or root.resolve() not in path.resolve().parents:
+    if root.is_symlink():
+        raise ValueError("shared artifact path escapes run")
+    root_real = os.path.realpath(root)
+    path_real = os.path.realpath(path)
+    if path_real == root_real or not path_real.startswith(os.path.join(root_real, "")):
         raise ValueError("shared artifact path escapes run")
     return path
 
@@ -440,17 +444,33 @@ def _verify_receipt(root: Path, ref: Mapping[str, Any], *,
     if policy is not None and actor["claim"]["path"] != f"{expected}/claim.json":
         raise ValueError("shared receipt claim is not its producing control record")
     _metadata_reference(root, actor["claim"], re.escape(f"{expected}/claim.json"))
-    claim = json.loads(_verified_bytes(root, actor["claim"]) if policy is not None
-                       else verify_reference(root, actor["claim"]).read_bytes())
+    from appsec_review.runtime.datasets import read_dataset_contract
+    if policy is not None:
+        claim = json.loads(_verified_bytes(root, actor["claim"]))
+        _, declarations = read_dataset_contract(claim["dataset_contract"], actor["job_id"])
+        shared_namespaces = frozenset(claim["dataset_contract"].get("shared_namespaces", ()))
+        artifact_patterns = tuple(pattern for declaration in declarations for pattern in declaration.artifacts)
+    else:
+        claim_path = verify_reference(root, actor["claim"])
+        context = current_validation(root)
+        claim_key = ("actor-claim", actor["claim"]["path"], _hash(actor["claim"]["sha256"]))
+        cached_claim = context.records.get(claim_key) if context is not None else None
+        if cached_claim is None:
+            claim = json.loads(claim_path.read_bytes())
+            _, declarations = read_dataset_contract(claim["dataset_contract"], actor["job_id"])
+            shared_namespaces = frozenset(claim["dataset_contract"].get("shared_namespaces", ()))
+            artifact_patterns = tuple(pattern for declaration in declarations for pattern in declaration.artifacts)
+            if context is not None:
+                with context.lock:
+                    context.records[claim_key] = (claim, shared_namespaces, artifact_patterns)
+        else:
+            claim, shared_namespaces, artifact_patterns = cached_claim
     if actor["claim"]["path"] != f"{expected}/claim.json" or any(
         claim.get(key) != actor[key] for key in ("run_id", "job_id", "attempt_id", "orchestration")
     ) or claim.get("attempt_path") != expected or actor["run_id"] != root.name:
         raise ValueError("shared receipt actor differs from its original claim")
-    from appsec_review.runtime.datasets import read_dataset_contract
-    _, declarations = read_dataset_contract(claim["dataset_contract"], actor["job_id"])
-    if not (namespace in claim["dataset_contract"].get("shared_namespaces", ())
-            or any(PurePosixPath(ref["path"]).match(pattern)
-                   for declaration in declarations for pattern in declaration.artifacts)):
+    if not (namespace in shared_namespaces
+            or any(PurePosixPath(ref["path"]).match(pattern) for pattern in artifact_patterns)):
         raise ValueError("shared receipt is not declared by its pinned attempt contract")
     if not isinstance(value["computation"], dict):
         raise ValueError("invalid shared computation identity")
@@ -802,8 +822,13 @@ def verify_request(root: Path, ref: Mapping[str, Any]) -> dict[str, Any]:
 def attempt_artifacts(root: Path, attempt_root: Path) -> list[dict[str, Any]]:
     """Verify and return the complete receipt closure for handoff/resume integrity."""
     artifacts: dict[str, dict[str, Any]] = {}
+    visited: set[tuple[str, str]] = set()
 
     def collect(ref: Mapping[str, Any]) -> None:
+        receipt_key = (ref["path"], ref["sha256"])
+        if receipt_key in visited:
+            return
+        visited.add(receipt_key)
         value = verify_receipt(root, ref)
         for artifact in (ref, value["actor"]["claim"], value["object"], *value["dependencies"]):
             artifacts[artifact["path"]] = dict(artifact)

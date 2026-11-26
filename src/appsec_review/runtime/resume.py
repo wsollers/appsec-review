@@ -228,19 +228,22 @@ class ResumePlanner:
                 reasons.append("accepted job contains a retriable failed producer")
         except (OSError, ValueError, KeyError, TypeError) as exc:
             reasons.append(f"shared provenance integrity failed: {exc}")
-            from appsec_review.storage.shared import safe_path
-            for artifact in handoff.get("artifacts", []):
-                try:
-                    path = safe_path(self.run_root, artifact["path"])
-                    if not path.is_file():
-                        reasons.append(f"artifact missing: {artifact['path']}")
+            from appsec_review.runtime.repair import IncompatibleComputation
+            if not isinstance(exc, IncompatibleComputation):
+                from appsec_review.storage.shared import safe_path
+                from appsec_review.storage.validation import observed_digest
+                for artifact in handoff.get("artifacts", []):
+                    try:
+                        path = safe_path(self.run_root, artifact["path"])
+                        if not path.is_file():
+                            reasons.append(f"artifact missing: {artifact['path']}")
+                            break
+                        if observed_digest(self.run_root, path) != artifact["sha256"]:
+                            reasons.append(f"artifact changed: {artifact['path']}")
+                            break
+                    except (OSError, ValueError, KeyError, TypeError):
+                        reasons.append("artifact reference is invalid")
                         break
-                    if file_sha256(path) != artifact["sha256"]:
-                        reasons.append(f"artifact changed: {artifact['path']}")
-                        break
-                except (OSError, ValueError, KeyError, TypeError):
-                    reasons.append("artifact reference is invalid")
-                    break
         return reasons, handoff_hash
 
     def accepted(self, job: Job, upstream: Mapping[str, str], *,

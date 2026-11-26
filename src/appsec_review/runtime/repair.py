@@ -38,8 +38,14 @@ class ComputationAdmission:
     allow_development_tainted: bool = False
     candidate_configuration: AppConfig | None = field(default=None, repr=False, compare=False)
     _importers: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict, repr=False, compare=False)
+    _producers: dict[tuple[str, str], tuple[dict[str, Any], Mapping[str, Any] | None]] = field(
+        default_factory=dict, repr=False, compare=False)
     _input_handoffs: dict[tuple[str, str], tuple[Mapping[str, Any], Path]] = field(
         default_factory=dict, repr=False, compare=False)
+    _input_handoff_index: dict[
+        tuple[str, str],
+        tuple[frozenset[tuple[Any, Any, Any]], tuple[Mapping[str, Any], ...]],
+    ] = field(default_factory=dict, repr=False, compare=False)
 
     @classmethod
     def for_repair(cls, root: Path, claim: Mapping[str, Any]) -> ComputationAdmission | None:
@@ -76,7 +82,16 @@ class ComputationAdmission:
             return
         if value.get("layout") == "public-feed" or value.get("mode") != "computed":
             return
-        producer = read_document(verify_reference(root, value["actor"]["claim"]))
+        claim_ref = value["actor"]["claim"]
+        claim_path = verify_reference(root, claim_ref)
+        claim_key = (claim_ref["path"], claim_ref["sha256"])
+        cached_producer = self._producers.get(claim_key)
+        if cached_producer is None:
+            producer = read_document(claim_path)
+            original = validate_claim_release(root, producer)
+            self._producers[claim_key] = (producer, original)
+        else:
+            producer, original = cached_producer
         producer_tainted = bool(
             producer.get("development_tainted") is True or producer.get("development_input_overrides")
         )
@@ -84,7 +99,6 @@ class ComputationAdmission:
             raise IncompatibleComputation(
                 f"cached computation from {producer['job_id']}/{producer['attempt_id']} "
                 "was produced with development-tainted inputs")
-        original = validate_claim_release(root, producer)
         if original is None:
             raise IncompatibleComputation("cached computation has no measured implementation")
         producer_id = producer["job_id"]
@@ -124,23 +138,32 @@ class ComputationAdmission:
                     if item["output_kind"] == "handoff" and item["channel"] == "handoff"}
         supplied = consumer.get("upstream_handoffs", {})
         first = origin["actor"]["job_id"]
+        from appsec_review.storage.validation import observed_digest
+        origin_triple = (origin_ref.get("path"), origin_ref.get("sha256"), origin_ref.get("size_bytes"))
         for producer in sorted(set(supplied) & declared, key=lambda item: (item != first, item)):
             digest = supplied[producer]
             key = producer, digest
             if key not in self._input_handoffs:
-                self._input_handoffs[key] = _accepted_handoff(root, producer, digest)
-            handoff, path = self._input_handoffs[key]
-            if file_sha256(path) != digest or not self._configuration_matches(
-                    root, handoff["resolved_config_sha256"]):
-                raise IncompatibleComputation("supplied input publication changed")
-            verify_publication(root, handoff, digest)
-            if any(all(item.get(name) == origin_ref.get(name) for name in ("path", "sha256", "size_bytes"))
-                   for item in handoff["artifacts"]):
+                handoff, path = _accepted_handoff(root, producer, digest)
+                if observed_digest(root, path) != digest or not self._configuration_matches(
+                        root, handoff["resolved_config_sha256"]):
+                    raise IncompatibleComputation("supplied input publication changed")
+                verify_publication(root, handoff, digest)
+                self._input_handoffs[key] = (handoff, path)
+                prefix = handoff["resolving_paths"]["attempt"] + "/shared/shared-input/"
+                self._input_handoff_index[key] = (
+                    frozenset((item.get("path"), item.get("sha256"), item.get("size_bytes"))
+                              for item in handoff["artifacts"]),
+                    tuple(item for item in handoff["artifacts"] if item["path"].startswith(prefix)),
+                )
+            else:
+                handoff, path = self._input_handoffs[key]
+                if observed_digest(root, path) != digest:
+                    raise IncompatibleComputation("supplied input publication changed")
+            artifact_set, shared_input_items = self._input_handoff_index[key]
+            if origin_triple in artifact_set:
                 return True
-            prefix = handoff["resolving_paths"]["attempt"] + "/shared/shared-input/"
-            for item in handoff["artifacts"]:
-                if not item["path"].startswith(prefix):
-                    continue
+            for item in shared_input_items:
                 metadata = read_document(verify_reference(root, item))
                 if metadata.get("object") != receipt["object"]:
                     continue
