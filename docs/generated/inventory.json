@@ -47048,6 +47048,7 @@
     "src/appsec_review/reporting/html.py": "04a9cbd72ddf2690ae5daacf51bc7f05d85ceea4f9d6708375305bd0486d32fa",
     "src/appsec_review/reporting/interchange.py": "c2151eb0bbaf858456daf0964040b50390ac1b3e02c9ffebfbc74008d845049d",
     "src/appsec_review/reporting/latex.py": "5eaeac27796393866bfbd6bbafd9da16506506df62bb822b0eeb7c3cca1a2e7d",
+    "src/appsec_review/reporting/live_report.py": "5e9a2ff36868aa4b50c7f084ae4736e32654926a8b19a43e76fe31e525695d76",
     "src/appsec_review/reporting/loader.py": "a4f9657785d10538a173caa5b4ffa5520dab66a21eaddc60cae6958108a3b0e6",
     "src/appsec_review/reporting/model.py": "3cb96caf0ad11118ba621ed538222ef525bd69ec81e7d06e8d3eb4f6d79f824b",
     "src/appsec_review/reporting/sarif.py": "a18bce8b77fd132926ba4c0b19dcb63d7c3b784124937af0750196516269dabf",

@@ -100,6 +100,8 @@ a run that is still in its lanes (cells of an unsealed lane appear as `unattribu
 `data/verification/cell-outcomes.json` and `.txt` only with `--write`. Its numbers describe the run's spend,
 never the target (T-5028).
 
+`scripts/live-run-report.py --run-id <run-id> [--runs-root <dir>] [--host 127.0.0.1] [--port 8765] [--top-n 10] [--refresh-seconds 300] [--export-html <path>]` serves a read-only nested dossier-style HTML web page for an active or completed review run over stdlib HTTP with an automatic 5-minute (`300` s) browser refresh, or writes a single HTML snapshot with `--export-html`. It displays dispatch status, nested wave and job progress, summary stats (`# findings` and wall/model performance metrics), and the top `N` ranked findings, rendering a slanted diagonal `N/A` watermark when `# findings` is `0`. It reads run artifacts strictly read-only and refuses `--export-html` paths inside the run directory.
+
 ## CodeQL
 
 | Script | Purpose |
