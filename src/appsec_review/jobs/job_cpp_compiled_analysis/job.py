@@ -396,7 +396,8 @@ def _run_infer(unit: UnitContext, case_id: str, catalog: Mapping[str, Any],
     stderr_path = scratch / "raw" / "stderr.bin"
     retained_stderr: Path | None = None
     if stderr_path.is_file() and not stderr_path.is_symlink() and stderr_path.stat().st_size > 0:
-        retained_stderr = unit.unit_root / f"{case_id}-infer-stderr.bin"
+        retained_stderr = unit.unit_root / "logs" / f"{case_id}-infer-stderr.bin"
+        retained_stderr.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(stderr_path, retained_stderr)
 
     infer_out = scratch / "infer-out"

@@ -104,16 +104,38 @@ def runtime_claims(job_steps: Mapping[str, Sequence[str]], *,
              f"{base}/attempts/*/inputs/development/*"),
             "unit results may embed exact recipes, host paths and unredacted records; only status, counts "
             "and hashes are published", sensitivity="sensitive", disposition="protected")))
+        if job_id == "job_code_graph_index":
+            claims.append(Claim(job_id, "lifecycle", "superseded_code_graph_attempt_shards", _runtime_declaration(
+                "superseded_code_graph_attempt_shards", "lifecycle", "execution_receipts",
+                "appsec-review/index-shard/1",
+                "Superseded attempt-scoped code-graph SQLite shards outside the canonical data/indices tree.",
+                ("data/code-graph/attempts/*/scopes/*/indices/*/*.sqlite",),
+                "attempt-scoped code-graph shards were superseded by canonical data/indices publication and are "
+                "excluded from accepted retrieval", sensitivity="sensitive", disposition="protected")))
         for step in steps:
             root = f"{base}/attempts/*/steps/{step}"
+            extra_step_receipts = (
+                (f"{root}/tasks/projects/*-infer-stderr.bin",)
+                if (job_id, step) == ("job_cpp_compiled_analysis", "infer")
+                else ()
+            )
             claims.append(Claim(job_id, step, "step_receipts", _runtime_declaration(
                 "step_receipts", step, "execution_receipts", "appsec-review/unit-execution/2",
                 "Per-task status, result receipts, reuse checkpoints and task event logs of one configured step.",
                 (f"{root}/lifecycle.json", f"{root}/lifecycle.lock", f"{root}/tasks/*/status.json",
                  f"{root}/tasks/*/result.json", f"{root}/tasks/*/checkpoint.json",
-                 f"{root}/tasks/*/traceback.txt", f"{root}/tasks/*/logs/**"),
+                 f"{root}/tasks/*/traceback.txt", f"{root}/tasks/*/logs/**", *extra_step_receipts),
                 "unit results may embed exact recipes, host paths and unredacted records; only status, counts "
                 "and hashes are published", sensitivity="sensitive", disposition="protected")))
+            if (job_id, step) == ("job_dependency_intelligence", "scorecards"):
+                claims.append(Claim(job_id, step, "scorecard_http_cache", _runtime_declaration(
+                    "scorecard_http_cache", step, "execution_receipts", "appsec-review/http-cache/1",
+                    "Bounded per-attempt OpenSSF Scorecard HTTP response cache blobs, metadata entries and locks.",
+                    (f"{root}/tasks/fetch/scorecard-cache/blobs/*.json",
+                     f"{root}/tasks/fetch/scorecard-cache/entries/*.json",
+                     f"{root}/tasks/fetch/scorecard-cache/locks/*.lock"),
+                    "raw upstream HTTP cache entries and lockfiles are operational fetch state; only validated "
+                    "dependency records are indexed", sensitivity="sensitive", disposition="protected")))
     run_level = (
         ("recovery_records", "execution_receipts", "application/json",
          "Implementation bindings, release snapshots, worker registration, repair admission and parent re-execution plans.",

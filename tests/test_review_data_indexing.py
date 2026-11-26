@@ -874,3 +874,71 @@ def test_model_recordings_written_by_a_parity_walk_are_claimed_not_unaccounted(t
 
     assert tree.unaccounted == ["data/stray.bin"]
     assert any(key[2] == "model_recordings" for key in tree.groups)
+
+
+def test_historical_attempt_scratch_and_debug_symbol_script_are_claimed_narrowly(tmp_path) -> None:
+    from appsec_review.indexing.inventory import FileClaims, runtime_claims, scan_run_tree
+    from appsec_review.runtime.datasets import dataset_contract
+    from appsec_review.runtime.scope import supplied_run_path
+
+    # 1. Container-mounted debug-symbol-export.py is classified as runtime-supplied only for its exact path.
+    supplied_rel = (
+        "data/jobs/job_debug_symbol_indexing/attempts/attempt_0001"
+        "/steps/extract/tasks/clang_dwarf/provisioning/debug-symbol-export.py"
+    )
+    assert supplied_run_path(supplied_rel) is True
+    assert supplied_run_path(
+        "data/jobs/job_debug_symbol_indexing/attempts/attempt_0001"
+        "/steps/extract/tasks/clang_dwarf/provisioning/other.py"
+    ) is False
+
+    # 2. Materialize all four Epoch-2 file shapes plus negative stray neighbors under historical attempts
+    #    whose pinned claim.json carries an empty producer dataset_contract (historical contract check).
+    for job_id, steps in (
+        ("job_debug_symbol_indexing", ["extract"]),
+        ("job_cpp_compiled_analysis", ["infer"]),
+        ("job_dependency_intelligence", ["scorecards"]),
+        ("job_code_graph_index", ["correlate"]),
+    ):
+        attempt = tmp_path / "data" / "jobs" / job_id / "attempts" / "attempt_0001"
+        attempt.mkdir(parents=True, exist_ok=True)
+        (attempt / "claim.json").write_text(
+            json.dumps({
+                "job_id": job_id,
+                "attempt_id": "attempt_0001",
+                "attempt_path": f"data/jobs/{job_id}/attempts/attempt_0001",
+                "dataset_contract": dataset_contract(job_id, steps, ()),
+            }),
+            encoding="utf-8",
+        )
+
+    claimed_paths = [
+        supplied_rel,
+        "data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/steps/infer/tasks/projects/build-unit-abc-infer-stderr.bin",
+        "data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/steps/infer/tasks/projects/logs/build-unit-abc-infer-stderr.bin",
+        "data/jobs/job_dependency_intelligence/attempts/attempt_0001/steps/scorecards/tasks/fetch/scorecard-cache/blobs/aa.json",
+        "data/jobs/job_dependency_intelligence/attempts/attempt_0001/steps/scorecards/tasks/fetch/scorecard-cache/entries/bb.json",
+        "data/jobs/job_dependency_intelligence/attempts/attempt_0001/steps/scorecards/tasks/fetch/scorecard-cache/locks/cc.lock",
+        "data/code-graph/attempts/attempt_0001/scopes/codeql-unit-1/indices/graph-codeql-unit-1-call_site/deadbeef.sqlite",
+    ]
+    unclaimed_paths = [
+        "data/jobs/job_debug_symbol_indexing/attempts/attempt_0001/steps/extract/tasks/clang_dwarf/provisioning/other.py",
+        "data/jobs/job_cpp_compiled_analysis/attempts/attempt_0001/steps/infer/tasks/projects/unexpected.bin",
+        "data/jobs/job_dependency_intelligence/attempts/attempt_0001/steps/scorecards/tasks/fetch/unexpected.json",
+        "data/code-graph/attempts/attempt_0001/scopes/codeql-unit-1/unexpected.sqlite",
+    ]
+    for rel in [*claimed_paths, *unclaimed_paths]:
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"payload")
+
+    claims = FileClaims(runtime_claims({
+        "job_debug_symbol_indexing": ["extract"],
+        "job_cpp_compiled_analysis": ["infer"],
+        "job_dependency_intelligence": ["scorecards"],
+        "job_code_graph_index": ["correlate"],
+    }))
+    tree = scan_run_tree(tmp_path, claims, max_files=200)
+
+    assert tree.claim_errors == []
+    assert tree.unaccounted == sorted(unclaimed_paths)

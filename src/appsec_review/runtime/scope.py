@@ -14,6 +14,9 @@ _CODEQL_SUPPLIED = re.compile(
     r"data/codeql/scopes/[^/]+/export/(?:pack(?:/.*)?|columns\.json|assets\.lock\.json)")
 _JVM_SUPPLIED = re.compile(
     r"data/build/jvm/units/[^/]+/(?:instrumentation(?:/.*)?|instrumentation-evidence/jdk(?:/.*)?)")
+_DEBUG_SYMBOL_SUPPLIED = re.compile(
+    r"data/jobs/job_debug_symbol_indexing/attempts/[^/]+/steps/extract/tasks/[^/]+/"
+    r"provisioning/debug-symbol-export\.py")
 _ACTIVE: ContextVar[tuple[Path, Path, Path | None] | None] = ContextVar("customer_review_scope", default=None)
 
 
@@ -46,7 +49,8 @@ def require_hashable_evidence(path: Path) -> None:
 def supplied_run_path(relative: str) -> bool:
     """Only application-reserved run layouts; never apply this to target-relative paths."""
     return (_CODEQL_SUPPLIED.fullmatch(relative) is not None
-            or _JVM_SUPPLIED.fullmatch(relative) is not None)
+            or _JVM_SUPPLIED.fullmatch(relative) is not None
+            or _DEBUG_SYMBOL_SUPPLIED.fullmatch(relative) is not None)
 
 
 def target_role(relative: str) -> ScopeRole:
