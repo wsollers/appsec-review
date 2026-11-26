@@ -316,6 +316,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
 
         def one(scope: Mapping[str, Any]) -> dict[str, Any]:
             if scope["reused"] is not None:
+                s.attest_scope_shards(run_root, scope["reused"]["shards"], snapshot=unit.job.source_fingerprint)
                 return dict(scope["reused"])
             attached = {name: shards for name, shards in scope["inputs"]["secondary"].items() if shards}
             if scope["export_status"] != s.SUCCEEDED:
@@ -429,6 +430,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
             job_id=JOB_ID,
             unit_id=unit.unit_id,
             file_shas=alt_file_shas,
+            attempt_id=unit.job.attempt_id,
         )
         manifest_path = run_root / "data" / "indices" / "manifests" / f"code-graph-{unit.job.attempt_id}.json"
         write_manifest(manifest_path, run_id=unit.job.run_id, target_snapshot=unit.job.source_fingerprint,
@@ -469,13 +471,23 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
                                        "scope_id", "language", "build_unit_id", "export_status", "coverage",
                                        "database", "counts", "gaps")} for scope in published["scopes"]],
                                    "gaps": gaps})
+        alt_artifact_refs = {
+            f"{name}_artifact": s.artifact(run_root, run_root / rel_path)
+            for name, rel_path in sorted(alt_summary["artifacts"].items())
+        }
+        shard_artifacts = [
+            s.artifact(run_root, run_root / item.relative_path)
+            for item in (*indexes, alt_shard)
+        ]
         unit.job.events.write("CODE_GRAPH_INDEX_COMPLETED", **counts, gap_count=len(gaps))
         return {"schema": SCHEMA, "artifact": s.artifact(run_root, summary_path),
                 "index_manifest": s.artifact(run_root, manifest_path), "item_count": counts["facts"],
+                "shard_artifacts": shard_artifacts,
                 "scorecard": {"document": s.artifact(run_root, scorecard_path),
                               "rendering": s.artifact(run_root, rendering_path), "totals": scorecard["totals"]},
                 "alternate_cpg": {"schema": ALTERNATE_CPG_SCHEMA,
                                   "summary": s.artifact(run_root, unit.unit_root / "alternate-cpg-summary.json"),
+                                  **alt_artifact_refs,
                                   "counts": dict(alt_counts),
                                   "resolution_breakdown": dict(alt_summary["resolution_breakdown"])},
                 "counts": counts, "families": families, "gaps": gaps,

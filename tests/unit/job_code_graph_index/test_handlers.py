@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict
 import json
 from pathlib import Path
@@ -524,3 +525,326 @@ def test_empty_scopes_analyzer_and_svf_crosscheck_catalog_drift_and_missing_shar
         with pytest.raises(IntegrityError, match="no longer holds the shards"):
             pub_unit.handler(pub_ctx)
     assert asdict(cs_ident)["shard_id"] == "cs-syn" and SimpleNamespace(ok=True).ok
+
+
+def _stage_single_scope_for_runner(tmp_path: Path) -> Staged:
+    """Stage a single C++ scope with shard-bound CodeQL handoff so JobRunner executes in <5s."""
+    from tests.handoff_fixture import write_fixture_handoff
+
+    staged = stage_run(tmp_path, with_priority=False)
+    run_root = staged.run_root
+    cql_attempt = run_root / "data" / "jobs" / "job_codeql_analysis" / "attempts" / "attempt_0001"
+    plan_path = cql_attempt / "artifacts" / "codeql" / "plan.json"
+    exports_path = cql_attempt / "artifacts" / "codeql" / "graph-exports.json"
+    result_path = cql_attempt / "result.json"
+    manifest_path = run_root / "data" / "indices" / "manifests" / "codeql-attempt_0001.json"
+
+    plan_doc = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan_doc["scopes"] = [sc for sc in plan_doc["scopes"] if sc["scope_id"] == SYNTHETIC]
+    atomic_json(plan_path, plan_doc)
+
+    exports_doc = json.loads(exports_path.read_text(encoding="utf-8"))
+    exports_doc["exports"] = [ex for ex in exports_doc["exports"] if ex["scope_id"] == SYNTHETIC]
+    atomic_json(exports_path, exports_doc)
+
+    def _ref(path: Path) -> dict[str, Any]:
+        return {
+            "path": path.relative_to(run_root).as_posix(),
+            "sha256": file_sha256(path),
+            "size_bytes": path.stat().st_size,
+        }
+
+    plan_ref = _ref(plan_path)
+    exports_ref = _ref(exports_path)
+    manifest_ref = _ref(manifest_path)
+    outputs = {
+        "plan.inventory": {"plan": plan_ref},
+        "execution.scopes": {
+            "schema": exports_doc["schema"],
+            "graph_export_artifact": exports_ref,
+            "exports": exports_doc["exports"],
+            "gaps": [],
+        },
+        "acceptance.publish_handoff": {"index_manifest": manifest_ref, "gaps": []},
+    }
+    atomic_json(result_path, {"schema": "appsec-review/unit-execution/2", "status": "SUCCEEDED", "outputs": outputs})
+    res_ref = _ref(result_path)
+
+    artifacts = [
+        res_ref,
+        plan_ref,
+        exports_ref,
+        manifest_ref,
+        *[
+            _ref(run_root / item["relative_path"])
+            for item in staged.upstream_shards
+            if (item.get("producer") or {}).get("job") == "job_codeql_analysis"
+        ],
+    ]
+    for record in exports_doc["exports"]:
+        artifacts.append(record["export_manifest"])
+        artifacts.extend(
+            {k: v for k, v in item.items() if k != "query_id"} for item in record["export_files"]
+        )
+
+    ho_path = cql_attempt / "handoff.json"
+    write_fixture_handoff(
+        run_root,
+        ho_path,
+        {
+            "job_id": "job_codeql_analysis",
+            "attempt_id": "attempt_0001",
+            "status": "ACCEPTED",
+            "completion_status": "SUCCEEDED",
+            "source_fingerprint": SNAPSHOT,
+            "outputs": {
+                "execution.scopes": outputs["execution.scopes"],
+                "acceptance.publish_handoff": outputs["acceptance.publish_handoff"],
+            },
+            "artifacts": artifacts,
+            "resolving_paths": {
+                "attempt": cql_attempt.relative_to(run_root).as_posix(),
+                "result": res_ref["path"],
+            },
+        },
+    )
+    ho_ref = _ref(ho_path)
+    atomic_json(
+        run_root / "data" / "jobs" / "job_codeql_analysis" / "latest.json",
+        {
+            "schema": "appsec-review/latest-handoff/1",
+            "attempt_id": "attempt_0001",
+            "handoff_path": ho_ref["path"],
+            "handoff_sha256": ho_ref["sha256"],
+        },
+    )
+    atomic_json(
+        run_root / "data" / "indices" / "accepted.json",
+        {
+            "schema": "appsec-review/accepted-index-set/1",
+            "run_id": staged.run_id,
+            "handoff_path": ho_ref["path"],
+            "handoff_sha256": ho_ref["sha256"],
+            "manifest_path": manifest_ref["path"],
+            "manifest_sha256": manifest_ref["sha256"],
+        },
+    )
+    return staged
+
+
+def _assert_security_tagging_observes_all_code_graph_shards(staged: Staged, handoff: Mapping[str, Any]) -> None:
+    """Exercise AcceptedIndexes._open -> observe_shard (runtime/inputs.py:573-575) + index-shard custody."""
+    from dataclasses import replace
+
+    from appsec_review.jobs.job_security_tagging.datasets import CONTRACT as TAGGING_CONTRACT
+    from appsec_review.jobs.job_security_tagging.producers import AcceptedIndexes
+    from appsec_review.runtime.inputs import input_read_scope
+
+    pub_manifest = (
+        json.loads((staged.run_root / handoff["resolving_paths"]["result"]).read_text(encoding="utf-8"))
+        ["outputs"]["acceptance.publish_handoff"]["index_manifest"]
+    )
+    consumer_contract = replace(
+        TAGGING_CONTRACT,
+        inputs=tuple(
+            req
+            for req in TAGGING_CONTRACT.inputs
+            if req.producer in {JOB_ID, "job_codeql_analysis", "job_cpp_symbol_index"}
+        ),
+    )
+    pins = _upstream_pins(staged.run_root)
+    pins[JOB_ID] = str(
+        json.loads((staged.run_root / "data" / "jobs" / JOB_ID / "latest.json").read_text(encoding="utf-8"))[
+            "handoff_sha256"
+        ]
+    )
+    tag_attempt = staged.run_root / "data" / "jobs" / "job_security_tagging" / "attempts" / "attempt_0001"
+    metadata_root = staged.run_root / "metadata"
+    metadata_root.mkdir(parents=True, exist_ok=True)
+    consumer_ctx = JobContext(
+        run_id=staged.run_id,
+        attempt_id="attempt_0001",
+        trigger="pytest",
+        repository_root=ROOT,
+        run_root=staged.run_root,
+        attempt_root=tag_attempt,
+        metadata_root=metadata_root,
+        orchestration=MappingProxyType({"driver": "unit"}),
+        config=staged.config.job("job_security_tagging"),
+        events=EventLog(metadata_root / "security_tagging.events.jsonl"),
+        target_root=staged.target,
+        source_fingerprint=SNAPSHOT,
+        upstream_handoffs=MappingProxyType(pins),
+        contract=consumer_contract,
+        review_policy=staged.config.review_policy,
+        input_manifest_path=staged.run_root / pub_manifest["path"],
+        input_manifest_sha256=pub_manifest["sha256"],
+    )
+    with input_read_scope(consumer_ctx):
+        accepted_indexes = AcceptedIndexes(
+            staged.run_root,
+            manifest_path=staged.run_root / pub_manifest["path"],
+            manifest_sha256=pub_manifest["sha256"],
+        )
+        own_shards = [
+            shard for shard in accepted_indexes.identities if (shard.get("producer") or {}).get("job") == JOB_ID
+        ]
+        assert len(own_shards) == 10
+        assert {shard["name"] for shard in own_shards} == {"graph", "analysis"}
+        for shard in own_shards:
+            with accepted_indexes._open(shard) as db:
+                db.execute("SELECT COUNT(*) FROM entities").fetchone()
+
+
+def test_job_runner_binds_code_graph_shards_and_alternate_cpg_across_fresh_and_reused_attempts(
+    tmp_path: Path,
+) -> None:
+    from appsec_review.runtime.runner import JobRunner
+    from appsec_review.storage.shared import verify_handoff, verify_receipt
+
+    staged = _stage_single_scope_for_runner(tmp_path)
+    runner = JobRunner(staged.config)
+
+    first = runner.run(
+        build_job(), run_id=staged.run_id, target_root=staged.target, source_fingerprint=SNAPSHOT
+    )
+    first_ho = first["handoff"]
+    verify_handoff(staged.run_root, first_ho)
+    first_result = json.loads((Path(first["attempt_root"]) / "result.json").read_text(encoding="utf-8"))
+    pub_out = first_result["outputs"]["acceptance.publish_handoff"]
+    manifest_doc, _ = load_verified_manifest(
+        staged.run_root,
+        staged.run_root / pub_out["index_manifest"]["path"],
+        pub_out["index_manifest"]["sha256"],
+    )
+    own_shards = [item for item in manifest_doc["indexes"] if (item.get("producer") or {}).get("job") == JOB_ID]
+    assert len(own_shards) == 10
+    assert sum(1 for item in own_shards if item["name"] == "graph") == 9
+    assert sum(1 for item in own_shards if item["name"] == "analysis" and item["shard_id"] == "alternate-cpg") == 1
+    assert all(
+        item["relative_path"].startswith(f"data/indices/{item['name']}/attempts/{JOB_ID}/attempt_0001/")
+        for item in own_shards
+    )
+
+    bound = {(ref["path"], ref["sha256"]) for ref in first_ho["artifacts"]}
+    for item in own_shards:
+        assert (item["relative_path"], item["sha256"]) in bound
+    first_receipt_objects = {
+        (
+            verify_receipt(staged.run_root, ref)["object"]["path"],
+            verify_receipt(staged.run_root, ref)["object"]["sha256"],
+        )
+        for ref in first_ho["artifacts"]
+        if ref["path"].startswith(f"data/jobs/{JOB_ID}/attempts/attempt_0001/shared/index-shard/")
+    }
+    assert {(item["relative_path"], item["sha256"]) for item in own_shards}.issubset(first_receipt_objects)
+
+    alt_summary = json.loads((staged.run_root / pub_out["alternate_cpg"]["summary"]["path"]).read_text(encoding="utf-8"))
+    for key in ("nodes", "edges", "paths"):
+        jsonl_rel = alt_summary["artifacts"][key]
+        assert jsonl_rel.endswith(f"cpg-{key}.jsonl")
+        assert (jsonl_rel, file_sha256(staged.run_root / jsonl_rel)) in bound
+
+    _assert_security_tagging_observes_all_code_graph_shards(staged, first_ho)
+
+    # Second JobRunner attempt reuses attempt_0001's scope checkpoint and re-attests shard custody.
+    second = runner.run(
+        build_job(), run_id=staged.run_id, target_root=staged.target, source_fingerprint=SNAPSHOT
+    )
+    second_ho = second["handoff"]
+    verify_handoff(staged.run_root, second_ho)
+    second_result = json.loads((Path(second["attempt_root"]) / "result.json").read_text(encoding="utf-8"))
+    assert second_result["outputs"]["correlate.scopes"]["reused_count"] == 1
+
+    second_pub = second_result["outputs"]["acceptance.publish_handoff"]
+    second_manifest, _ = load_verified_manifest(
+        staged.run_root,
+        staged.run_root / second_pub["index_manifest"]["path"],
+        second_pub["index_manifest"]["sha256"],
+    )
+    second_own = [item for item in second_manifest["indexes"] if (item.get("producer") or {}).get("job") == JOB_ID]
+    assert len(second_own) == 10
+    second_bound = {(ref["path"], ref["sha256"]) for ref in second_ho["artifacts"]}
+    for item in second_own:
+        assert (item["relative_path"], item["sha256"]) in second_bound
+    second_receipt_objects = {
+        (
+            verify_receipt(staged.run_root, ref)["object"]["path"],
+            verify_receipt(staged.run_root, ref)["object"]["sha256"],
+        )
+        for ref in second_ho["artifacts"]
+        if ref["path"].startswith(f"data/jobs/{JOB_ID}/attempts/attempt_0002/shared/index-shard/")
+    }
+    assert {(item["relative_path"], item["sha256"]) for item in second_own}.issubset(second_receipt_objects)
+
+    _assert_security_tagging_observes_all_code_graph_shards(staged, second_ho)
+
+
+def test_out_of_custody_checkpoint_not_reused_and_unbound_shard_handoff_rejected(tmp_path: Path) -> None:
+    from appsec_review.jobs.job_code_graph_index.scopes import (
+        CHECKPOINT_SCHEMA,
+        reuse_checkpoint,
+        scope_root,
+    )
+    from appsec_review.runtime.handoff import verify_handoff_integrity
+    from appsec_review.runtime.runner import JobRunner
+
+    # 1. Pre-fix Epoch-1 checkpoints pointing outside data/indices/ are skipped without deleting files.
+    legacy_shard = (
+        scope_root(tmp_path, "cpp-s1", "attempt_0001") / "indices" / "graph-cpp-s1-sink_site" / ("a" * 64 + ".sqlite")
+    )
+    legacy_shard.parent.mkdir(parents=True, exist_ok=True)
+    legacy_shard.write_bytes(b"sqlite-placeholder")
+    legacy_cp = scope_root(tmp_path, "cpp-s1", "attempt_0001") / "checkpoint.json"
+    atomic_json(
+        legacy_cp,
+        {
+            "schema": CHECKPOINT_SCHEMA,
+            "identity": "ident-epoch1",
+            "result": {
+                "scope_id": "cpp-s1",
+                "shards": [
+                    {
+                        "name": "graph",
+                        "shard_id": "graph-cpp-s1-sink_site",
+                        "relative_path": legacy_shard.relative_to(tmp_path).as_posix(),
+                        "sha256": file_sha256(legacy_shard),
+                    }
+                ],
+            },
+        },
+    )
+    assert reuse_checkpoint(tmp_path, "cpp-s1", "ident-epoch1", attempt_id="attempt_0001") is None
+    assert reuse_checkpoint(tmp_path, "cpp-s1", "ident-epoch1", attempt_id="attempt_0002") is None
+    assert legacy_shard.is_file()
+
+    # 2. verify_handoff_integrity rejects accepted handoffs missing a producer-owned manifest shard,
+    #    even when all dataset declarations have required=False and result.json omits direct shard refs.
+    run_dir = tmp_path / "runner"
+    run_dir.mkdir()
+    staged = _stage_single_scope_for_runner(run_dir)
+    outcome = JobRunner(staged.config).run(
+        build_job(), run_id=staged.run_id, target_root=staged.target, source_fingerprint=SNAPSHOT
+    )
+    handoff = dict(outcome["handoff"])
+    res_path = staged.run_root / handoff["resolving_paths"]["result"]
+    res_doc = json.loads(res_path.read_text(encoding="utf-8"))
+    res_doc["outputs"]["acceptance.publish_handoff"].pop("shard_artifacts", None)
+    res_doc["outputs"]["acceptance.publish_handoff"]["alternate_cpg"].pop("shard_artifact", None)
+    res_path.write_bytes(json.dumps(res_doc).encode("utf-8"))
+    new_res_ref = {
+        "path": handoff["resolving_paths"]["result"],
+        "sha256": file_sha256(res_path),
+        "size_bytes": res_path.stat().st_size,
+    }
+    dropped = next(
+        ref for ref in handoff["artifacts"]
+        if ref["path"].startswith(f"data/indices/analysis/attempts/{JOB_ID}/") and ref["path"].endswith(".sqlite")
+    )
+    handoff["artifacts"] = [
+        new_res_ref if ref["path"] == new_res_ref["path"] else ref
+        for ref in handoff["artifacts"]
+        if ref["path"] != dropped["path"]
+    ]
+    with pytest.raises(ValueError, match="published index shard is not bound in handoff artifacts"):
+        verify_handoff_integrity(staged.run_root, handoff)

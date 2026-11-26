@@ -2767,6 +2767,26 @@ def build_run_alternate_cpg(
     return cpg, file_shas
 
 
+_SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _attempt_segment(run_root: Path, unit_root: Path, attempt_id: str | None) -> str:
+    candidate = attempt_id
+    if not candidate:
+        try:
+            parts = unit_root.relative_to(run_root).parts
+        except ValueError:
+            parts = ()
+        for idx, part in enumerate(parts[:-1]):
+            if part == "attempts" and parts[idx + 1]:
+                candidate = parts[idx + 1]
+                break
+    segment = candidate or "legacy"
+    if not _SAFE_SEGMENT.fullmatch(segment):
+        raise IntegrityError(f"invalid alternate CPG attempt segment: {segment!r}")
+    return segment
+
+
 def publish_alternate_cpg(
     run_root: Path,
     unit_root: Path,
@@ -2775,8 +2795,11 @@ def publish_alternate_cpg(
     job_id: str,
     unit_id: str,
     file_shas: Mapping[str, str] | None = None,
+    attempt_id: str | None = None,
 ) -> tuple[dict[str, Any], IndexIdentity]:
     """Write portable Alternate CPG JSONL/JSON artifacts and the indexed SQLite shard."""
+    if not _SAFE_SEGMENT.fullmatch(job_id):
+        raise IntegrityError(f"invalid alternate CPG job segment: {job_id!r}")
     snapshot = str(cpg.get("target_snapshot") or "").strip() or ("0" * 64)
     shas = file_shas or {}
     gaps = list(cpg.get("gaps", ()))
@@ -2961,7 +2984,11 @@ def publish_alternate_cpg(
         "".join(json.dumps(p, sort_keys=True) + "\n" for p in raw_paths).encode("utf-8"),
     )
 
-    shard_path = out_dir / f"{fingerprint}.sqlite"
+    attempt_seg = _attempt_segment(run_root, unit_root, attempt_id)
+    shard_path = (
+        run_root / "data" / "indices" / "analysis" / "attempts" / job_id / attempt_seg
+        / "alternate-cpg" / f"{fingerprint}.sqlite"
+    )
     builder = IndexBuilder(
         shard_path,
         name="analysis",

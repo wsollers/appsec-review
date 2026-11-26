@@ -511,8 +511,6 @@ def verify_required_outputs(root: Path, handoff: Mapping[str, Any], claim: Mappi
                 if verified["run_id"] != root.name or verified["target_snapshot"] != handoff["target_snapshot"]:
                     raise ValueError("output manifest target or run identity mismatch")
                 candidates.extend(verified["indexes"])
-    if not required:
-        return
     for declaration in required:
         matched_artifact = any(compile_glob(pattern).fullmatch(path) for pattern in declaration.artifacts
                                for path in owned)
@@ -524,3 +522,12 @@ def verify_required_outputs(root: Path, handoff: Mapping[str, Any], claim: Mappi
             for raw in candidates)
         if not matched_artifact and not matched_shard:
             raise ValueError(f"required dataset output missing: {declaration.output_kind}")
+    if "artifacts" in handoff:
+        bound_artifacts = {(ref["path"], ref["sha256"]) for ref in handoff["artifacts"]}
+        for raw in candidates:
+            if (raw.get("producer") or {}).get("job") == handoff["job_id"] and (
+                    raw.get("relative_path"), raw.get("sha256")) not in bound_artifacts:
+                raise ValueError(
+                    f"published index shard is not bound in handoff artifacts: "
+                    f"{raw.get('name')}/{raw.get('shard_id', 'default')}"
+                )

@@ -441,13 +441,7 @@ def scope_root(run_root: Path, scope_id: str, attempt_id: str = "legacy") -> Pat
     return run_root / "data" / "code-graph" / "attempts" / attempt_id / "scopes" / scope_id
 
 
-def reuse_checkpoint(run_root: Path, scope_id: str, identity: str, *, attempt_id: str = "legacy") -> dict[str, Any] | None:
-    """A prior scope result whose shards still verify, or ``None`` (absent, stale or unverifiable).
-
-    A checkpoint whose identity matches but whose shards no longer verify is an unverifiable
-    leftover: it is not republished, and its recorded files are never deleted.
-    """
-    path = scope_root(run_root, scope_id, attempt_id) / "checkpoint.json"
+def _load_valid_checkpoint(run_root: Path, path: Path, scope_id: str, identity: str) -> dict[str, Any] | None:
     if not path.is_file() or path.is_symlink():
         return None
     try:
@@ -461,8 +455,10 @@ def reuse_checkpoint(run_root: Path, scope_id: str, identity: str, *, attempt_id
     shards = result.get("shards") if isinstance(result, Mapping) else None
     valid = isinstance(shards, list) and bool(shards) and result.get("scope_id") == scope_id
     for shard in shards or ():
-        candidate = (run_root / str(shard.get("relative_path", ""))).resolve()
-        if run_root.resolve() not in candidate.parents or not candidate.is_file() \
+        relative = str(shard.get("relative_path", ""))
+        candidate = (run_root / relative).resolve()
+        if not relative.startswith("data/indices/") \
+                or run_root.resolve() not in candidate.parents or not candidate.is_file() \
                 or file_sha256(candidate) != shard.get("sha256"):
             valid = False
     if not valid:
@@ -470,10 +466,47 @@ def reuse_checkpoint(run_root: Path, scope_id: str, identity: str, *, attempt_id
     return {**dict(result), "checkpoint_reused": True}
 
 
+def reuse_checkpoint(run_root: Path, scope_id: str, identity: str, *, attempt_id: str = "legacy") -> dict[str, Any] | None:
+    """A prior scope result whose shards still verify, or ``None`` (absent, stale or unverifiable).
+
+    A checkpoint whose identity matches but whose shards no longer verify (or reside outside
+    ``data/indices/``) is an unverifiable leftover: it is not republished, and its recorded files
+    are never deleted.
+    """
+    own = scope_root(run_root, scope_id, attempt_id) / "checkpoint.json"
+    if own.exists() or own.is_symlink():
+        return _load_valid_checkpoint(run_root, own, scope_id, identity)
+    candidates: list[Path] = []
+    attempts_dir = run_root / "data" / "code-graph" / "attempts"
+    if attempts_dir.is_dir() and not attempts_dir.is_symlink():
+        for entry in sorted(attempts_dir.iterdir(), key=lambda item: item.name, reverse=True):
+            if entry.name == attempt_id or entry.is_symlink() or not entry.is_dir():
+                continue
+            candidates.append(entry / "scopes" / scope_id / "checkpoint.json")
+    candidates.append(run_root / "data" / "code-graph" / "scopes" / scope_id / "checkpoint.json")
+    for candidate in candidates:
+        reused = _load_valid_checkpoint(run_root, candidate, scope_id, identity)
+        if reused is not None:
+            return reused
+    return None
+
+
 def save_checkpoint(run_root: Path, scope_id: str, identity: str, result: Mapping[str, Any], *, attempt_id: str = "legacy") -> dict[str, Any]:
     path = scope_root(run_root, scope_id, attempt_id) / "checkpoint.json"
     atomic_json(path, {"schema": CHECKPOINT_SCHEMA, "identity": identity, "result": dict(result)})
     return artifact(run_root, path)
+
+
+def attest_scope_shards(run_root: Path, shards: Sequence[Mapping[str, Any]], *, snapshot: str) -> None:
+    """Record shared index-shard custody for reused scope shards in the active attempt."""
+    for shard in shards:
+        IndexBuilder(
+            run_root / str(shard["relative_path"]),
+            name=str(shard["name"]),
+            fingerprint=str(shard["fingerprint"]),
+            target_snapshot=snapshot,
+            shard_id=str(shard.get("shard_id", "default")),
+        ).attest_existing(str(shard["sha256"]))
 
 
 # --------------------------------------------------------------------------- stage codec
@@ -719,8 +752,10 @@ def _publish_one(run_root: Path, *, scope: Mapping[str, Any], family: Family | N
                 database_shard_id(scope["scope_id"]))
     fingerprint = digest({"schema": INDEX_SCHEMA, "index": GRAPH_INDEX, "shard_id": shard_id,
                           "scope_identity": identity})
-    path = (scope_root(run_root, scope["scope_id"], scope.get("attempt_id", "legacy")) / "indices" /
-            shard_id / f"{fingerprint}.sqlite")
+    attempt_id = str(scope.get("attempt_id", "legacy"))
+    scope_root(run_root, scope["scope_id"], attempt_id)
+    path = (run_root / "data" / "indices" / GRAPH_INDEX / "attempts" / JOB_ID / attempt_id /
+            "scopes" / scope["scope_id"] / shard_id / f"{fingerprint}.sqlite")
     if path.exists():
         raise IntegrityError("graph shard already exists in this attempt")
     builder = IndexBuilder(path, name=GRAPH_INDEX, fingerprint=fingerprint, target_snapshot=snapshot,

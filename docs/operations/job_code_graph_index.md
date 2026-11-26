@@ -34,7 +34,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L390) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L391) |
 | `correlate` | `correlate.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L307) |
 | `crosscheck` | `crosscheck.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L230) |
 | `load` | `load.accepted_inputs` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L149) |
@@ -493,9 +493,12 @@ Source: [handler graph](../../src/appsec_review/jobs/job_code_graph_index/job.py
 2. Otherwise correlate tool-observation code flows against the graph; use optional priority only
    as context. Retain broken/unindexed flow reasons with a bounded diagnostic list, and apply
    seeded coverage limits.
-3. Publish one graph shard per family, database card and bounded producer-neighborhood shard.
-   Neighborhoods retain IR flow, analyzer diagnostics, linked clangd symbols and optional seeded
-   CPG function facts; they are partial when populated, unavailable otherwise. Save the scope checkpoint.
+3. Publish one graph shard per family, database card and bounded producer-neighborhood shard under
+   `data/indices/graph/attempts/job_code_graph_index/<attempt>/scopes/<scope>/` with shared
+   `index-shard` custody. Neighborhoods retain IR flow, analyzer diagnostics, linked clangd symbols
+   and optional seeded CPG function facts; they are partial when populated, unavailable otherwise.
+   Save the scope checkpoint; when a later attempt reuses a verified `data/indices/` checkpoint,
+   re-attest shared `index-shard` custody for that attempt.
 
 ### `acceptance`
 
@@ -507,11 +510,14 @@ Source: [handler graph](../../src/appsec_review/jobs/job_code_graph_index/job.py
    [closed schema](../schemas/graph-quality-scorecard.schema.json)) plus `graph-quality-scorecard.txt`.
 3. Build the bounded Alternate CPG over accepted inputs and the newly produced graph shards.
    Publish node/edge/path JSONL and `alternate-cpg-summary.json` as `alternate_cpg`, and the
-   `analysis/alternate-cpg` shard as `alternate_cpg_index`, both under
-   `appsec-review/alternate-cpg/1`. Preserve resolution tiers, inherited coverage and explicit
-   fallback/omission reasons; source-hash disagreement cannot be reconciled by display name.
-   Summary counters distinguish nodes, semantic edges, syntactic fallback edges, linked entry
-   points and precomputed sink paths from the original graph-family fact count.
+   `analysis/alternate-cpg` shard under
+   `data/indices/analysis/attempts/job_code_graph_index/<attempt>/alternate-cpg/` as
+   `alternate_cpg_index`, both under `appsec-review/alternate-cpg/1`, binding every published
+   producer shard and portable JSONL artifact into `handoff.json["artifacts"]`. Preserve resolution
+   tiers, inherited coverage and explicit fallback/omission reasons; source-hash disagreement cannot
+   be reconciled by display name. Summary counters distinguish nodes, semantic edges, syntactic
+   fallback edges, linked entry points and precomputed sink paths from the original graph-family
+   fact count.
 
 `query_cpg_slice` and `query_call_paths` read the admitted Alternate CPG shard through the existing
 authenticated database boundary. They retain producer gaps, deadlines, bounded depth/hops and
@@ -583,8 +589,8 @@ Known limitations still require the walk's explicit expected-cause decision.
 Scope identity binds snapshot, language/root/build unit, database/export identity/status/reasons,
 seeds, file identities, catalog/column/normalizer releases, rules/settings/tool version and all
 secondary/analyzer/observation/priority shard references. A changed input rebuilds only affected
-scopes. Unlike accepted-input corruption, an unverifiable matching **local output checkpoint**
-is discarded with its own shard files and rebuilt by `reuse_checkpoint`; it is never republished.
+scopes. Unlike accepted-input corruption, an unverifiable or out-of-custody matching **local output checkpoint**
+is skipped without deleting prior shard files and rebuilt by `reuse_checkpoint`; it is never republished.
 No CodeQL queries or models execute in this job. Shared composition is in
 [accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
 Generated task/language bindings remain
