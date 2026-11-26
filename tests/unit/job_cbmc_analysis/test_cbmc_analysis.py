@@ -928,6 +928,70 @@ def test_compact_goto_functions_parses_large_multi_function_table_without_json_t
         goto_functions_output(compact_bytes, settings().max_output_bytes, max_instructions=100)
 
 
+def test_compact_goto_functions_accepts_labeled_end_function_epilogues(tmp_path):
+    sep = "^" * 44
+    compact = "\n".join([
+        "Reading GOTO program from '/inputs/unit.goto'",
+        sep, "", "frame_fill /* frame_fill */",
+        "        // 0 file /target/source/main.c line 10 function frame_fill",
+        "     1: IF !(n == 0) THEN GOTO 2",
+        "        // 1 file /target/source/main.c line 11 function frame_fill",
+        "        GOTO 2",
+        "        // 2 file /target/source/main.c line 14 function frame_fill",
+        "     2: END_FUNCTION",
+        sep, "", "multi_digit /* multi_digit */",
+        "        // 0 file /target/source/main.c line 20 function multi_digit",
+        "    89: END_FUNCTION",
+        sep, "", "six_digit /* six_digit */",
+        "        // 0 file /target/source/main.c line 30 function six_digit",
+        "100000: END_FUNCTION",
+        sep, "", "multi_label /* multi_label */",
+        "        // 0 file /target/source/main.c line 40 function multi_label",
+        "     1: 2: END_FUNCTION",
+        "",
+    ]).encode("utf-8")
+    parsed = goto_functions_output(compact, 4096, max_instructions=100)
+    by_name = {fn["name"]: fn for fn in parsed[0]["functions"]}
+    assert list(by_name) == ["frame_fill", "multi_digit", "six_digit", "multi_label"]
+    assert by_name["frame_fill"]["sourceSpans"] == {"main.c": [10, 14]}
+    assert by_name["frame_fill"]["instructionCount"] == 3
+
+    with pytest.raises(OutputRejected, match="incomplete GOTO function body"):
+        goto_functions_output(
+            f"Reading GOTO program from '/inputs/unit.goto'\n{sep}\n\nf /* f */\nEND_FUNCTION\n".encode("utf-8"),
+            4096,
+            max_instructions=100,
+        )
+    with pytest.raises(OutputRejected, match="incomplete GOTO function body"):
+        goto_functions_output(
+            f"Reading GOTO program from '/inputs/unit.goto'\n{sep}\n\nf /* f */\n     label: END_FUNCTION\n".encode("utf-8"),
+            4096,
+            max_instructions=100,
+        )
+
+    scope, row, unit = fixture(tmp_path)
+    (scope.case_root / "source/main.c").write_text("\n".join(f"int line_{i};" for i in range(1, 50)) + "\n")
+    accepted = {"target_path": "native/main.c", "scratch_path": "source/main.c",
+                "sha256": file_sha256(scope.case_root / "source/main.c")}
+    scope = replace(scope, files=(accepted,))
+    target = tmp_path / "staged"
+    stage_source(scope, target, settings())
+    seed = {"path": "main.c", "start_line": 11, "end_line": 11, "rank": 0,
+            "observation_ids": SEED["observation_ids"]}
+    executor = FakeExecutor(
+        unit.job.run_root,
+        [(0, [{"result": [{"property": "frame_fill.pointer_dereference.1", "description": "dereference failure",
+                           "status": "SUCCESS", "sourceLocation": {"file": "/target/source/main.c", "line": "11"}}]},
+              {"cProverStatus": "success"}])],
+        discovery_response=(0, compact),
+    )
+    engine = Analysis(unit, settings(unwind_limits=(8,)), executor_factory=lambda *_: executor)
+    results = engine.translation_unit(scope, row, [seed], target)
+    assert len(results) == 1
+    assert results[0]["function"] == "frame_fill"
+    assert results[0]["judgment"] == "bounded_pass"
+
+
 def test_plan_rejects_cpp17_units_without_starving_c_units_or_seeds(tmp_path):
     from appsec_review.config import load_config
     from appsec_review.indexing.store import ShardSet

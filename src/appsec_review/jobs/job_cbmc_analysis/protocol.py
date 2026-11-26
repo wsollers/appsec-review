@@ -143,6 +143,7 @@ def source_position(value: Any) -> tuple[str, int] | None:
 
 
 _GOTO_FUNCTION_SEPARATOR = "^" * 44
+_GOTO_END_FUNCTION = re.compile(r"^(?:[ ]+|[ ]*(?:[0-9]+:[ ]+)+)END_FUNCTION$")
 _GOTO_LOCATION_COMMENT = re.compile(r"^        // [0-9]+(?: (.*))?$")
 _GOTO_SOURCE_LOCATION = re.compile(r"^file (.+) line ([1-9][0-9]{0,8})(?: column [0-9]+)?(?: function .*)?$")
 
@@ -186,7 +187,7 @@ def goto_functions_output(data: bytes, max_bytes: int, *, max_instructions: int)
         while index < len(lines) and lines[index] != _GOTO_FUNCTION_SEPARATOR:
             line = lines[index]
             index += 1
-            if line == "        END_FUNCTION":
+            if _GOTO_END_FUNCTION.fullmatch(line) is not None:
                 ended = True
                 continue
             match = _GOTO_LOCATION_COMMENT.match(line)
