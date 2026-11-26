@@ -50,7 +50,7 @@ def test_android_expected_output_requires_a_structurally_valid_apk(tmp_path: Pat
 def test_build_capture_mode_changes_project_probe_checkpoint_identity(tmp_path: Path) -> None:
     config = load_config(ROOT / "appsec-review.toml")
     job = config.job("job_project_build")
-    context = dict(metadata_root=tmp_path, run_root=tmp_path / "run",
+    context = dict(metadata_root=tmp_path, run_root=tmp_path / "run", attempt_id="attempt_0001",
                    source_fingerprint="target", review_policy=config.review_policy)
     unit = SimpleNamespace(job=SimpleNamespace(**context, config=job))
     baseline = _probe_cache(unit, "a" * 64)
@@ -66,7 +66,7 @@ def test_build_outputs_policy_changes_project_probe_checkpoint_identity(tmp_path
     config = load_config(ROOT / "appsec-review.toml")
     job = config.job("job_project_build")
     assert job.build_outputs is not None
-    context = dict(metadata_root=tmp_path, run_root=tmp_path / "run",
+    context = dict(metadata_root=tmp_path, run_root=tmp_path / "run", attempt_id="attempt_0001",
                    source_fingerprint="target", review_policy=config.review_policy)
     baseline = _probe_cache(SimpleNamespace(job=SimpleNamespace(**context, config=job)), "a" * 64)
     view = job.build_outputs.view()
@@ -134,7 +134,7 @@ def test_probe_and_repair_identity_bind_relevant_releases_target_and_run(tmp_pat
     config = load_config(ROOT / "appsec-review.toml")
     releases = {"platform": "fixture-platform", "build_toolchain": "fixture-build",
                 "validation": "fixture-validation"}
-    context = dict(metadata_root=tmp_path, run_root=tmp_path / "run",
+    context = dict(metadata_root=tmp_path, run_root=tmp_path / "run", attempt_id="attempt_0001",
                    source_fingerprint="target", config=config.job("job_project_build"),
                    review_policy=replace(config.review_policy, releases=ComponentReleases(releases)))
     for cache in (_probe_cache, _repair_cache):
@@ -204,8 +204,8 @@ def test_node_configure_restore_does_not_mount_immutable_image_dependencies() ->
 def test_probe_environment_injects_native_debug_flags_without_clobbering_explicit_settings() -> None:
     cmake_env = _probe_environment({"build_system": "cmake", "source_dir": ".", "environment": {}})
     assert cmake_env["CMAKE_BUILD_TYPE"] == "RelWithDebInfo"
-    assert cmake_env["CFLAGS"] == "-g"
-    assert cmake_env["CXXFLAGS"] == "-g"
+    assert "CFLAGS" not in cmake_env
+    assert "CXXFLAGS" not in cmake_env
 
     preserved = _probe_environment({
         "build_system": "cmake",
@@ -497,3 +497,24 @@ def test_image_repair_vocabulary_names_no_case_identifiers() -> None:
     import re
 
     assert not re.search(r"case-?\d{3}", source) and "multivuln" not in source.lower()
+
+
+def test_make_and_autotools_probe_environment_preserves_makefile_optimization_defaults() -> None:
+    from appsec_review.jobs.job_project_build.job import EXECUTOR_IDENTITY
+
+    assert EXECUTOR_IDENTITY == "appsec-review/build-container-executor/4"
+    make_env = _probe_environment({"build_system": "make", "source_dir": ".", "environment": {}})
+    assert "CFLAGS" not in make_env
+    assert "CXXFLAGS" not in make_env
+
+    autotools_env = _probe_environment({"build_system": "autotools", "source_dir": ".", "environment": {}})
+    assert "CFLAGS" not in autotools_env
+    assert "CXXFLAGS" not in autotools_env
+
+    explicit_env = _probe_environment({
+        "build_system": "make",
+        "source_dir": ".",
+        "environment": {"CFLAGS": "-O2 -D_FORTIFY_SOURCE=2"},
+    })
+    assert explicit_env["CFLAGS"] == "-O2 -D_FORTIFY_SOURCE=2 -g"
+    assert "CXXFLAGS" not in explicit_env

@@ -7,12 +7,26 @@ import re
 
 
 _IDENT_RE = re.compile(r"[A-Za-z_$][\w$]*")
+_RAW_STR_PREFIX_RE = re.compile(r'(?:u8|u|U|L)?R"([^()\\\s]{0,16})\(')
+_STR_PREFIX_RE = re.compile(r"""(?:u8|u|U|L)(?=["'])""")
+_PP_NUMBER_RE = re.compile(r"(?:\.[0-9]|[0-9])(?:[eEpP][+-]|'[0-9A-Za-z_]|[0-9A-Za-z_.])*")
+_PP_DIRECTIVE_RE = re.compile(r"#[ \t]*([A-Za-z_][A-Za-z0-9_]*)")
 _NON_FUNCTION_NAMES = frozenset({
     "if", "else", "for", "while", "do", "switch", "case", "catch", "return",
     "sizeof", "alignof", "alignas", "decltype", "noexcept", "static_assert",
     "typedef", "using", "namespace", "extern", "template", "class", "struct",
     "union", "enum", "asm", "__asm", "__asm__", "__attribute", "__attribute__",
     "__declspec", "_Static_assert", "typeof", "__typeof__", "requires",
+})
+_THREE_CHAR_OPS = frozenset({"<<=", ">>=", "<=>", "->*"})
+_TWO_CHAR_OPS = frozenset({
+    "::", "->", "&&", "||", "==", "!=", "<=", ">=", "<<", ">>",
+    "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=", "++", "--",
+})
+_OVERLOADABLE_OP_TOKENS = frozenset({
+    "+", "-", "*", "/", "%", "^", "&", "|", "~", "!", "=", "<", ">",
+    "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=", "<<", ">>", "<<=", ">>=",
+    "==", "!=", "<=", ">=", "<=>", "&&", "||", "++", "--", ",", "->*", "->",
 })
 
 
@@ -34,16 +48,79 @@ class _Tok:
     val: str
     line: int
     col: int
+    end_col: int = 0
 
 
 def _line_table(text: str) -> list[tuple[int, int, str]]:
+    if not text:
+        return []
     lines: list[tuple[int, int, str]] = []
+    start = 0
     offset = 0
-    for seg in text.splitlines(keepends=True):
+    n = len(text)
+    while start < n:
+        nl = text.find("\n", start)
+        if nl == -1:
+            seg = text[start:]
+            encoded = seg.encode("utf-8")
+            clean = seg[:-1] if seg.endswith("\r") else seg
+            lines.append((offset, offset + len(encoded), clean))
+            break
+        seg = text[start:nl + 1]
         encoded = seg.encode("utf-8")
-        lines.append((offset, offset + len(encoded), seg.rstrip("\r\n")))
+        clean = seg[:-2] if seg.endswith("\r\n") else seg[:-1]
+        lines.append((offset, offset + len(encoded), clean))
         offset += len(encoded)
+        start = nl + 1
     return lines
+
+
+def _advance_span(span: str, line: int, col: int) -> tuple[int, int]:
+    nl = span.count("\n")
+    if nl:
+        return line + nl, len(span) - span.rfind("\n")
+    return line, col + len(span)
+
+
+def _scan_raw_string(text: str, i: int, line: int, col: int) -> tuple[int, int, int] | None:
+    m = _RAW_STR_PREFIX_RE.match(text, i)
+    if not m:
+        return None
+    closing = ")" + m.group(1) + '"'
+    end_idx = text.find(closing, m.end())
+    if end_idx == -1:
+        return None
+    end_pos = end_idx + len(closing)
+    new_line, new_col = _advance_span(text[i:end_pos], line, col)
+    return end_pos, new_line, new_col
+
+
+def _scan_quoted_literal(text: str, i: int, quote: str, line: int, col: int) -> tuple[int, int, int]:
+    n = len(text)
+    i += 1
+    col += 1
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            if i + 1 < n and text[i + 1] == "\n":
+                i += 2
+                line += 1
+                col = 1
+            elif i + 2 < n and text[i + 1] == "\r" and text[i + 2] == "\n":
+                i += 3
+                line += 1
+                col = 1
+            else:
+                i += 2
+                col += 2
+            continue
+        if c == "\n":
+            break
+        i += 1
+        col += 1
+        if c == quote:
+            break
+    return i, line, col
 
 
 def _tokenize(text: str) -> list[_Tok]:
@@ -77,18 +154,28 @@ def _tokenize(text: str) -> list[_Tok]:
             col = 1
             continue
         if at_bol and ch == "#":
+            dm = _PP_DIRECTIVE_RE.match(text, i)
+            if dm:
+                kw = dm.group(1)
+                if kw in {"if", "ifdef", "ifndef"}:
+                    tokens.append(_Tok("PP", "if", line, col))
+                elif kw in {"else", "elif", "elifdef", "elifndef"}:
+                    tokens.append(_Tok("PP", "else", line, col))
+                elif kw == "endif":
+                    tokens.append(_Tok("PP", "endif", line, col))
             while i < n:
-                if text[i] == "\\" and i + 1 < n and text[i + 1] == "\n":
+                c = text[i]
+                if c == "\\" and i + 1 < n and text[i + 1] == "\n":
                     i += 2
                     line += 1
                     col = 1
                     continue
-                if text[i] == "\\" and i + 2 < n and text[i + 1] == "\r" and text[i + 2] == "\n":
+                if c == "\\" and i + 2 < n and text[i + 1] == "\r" and text[i + 2] == "\n":
                     i += 3
                     line += 1
                     col = 1
                     continue
-                if text[i] == "/" and i + 1 < n and text[i + 1] == "*":
+                if c == "/" and i + 1 < n and text[i + 1] == "*":
                     i += 2
                     col += 2
                     while i < n and not (text[i] == "*" and i + 1 < n and text[i + 1] == "/"):
@@ -102,11 +189,44 @@ def _tokenize(text: str) -> list[_Tok]:
                         i += 2
                         col += 2
                     continue
-                if text[i] == "/" and i + 1 < n and text[i + 1] == "/":
-                    while i < n and text[i] != "\n":
+                if c == "/" and i + 1 < n and text[i + 1] == "/":
+                    i += 2
+                    col += 2
+                    while i < n:
+                        if text[i] == "\\" and i + 1 < n and text[i + 1] == "\n":
+                            i += 2
+                            line += 1
+                            col = 1
+                            continue
+                        if text[i] == "\\" and i + 2 < n and text[i + 1] == "\r" and text[i + 2] == "\n":
+                            i += 3
+                            line += 1
+                            col = 1
+                            continue
+                        if text[i] == "\n":
+                            break
                         i += 1
+                        col += 1
                     break
-                if text[i] == "\n":
+                raw_pp = _scan_raw_string(text, i, line, col)
+                if raw_pp is not None:
+                    i, line, col = raw_pp
+                    continue
+                num_pp = _PP_NUMBER_RE.match(text, i)
+                if num_pp:
+                    span = num_pp.group(0)
+                    i = num_pp.end()
+                    col += len(span)
+                    continue
+                sp_pp = _STR_PREFIX_RE.match(text, i)
+                if sp_pp:
+                    plen = len(sp_pp.group(0))
+                    i, line, col = _scan_quoted_literal(text, i + plen, text[i + plen], line, col + plen)
+                    continue
+                if c in ('"', "'"):
+                    i, line, col = _scan_quoted_literal(text, i, c, line, col)
+                    continue
+                if c == "\n":
                     break
                 i += 1
                 col += 1
@@ -140,57 +260,44 @@ def _tokenize(text: str) -> list[_Tok]:
                     line += 1
                     col = 1
                     continue
+                if text[i] == "\\" and i + 2 < n and text[i + 1] == "\r" and text[i + 2] == "\n":
+                    i += 3
+                    line += 1
+                    col = 1
+                    continue
                 if text[i] == "\n":
                     break
                 i += 1
                 col += 1
             continue
 
-        if ch == "R" and i + 1 < n and text[i + 1] == '"':
-            j = i + 2
-            delim_end = text.find("(", j)
-            if delim_end != -1 and "\n" not in text[j:delim_end] and len(text[j:delim_end]) <= 16:
-                closing = ")" + text[j:delim_end] + '"'
-                end_idx = text.find(closing, delim_end + 1)
-                if end_idx != -1:
-                    span = text[i:end_idx + len(closing)]
-                    tokens.append(_Tok("LIT", '""', line, col))
-                    nl = span.count("\n")
-                    if nl:
-                        line += nl
-                        col = len(span) - span.rfind("\n")
-                    else:
-                        col += len(span)
-                    i = end_idx + len(closing)
-                    continue
+        raw_hit = _scan_raw_string(text, i, line, col)
+        if raw_hit is not None:
+            tokens.append(_Tok("LIT", '""', line, col))
+            i, line, col = raw_hit
+            continue
+
+        num_m = _PP_NUMBER_RE.match(text, i)
+        if num_m:
+            val = num_m.group(0)
+            tokens.append(_Tok("LIT", val, line, col))
+            i = num_m.end()
+            col += len(val)
+            continue
+
+        sp_m = _STR_PREFIX_RE.match(text, i)
+        if sp_m:
+            start_line, start_col = line, col
+            plen = len(sp_m.group(0))
+            quote = text[i + plen]
+            i, line, col = _scan_quoted_literal(text, i + plen, quote, line, col + plen)
+            tokens.append(_Tok("LIT", quote * 2, start_line, start_col))
+            continue
 
         if ch in ('"', "'"):
-            quote = ch
             start_line, start_col = line, col
-            i += 1
-            col += 1
-            while i < n:
-                c = text[i]
-                if c == "\\":
-                    if i + 1 < n and text[i + 1] == "\n":
-                        i += 2
-                        line += 1
-                        col = 1
-                    elif i + 2 < n and text[i + 1] == "\r" and text[i + 2] == "\n":
-                        i += 3
-                        line += 1
-                        col = 1
-                    else:
-                        i += 2
-                        col += 2
-                    continue
-                if c == "\n":
-                    break
-                i += 1
-                col += 1
-                if c == quote:
-                    break
-            tokens.append(_Tok("LIT", quote * 2, start_line, start_col))
+            i, line, col = _scan_quoted_literal(text, i, ch, line, col)
+            tokens.append(_Tok("LIT", ch * 2, start_line, start_col))
             continue
 
         m = _IDENT_RE.match(text, i)
@@ -201,8 +308,15 @@ def _tokenize(text: str) -> list[_Tok]:
             col += len(val)
             continue
 
+        three = text[i:i + 3]
+        if three in _THREE_CHAR_OPS:
+            tokens.append(_Tok("PUNCT", three, line, col))
+            i += 3
+            col += 3
+            continue
+
         two = text[i:i + 2]
-        if two in {"::", "->", "&&", "==", "!=", "<=", ">=", "<<", ">>"}:
+        if two in _TWO_CHAR_OPS:
             tokens.append(_Tok("PUNCT", two, line, col))
             i += 2
             col += 2
@@ -224,6 +338,10 @@ def _match_close(tokens: list[_Tok], open_idx: int, open_val: str, close_val: st
         elif v == close_val:
             depth -= 1
             if depth == 0:
+                return idx
+        elif open_val == "<" and close_val == ">" and v == ">>":
+            depth -= 2
+            if depth <= 0:
                 return idx
     return -1
 
@@ -264,6 +382,12 @@ def _looks_like_post_params_before_body(tokens: list[_Tok], open_idx: int, close
                 return False
             j = end_p + 1
             continue
+        if tok.val == "[":
+            end_b = _match_close(after, j, "[", "]")
+            if end_b == -1:
+                return False
+            j = end_b + 1
+            continue
         if tok.val == "->":
             j += 1
             while j < len(after):
@@ -284,20 +408,27 @@ def _looks_like_post_params_before_body(tokens: list[_Tok], open_idx: int, close
 def _find_type_tag_before_brace(stmt: list[_Tok]) -> tuple[_Tok, str] | None:
     idx = -1
     kind = ""
+    angle = 0
+    paren = 0
+    bracket = 0
     for k, tok in enumerate(stmt):
-        if tok.kind == "IDENT" and tok.val in {"struct", "class", "union", "enum"}:
-            angle = 0
-            paren = 0
-            for prev in stmt[:k]:
-                if prev.val == "(":
-                    paren += 1
-                elif prev.val == ")":
-                    paren = max(0, paren - 1)
-                elif paren == 0 and prev.val == "<":
-                    angle += 1
-                elif paren == 0 and prev.val == ">":
-                    angle = max(0, angle - 1)
-            if angle == 0 and paren == 0:
+        is_op_arg = k >= 1 and stmt[k - 1].kind == "IDENT" and stmt[k - 1].val == "operator"
+        if tok.val == "(":
+            paren += 1
+        elif tok.val == ")":
+            paren = max(0, paren - 1)
+        elif tok.val == "[":
+            bracket += 1
+        elif tok.val == "]":
+            bracket = max(0, bracket - 1)
+        elif paren == 0 and bracket == 0 and not is_op_arg:
+            if tok.val == "<":
+                angle += 1
+            elif tok.val == ">":
+                angle = max(0, angle - 1)
+            elif tok.val == ">>" and angle > 0:
+                angle = max(0, angle - 2)
+            elif angle == 0 and tok.kind == "IDENT" and tok.val in {"struct", "class", "union", "enum"}:
                 idx = k
                 kind = tok.val
     if idx == -1:
@@ -315,6 +446,12 @@ def _find_type_tag_before_brace(stmt: list[_Tok]) -> tuple[_Tok, str] | None:
             break
         if tok.val in {"*", "&", "&&", "=", ";", ","}:
             return None
+        if tok.val == "[":
+            end_b = _match_close(rest, pos, "[", "]")
+            if end_b == -1:
+                return None
+            pos = end_b + 1
+            continue
         if tok.val == "(":
             if candidates:
                 candidates.pop()
@@ -356,44 +493,166 @@ def _has_kr_header(stmt: list[_Tok]) -> bool:
     return False
 
 
+def _skip_trailing_template_or_attrs(stmt: list[_Tok], end_exclusive: int) -> int:
+    idx = end_exclusive - 1
+    while idx >= 0:
+        if stmt[idx].val == "]" and idx >= 1 and stmt[idx - 1].val == "]":
+            depth = 0
+            found = -1
+            for p in range(idx, -1, -1):
+                if stmt[p].val == "]":
+                    depth += 1
+                elif stmt[p].val == "[":
+                    depth -= 1
+                    if depth == 0:
+                        found = p
+                        break
+            if found != -1 and found + 1 <= idx and stmt[found + 1].val == "[":
+                idx = found - 1
+                continue
+        if stmt[idx].val in {">", ">>"} and not (
+            idx >= 1 and stmt[idx - 1].kind == "IDENT" and stmt[idx - 1].val == "operator"
+        ):
+            depth = 0
+            found = -1
+            for p in range(idx, -1, -1):
+                if p >= 1 and stmt[p - 1].kind == "IDENT" and stmt[p - 1].val == "operator":
+                    break
+                if stmt[p].val == ">>":
+                    depth += 2
+                elif stmt[p].val == ">":
+                    depth += 1
+                elif stmt[p].val == "<":
+                    depth -= 1
+                    if depth <= 0:
+                        found = p
+                        break
+            if found != -1:
+                idx = found - 1
+                continue
+        break
+    return idx
+
+
+def _build_operator_token(stmt: list[_Tok], op_idx: int, end_exclusive: int) -> _Tok | None:
+    op_tok = stmt[op_idx]
+    parts = stmt[op_idx + 1:end_exclusive]
+    if not parts:
+        return None
+    last = parts[-1]
+    end_col = last.col + len(last.val) if last.line == op_tok.line else op_tok.col + len(op_tok.val)
+    if len(parts) == 1 and parts[0].val in _OVERLOADABLE_OP_TOKENS:
+        return _Tok("IDENT", f"operator{parts[0].val}", op_tok.line, op_tok.col, end_col)
+    if len(parts) == 2 and parts[0].val == "(" and parts[1].val == ")":
+        return _Tok("IDENT", "operator()", op_tok.line, op_tok.col, end_col)
+    if len(parts) == 2 and parts[0].val == "[" and parts[1].val == "]":
+        return _Tok("IDENT", "operator[]", op_tok.line, op_tok.col, end_col)
+    if parts[0].kind == "IDENT" and parts[0].val in {"new", "delete", "co_await"}:
+        if len(parts) == 1:
+            return _Tok("IDENT", f"operator {parts[0].val}", op_tok.line, op_tok.col, end_col)
+        if len(parts) == 3 and parts[1].val == "[" and parts[2].val == "]":
+            return _Tok("IDENT", f"operator {parts[0].val}[]", op_tok.line, op_tok.col, end_col)
+    if len(parts) == 2 and parts[0].kind == "LIT" and parts[0].val == '""' and parts[1].kind == "IDENT":
+        return _Tok("IDENT", f'operator""{parts[1].val}', op_tok.line, op_tok.col, end_col)
+    if any(p.val in {";", ",", "=", "{", "}"} for p in parts):
+        return None
+    rendered: list[str] = []
+    for p in parts:
+        if rendered and rendered[-1][-1].isalnum() and p.val[0].isalnum():
+            rendered.append(" " + p.val)
+        else:
+            rendered.append(p.val)
+    return _Tok("IDENT", "operator " + "".join(rendered), op_tok.line, op_tok.col, end_col)
+
+
 def _find_function_before_brace(stmt: list[_Tok], *, in_type_scope: bool) -> _Tok | None:
     paren = 0
+    bracket = 0
+    angle = 0
     for idx, tok in enumerate(stmt):
+        is_op_arg = idx >= 1 and stmt[idx - 1].kind == "IDENT" and stmt[idx - 1].val == "operator"
         if tok.val == "(":
             paren += 1
         elif tok.val == ")":
             paren = max(0, paren - 1)
-        elif paren == 0 and tok.val == ":":
-            stmt = stmt[:idx]
-            break
-    paren = 0
-    for idx, tok in enumerate(stmt):
-        if tok.val == "(":
-            paren += 1
-        elif tok.val == ")":
-            paren = max(0, paren - 1)
-        elif paren == 0 and tok.val == "=":
-            if not (idx >= 1 and stmt[idx - 1].val == "operator"):
-                return None
+        elif tok.val == "[":
+            bracket += 1
+        elif tok.val == "]":
+            bracket = max(0, bracket - 1)
+        elif paren == 0 and bracket == 0 and not is_op_arg:
+            if tok.val == "<":
+                angle += 1
+            elif tok.val == ">":
+                angle = max(0, angle - 1)
+            elif tok.val == ">>" and angle > 0:
+                angle = max(0, angle - 2)
+            elif angle == 0 and tok.val == ":":
+                stmt = stmt[:idx]
+                break
 
+    paren = 0
+    bracket = 0
+    angle = 0
     top_parens: list[tuple[int, int]] = []
-    k = 0
-    while k < len(stmt):
-        if stmt[k].val == "(":
-            close_k = _match_close(stmt, k, "(", ")")
-            if close_k == -1:
-                return None
-            top_parens.append((k, close_k))
-            k = close_k + 1
-        else:
-            k += 1
+    op_indices: list[int] = []
+    idx = 0
+    while idx < len(stmt):
+        tok = stmt[idx]
+        is_op_arg = idx >= 1 and stmt[idx - 1].kind == "IDENT" and stmt[idx - 1].val == "operator"
+        if tok.val == "(":
+            if paren == 0 and bracket == 0 and angle == 0:
+                close_k = _match_close(stmt, idx, "(", ")")
+                if close_k == -1:
+                    return None
+                top_parens.append((idx, close_k))
+                idx = close_k + 1
+                continue
+            paren += 1
+        elif tok.val == ")":
+            paren = max(0, paren - 1)
+        elif tok.val == "[":
+            bracket += 1
+        elif tok.val == "]":
+            bracket = max(0, bracket - 1)
+        elif paren == 0 and bracket == 0:
+            if not is_op_arg and tok.val == "<":
+                angle += 1
+            elif not is_op_arg and tok.val == ">" and angle > 0:
+                angle -= 1
+            elif not is_op_arg and tok.val == ">>" and angle > 0:
+                angle = max(0, angle - 2)
+            elif angle == 0:
+                if tok.val == "=" and not is_op_arg:
+                    return None
+                if tok.kind == "IDENT" and tok.val == "operator":
+                    op_indices.append(idx)
+        idx += 1
 
     for open_k, close_k in reversed(top_parens):
         if open_k == 0:
             continue
         if not _looks_like_post_params_before_body(stmt, open_k, close_k):
             continue
-        name_idx = open_k - 1
+        op_before = [oi for oi in op_indices if oi < open_k]
+        if op_before:
+            op_idx = op_before[-1]
+            decl_end = open_k
+            if not (op_idx + 1 == open_k - 1 and stmt[op_idx + 1].val in {">", ">>"}):
+                adj = _skip_trailing_template_or_attrs(stmt, open_k)
+                if adj >= op_idx + 1:
+                    decl_end = adj + 1
+            op_tok = _build_operator_token(stmt, op_idx, decl_end)
+            if op_tok is not None:
+                prefix = stmt[:op_idx]
+                is_conversion = not (
+                    (decl_end - op_idx == 2 and stmt[op_idx + 1].val in _OVERLOADABLE_OP_TOKENS)
+                    or (decl_end - op_idx == 3 and stmt[op_idx + 1].val in {"(", "["})
+                )
+                is_qualified = bool(prefix and prefix[-1].val == "::")
+                if in_type_scope or is_qualified or prefix or is_conversion:
+                    return op_tok
+
+        name_idx = _skip_trailing_template_or_attrs(stmt, open_k)
         prefix_end = -1
         if name_idx >= 0 and stmt[name_idx].val == ")":
             wrapped = next(((op, cl) for op, cl in top_parens if cl == name_idx), None)
@@ -405,16 +664,6 @@ def _find_function_before_brace(stmt: list[_Tok], *, in_type_scope: bool) -> _To
                                  and stmt[op - 1].val in _NON_FUNCTION_NAMES)):
                     name_idx = op + 1
                     prefix_end = op
-        if name_idx >= 0 and stmt[name_idx].val == ">":
-            depth = 0
-            for p in range(name_idx, -1, -1):
-                if stmt[p].val == ">":
-                    depth += 1
-                elif stmt[p].val == "<":
-                    depth -= 1
-                    if depth == 0:
-                        name_idx = p - 1
-                        break
         if name_idx < 0 or stmt[name_idx].kind != "IDENT":
             continue
         name_tok = stmt[name_idx]
@@ -476,6 +725,27 @@ def _typedef_names_after_brace(stmt: list[_Tok]) -> list[_Tok]:
     return names
 
 
+def _is_namespace_open(stmt: list[_Tok]) -> bool:
+    if any(t.val == "=" for t in stmt):
+        return False
+    idx = 0
+    while idx < len(stmt) and stmt[idx].kind == "IDENT" and stmt[idx].val in {"inline", "export"}:
+        idx += 1
+    return idx < len(stmt) and stmt[idx].kind == "IDENT" and stmt[idx].val == "namespace"
+
+
+def _is_extern_linkage_open(stmt: list[_Tok]) -> bool:
+    idx = 0
+    while idx < len(stmt) and stmt[idx].kind == "IDENT" and stmt[idx].val == "export":
+        idx += 1
+    return (
+        idx + 1 < len(stmt)
+        and stmt[idx].kind == "IDENT"
+        and stmt[idx].val == "extern"
+        and stmt[idx + 1].kind == "LIT"
+    )
+
+
 def extract_c_family_symbols(text: str, *, limit: int = 50_000) -> list[CSymbolSpan]:
     """Extract C/C++ type, typedef, and function/method definitions with exact line/byte spans."""
     lines = _line_table(text)
@@ -493,6 +763,7 @@ def extract_c_family_symbols(text: str, *, limit: int = 50_000) -> list[CSymbolS
             return
         seen.add(key)
         start_b, end_b, line_txt = lines[tok.line - 1]
+        end_c = tok.end_col if tok.end_col else tok.col + len(tok.val)
         out.append(CSymbolSpan(
             name=tok.val,
             kind=kind,
@@ -500,13 +771,14 @@ def extract_c_family_symbols(text: str, *, limit: int = 50_000) -> list[CSymbolS
             line_start_byte=start_b,
             line_end_byte=end_b,
             start_column=tok.col,
-            end_column=tok.col + len(tok.val),
+            end_column=end_c,
             line_text=line_txt,
         ))
 
     scope_stack: list[tuple[str, bool]] = []
     stmt: list[_Tok] = []
     after_typedef_brace = False
+    pp_stack: list[tuple[list[tuple[str, bool]], bool, list[_Tok]]] = []
 
     def current_scope() -> str:
         return scope_stack[-1][0] if scope_stack else "file"
@@ -515,6 +787,21 @@ def extract_c_family_symbols(text: str, *, limit: int = 50_000) -> list[CSymbolS
     n = len(tokens)
     while i < n and len(out) < limit:
         tok = tokens[i]
+        if tok.kind == "PP":
+            if tok.val == "if":
+                pp_stack.append((list(scope_stack), after_typedef_brace, list(stmt)))
+            elif tok.val == "else":
+                if pp_stack:
+                    saved_scopes, saved_typedef, saved_stmt = pp_stack[-1]
+                    scope_stack[:] = list(saved_scopes)
+                    after_typedef_brace = saved_typedef
+                    stmt[:] = list(saved_stmt)
+            elif tok.val == "endif":
+                if pp_stack:
+                    pp_stack.pop()
+            i += 1
+            continue
+
         scope = current_scope()
 
         if scope in {"block", "enum"}:
@@ -529,10 +816,9 @@ def extract_c_family_symbols(text: str, *, limit: int = 50_000) -> list[CSymbolS
 
         if tok.val == "{":
             has_typedef = any(t.kind == "IDENT" and t.val == "typedef" for t in stmt)
-            if (len(stmt) >= 2 and stmt[0].kind == "IDENT" and stmt[0].val == "extern"
-                    and stmt[1].kind == "LIT"):
+            if _is_extern_linkage_open(stmt):
                 scope_stack.append(("extern", False))
-            elif stmt and stmt[0].kind == "IDENT" and stmt[0].val == "namespace":
+            elif _is_namespace_open(stmt):
                 scope_stack.append(("namespace", False))
             else:
                 tag_hit = _find_type_tag_before_brace(stmt)

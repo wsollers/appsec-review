@@ -117,6 +117,7 @@ def test_real_project_plan_keeps_cmake_contract_and_admits_planning_output(tmp_p
     plan_unit = next(unit for unit in build_job().units if unit.unit_id == "plan.load_recipes")
     context = SimpleNamespace(
         job=SimpleNamespace(run_root=root, target_root=target, source_fingerprint="synthetic-source",
+                            attempt_id="attempt_0001", resolved_config_sha256="c" * 64,
                             config=runner.config.job("job_project_build"),
                             review_policy=runner.config.review_policy),
         unit_id=plan_unit.unit_id)

@@ -321,8 +321,35 @@ def _cmake_calls(text: str):
         pos = i
 
 
+_CMAKE_INTERFACE_GENEX = re.compile(r"\$<(BUILD|INSTALL)_INTERFACE:([^<>]*)>")
+
+
+def _unwrap_cmake_include_arg(value: str) -> list[str]:
+    if "$<" not in value:
+        return [value]
+    if _CMAKE_INTERFACE_GENEX.sub("", value).strip():
+        if value.startswith("$<BUILD_INTERFACE:") and value.endswith(">") and "$<" not in value[18:-1]:
+            return [part for part in value[18:-1].split(";") if part]
+        if value.startswith("$<INSTALL_INTERFACE:") and value.endswith(">") and "$<" not in value[20:-1]:
+            return []
+        return [value]
+    out: list[str] = []
+    for match in _CMAKE_INTERFACE_GENEX.finditer(value):
+        if match.group(1) == "BUILD":
+            out.extend(part for part in match.group(2).split(";") if part)
+    return out
+
+
 def _cmake_dir(base: str, root: str, value: str) -> str | None:
     """A directory argument with the source-dir variables resolved; None when it stays dynamic."""
+    if "$<" in value:
+        unwrapped = _unwrap_cmake_include_arg(value)
+        if not unwrapped:
+            return None
+        if len(unwrapped) == 1 and "$<" not in unwrapped[0]:
+            value = unwrapped[0]
+        else:
+            return None
     for variable in _CMAKE_SOURCE_DIR_VARIABLES:
         anchor = root if variable in ("${CMAKE_SOURCE_DIR}/", "${PROJECT_SOURCE_DIR}/") else base
         if value.startswith(variable):
@@ -362,12 +389,22 @@ def cmake_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
     exported_includes: dict[str, set[str]] = {}
     link_edges: dict[str, list[tuple[str, str]]] = {}
     module_dirs: list[str] = []
+    aliases: dict[str, str] = {}
+
+    def _resolve_target(tname: str) -> str:
+        seen: set[str] = set()
+        while tname in aliases and tname not in seen:
+            seen.add(tname)
+            tname = aliases[tname]
+        return tname
+
     lists = sorted(path for path in descriptors if posixpath.basename(path) == "CMakeLists.txt")
     for path in lists:
         base = posixpath.dirname(path) or "."
         for name, args, line, condition, body in _cmake_calls(descriptors[path]):
             evidence = f"{path}:{line}"
-            if "$<" in body:
+            body_for_genex = _CMAKE_INTERFACE_GENEX.sub("", body) if name == "target_include_directories" else body
+            if "$<" in body_for_genex:
                 unresolved.append({"evidence": evidence, "reason": "generator expression"})
             if name == "set" and len(args) >= 2 and not args[0].startswith("$"):
                 variables[args[0]] = args[1:]
@@ -419,39 +456,44 @@ def cmake_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
                 target_name = args[0]
                 if any(a.upper() == "ALIAS" for a in args[1:]):
                     kind = "alias"
+                    alias_idx = next(idx for idx, val in enumerate(args[1:], start=1) if val.upper() == "ALIAS")
+                    if alias_idx + 1 < len(args):
+                        aliases[target_name] = args[alias_idx + 1]
+                    sources = []
                 elif name == "add_custom_target":
                     kind = "custom_target"
+                    sources = _cmake_sources(base, args[1:], variables, inventory, unresolved, evidence)
                 elif name == "add_executable":
                     kind = "executable"
+                    sources = _cmake_sources(base, args[1:], variables, inventory, unresolved, evidence)
                 else:
                     linkage = next((a.upper() for a in args[1:] if a.upper() in {"STATIC", "SHARED", "MODULE", "INTERFACE", "OBJECT"}), None)
                     kind = {"STATIC": "static_library", "SHARED": "shared_library", "MODULE": "module_library",
                             "INTERFACE": "interface_library", "OBJECT": "object_library"}.get(linkage or "", "library")
-                sources = _cmake_sources(base, args[1:], variables, inventory, unresolved, evidence)
+                    sources = _cmake_sources(base, args[1:], variables, inventory, unresolved, evidence)
                 point = _point(target_name, kind, evidence, sources=sources, condition=condition)
                 if "IMPORTED" in {a.upper() for a in args[1:]}:
                     point["kind"] = "imported"
                 points.append(point)
                 by_name[target_name] = point
                 if name == "add_custom_target":
-                    # The COMMAND of a custom target may run another build system: a literal drive,
-                    # recorded at the COMMAND's own line.
                     drives.extend(_invocation_drives(_cmake_commands(body), base, root, path, line, inventory, condition))
                 continue
             if name == "add_custom_command":
                 drives.extend(_invocation_drives(_cmake_commands(body), base, root, path, line, inventory, condition))
                 unresolved.append({"evidence": evidence, "reason": "add_custom_command is a dynamic construct"})
                 continue
-            if name == "target_sources" and len(args) >= 2 and args[0] in by_name:
-                point = by_name[args[0]]
+            if name == "target_sources" and len(args) >= 2 and _resolve_target(args[0]) in by_name:
+                point = by_name[_resolve_target(args[0])]
                 point["sources"] = sorted(set(point["sources"]) | set(
                     _cmake_sources(base, args[1:], variables, inventory, unresolved, evidence)))
                 continue
-            if name == "target_include_directories" and len(args) >= 2 and args[0] in by_name:
-                point = by_name[args[0]]
+            if name == "target_include_directories" and len(args) >= 2 and _resolve_target(args[0]) in by_name:
+                real_tname = _resolve_target(args[0])
+                point = by_name[real_tname]
                 vis = "INTERFACE" if point["kind"] == "interface_library" else "PRIVATE"
                 own_dirs: set[str] = set(point["include_dirs"])
-                pub_dirs = exported_includes.setdefault(args[0], set())
+                pub_dirs = exported_includes.setdefault(real_tname, set())
                 for a in args[1:]:
                     up = a.upper()
                     if up in {"PUBLIC", "PRIVATE", "INTERFACE"}:
@@ -459,17 +501,19 @@ def cmake_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
                         continue
                     if up in {"SYSTEM", "BEFORE", "AFTER"}:
                         continue
-                    resolved_dir = _cmake_dir(base, root, a)
-                    if resolved_dir:
-                        if vis in {"PRIVATE", "PUBLIC"} or point["kind"] == "interface_library":
-                            own_dirs.add(resolved_dir)
-                        if vis in {"PUBLIC", "INTERFACE"}:
-                            pub_dirs.add(resolved_dir)
+                    for candidate_dir in _unwrap_cmake_include_arg(a):
+                        resolved_dir = _cmake_dir(base, root, candidate_dir)
+                        if resolved_dir:
+                            if vis in {"PRIVATE", "PUBLIC"} or point["kind"] == "interface_library":
+                                own_dirs.add(resolved_dir)
+                            if vis in {"PUBLIC", "INTERFACE"}:
+                                pub_dirs.add(resolved_dir)
                 point["include_dirs"] = sorted(own_dirs)
                 continue
-            if name == "target_link_libraries" and len(args) >= 2 and args[0] in by_name:
+            if name == "target_link_libraries" and len(args) >= 2 and _resolve_target(args[0]) in by_name:
+                real_tname = _resolve_target(args[0])
                 vis = "PUBLIC"
-                edges = link_edges.setdefault(args[0], [])
+                edges = link_edges.setdefault(real_tname, [])
                 for a in args[1:]:
                     up = a.upper()
                     if up in {"PUBLIC", "PRIVATE", "INTERFACE"}:
@@ -486,28 +530,37 @@ def cmake_build_points(root: str, descriptors: Mapping[str, str], inventory: Seq
                 variables.setdefault("PROJECT_NAME", [args[0]])
             if name in {"execute_process", "configure_file"}:
                 unresolved.append({"evidence": evidence, "reason": f"{name} is a dynamic construct"})
-    for point in points:
-        point["headers"] = _headers_under(point["include_dirs"], inventory) if point["include_dirs"] else []
     changed = True
     while changed:
         changed = False
         for tname, edges in link_edges.items():
-            pub = exported_includes.setdefault(tname, set())
+            real_tname = _resolve_target(tname)
+            pub = exported_includes.setdefault(real_tname, set())
             for vis, dep in edges:
-                if vis in {"PUBLIC", "INTERFACE"} and dep in exported_includes:
+                real_dep = _resolve_target(dep)
+                if vis in {"PUBLIC", "INTERFACE"} and real_dep in exported_includes:
                     before_len = len(pub)
-                    pub.update(exported_includes[dep])
+                    pub.update(exported_includes[real_dep])
                     if len(pub) != before_len:
                         changed = True
     for tname, edges in link_edges.items():
-        point = by_name.get(tname)
+        real_tname = _resolve_target(tname)
+        point = by_name.get(real_tname)
         if point is None:
             continue
         inherited: set[str] = set(point["include_dirs"])
         for vis, dep in edges:
-            if (vis in {"PRIVATE", "PUBLIC"} or point["kind"] == "interface_library") and dep in exported_includes:
-                inherited.update(exported_includes[dep])
+            real_dep = _resolve_target(dep)
+            if (vis in {"PRIVATE", "PUBLIC"} or point["kind"] == "interface_library") and real_dep in exported_includes:
+                inherited.update(exported_includes[real_dep])
         point["include_dirs"] = sorted(inherited)
+    for alias_name, target_ref in aliases.items():
+        alias_point = by_name.get(alias_name)
+        real_point = by_name.get(_resolve_target(target_ref))
+        if alias_point is not None and real_point is not None:
+            alias_point["include_dirs"] = list(real_point["include_dirs"])
+    for point in points:
+        point["headers"] = _headers_under(point["include_dirs"], inventory) if point["include_dirs"] else []
     return {"build_points": points, "drives": drives, "includes": sorted(set(includes)), "unresolved": unresolved}
 
 

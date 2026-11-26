@@ -43,7 +43,7 @@ DATASETS = (
     protected("cpp_case_material", "prepare", "compiled", "application/octet-stream",
               "Materialized sources and build trees, compile and link databases, AST dumps, LLVM IR, "
               "binary records, Infer results and raw streams.",
-              artifacts=("data/cpp/projects/**", "data/cpp/attempts/*/projects/**",),
+              artifacts=("data/cpp/attempts/*/projects/**",),
               reason="exact compile arguments, bulky AST and IR dumps and raw tool output; bounded "
                      "source-mapped facts are indexed"),
 )

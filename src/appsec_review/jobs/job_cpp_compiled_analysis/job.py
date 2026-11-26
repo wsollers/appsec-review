@@ -43,7 +43,7 @@ AST_ENTITY_KINDS = AST_CALLABLE_KINDS | {"VarDecl", "RecordDecl", "CallExpr", "D
 BRANCH_IDENTITY = {"compiled": "cpp-compiled-index/4", "ast": "clang-ast/7",
                    "ir": "llvm-ir/4",
                    "infer": "infer-cpp-adapter/3",
-                   "binary": "elf-symbols/3"}
+                   "binary": "elf-symbols/4"}
 INFER_MEMORY_LIMIT = "4g"
 # 192 Mi words * 8 bytes/word = 1.5 GiB on 64-bit Linux, leaving 2.5 GiB inside the 4g cgroup
 # for single-instruction allocation spikes, SQLite WAL, OCaml runtime pools, and Clang capture.
@@ -58,13 +58,7 @@ def _project_key(root: PurePosixPath) -> str:
 
 
 def _case_root(unit: UnitContext, case_id: str) -> Path:
-    attempt_root = unit.job.run_root / "data" / "cpp" / "attempts" / unit.job.attempt_id / "projects" / case_id
-    if attempt_root.exists():
-        return attempt_root
-    legacy_root = unit.job.run_root / "data" / "cpp" / "projects" / case_id
-    if legacy_root.exists():
-        return legacy_root
-    return attempt_root
+    return unit.job.run_root / "data" / "cpp" / "attempts" / unit.job.attempt_id / "projects" / case_id
 
 
 def _artifact(run_root: Path, path: Path) -> dict[str, Any]:
@@ -751,7 +745,7 @@ def _new_builder(unit: UnitContext, name: str, case_id: str, branch: str,
     fingerprint = index_fingerprint(name=name, target_snapshot=scope_snapshot,
         producer_artifacts=[*artifacts, *evidence], tool_identity=tool,
         parser_identity=BRANCH_IDENTITY[branch],
-        normalizer_identity=f"cpp-{branch}-normalizer/4", mapping_identity="cpp-source-mapping/4")
+        normalizer_identity=f"cpp-{branch}-normalizer/5", mapping_identity="cpp-source-mapping/4")
     shard = f"cpp-{case_id}-{branch}"
     physical_shard = hashlib.sha256(shard.encode()).hexdigest()[:16]
     job_id = getattr(unit.job.config, "job_id", None) or getattr(unit.job, "job_id", "job_cpp_compiled_analysis")
@@ -1496,20 +1490,28 @@ def _binary_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], e
         gaps.append(f"binary inspection exited with status {execution['exit_code']}")
     expected = {item["path"]: item for item in catalog.get("outputs", ())}
     observed = set()
-    if len(records) > 4096:
+    filtered_records = [
+        record for record in records
+        if not (
+            isinstance(record.get("path"), str)
+            and record["path"] not in expected
+            and bookkeeping_reason(record["path"]) is not None
+        )
+    ]
+    if len(filtered_records) > 4096:
         gaps.append("binary record set truncated at 4096 artifacts")
     builder, path, fingerprint, shard = _new_builder(unit, "compiled", case_id, "binary",
         [execution["execution"], catalog["artifact_catalog"]], gaps,
         {"tool": "binutils-2.42", "image": execution["image_id"]}, catalog["mapping"]["case_snapshot"])
     symbols = 0
     seen_entities: set[str] = set()
-    for record_index, record in enumerate(records[:4096]):
+    for record_index, record in enumerate(filtered_records[:4096]):
         if (not isinstance(record.get("path"), str) or not isinstance(record.get("sha256"), str)
                 or not isinstance(record.get("symbols"), list) or
                 any(not isinstance(line, str) for line in record["symbols"])):
+            from appsec_review.runtime import execution_safety as safety
+            safety.fail("binary record has an invalid artifact or symbol shape", action="cpp.binary")
             gaps.append(f"binary record {record_index} has an invalid artifact or symbol shape")
-            continue
-        if record["path"] not in expected and bookkeeping_reason(record["path"]) is not None:
             continue
         if expected and (record["path"] not in expected or
                          record["sha256"] != expected[record["path"]]["sha256"]):
@@ -1517,18 +1519,33 @@ def _binary_index(unit: UnitContext, case_id: str, catalog: Mapping[str, Any], e
             continue
         observed.add(record["path"])
         tools = record.get("tools")
-        if "tools" in record or execution.get("exit_code") != 0 or not isinstance(record.get("metadata"), str):
+        record_failed = False
+        if not isinstance(record.get("metadata"), str):
+            gaps.append(f"{record['path']}: metadata unavailable")
+            record_failed = True
+        if not isinstance(tools, Mapping):
+            gaps.append(f"{record['path']}: tool receipts unavailable")
+            record_failed = True
+        else:
             for tool in ("nm", "readelf"):
-                receipt = tools.get(tool) if isinstance(tools, Mapping) else None
+                receipt = tools.get(tool)
                 if not isinstance(receipt, Mapping):
                     gaps.append(f"{record['path']}: {tool} outcome unavailable")
+                    record_failed = True
                     continue
                 if type(receipt.get("exit_code")) is not int or receipt["exit_code"] != 0 or receipt.get("timeout"):
                     gaps.append(f"{record['path']}: {tool} failed with exit {receipt.get('exit_code')}: "
                                 f"{str(receipt.get('stderr', ''))[:512]}")
+                    record_failed = True
                 if receipt.get("output_truncated") or receipt.get("stderr_truncated"):
                     gaps.append(f"{record['path']}: {tool} output truncated")
-        if len(record["symbols"]) > 10000:
+        if record_failed:
+            from appsec_review.runtime import execution_safety as safety
+            safety.fail(f"binary tool receipt missing or failed for {record['path']}", action="cpp.binary")
+            continue
+        nm_receipt = tools["nm"]
+        if (len(record["symbols"]) >= 10000 or bool(record.get("symbols_truncated"))
+                or bool(nm_receipt.get("output_truncated"))):
             gaps.append(f"{record['path']}: symbols truncated at 10000")
         kind = {"object": EntityKind.OBJECT_FILE, "library": EntityKind.LIBRARY,
                 "executable": EntityKind.EXECUTABLE}.get(record.get("kind"), EntityKind.EVIDENCE_ARTIFACT)

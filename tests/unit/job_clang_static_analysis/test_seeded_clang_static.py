@@ -27,8 +27,11 @@ def _hood(staged, executor=None):
     """The neighborhood the seeded IR job publishes for the same project (the real handler, recorded IR)."""
     from appsec_review.jobs.job_cpp_compiled_analysis import build_job
 
+    import shutil
     ir_executor = executor or sc.FixtureExecutor(staged.run_root)
     unit = staged.unit("ir.projects", {"catalog.projects": {"projects": {sc.CASE: staged.cataloged}}})
+    attempt_case = staged.run_root / "data" / "cpp" / "attempts" / unit.job.attempt_id / "projects" / sc.CASE
+    shutil.copytree(staged.case_root, attempt_case, dirs_exist_ok=True)
     ir = next(item for item in build_job(executor_factory=lambda _u: ir_executor).units
               if item.unit_id == "ir.projects").handler(unit)
     return {"result": {"outputs": {"ir.projects": ir}}}

@@ -1127,3 +1127,26 @@ def test_native_recipe_validation_rejects_gcc_and_unnormalized_compiler_override
     recipe = {**_recipe(unit), **overrides}
     errors = validate_build_recipe(recipe, unit)
     assert any(expected_fragment in error for error in errors), errors
+
+
+def test_cmake_compiler_env_and_build_tool_cc_overrides_are_rejected_and_normalized() -> None:
+    unit = discover_build_units([_file("native/CMakeLists.txt")])[0]
+    raw_recipe = {
+        **_recipe(unit),
+        "environment": {"CMAKE_C_COMPILER": "gcc", "CMAKE_CXX_COMPILER": "g++", "EXTRA_FLAG": "1"},
+        "build_commands": [
+            ["cmake", "--build", "build", "--", "CC=gcc", "CXX=g++"],
+            ["ninja", "-C", "build", "CC=gcc"],
+        ],
+    }
+    errors = validate_build_recipe(raw_recipe, unit)
+    assert any("CMAKE_C_COMPILER" in err for err in errors)
+    assert any("overrides the image-provided C/C++ compiler" in err for err in errors)
+
+    normalized = normalize_build_recipe(raw_recipe, unit)
+    assert normalized["environment"] == {"EXTRA_FLAG": "1"}
+    assert normalized["build_commands"] == [
+        ["cmake", "--build", "build"],
+        ["ninja", "-C", "build"],
+    ]
+    assert validate_build_recipe(normalized, unit) == []
