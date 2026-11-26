@@ -113,13 +113,23 @@ def _validate(context, _result) -> None:
     job_dispositions(context.config.settings)
 
 
-def verify_catalog_pin(run_root: Path, current: Catalog, scopes: list[Mapping[str, Any]]) -> None:
+def verify_catalog_pin(
+    run_root: Path,
+    current: Catalog,
+    scopes: list[Mapping[str, Any]],
+    *,
+    resolved_config_sha256: str | None = None,
+) -> None:
     """Bind the operator declaration, never fingerprint the supplied catalog."""
     exported = sorted({str(scope["language"]) for scope in scopes if scope["export_status"] == s.SUCCEEDED})
     if not exported:
         return
     try:
-        document = run_configuration(run_root)
+        document = (
+            run_configuration(run_root)
+            if resolved_config_sha256 is None
+            else run_configuration(run_root, resolved_config_sha256)
+        )
     except RunConfigurationError as error:
         raise IntegrityError(str(error)) from error
     if document is None:
@@ -154,7 +164,7 @@ def build_job(*, catalog_path: Path | None = None) -> Job:
         manifest, _ = load_verified_manifest(run_root, manifest_path, manifest_sha)
         shard_set = ShardSet(run_root, manifest["indexes"])
         current = catalog(unit)
-        verify_catalog_pin(run_root, current, codeql["scopes"])
+        verify_catalog_pin(run_root, current, codeql["scopes"], resolved_config_sha256=getattr(unit.job, "resolved_config_sha256", None))
         releases = unit.job.review_policy.releases
         columns = releases.values.get("graph_columns", "undeclared")
         tool_version = s.codeql_version(run_root)

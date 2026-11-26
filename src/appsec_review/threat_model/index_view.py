@@ -161,12 +161,14 @@ class IndexEvidenceView:
     """
 
     def __init__(self, run_root: Path, upstream_handoffs: Mapping[str, str] | None = None, *,
-                 inputs: Iterable[tuple[str, str]] = DECLARED_INPUTS) -> None:
+                 inputs: Iterable[tuple[str, str]] = DECLARED_INPUTS,
+                 resolved_config_sha256: str | None = None) -> None:
         self.run_root = Path(run_root).resolve()
         self._pins = None if upstream_handoffs is None else dict(upstream_handoffs)
         self._inputs = frozenset((str(producer), str(output_kind)) for producer, output_kind in inputs)
         self._producers: dict[str, _Producer | None] = {}
         self._disabled_jobs: frozenset[str] | None = None
+        self._resolved_config_sha256 = resolved_config_sha256
 
     # -- admission -------------------------------------------------------------------------------
 
@@ -205,11 +207,21 @@ class IndexEvidenceView:
         return found
 
     def _disabled(self, producer: str) -> bool:
-        """Whether the run's frozen resolved configuration disables ``producer`` (unknown is ``False``)."""
+        """Whether the attempt/run's resolved configuration disables ``producer`` (unknown is ``False``)."""
         if self._disabled_jobs is None:
             disabled = set()
             try:
-                document = json.loads(safe_path(self.run_root, "data/configuration/resolved.json").read_bytes())
+                from appsec_review.graph.settings import _active_config_sha256
+                from appsec_review.storage import file_sha256
+                target_sha = _active_config_sha256(self.run_root, self._resolved_config_sha256)
+                base_resolved = safe_path(self.run_root, "data/configuration/resolved.json")
+                if isinstance(target_sha, str) and target_sha and (
+                    not base_resolved.is_file() or file_sha256(base_resolved) != target_sha
+                ):
+                    from appsec_review.runtime.configuration import configuration_snapshot
+                    document = configuration_snapshot(self.run_root, target_sha).document
+                else:
+                    document = json.loads(base_resolved.read_bytes())
                 jobs = document["jobs"]
                 for name, value in jobs.items():
                     try:

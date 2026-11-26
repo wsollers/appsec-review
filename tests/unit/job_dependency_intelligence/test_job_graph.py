@@ -175,7 +175,7 @@ def _make_job_context(
             "resolved_config_sha256": resolved_sha,
             "orchestration": {"system": "cli"},
             "dataset_contract": dataset_contract(
-                JOB_ID, sorted({d.step for d in DATASETS}), DATASETS, job_contract=CONTRACT.document()
+                JOB_ID, sorted(TOPOLOGY.keys()), DATASETS, job_contract=CONTRACT.document()
             ),
         },
     )
@@ -521,33 +521,15 @@ def test_full_job_unit_graph_executes_and_validates_publication(tmp_path: Path) 
     assert accepted["sbom"]["status"] in {"SUCCEEDED", "COMPLETED_WITH_GAPS"}
     assert any(g.get("response_artifact") for g in accepted["gaps"] if isinstance(g, dict))
 
-    # Second execution hits the local Scorecard cache populated on the first execution!
-    ctx2, run_root2, _ = _make_job_context(
-        tmp_path / "run2",
-        target_root=target,
-        cache_root=ctx_no_native_inf.repository_root / ctx_no_native_inf.config.settings["scorecard"]["cache_root"],
-    )
-    ctx2 = replace(
-        ctx2,
-        config=replace(
-            ctx2.config,
-            settings={**ctx2.config.settings, "native_inference": {**ctx2.config.settings["native_inference"], "enabled": False}},
-        ),
-    )
-    _seed_upstreams(
-        run_root2,
-        target,
-        declared_dependencies=[
-            {"name": "requests", "version": "2.31.0", "ecosystem": "pypi",
-             "repository_url": "https://github.com/psf/requests", "path": "requirements.txt"},
-        ],
-    )
-    with _owner_scope(ctx2):
-        result2 = job.handler(ctx2)
-    assert result2["outputs"]["scorecards.fetch"]["cache_hit_count"] >= 1
+    assert result["outputs"]["scorecards.fetch"]["cache_hit_count"] == 0
+    assert not (ctx_no_native_inf.attempt_root / "steps/scorecards/tasks/fetch/scorecard-cache").exists()
 
 
-def test_scorecard_cache_invalidation_and_write_failure_in_job_step(tmp_path: Path, monkeypatch) -> None:
+def test_scorecards_fetch_writes_no_unaccounted_files_in_inventory(tmp_path: Path, monkeypatch) -> None:
+    from appsec_review.indexing.inventory import InventoryInputs, build_inventory
+    from appsec_review.jobs.job_dependency_intelligence.scorecard import ScorecardClient
+    from appsec_review.runtime.datasets import DatasetDeclaration, artifact_only
+
     target = tmp_path / "target"
     ctx, run_root, _ = _make_job_context(tmp_path, target_root=target)
     ctx = replace(
@@ -567,20 +549,66 @@ def test_scorecard_cache_invalidation_and_write_failure_in_job_step(tmp_path: Pa
         ],
         source_syft=False,
     )
-    payload = json.dumps({"score": 7.5, "checks": []}).encode("utf-8")
+    payload = json.dumps({
+        "date": "2026-10-28",
+        "repo": {"name": "github.com/psf/requests", "commit": "a" * 40},
+        "scorecard": {"version": "5.0.0", "commit": "b" * 40},
+        "score": 7.5,
+        "checks": [{"name": "Maintained", "score": 10, "reason": "active"}],
+    }).encode("utf-8")
     monkeypatch.setattr(
-        "appsec_review.jobs.job_dependency_intelligence.scorecard.ScorecardCache.load",
-        lambda self, repo: (_ for _ in ()).throw(ScorecardCacheError("corrupt pointer")),
+        ScorecardClient,
+        "fetch",
+        lambda self, repository: self.normalize(repository, payload),
     )
-    monkeypatch.setattr(
-        "appsec_review.jobs.job_dependency_intelligence.scorecard.ScorecardCache.store",
-        lambda self, repo, raw: (_ for _ in ()).throw(ScorecardCacheError("disk full")),
-    )
-    job = build_job(scorecard_transport=lambda *_a, **_kw: HttpResponse(200, payload, {}))
+    job = build_job()
     with _owner_scope(ctx):
         result = job.handler(ctx)
-    kinds = {g["kind"] for g in result["outputs"]["scorecards.fetch"]["gaps"]}
-    assert {"scorecard_cache_invalid", "scorecard_cache_write_failure"} <= kinds
+    _publish_result_as_handoff(ctx, result)
+
+    fetch_out = result["outputs"]["scorecards.fetch"]
+    assert fetch_out["terminal_status"] == "SUCCEEDED"
+    assert fetch_out["cache_hit_count"] == 0
+    assert len(fetch_out["records"]) == 1
+    assert fetch_out["records"][0]["cache"] == {"status": "disabled"}
+    fetch_dir = ctx.attempt_root / "steps" / "scorecards" / "tasks" / "fetch"
+    assert not (fetch_dir / "scorecard-cache").exists()
+    assert list((fetch_dir / "artifacts" / "scorecards").glob("*.json"))
+
+    upstream_jobs = (
+        "job_target_catalog", "job_language_build", "job_artifact_indexing",
+        "job_evidence_collection", "job_artifact_security_analysis",
+    )
+    file_declarations: dict[str, tuple[DatasetDeclaration, ...]] = {
+        JOB_ID: DATASETS,
+        "job_fixture_upstreams": (
+            artifact_only(
+                "synthetic_upstream_fixtures",
+                "work",
+                "inventory",
+                "appsec-review/fixture/1",
+                "Synthetic upstream test fixtures.",
+                artifacts=("data/native-sbom-fixtures/**", "data/indices/*.json"),
+                reason="synthetic_upstream_fixture",
+            ),
+        ),
+    }
+    file_job_steps: dict[str, tuple[str, ...]] = {
+        JOB_ID: tuple(TOPOLOGY.keys()),
+        "job_fixture_upstreams": ("work",),
+    }
+    for up_job in upstream_jobs:
+        up_ds = import_module(f"appsec_review.jobs.{up_job}.datasets").DATASETS
+        file_declarations[up_job] = up_ds
+        file_job_steps[up_job] = tuple(sorted({d.step for d in up_ds}))
+
+    report = build_inventory(InventoryInputs(
+        run_root, run_root.name, SNAPSHOT, {}, {}, {}, {}, {}, [],
+        file_job_steps=file_job_steps, file_declarations=file_declarations,
+    ))
+    unaccounted = [v for v in report["audit"]["violations"] if v["code"] == "unaccounted_file"]
+    assert unaccounted == [], unaccounted
+    assert report["run_tree"]["unaccounted_count"] == 0
 
 
 def test_validate_config_rejects_invalid_settings(tmp_path: Path) -> None:

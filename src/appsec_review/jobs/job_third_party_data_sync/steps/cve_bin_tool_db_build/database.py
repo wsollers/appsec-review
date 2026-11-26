@@ -358,9 +358,23 @@ def publish(settings: CveBinToolSettings, built: Mapping[str, Any]) -> dict[str,
 SNAPSHOT_SCHEMA = "appsec-review/cve-bin-tool-snapshot/1"
 
 
-def consumer_settings(repository_root: Path, run_root: Path) -> CveBinToolSettings:
-    """The database builder's settings as the run froze them, for a scanning consumer of the feed."""
-    document = json.loads((run_root / "data/configuration/resolved.json").read_bytes())
+def consumer_settings(
+    repository_root: Path,
+    run_root: Path,
+    *,
+    resolved_config_sha256: str | None = None,
+) -> CveBinToolSettings:
+    from appsec_review.graph.settings import _active_config_sha256
+    from appsec_review.storage import file_sha256
+    target_sha = _active_config_sha256(run_root, resolved_config_sha256)
+    base_resolved = run_root / "data/configuration/resolved.json"
+    if isinstance(target_sha, str) and target_sha and (
+        not base_resolved.is_file() or file_sha256(base_resolved) != target_sha
+    ):
+        from appsec_review.runtime.configuration import configuration_snapshot
+        document = configuration_snapshot(run_root, target_sha).document
+    else:
+        document = json.loads(base_resolved.read_bytes())
     values = document["jobs"]["job_third_party_data_sync"]["steps"]["cve_bin_tool_db_build"]["settings"]
     return CveBinToolSettings.from_mapping(repository_root, values)
 

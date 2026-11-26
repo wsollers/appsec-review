@@ -79,10 +79,24 @@ def build_job(*, runner: Runner | None = None) -> Job:
             raise FileNotFoundError(f"image pin verification requires {CATALOG.as_posix()}")
         catalog_bytes = catalog_path.read_bytes()
         images = tomllib.loads(catalog_bytes.decode("utf-8")).get("images", [])
-        frozen = unit.job.run_root / "data" / "configuration" / "resolved.json"
+        from appsec_review.graph.settings import _active_config_sha256
+        config_sha = _active_config_sha256(unit.job.run_root, getattr(unit.job, "resolved_config_sha256", None))
+        base_config_dir = unit.job.run_root / "data" / "configuration"
+        base_frozen = base_config_dir / "resolved.json"
+        if isinstance(config_sha, str) and config_sha and (
+            not base_frozen.is_file()
+            or hashlib.sha256(base_frozen.read_bytes()).hexdigest() != config_sha
+            or (base_config_dir / "manifest.json").is_file()
+        ):
+            from appsec_review.runtime.configuration import configuration_snapshot
+            snapshot = configuration_snapshot(unit.job.run_root, config_sha)
+            frozen = snapshot.directory / "resolved.json"
+        else:
+            frozen = base_frozen
         frozen_bytes = frozen.read_bytes()
         resolved = json.loads(frozen_bytes)
-        host_path = frozen.parent / "host-pins.toml"
+        candidate_host = frozen.parent / "host-pins.toml"
+        host_path = candidate_host if candidate_host.is_file() else base_config_dir / "host-pins.toml"
         host_bytes = host_path.read_bytes()
         host_record = resolved.get("configuration_host_pins", {})
         if (host_record.get("sha256") != hashlib.sha256(host_bytes).hexdigest()

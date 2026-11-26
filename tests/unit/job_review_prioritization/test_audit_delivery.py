@@ -142,43 +142,36 @@ def test_omitted_imports_qualify_shared_coupling(mode: str) -> None:
     assert value["instability"] is None
 
 
-@pytest.mark.parametrize("damage", ["shard", "checkpoint", "missing-checkpoint"])
-def test_cached_priority_keeps_local_gaps_and_rejects_tamper(tmp_path: Path, monkeypatch, damage: str) -> None:
+def test_whole_job_retry_builds_attempt_isolated_priority_shard_and_preserves_local_gaps(tmp_path: Path) -> None:
     run, target, snapshot, pins = _seed_upstream_run(tmp_path, golden_paths=tuple(sorted(GOLDEN["files"])))
-    ctx = _job_context(tmp_path, run, target, snapshot, pins, settings_override={
+    settings_override = {
         "sources": _sources(),
         "index": {**BASE_CONFIG.job(JOB_ID).settings["index"],
-                  "file_top_count": 2, "function_top_count": 1, "max_graph_neighbors": 1}})
+                  "file_top_count": 2, "function_top_count": 1, "max_graph_neighbors": 1},
+    }
+    ctx1 = _job_context(tmp_path / "a1", run, target, snapshot, pins, settings_override=settings_override)
     job = build_job()
-    first = job.execute(ctx)["outputs"]["publish.index_priority"]
+    first = job.execute(ctx1)["outputs"]["publish.index_priority"]
     assert "dependency_graph_context_bound_reached" in first["gaps"]
-    with monkeypatch.context() as patch:
-        patch.setattr(IndexBuilder, "build", lambda _: pytest.fail("a checkpointed shard must be reused"))
-        second = job.execute(ctx)["outputs"]["publish.index_priority"]
+    rel1 = first["index_identity"]["relative_path"]
+    assert "attempts/job_review_prioritization/attempt_0001/" in rel1
+
+    (run / rel1).write_bytes(b"corrupt-attempt-1-shard")
+    ctx2_base = _job_context(tmp_path / "a2", run, target, snapshot, pins, settings_override=settings_override)
+    attempt2_root = run / "data/jobs" / JOB_ID / "attempts/attempt_0002"
+    attempt2_root.mkdir(parents=True, exist_ok=True)
+    ctx2_base.attempt_id = "attempt_0002"
+    ctx2_base.attempt_root = attempt2_root
+    ctx2 = ctx2_base
+    second_res = job.execute(ctx2)
+    assert second_res["status"] == "COMPLETED_WITH_GAPS"
+    second = second_res["outputs"]["publish.index_priority"]
+    rel2 = second["index_identity"]["relative_path"]
+    assert "attempts/job_review_prioritization/attempt_0002/" in rel2
+    assert rel2 != rel1
     assert second["gaps"] == first["gaps"]
     assert second["aggregated_gaps"] == first["aggregated_gaps"]
-    assert second["index_identity"] == first["index_identity"]
-    checkpoint_path = run / first["checkpoint"]["path"]
-    if damage == "shard":
-        shard = run / first["index_identity"]["relative_path"]
-        with shard.open("ab") as stream:
-            stream.write(b"tampered")
-    elif damage == "checkpoint":
-        checkpoint = json.loads(checkpoint_path.read_text())
-        checkpoint["gaps"] = []
-        atomic_json(checkpoint_path, checkpoint)
-    else:
-        checkpoint_path.unlink()
-        recovered = job.execute(ctx)["outputs"]["publish.index_priority"]
-        assert recovered["index_identity"] == first["index_identity"]
-        assert recovered["gaps"] == first["gaps"]
-        assert recovered["checkpoint"] == first["checkpoint"]
-        return
-    rejected = job.execute(ctx)
-    assert rejected["status"] == "FAILED"
-    assert rejected["failed_units"] == ["publish.index_priority"]
-    assert "differ" in rejected["units"]["publish.index_priority"]["error"]["message"]
-    assert "publish.publish_handoff" not in rejected["outputs"]
+    assert (run / second["shard_artifact"]["path"]).is_file()
 
 
 def test_suppression_only_bound_preserves_count_and_names_loss(tmp_path: Path) -> None:

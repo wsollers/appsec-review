@@ -942,3 +942,55 @@ def test_historical_attempt_scratch_and_debug_symbol_script_are_claimed_narrowly
 
     assert tree.claim_errors == []
     assert tree.unaccounted == sorted(unclaimed_paths)
+
+
+def test_config_snapshot_consumers_resolve_operational_revision(tmp_path: Path) -> None:
+    from appsec_review.config.loader import load_config
+    from appsec_review.graph.settings import run_configuration, run_graph_settings
+    from appsec_review.jobs.job_review_data_indexing.job import _resolved_document, _resolved_steps
+    from appsec_review.jobs.job_third_party_data_sync.steps.grype_db_sync.feed import (
+        consumer_settings as grype_consumer_settings,
+    )
+    from appsec_review.runtime.configuration import (
+        configurations_compatible,
+        persist_configuration_revision,
+    )
+    from appsec_review.runtime.runner import JobRunner
+    from appsec_review.threat_model.index_view import IndexEvidenceView
+
+    repo_root = Path(__file__).resolve().parents[1]
+    base_bytes = (repo_root / "appsec-review.toml").read_text(encoding="utf-8")
+    base_cfg_path = tmp_path / "base.toml"
+    base_cfg_path.write_text(base_bytes, encoding="utf-8")
+    base_cfg = load_config(base_cfg_path)
+    run_root = tmp_path / "runs" / "run-rev"
+    JobRunner(base_cfg)._bind_configuration(run_root)
+
+    # Operational timeout + graph revision persisted under data/configuration/revisions/<sha>
+    tuned_text = base_bytes.replace("export_timeout_seconds = 1800", "export_timeout_seconds = 2400", 1)
+    assert tuned_text != base_bytes
+    tuned_cfg_path = tmp_path / "tuned.toml"
+    tuned_cfg_path.write_text(tuned_text, encoding="utf-8")
+    tuned_cfg = load_config(tuned_cfg_path)
+    rev_sha = tuned_cfg.resolved_sha256
+    assert rev_sha != base_cfg.resolved_sha256
+    persist_configuration_revision(tuned_cfg, run_root)
+
+    base_doc = run_configuration(run_root)
+    rev_doc_loaded = run_configuration(run_root, rev_sha)
+    assert base_doc is not None and rev_doc_loaded is not None
+    assert configurations_compatible(run_root, base_cfg.resolved_sha256, rev_sha)
+
+    # Base fallback vs operational revision resolution
+    assert run_graph_settings(run_root).export_timeout_seconds == 1800
+    assert run_graph_settings(run_root, rev_sha).export_timeout_seconds == 2400
+
+    rev_doc = _resolved_document(run_root, rev_sha)
+    assert rev_doc["jobs"]["job_code_graph_index"]["settings"]["graph"]["export_timeout_seconds"] == 2400
+    assert "job_code_graph_index" in _resolved_steps(run_root, expected_sha256=rev_sha)
+
+    grype_settings = grype_consumer_settings(repo_root, run_root, resolved_config_sha256=rev_sha)
+    assert grype_settings is not None
+
+    view = IndexEvidenceView(run_root, resolved_config_sha256=rev_sha)
+    assert view._disabled("job_code_graph_index") is False

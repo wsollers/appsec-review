@@ -840,13 +840,24 @@ def test_analyze_index_publish_and_multi_source_pipeline(tmp_path: Path, monkeyp
     u_idx = step_unit("publish.index_change_context", outputs_so_far)
     idx_out = handler(u_idx)(u_idx)
     assert idx_out["index_identity"]["shard_id"] == "change-context"
-    # Second call reuses existing content-addressed sqlite file AND filters prior PRODUCER entry from upstream manifest
+    # Second attempt builds an attempt-isolated sqlite shard AND filters prior PRODUCER entry from upstream manifest
     produced_manifest = u_cs.job.run_root / "data/indices/manifests/upstream2.json"
     produced_manifest.write_bytes((u_cs.job.run_root / idx_out["manifest"]["path"]).read_bytes())
     prod_sha = file_sha256(produced_manifest)
     monkeypatch.setattr(job, "resolve_context_manifest", lambda _ctx: (produced_manifest, prod_sha))
-    idx_reused = handler(u_idx)(u_idx)
-    assert idx_reused["index_identity"] == idx_out["index_identity"]
+    u_idx_a2 = replace(
+        u_idx,
+        job=replace(
+            u_idx.job,
+            attempt_id="attempt_0002",
+            attempt_root=u_idx.job.run_root / f"data/jobs/{job.PRODUCER}/attempts/attempt_0002",
+        ),
+    )
+    idx_a2 = handler(u_idx_a2)(u_idx_a2)
+    assert idx_a2["index_identity"]["sha256"] == idx_out["index_identity"]["sha256"]
+    assert "attempts/job_change_context_analysis/attempt_0001/" in idx_out["index_identity"]["relative_path"]
+    assert "attempts/job_change_context_analysis/attempt_0002/" in idx_a2["index_identity"]["relative_path"]
+    assert idx_a2["index_identity"]["relative_path"] != idx_out["index_identity"]["relative_path"]
     monkeypatch.setattr(job, "resolve_context_manifest", lambda _ctx: (upstream_manifest, up_sha))
 
     outputs_so_far["publish.index_change_context"] = idx_out

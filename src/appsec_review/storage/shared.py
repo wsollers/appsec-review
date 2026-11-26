@@ -715,6 +715,13 @@ class SharedArtifacts:
                 self._named_refs[(namespace, fingerprint)] = dict(hit[1])
             return hit[1]
         claim = self._claim()
+        if claim.get("recovery_boundary") == "whole_job" and binding.exists():
+            for _, value in self._requests(namespace, fingerprint):
+                actor = value.get("actor", {})
+                if (actor.get("job_id") == self.actor["job_id"]
+                        and actor.get("attempt_id") != self.actor["attempt_id"]
+                        and value.get("object") == obj):
+                    return dict(obj)
         if (claim.get("repair_admission_sha256")
                 and safe_path(self.run_root, f"{REQUESTS}/{namespace}/{fingerprint}").exists()):
             raise ValueError("repair cannot relabel an unresolved or incompatible named computation as legacy; "
