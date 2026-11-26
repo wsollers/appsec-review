@@ -213,7 +213,7 @@ def test_local_schemas_reject_unknown_fields_counts_and_empty_success() -> None:
         changed["extra"] = "not accepted"
         assert list(schema_validator(f"{name}.schema.json").iter_errors(changed))
     result = c.json_body(bundle.result)
-    result["statement_count"] = 10001
+    result["statement_count"] = c.MAX_PACKAGES + 1
     assert list(schema_validator("result.schema.json").iter_errors(result))
     result["statement_count"] = 0
     assert list(schema_validator("result.schema.json").iter_errors(result))

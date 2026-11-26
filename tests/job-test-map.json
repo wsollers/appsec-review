@@ -2,7 +2,9 @@
   "schema": "appsec-review/job-test-map/2",
   "jobs": {
     "job_cbmc_analysis": {
-      "unit": ["tests/unit/job_cbmc_analysis/test_cbmc_analysis.py"],
+      "unit": [
+        "tests/unit/job_cbmc_analysis/test_cbmc_analysis.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []
@@ -51,7 +53,9 @@
         "tests/integration/test_installer_record_scans.py",
         "tests/integration/job_artifact_indexing/test_artifact_input_contracts.py"
       ],
-      "acceptance": ["tests/acceptance/test_dependency_output_bounds.py::test_blint_reviews_production_dependency_binaries_but_not_build_only_ones"],
+      "acceptance": [
+        "tests/acceptance/test_dependency_output_bounds.py::test_blint_reviews_production_dependency_binaries_but_not_build_only_ones"
+      ],
       "live": []
     },
     "job_binary_evidence_indexing": {
@@ -114,9 +118,12 @@
         "tests/unit/job_change_context_analysis/test_metrics.py",
         "tests/unit/job_change_context_analysis/test_settings_and_sources.py",
         "tests/unit/runtime/test_wave2_consumers.py",
-        "tests/unit/runtime/test_wave3_contracts.py"
+        "tests/unit/runtime/test_wave3_contracts.py",
+        "tests/test_analyzer_attempt_scopes.py"
       ],
-      "integration": ["tests/integration/job_change_context_analysis/test_change_context_graph.py"],
+      "integration": [
+        "tests/integration/job_change_context_analysis/test_change_context_graph.py"
+      ],
       "acceptance": [],
       "live": []
     },
@@ -134,7 +141,9 @@
         "tests/integration/job_ci_configuration_analysis/test_ci_configuration_analysis_graph.py"
       ],
       "acceptance": [],
-      "live": ["tests/live/test_ci_configuration_analysis_multivuln.py"]
+      "live": [
+        "tests/live/test_ci_configuration_analysis_multivuln.py"
+      ]
     },
     "job_clang_static_analysis": {
       "unit": [
@@ -146,11 +155,14 @@
         "tests/unit/job_clang_static_analysis/test_clang_static_tool.py",
         "tests/unit/job_clang_static_analysis/test_contract.py",
         "tests/unit/job_clang_static_analysis/test_seeded_clang_static.py",
-        "tests/unit/job_code_graph_index/test_producers.py::test_diagnostic_rows_empty_filtering_sorting_and_truncation"
+        "tests/unit/job_code_graph_index/test_producers.py::test_diagnostic_rows_empty_filtering_sorting_and_truncation",
+        "tests/test_analyzer_attempt_scopes.py"
       ],
       "integration": [],
       "acceptance": [],
-      "live": ["tests/live/test_seeded_clang_live.py"]
+      "live": [
+        "tests/live/test_seeded_clang_live.py"
+      ]
     },
     "job_code_graph_index": {
       "unit": [
@@ -171,7 +183,9 @@
         "tests/integration/test_code_graph_integration.py"
       ],
       "acceptance": [],
-      "live": ["tests/live/test_code_graph_live.py"]
+      "live": [
+        "tests/live/test_code_graph_live.py"
+      ]
     },
     "job_codeql_analysis": {
       "unit": [
@@ -211,7 +225,8 @@
         "tests/unit/job_cpg_analysis/test_export_and_seeded.py",
         "tests/unit/job_cpg_analysis/test_handlers.py",
         "tests/test_cpg_export.py",
-        "tests/test_seeded_cpg.py"
+        "tests/test_seeded_cpg.py",
+        "tests/test_analyzer_attempt_scopes.py"
       ],
       "integration": [
         "tests/integration/job_cpg_analysis/test_cpg_analysis_graph.py"
@@ -227,7 +242,8 @@
         "tests/unit/job_cpp_compiled_analysis/test_job_pipeline.py",
         "tests/unit/job_cpp_compiled_analysis/test_seeded_compiled.py",
         "tests/unit/job_cpp_compiled_analysis/test_seeded_ir_and_record.py",
-        "tests/unit/job_cpp_compiled_analysis/test_terminal_gap.py"
+        "tests/unit/job_cpp_compiled_analysis/test_terminal_gap.py",
+        "tests/unit/job_cpp_compiled_analysis/test_binary_and_infer_repairs.py"
       ],
       "integration": [
         "tests/integration/job_cpp_compiled_analysis/test_cpp_compiled_analysis_graph.py"
@@ -244,7 +260,8 @@
         "tests/unit/job_cpp_symbol_index/test_handlers.py",
         "tests/unit/job_cpp_symbol_index/test_symbol_budget.py",
         "tests/test_clangd_indexer_tool.py",
-        "tests/unit/job_code_graph_index/test_graph_truth.py::test_clangd_variable_reference_and_occurrences_survive_real_normalization"
+        "tests/unit/job_code_graph_index/test_graph_truth.py::test_clangd_variable_reference_and_occurrences_survive_real_normalization",
+        "tests/test_analyzer_attempt_scopes.py"
       ],
       "integration": [
         "tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py"
@@ -317,7 +334,8 @@
         "tests/unit/job_document_issue_analysis/test_contract.py",
         "tests/unit/job_document_issue_analysis/test_document_issues.py",
         "tests/unit/job_document_issue_analysis/test_drift.py",
-        "tests/unit/job_document_issue_analysis/test_handlers.py"
+        "tests/unit/job_document_issue_analysis/test_handlers.py",
+        "tests/test_analyzer_attempt_scopes.py"
       ],
       "integration": [
         "tests/test_target_document_pipeline.py::test_document_issue_path_keeps_claims_private_and_resolves_source",
@@ -337,7 +355,9 @@
         "tests/integration/job_dossier_publication/test_dossier_review_chain.py"
       ],
       "acceptance": [],
-      "live": ["tests/integration/test_dossier_live.py"]
+      "live": [
+        "tests/integration/test_dossier_live.py"
+      ]
     },
     "job_evidence_collection": {
       "unit": [
@@ -349,14 +369,17 @@
         "tests/unit/job_evidence_collection/test_job_graph.py",
         "tests/unit/job_evidence_collection/test_taint_and_corroboration.py",
         "tests/unit/job_evidence_collection/test_scanner_semantics.py",
-        "tests/unit/runtime/test_wave5_contracts.py"
+        "tests/unit/runtime/test_wave5_contracts.py",
+        "tests/unit/job_evidence_collection/test_checkov_empty_summary.py"
       ],
       "integration": [
         "tests/integration/job_evidence_collection/test_evidence_collection_graph.py",
         "tests/integration/test_signal_job_acceptance.py"
       ],
       "acceptance": [],
-      "live": ["tests/live/test_evidence_collection_multivuln.py"]
+      "live": [
+        "tests/live/test_evidence_collection_multivuln.py"
+      ]
     },
     "job_final_publication_gate": {
       "unit": [
@@ -370,7 +393,9 @@
         "tests/unit/review_decision_audit_wiring/test_gate_handler.py"
       ],
       "integration": [],
-      "acceptance": ["tests/test_final_report.py::test_gate_accounts_for_every_package_in_exactly_one_bucket"],
+      "acceptance": [
+        "tests/test_final_report.py::test_gate_accounts_for_every_package_in_exactly_one_bucket"
+      ],
       "live": []
     },
     "job_final_report_publication": {
@@ -385,7 +410,9 @@
         "tests/unit/job_final_report_publication/test_report_custody.py"
       ],
       "integration": [],
-      "acceptance": ["tests/test_final_report.py::test_report_json_is_schema_valid_and_contains_the_required_sections"],
+      "acceptance": [
+        "tests/test_final_report.py::test_report_json_is_schema_valid_and_contains_the_required_sections"
+      ],
       "live": []
     },
     "job_image_pin_verification": {
@@ -578,13 +605,16 @@
         "tests/test_owasp_proof_procedures.py",
         "tests/test_owasp_telemetry.py",
         "tests/test_owasp_workbench.py",
-        "tests/orchestration/dagster/test_owasp_workbench.py"
+        "tests/orchestration/dagster/test_owasp_workbench.py",
+        "tests/test_analyzer_attempt_scopes.py"
       ],
       "integration": [
         "tests/integration/job_owasp_control_assessment/test_subject_selection.py",
         "tests/integration/job_owasp_control_assessment/test_dagster_owasp_workbench.py"
       ],
-      "acceptance": ["tests/acceptance/job_owasp_control_assessment/test_subject_selection.py"],
+      "acceptance": [
+        "tests/acceptance/job_owasp_control_assessment/test_subject_selection.py"
+      ],
       "live": []
     },
     "job_poc_generation": {
@@ -604,7 +634,9 @@
         "tests/integration/test_authentic_poc_contract.py"
       ],
       "acceptance": [],
-      "live": ["tests/integration/test_poc_live_compile.py"]
+      "live": [
+        "tests/integration/test_poc_live_compile.py"
+      ]
     },
     "job_post_build_security_assessment": {
       "unit": [
@@ -615,7 +647,8 @@
         "tests/unit/job_post_build_security_assessment/test_binary_inspection.py",
         "tests/unit/job_post_build_security_assessment/test_handlers.py",
         "tests/test_family_binary_assessment.py",
-        "tests/orchestration/dagster/test_post_build_security.py"
+        "tests/orchestration/dagster/test_post_build_security.py",
+        "tests/unit/job_post_build_security_assessment/test_compaction_and_gaps.py"
       ],
       "integration": [
         "tests/integration/job_post_build_security_assessment/test_post_build_jobrunner.py"
@@ -679,7 +712,9 @@
         "tests/unit/job_remediation_planning/test_t174_risk_first_planning.py"
       ],
       "integration": [],
-      "acceptance": ["tests/test_remediation_jobs.py::test_real_review_produces_exact_confirmed_only_proposals_and_regression_specs"],
+      "acceptance": [
+        "tests/test_remediation_jobs.py::test_real_review_produces_exact_confirmed_only_proposals_and_regression_specs"
+      ],
       "live": []
     },
     "job_remediation_validation": {
@@ -694,7 +729,9 @@
         "tests/unit/job_remediation_validation/test_execution_receipts.py"
       ],
       "integration": [],
-      "acceptance": ["tests/test_remediation_jobs.py::test_real_runner_publishes_build_checked_without_changing_original_state_or_shipment"],
+      "acceptance": [
+        "tests/test_remediation_jobs.py::test_real_runner_publishes_build_checked_without_changing_original_state_or_shipment"
+      ],
       "live": []
     },
     "job_review_data_indexing": {
@@ -770,7 +807,9 @@
         "tests/integration/job_sanitizer_build/test_sanitizer_build_graph.py"
       ],
       "acceptance": [],
-      "live": ["tests/live/test_sanitizer_live.py"]
+      "live": [
+        "tests/live/test_sanitizer_live.py"
+      ]
     },
     "job_security_tagging": {
       "unit": [
@@ -790,7 +829,9 @@
         "tests/integration/job_security_tagging/test_behavioral_tags.py",
         "tests/integration/job_security_tagging/test_security_tagging_jobrunner.py"
       ],
-      "acceptance": ["tests/acceptance/job_security_tagging/test_behavioral_tags.py"],
+      "acceptance": [
+        "tests/acceptance/job_security_tagging/test_behavioral_tags.py"
+      ],
       "live": []
     },
     "job_source_history_analysis": {
@@ -829,7 +870,9 @@
       ],
       "integration": [],
       "acceptance": [],
-      "live": ["tests/live/test_svf_live.py"]
+      "live": [
+        "tests/live/test_svf_live.py"
+      ]
     },
     "job_target_acquisition": {
       "unit": [
@@ -875,7 +918,9 @@
         "tests/unit/job_target_catalog/test_graph.py",
         "tests/unit/job_target_catalog/test_helpers.py",
         "tests/unit/job_target_catalog/test_indexes.py",
-        "tests/unit/runtime/test_wave5_contracts.py"
+        "tests/unit/runtime/test_wave5_contracts.py",
+        "tests/unit/job_target_catalog/test_c_symbols.py",
+        "tests/test_build_discovery.py"
       ],
       "integration": [
         "tests/integration/job_target_catalog/test_catalog_graph.py",
@@ -953,7 +998,9 @@
         "tests/integration/job_threat_model_generation/test_threat_model_jobrunner.py",
         "tests/integration/test_threat_model_generation.py"
       ],
-      "acceptance": ["tests/acceptance/test_threat_model_generation.py"],
+      "acceptance": [
+        "tests/acceptance/test_threat_model_generation.py"
+      ],
       "live": []
     },
     "job_tree_sitter_ast": {
@@ -979,7 +1026,9 @@
   },
   "common_contracts": {
     "selected-retrieval-custody": {
-      "jobs": ["job_owasp_control_assessment"],
+      "jobs": [
+        "job_owasp_control_assessment"
+      ],
       "unit": [
         "tests/unit/retrieval/test_selected_manifest.py",
         "tests/unit/retrieval/test_selected_store.py",
@@ -1011,21 +1060,36 @@
         "job_third_party_data_sync",
         "job_tree_sitter_ast"
       ],
-      "unit": ["tests/test_stream_capture.py", "tests/test_escaped_capture.py"],
+      "unit": [
+        "tests/test_stream_capture.py",
+        "tests/test_escaped_capture.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []
     },
     "seeded-source-selection": {
-      "jobs": ["job_cpp_compiled_analysis", "job_clang_static_analysis", "job_cpg_analysis"],
-      "unit": ["tests/test_seeding_module.py"],
+      "jobs": [
+        "job_cpp_compiled_analysis",
+        "job_clang_static_analysis",
+        "job_cpg_analysis"
+      ],
+      "unit": [
+        "tests/test_seeding_module.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []
     },
     "dossier-format-custody": {
-      "jobs": ["job_dossier_publication", "job_final_publication_gate", "job_final_report_publication"],
-      "unit": ["tests/unit/job_dossier_publication/test_format_custody.py"],
+      "jobs": [
+        "job_dossier_publication",
+        "job_final_publication_gate",
+        "job_final_report_publication"
+      ],
+      "unit": [
+        "tests/unit/job_dossier_publication/test_format_custody.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []
@@ -1053,13 +1117,17 @@
         "job_review_package_assembly",
         "job_review_prioritization"
       ],
-      "unit": ["tests/unit/test_evidence_consumer_delivery.py"],
+      "unit": [
+        "tests/unit/test_evidence_consumer_delivery.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []
     },
     "evidence-querying-guidance": {
-      "jobs": ["job_inference_security_review"],
+      "jobs": [
+        "job_inference_security_review"
+      ],
       "unit": [
         "tests/test_guidance_procedures.py::test_querying_attachment_cannot_make_an_unwired_task_composable",
         "tests/test_guidance_procedures.py::test_querying_attachment_does_not_bypass_the_request_input_budget",
@@ -1079,14 +1147,25 @@
       ],
       "unit": [],
       "integration": [],
-      "acceptance": ["tests/acceptance/test_repair_fixture_review.py"],
+      "acceptance": [
+        "tests/acceptance/test_repair_fixture_review.py"
+      ],
       "live": []
     },
     "inventory-publication": {
-      "jobs": ["job_build_iteration", "job_review_data_indexing"],
-      "unit": ["tests/test_inventory_publication.py"],
-      "integration": ["tests/integration/test_inventory_publication.py"],
-      "acceptance": ["tests/acceptance/test_inventory_publication.py"],
+      "jobs": [
+        "job_build_iteration",
+        "job_review_data_indexing"
+      ],
+      "unit": [
+        "tests/test_inventory_publication.py"
+      ],
+      "integration": [
+        "tests/integration/test_inventory_publication.py"
+      ],
+      "acceptance": [
+        "tests/acceptance/test_inventory_publication.py"
+      ],
       "live": []
     },
     "job-input-dispatch": {
@@ -1145,10 +1224,17 @@
         "tests/test_downstream_input_contracts.py",
         "tests/test_standalone_input_contracts.py",
         "tests/test_shard_ownership.py",
-        "tests/unit/review_decision_audit_wiring/test_optional_declarations.py"
+        "tests/unit/review_decision_audit_wiring/test_optional_declarations.py",
+        "tests/test_development_input_overrides.py",
+        "tests/test_job_operational_tuning.py",
+        "tests/test_operational_configuration.py"
       ],
-      "integration": ["tests/integration/test_job_input_contracts.py"],
-      "acceptance": ["tests/acceptance/test_job_input_contracts.py"],
+      "integration": [
+        "tests/integration/test_job_input_contracts.py"
+      ],
+      "acceptance": [
+        "tests/acceptance/test_job_input_contracts.py"
+      ],
       "live": []
     },
     "recovery-admission": {
@@ -1217,12 +1303,17 @@
         "tests/test_repair_admission.py::test_shared_producer_change_invalidates_its_real_consumer_not_an_independent_job",
         "tests/test_repair_admission.py::test_successful_portable_unit_is_admitted_into_fresh_attempt"
       ],
-      "integration": ["tests/integration/test_repair_workflow.py"],
+      "integration": [
+        "tests/integration/test_repair_workflow.py"
+      ],
       "acceptance": [],
       "live": []
     },
     "reporting-projections": {
-      "jobs": ["job_dossier_publication", "job_final_report_publication"],
+      "jobs": [
+        "job_dossier_publication",
+        "job_final_report_publication"
+      ],
       "unit": [
         "tests/unit/reporting/test_executive_report.py",
         "tests/unit/reporting/test_projection_authority.py",
@@ -1267,13 +1358,18 @@
         "job_remediation_planning",
         "job_remediation_validation"
       ],
-      "unit": ["tests/test_stateful_guidance.py"],
+      "unit": [
+        "tests/test_stateful_guidance.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []
     },
     "wave1-reuse": {
-      "jobs": ["job_review_intake", "job_target_catalog"],
+      "jobs": [
+        "job_review_intake",
+        "job_target_catalog"
+      ],
       "unit": [
         "tests/test_wave1_resume.py::test_every_wave1_job_is_reused_without_handler_execution",
         "tests/test_wave1_resume.py::test_warm_graph_preserves_gap_completion_status"
@@ -1283,8 +1379,13 @@
       "live": []
     },
     "worker-competence": {
-      "jobs": ["job_remediation_planning", "job_target_analysis_plan"],
-      "unit": ["tests/review/test_worker_competence.py"],
+      "jobs": [
+        "job_remediation_planning",
+        "job_target_analysis_plan"
+      ],
+      "unit": [
+        "tests/review/test_worker_competence.py"
+      ],
       "integration": [],
       "acceptance": [],
       "live": []

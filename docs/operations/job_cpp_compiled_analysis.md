@@ -29,15 +29,15 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L2012) |
-| `ast` | `ast.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1895) |
-| `binary` | `binary.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1895) |
-| `catalog` | `catalog.projects` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1814) |
-| `compiled` | `compiled.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1895) |
-| `infer` | `infer.projects` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1895) |
-| `ir` | `ir.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1895) |
-| `plan` | `plan.accepted_cpp_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1676) |
-| `prepare` | `prepare.projects` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1701) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L2030) |
+| `ast` | `ast.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1913) |
+| `binary` | `binary.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1913) |
+| `catalog` | `catalog.projects` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1832) |
+| `compiled` | `compiled.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1913) |
+| `infer` | `infer.projects` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1913) |
+| `ir` | `ir.projects` | 1 | `cpp_analysis` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1913) |
+| `plan` | `plan.accepted_cpp_plan` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1694) |
+| `prepare` | `prepare.projects` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_cpp_compiled_analysis/job.py#L1719) |
 
 ### Accepted input declarations
 
@@ -92,7 +92,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_cpp_compiled_analysis/test_cpp_compiled_analysis_graph.py` |
 | live | `tests/live/test_seeded_clang_live.py` |
-| unit | `tests/unit/job_cpp_compiled_analysis/test_clang_cfg.py`<br>`tests/unit/job_cpp_compiled_analysis/test_compile_and_replay.py`<br>`tests/unit/job_cpp_compiled_analysis/test_contract.py`<br>`tests/unit/job_cpp_compiled_analysis/test_job_pipeline.py`<br>`tests/unit/job_cpp_compiled_analysis/test_seeded_compiled.py`<br>`tests/unit/job_cpp_compiled_analysis/test_seeded_ir_and_record.py`<br>`tests/unit/job_cpp_compiled_analysis/test_terminal_gap.py` |
+| unit | `tests/unit/job_cpp_compiled_analysis/test_clang_cfg.py`<br>`tests/unit/job_cpp_compiled_analysis/test_compile_and_replay.py`<br>`tests/unit/job_cpp_compiled_analysis/test_contract.py`<br>`tests/unit/job_cpp_compiled_analysis/test_job_pipeline.py`<br>`tests/unit/job_cpp_compiled_analysis/test_seeded_compiled.py`<br>`tests/unit/job_cpp_compiled_analysis/test_seeded_ir_and_record.py`<br>`tests/unit/job_cpp_compiled_analysis/test_terminal_gap.py`<br>`tests/unit/job_cpp_compiled_analysis/test_binary_and_infer_repairs.py` |
 
 ### Dagster placement
 

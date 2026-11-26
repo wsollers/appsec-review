@@ -108,7 +108,11 @@ def test_configuration_and_policy_are_not_self_attested(tmp_path, change):
             # The raw table may agree with its config object; the typed policy still must agree.
             f.unit = replace(f.unit, job=replace(f.unit.job, config=replace(f.unit.job.config, settings=table)))
         config_ref = put(f.root, f.config_ref["path"], frozen)
-        put(f.root, "data/configuration/manifest.json", {"resolved_sha256": config_ref["sha256"]})
+        put(f.root, "data/configuration/manifest.json", {
+            "schema": "appsec-review/run-configuration/2",
+            "source_sha256": f.source_ref["sha256"],
+            "resolved_sha256": config_ref["sha256"],
+        })
         put(f.root, ATTEMPT + "/claim.json", {**f.claim, "resolved_config_sha256": config_ref["sha256"]})
     with pytest.raises(IntegrityError):
         trusted_origin(f.unit, f.scope, f.handoff_ref, f.settings)
@@ -174,7 +178,11 @@ def test_control_inputs_fail_closed_not_as_successful_unavailable(tmp_path, chan
     else:
         payload = b'{"jobs":{},"jobs":{}}'
         config_ref = put(f.root, f.config_ref["path"], payload)
-        put(f.root, "data/configuration/manifest.json", {"resolved_sha256": config_ref["sha256"]})
+        put(f.root, "data/configuration/manifest.json", {
+            "schema": "appsec-review/run-configuration/2",
+            "source_sha256": f.source_ref["sha256"],
+            "resolved_sha256": config_ref["sha256"],
+        })
         put(f.root, ATTEMPT + "/claim.json", {**f.claim, "resolved_config_sha256": config_ref["sha256"]})
     with pytest.raises(IntegrityError):
         trusted_origin(f.unit, f.scope, f.handoff_ref, f.settings)

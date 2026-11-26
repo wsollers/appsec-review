@@ -36,7 +36,8 @@ def gate_case(tmp_path):
     attempt = case.root / "data" / "jobs" / GATE / "attempts" / "attempt_0001"
     context = SimpleNamespace(
         run_root=case.root, repository_root=ROOT, config=case.config.job(GATE),
-        events=EventLog(attempt / "events.jsonl"), upstream_handoffs={REVIEW_JOB: case.accepted_review.sha256})
+        events=EventLog(attempt / "events.jsonl"), upstream_handoffs={REVIEW_JOB: case.accepted_review.sha256},
+        resolved_config_sha256=None)
     outputs = {}
     certificates = []
 

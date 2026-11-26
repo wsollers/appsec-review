@@ -192,7 +192,7 @@ def test_reference_feed_handlers_pass_outputs_through_and_publish_feed_metadata(
                         or {"schema": f"appsec-review/{feed}-normalize/1", "normalized": True})
     monkeypatch.setattr(module, "publish", lambda s, fetched, normalized:
                         calls.append(("publish", s, fetched, normalized)) or {"snapshot_id": "snap"})
-    monkeypatch.setattr(module, "verify", lambda s: calls.append(("verify", s)) or {"snapshot_id": "snap", "ok": 1})
+    monkeypatch.setattr(module, "verify", lambda s, *, pointer=None: calls.append(("verify", s)) or {"snapshot_id": "snap", "ok": 1})
     downloader = object()
     units = _units(**{f"{feed}_downloader": downloader})
     step = f"{feed}_sync"
@@ -271,7 +271,7 @@ def test_cve_bin_tool_units_bind_the_published_nvd_identity_and_the_injected_run
                         lambda settings, resolved, work, runner: calls.append(("build", settings, resolved, work, runner))
                         or {"built": True})
     monkeypatch.setattr(sync_job.cve_db, "publish", lambda settings, built: {"snapshot_id": "cve-1"})
-    monkeypatch.setattr(sync_job.cve_db, "verify", lambda settings, resolved: {"snapshot_id": "cve-1", "cve_count": 1})
+    monkeypatch.setattr(sync_job.cve_db, "verify", lambda settings, resolved, *, pointer=None: {"snapshot_id": "cve-1", "cve_count": 1})
     runner = object()
     units = _units(cve_runner=runner)
     resolved = units["cve_bin_tool_db_build.resolve_nvd_snapshot"].handler(_unit_context(
@@ -325,12 +325,12 @@ def test_osv_and_mitre_unit_handlers_wire_steps_and_publish_metadata(
     monkeypatch.setattr(sync_job.osv_feed, "fetch", lambda s, work, dl: calls.append(("osv.fetch", s, work, dl)) or {"f": 1})
     monkeypatch.setattr(sync_job.osv_feed, "index", lambda s, f, work: calls.append(("osv.index", s, f, work)) or {"i": 1})
     monkeypatch.setattr(sync_job.osv_feed, "publish", lambda s, f, i: calls.append(("osv.publish", s, f, i)) or {"snapshot_id": "osv-1"})
-    monkeypatch.setattr(sync_job.osv_feed, "verify", lambda s: calls.append(("osv.verify", s)) or {"snapshot_id": "osv-1"})
+    monkeypatch.setattr(sync_job.osv_feed, "verify", lambda s, *, pointer=None: calls.append(("osv.verify", s)) or {"snapshot_id": "osv-1"})
 
     monkeypatch.setattr(sync_job.mitre_feed, "fetch", lambda s, work, dl: calls.append(("mitre.fetch", s, work, dl)) or {"mf": 1})
     monkeypatch.setattr(sync_job.mitre_feed, "normalize", lambda s, f, work: calls.append(("mitre.norm", s, f, work)) or {"mn": 1})
     monkeypatch.setattr(sync_job.mitre_feed, "publish", lambda s, f, n: calls.append(("mitre.pub", s, f, n)) or {"snapshot_id": "m-1"})
-    monkeypatch.setattr(sync_job.mitre_feed, "verify", lambda s: calls.append(("mitre.verify", s)) or {"snapshot_id": "m-1"})
+    monkeypatch.setattr(sync_job.mitre_feed, "verify", lambda s, *, pointer=None: calls.append(("mitre.verify", s)) or {"snapshot_id": "m-1"})
 
     osv_dl, mitre_dl = object(), object()
     units = _units(osv_downloader=osv_dl, mitre_downloader=mitre_dl)
@@ -386,9 +386,18 @@ def test_grype_fetch_and_import_handlers_support_injected_and_resolved_executors
     assert calls[0][3:] == (dl, "2026-11-12T00:00:00Z")
     assert calls[1][4:] == (injected_ex, "2026-11-12T00:00:00Z")
 
-    resolved_path = tmp_path / "runs" / "2026-11-12-0001" / "data" / "configuration" / "resolved.json"
-    resolved_path.parent.mkdir(parents=True, exist_ok=True)
-    resolved_path.write_text('{"profile": "fixture"}', encoding="utf-8")
+    import hashlib
+    cfg_dir = tmp_path / "runs" / "2026-11-12-0001" / "data" / "configuration"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    source_bytes = b"# fixture\n"
+    resolved_bytes = b'{"profile": "fixture"}'
+    (cfg_dir / "appsec-review.toml").write_bytes(source_bytes)
+    (cfg_dir / "resolved.json").write_bytes(resolved_bytes)
+    (cfg_dir / "manifest.json").write_text(json.dumps({
+        "schema": "appsec-review/run-configuration/2",
+        "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        "resolved_sha256": hashlib.sha256(resolved_bytes).hexdigest(),
+    }), encoding="utf-8")
     monkeypatch.setattr(sync_job, "load_catalog", lambda repo, resolved_config=None: ("cat", repo, resolved_config))
     monkeypatch.setattr(sync_job, "ContainerExecutor", lambda catalog, run_root: ("exec", catalog, run_root))
     units_default = _units()

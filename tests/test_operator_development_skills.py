@@ -237,13 +237,18 @@ def test_repair_instructions_name_actual_cli_limits_and_release_identity_behavio
     assert "does not paginate or provide a byte limit" in text
     assert "RESUME_PLANNED" in text and "not a mutation-free read" in text
     assert "RESUME_PLANNED" in (ROOT / "src/appsec_review/runtime/resume.py").read_text()
+    from appsec_review.runtime.release import identities_from_release
+
     job = Job("job_skill_probe", "skill_probe", lambda context: {}, implementation_identity="edited-source")
     assert job.identities(ROOT)["implementation"] == "undeclared"
     releases = ComponentReleases({"platform": "platform-v2", "validation": "validation-v3",
                                   "job_skill_probe": "job-v4"})
-    assert job.identities(ROOT, releases) == {
-        "implementation": "job-v4", "schema": "appsec-review/job-result/1", "validation": "validation-v3",
-    }
+    assert job.identities(ROOT, releases)["implementation"] == "undeclared"
+    measured = {"jobs": {"job_skill_probe": {"implementation": "a" * 64, "validation": "b" * 64}}}
+    bound = identities_from_release(measured, "job_skill_probe", "appsec-review/job-result/1", releases.values)
+    assert bound["schema"] == "appsec-review/job-result/1"
+    assert bound["implementation"] != "job-v4" and len(bound["implementation"]) == 64
+    assert bound["validation"] != "validation-v3" and len(bound["validation"]) == 64
     assert "does not fingerprint edited Python source" in text
 
 

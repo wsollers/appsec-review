@@ -154,20 +154,20 @@ def test_each_handler_artifact_name_schema_and_read_write_boundary_is_pinned():
         "projects": ["path = Path(item['path'])"],
         "dependencies": ["path = _target(unit) / manifest"],
         "path_index": [
-            "path = unit.job.run_root / 'data' / 'indices' / 'source' / f'{fingerprint}.sqlite'",
+            "path = unit.job.run_root / 'data' / 'indices' / 'source' / 'attempts' / unit.job.config.job_id / unit.job.attempt_id / f'{fingerprint}.sqlite'",
             "source = _target(unit) / item['path']"],
         "symbol_index": [
-            "path = unit.job.run_root / 'data' / 'indices' / 'analysis' / f'{fingerprint}.sqlite'",
+            "path = unit.job.run_root / 'data' / 'indices' / 'analysis' / 'attempts' / unit.job.config.job_id / unit.job.attempt_id / f'{fingerprint}.sqlite'",
             "index_path = builder.path", "source_path = safe_path(_target(unit), item['path'])"],
         "component_index": [
-            "path = unit.job.run_root / 'data' / 'indices' / 'components' / f'{fingerprint}.sqlite'"],
+            "path = unit.job.run_root / 'data' / 'indices' / 'components' / 'attempts' / unit.job.config.job_id / unit.job.attempt_id / f'{fingerprint}.sqlite'"],
         "document_index": [
-            "path = unit.job.run_root / 'data' / 'indices' / 'documents' / f'{fingerprint}.sqlite'",
+            "path = unit.job.run_root / 'data' / 'indices' / 'documents' / 'attempts' / unit.job.config.job_id / unit.job.attempt_id / f'{fingerprint}.sqlite'",
             "source_path = record['path']",
             "target_root = _target(unit).resolve()", "source = (target_root / source_path).resolve()"],
         "validate_catalog": ["path = unit.job.run_root / artifact['path']"],
         "publish": [
-            "build_path = unit.job.run_root / 'data' / 'indices' / 'build' / f'{build_fingerprint}.sqlite'",
+            "build_path = unit.job.run_root / 'data' / 'indices' / 'build' / 'attempts' / unit.job.config.job_id / unit.job.attempt_id / f'{build_fingerprint}.sqlite'",
             "manifest_path = unit.job.run_root / 'data' / 'indices' / 'manifests' / f'catalog-{unit.job.attempt_id}.json'"],
     }
 

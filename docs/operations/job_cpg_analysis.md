@@ -86,7 +86,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_cpg_analysis/test_cpg_analysis_graph.py` |
 | live | None declared |
-| unit | `tests/unit/job_cpg_analysis/test_audit_closure.py`<br>`tests/unit/job_cpg_analysis/test_contract.py`<br>`tests/unit/job_cpg_analysis/test_export_and_seeded.py`<br>`tests/unit/job_cpg_analysis/test_handlers.py`<br>`tests/test_cpg_export.py`<br>`tests/test_seeded_cpg.py` |
+| unit | `tests/unit/job_cpg_analysis/test_audit_closure.py`<br>`tests/unit/job_cpg_analysis/test_contract.py`<br>`tests/unit/job_cpg_analysis/test_export_and_seeded.py`<br>`tests/unit/job_cpg_analysis/test_handlers.py`<br>`tests/test_cpg_export.py`<br>`tests/test_seeded_cpg.py`<br>`tests/test_analyzer_attempt_scopes.py` |
 
 ### Dagster placement
 

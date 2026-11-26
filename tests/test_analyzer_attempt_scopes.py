@@ -69,3 +69,78 @@ def test_new_attempt_recomputes_unchanged_scope_and_preserves_original_bytes(tmp
     same_attempt = execute(second_unit, scope, lambda _: executor)
     assert same_attempt["checkpoint_reused"] is True
     assert len(executor.calls) == calls_per_attempt * 2
+
+
+def test_whole_job_shard_and_derived_isolation_across_attempts(tmp_path):
+    from types import SimpleNamespace
+    from appsec_review.indexing.derive import Derived, fact, publish_derived
+    from appsec_review.jobs.job_document_issue_analysis import datasets as doc_ds, job as doc_job
+    from appsec_review.owasp_workbench.indexes import publish_shard
+    from appsec_review.runtime.datasets import dataset_contract
+    from appsec_review.storage import atomic_json
+    from appsec_review.storage.shared import SharedArtifacts
+
+    s1 = publish_shard(
+        tmp_path, family="control-result", shard_id="comp-a",
+        records=[{"id": "r1"}], fingerprint_inputs={"k": "v"}, attempt_id="attempt_0001",
+    )
+    s2 = publish_shard(
+        tmp_path, family="control-result", shard_id="comp-a",
+        records=[{"id": "r1"}], fingerprint_inputs={"k": "v"}, attempt_id="attempt_0002",
+    )
+    assert s1["path"] != s2["path"]
+    assert "/attempt_0001/" in s1["path"]
+    assert "/attempt_0002/" in s2["path"]
+
+    calls = 0
+
+    def _build():
+        nonlocal calls
+        calls += 1
+        derived = Derived()
+        derived.entities.append(
+            fact("snap-1", "document_context", "1", {"k": "v"}, name="doc", text="doc",
+                 result={"count": calls}, basis="unit", upstream=())
+        )
+        derived.coverage.append(("documents", "complete", None))
+        return derived
+
+    run_root = tmp_path / "run-doc"
+    dc = dataset_contract(
+        "job_document_issue_analysis",
+        ("analysis",),
+        doc_ds.DATASETS,
+        job_contract=doc_ds.CONTRACT.document(),
+    )
+    for idx_num, attempt_id in enumerate(("attempt_0001", "attempt_0002"), start=1):
+        attempt_rel = f"data/jobs/job_document_issue_analysis/attempts/{attempt_id}"
+        attempt_root = run_root / attempt_rel
+        atomic_json(
+            attempt_root / "claim.json",
+            {
+                "run_id": run_root.name,
+                "job_id": "job_document_issue_analysis",
+                "attempt_id": attempt_id,
+                "attempt_path": attempt_rel,
+                "orchestration": {"system": "direct"},
+                "recovery_boundary": "whole_job",
+                "dataset_contract": dc,
+            },
+        )
+        ctx = SimpleNamespace(
+            run_id=run_root.name,
+            run_root=run_root,
+            attempt_root=attempt_root,
+            attempt_id=attempt_id,
+            orchestration={"system": "direct"},
+            config=SimpleNamespace(job_id="job_document_issue_analysis"),
+            component_identities={"implementation": "impl/1", "schema": "schema/1", "validation": "val/1"},
+        )
+        out = publish_derived(
+            run_root, index="precomputed", shard_id="document-issues",
+            job_id="job_document_issue_analysis", unit_id="analysis.publish",
+            rule="doc_nav", rule_version="1", snapshot="snap-1",
+            inputs={"seed": "same"}, build=_build, shared=SharedArtifacts.for_job(ctx),
+        )
+        assert out["reused"] is False
+        assert calls == idx_num

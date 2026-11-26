@@ -158,21 +158,21 @@ def fixture(tmp_path: Path):
 
 def write_osv_feed(repository_root: Path, ecosystems: tuple[str, ...] = ("npm",)) -> Path:
     """Publish a tiny synthetic OSV snapshot under ``repository_root/data/feeds/osv``."""
+    from appsec_review.jobs.job_third_party_data_sync.steps.osv_sync import feed as osv
+
     staging = repository_root / ".osv-staging"
     staging.mkdir(parents=True, exist_ok=True)
     files: dict[str, Path] = {}
     for ecosystem in ecosystems:
         archive = staging / f"{ecosystem}.zip"
-        with zipfile.ZipFile(archive, "w"):
-            pass
+        with zipfile.ZipFile(archive, "w") as handle:
+            handle.writestr(f"OSV-{ecosystem}.json", json.dumps({"id": f"OSV-{ecosystem}"}))
         files[f"sources/{ecosystem}.zip"] = archive
-    publish_snapshot(
-        repository_root / "data" / "feeds" / "osv",
-        feed_id="osv",
-        schema="appsec-review/osv-snapshot/1",
-        files=files,
-        manifest_fields={"source": "unit-fixture"},
+    settings = osv.OsvSettings.from_mapping(
+        repository_root, {"feed_root": "data/feeds/osv", "ecosystems": list(ecosystems)}
     )
+    fetched = {"archives": {ecosystem: {"path": str(files[f"sources/{ecosystem}.zip"])} for ecosystem in ecosystems}}
+    osv.publish(settings, fetched, osv.index(settings, fetched, staging))
     shutil.rmtree(staging, ignore_errors=True)
     return repository_root / "data" / "feeds" / "osv"
 

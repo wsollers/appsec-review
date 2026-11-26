@@ -63,6 +63,7 @@ last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 | [trivy tool image](../../containers/tools/trivy/README.md) | images and deployment | current |
 | [zizmor tool image](../../containers/tools/zizmor/README.md) | images and deployment | current |
 | [Reading the per-defect funnel](acceptance-funnel.md) | testing and operations | current |
+| [Analyzer attempt-local scope artifacts](analyzer-attempt-scopes.md) | code intelligence | current |
 | [Produced-artifact indexing](artifact-indexing.md) | scanners and evidence collection | current |
 | [Produced-artifact security analysis](artifact-security-analysis.md) | scanners and evidence collection | current |
 | [Binary decompilation: running Ghidra before a review](binary-decompilation.md) | scanners and evidence collection | current |
@@ -86,6 +87,7 @@ last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 | [Image-pin verification and host bindings](image-pin-verification.md) | images and deployment | current |
 | [Inference security review operations](inference-security-review.md) | review inference and guidance | current |
 | [Job-focused test selection](job-test-selection.md) | testing and operations | current |
+| [Job-local operational tuning](job-tuning.md) | runtime interchange | current |
 | [artifact_indexing](job_artifact_indexing.md) | scanners and evidence collection | current |
 | [artifact_security_analysis](job_artifact_security_analysis.md) | scanners and evidence collection | current |
 | [binary_evidence_indexing](job_binary_evidence_indexing.md) | code intelligence | current |
@@ -155,6 +157,7 @@ last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 | [Operating review-data indexing](review-data-indexing.md) | runtime interchange | current |
 | [Review prioritization operations](review-prioritization.md) | review inference and guidance | current |
 | [Starting an appsec review: features and flags](review-startup.md) | testing and operations | current |
+| [Five-minute review monitoring](run-monitor.md) | reporting and metrics | current |
 | [Run readiness: preparing a host for review runs](run-readiness.md) | images and deployment | current |
 | [Operating the sanitizer build](sanitizer-build.md) | target acquisition and build | current |
 | [Operating the security-tagging stage](security-tagging.md) | review inference and guidance | current |

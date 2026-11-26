@@ -32,7 +32,7 @@ def context(tmp_path: Path, unit_id: str, outputs=None):
         run_root=root, target_root=target,
         attempt_root=root / "data/jobs/job_target_catalog/attempts/attempt_0001",
         run_id="fixture-run", attempt_id="attempt_0001", source_fingerprint="fixture-snapshot",
-        config=SimpleNamespace(inventory_max_file_bytes=128, exclusions=None,
+        config=SimpleNamespace(job_id="job_target_catalog", inventory_max_file_bytes=128, exclusions=None,
                                typed_settings=TargetDocumentSettings(
                                    max_files=20, max_file_bytes=4096, max_records=100)),
         review_policy=SimpleNamespace(releases=SimpleNamespace(values={"target_documents": "fixture/1"})),

@@ -154,12 +154,45 @@ def test_accepted_json_duplicate_keys_remain_a_parse_gap(tmp_path):
   }
 }
 """
-    core, _, rows = _catalog_core(tmp_path, documents=[("api/openapi.json", "openapi", raw)])
-    assert rows
+    core, target, rows = _catalog_core(tmp_path / "catalog", documents=[("api/openapi.json", "openapi", raw)])
+    assert not rows
     report = issues.analyze_api_spec_drift(core)
     assert report["specs_parsed"] == 0
     assert not report["mismatches"]
-    assert any("parse failed" in gap and "duplicate" in gap for gap in report["gaps"])
+    assert any("parse_error" in gap and "duplicate" in gap for gap in report["gaps"])
+
+    # Defense-in-depth: even if an accepted document record points at duplicate-key JSON, drift still emits a parse gap.
+    fallback_core, fallback_target, _ = _catalog_core(
+        tmp_path / "accepted-fallback", documents=[("api/openapi.json", "openapi", b'{"openapi": "3.0.3", "paths": {"/ok": {"get": {}}}}')]
+    )
+    spec_path = fallback_target / "api/openapi.json"
+    spec_path.write_bytes(raw)
+    digest = file_sha256(spec_path)
+    snapshot = fallback_core.manifest["target_snapshot"]
+    shard = "catalog-documents-dup"
+    fingerprint = hashlib.sha256(shard.encode()).hexdigest()
+    db = fallback_core.run_root / "data" / "indices" / f"{shard}.sqlite"
+    builder = IndexBuilder(db, name="documents", fingerprint=fingerprint, target_snapshot=snapshot, shard_id=shard)
+    builder.add_entity(EntityRecord(
+        LogicalIdentity.derive(EntityKind.DOCUMENT_RECORD, snapshot, {"record_id": "dup-openapi"}),
+        "dup-openapi", "api/openapi.json", "api/openapi.json",
+        {"record_type": "target_document", "document_kind": "openapi", "subtype": "document", "authority": "target", "fields": {}},
+        SourceLocation(snapshot, "api/openapi.json", digest, 0, len(raw), 1, 10, 1, 1, {}, "exact", 1.0),
+    ))
+    builder.add_coverage(shard, "complete", None)
+    db_digest = builder.build()
+    indexes = [IndexIdentity(**{**item, "gaps": tuple(item.get("gaps", ()))})
+               for item in fallback_core.manifest["indexes"] if item["name"] != "documents"]
+    indexes.append(IndexIdentity("documents", "appsec-review/retrieval-index/2", db_digest, fingerprint,
+                                 db.relative_to(fallback_core.run_root).as_posix(), {"job": "job_target_catalog"}, (), shard))
+    manifest = fallback_core.run_root / "data" / "indices" / "dup-manifest.json"
+    write_manifest(manifest, run_id=fallback_core.run_id, target_snapshot=snapshot, target_root=fallback_target, indexes=indexes)
+    reopened = RetrievalCore(fallback_core.run_root.parent, fallback_core.run_id,
+                             manifest_path=manifest, manifest_sha256=file_sha256(manifest))
+    fallback_report = issues.analyze_api_spec_drift(reopened)
+    assert fallback_report["specs_parsed"] == 0
+    assert not fallback_report["mismatches"]
+    assert any("parse failed" in gap and "duplicate" in gap for gap in fallback_report["gaps"])
 
 
 def test_unresolved_references_are_not_fetched_or_clean_coverage(tmp_path):

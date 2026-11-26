@@ -186,7 +186,7 @@ def test_whole_job_retry_isolates_receipts_and_shards_by_attempt(tmp_path, monke
     fail_handoff = [True]
 
     def whole_job_context(attempt: int):
-        ctx = context_for(fixture, attempt=attempt, max_batch_size=4)
+        ctx = context_for(fixture, attempt=attempt, max_batch_size=32)
         claim_path = ctx.attempt_root / "claim.json"
         claim = json.loads(claim_path.read_text(encoding="utf-8"))
         claim["recovery_boundary"] = "whole_job"

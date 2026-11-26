@@ -29,7 +29,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `analysis` | `analysis.map_and_adjudicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_document_issue_analysis/job.py#L173) |
+| `analysis` | `analysis.map_and_adjudicate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_document_issue_analysis/job.py#L176) |
 
 ### Accepted input declarations
 
@@ -203,7 +203,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/test_target_document_pipeline.py::test_document_issue_path_keeps_claims_private_and_resolves_source`<br>`tests/test_target_document_pipeline.py::test_document_issue_analysis_rejects_changed_source` |
 | live | None declared |
-| unit | `tests/unit/job_document_issue_analysis/test_contract.py`<br>`tests/unit/job_document_issue_analysis/test_document_issues.py`<br>`tests/unit/job_document_issue_analysis/test_drift.py`<br>`tests/unit/job_document_issue_analysis/test_handlers.py` |
+| unit | `tests/unit/job_document_issue_analysis/test_contract.py`<br>`tests/unit/job_document_issue_analysis/test_document_issues.py`<br>`tests/unit/job_document_issue_analysis/test_drift.py`<br>`tests/unit/job_document_issue_analysis/test_handlers.py`<br>`tests/test_analyzer_attempt_scopes.py` |
 
 ### Dagster placement
 
