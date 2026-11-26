@@ -25,7 +25,9 @@ from .contracts import (
 )
 from . import dependencies
 from .datasets import CONTRACT
-from .inputs import BoundedInputReader, _require, compatible_settings, reprove_inputs
+from .inputs import (
+    BoundedInputReader, _pin_configuration_snapshot, _require, compatible_settings, reprove_inputs,
+)
 from .settings import OpenVexExportSettings
 from .validation import schema_registry, schema_validator, validate_export
 
@@ -42,7 +44,20 @@ def read_output(run_root: Path, reference: ArtifactRef, settings: OpenVexExportS
                               phase=phase)
         if max_bytes is not None and before.st_size > max_bytes:
             raise ExportError("export artifact exceeds its byte bound", reason=Reason.BOUND_EXCEEDED, phase=phase)
-        payload = stream.read() if max_bytes is None else stream.read(max_bytes + 1)
+        chunks: list[bytes] = []
+        size = 0
+        limit = before.st_size if max_bytes is None else max_bytes
+        while True:
+            chunk = stream.read(min(65536, limit - size + 1))
+            if not chunk:
+                break
+            size += len(chunk)
+            if max_bytes is not None and size > max_bytes:
+                raise ExportError("export artifact exceeds its byte bound", reason=Reason.BOUND_EXCEEDED, phase=phase)
+            if size > before.st_size:
+                break
+            chunks.append(chunk)
+        payload = b"".join(chunks)
         after = os.fstat(stream.fileno())
     current = reader.path(reference.path).stat()
     if (after.st_nlink != 1 or current.st_nlink != 1
@@ -56,16 +71,20 @@ def read_output(run_root: Path, reference: ArtifactRef, settings: OpenVexExportS
     return payload
 
 
-def frozen_configuration(run_root: Path) -> tuple[dict[str, Any], ArtifactRef]:
+def frozen_configuration(
+    run_root: Path, expected_sha256: str | None = None,
+) -> tuple[dict[str, Any], ArtifactRef]:
     reader = BoundedInputReader(run_root, OpenVexExportSettings(), phase=ExportPhase.LOAD)
-    manifest = reader.json(reader.pin("data/configuration/manifest.json").reference)
-    reference = ArtifactRef("data/configuration/resolved.json", manifest["resolved_sha256"])
-    document = reader.json(reference)
+    _, reference, document = _pin_configuration_snapshot(
+        reader, expected_sha256, missing_reason=Reason.CONFIGURATION_INVALID,
+    )
     return document, reference
 
 
-def frozen_export_settings(run_root: Path) -> tuple[OpenVexExportSettings | None, str]:
-    configuration, _ = frozen_configuration(run_root)
+def frozen_export_settings(
+    run_root: Path, expected_sha256: str | None = None,
+) -> tuple[OpenVexExportSettings | None, str]:
+    configuration, _ = frozen_configuration(run_root, expected_sha256)
     job = configuration.get("jobs", {}).get(JOB_ID)
     settings = None if job is None else OpenVexExportSettings.from_mapping(job["settings"])
     releases = configuration.get("review_policy", {}).get("releases", {})
@@ -89,10 +108,15 @@ def _recorded_settings(reader: BoundedInputReader, accepted: Mapping[str, Any]) 
         base_configuration_sha256, configuration_directory, configuration_snapshot,
     )
     identity = accepted["resolved_config_sha256"]
-    directory = configuration_directory(reader.root, identity)
+    try:
+        base_sha = base_configuration_sha256(reader.root)
+        directory = configuration_directory(reader.root, identity)
+        if identity != base_sha:
+            configuration_snapshot(reader.root, identity)
+    except (OSError, ValueError) as exc:
+        raise ExportError("accepted export configuration snapshot is invalid",
+                          reason=Reason.INPUT_TAMPERED, phase=ExportPhase.ACCEPT) from exc
     config = reader.json(ArtifactRef((directory / "resolved.json").relative_to(reader.root).as_posix(), identity))
-    if identity != base_configuration_sha256(reader.root):
-        configuration_snapshot(reader.root, identity)
     recorded = OpenVexExportSettings.from_mapping(config["jobs"][JOB_ID]["settings"])
     _require(compatible_settings(recorded, reader.settings), "accepted export uses different settings",
              Reason.IDENTITY_CONFLICT, phase=ExportPhase.ACCEPT)
@@ -124,8 +148,9 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
     except ValueError as exc:
         raise ExportError("accepted OpenVEX common envelope is invalid", reason=Reason.SCHEMA_INVALID,
                           phase=ExportPhase.ACCEPT) from exc
+    caller_max_bindings = settings.max_bindings
     settings = _recorded_settings(reader, accepted)
-    if len(accepted["artifacts"]) > settings.max_bindings:
+    if len(accepted["artifacts"]) > min(settings.max_bindings, caller_max_bindings):
         raise ExportError("accepted runtime artifact inventory exceeds its bounds", reason=Reason.BOUND_EXCEEDED,
                           phase=ExportPhase.ACCEPT)
     outputs = accepted.get("outputs", {})
@@ -188,7 +213,7 @@ def _read_accepted_export(run_root: Path, handoff: ArtifactRef, settings: OpenVe
             raise ExportError("runtime and export inventories disagree", reason=Reason.IDENTITY_CONFLICT,
                               phase=ExportPhase.ACCEPT)
         admitted[reference.path] = reference
-    if len(admitted) > settings.max_bindings:
+    if len(admitted) > min(settings.max_bindings, caller_max_bindings):
         raise ExportError("accepted export inventory exceeds its bounds", reason=Reason.BOUND_EXCEEDED,
                           phase=ExportPhase.ACCEPT)
     for item in accepted["artifacts"]:
@@ -339,8 +364,15 @@ def load_export(run_root: Path, settings: OpenVexExportSettings, repository_root
     settings = _recorded_settings(reader, accepted.handoff)
     bundle = read_accepted_export(run_root, reference, settings, repository_root)
     provenance = bundle.manifest["provenance"]
+    from appsec_review.runtime.configuration import configurations_compatible
     _, configuration_ref = frozen_configuration(run_root)
-    if (provenance["resolved_config_sha256"] != configuration_ref.sha256
+    try:
+        config_compatible = configurations_compatible(
+            run_root, provenance["resolved_config_sha256"], configuration_ref.sha256,
+        )
+    except (OSError, ValueError):
+        config_compatible = False
+    if (not config_compatible
             or provenance["exporter_release"] != exporter_release
             or gate_handoff is not None and provenance["gate_handoff"] != dict(gate_handoff)):
         return _unavailable(State.STALE, "openvex_export_stale")
@@ -364,8 +396,11 @@ def load_export(run_root: Path, settings: OpenVexExportSettings, repository_root
     verified_document, _ = _json_output(run_root, verified_ref, settings, max_bytes=settings.max_manifest_bytes)
     verified = VerifiedInputs.from_mapping(verified_document)
     with upstream_scope(run_root, JOB_ID, accepted.handoff["upstream_handoff_sha256"], contract=CONTRACT):
-        reprove_inputs(run_root, upstream_inputs(verified), settings, repository_root)
-    reader.read(reader.pin(pointer).reference)
+        reprove_inputs(
+            run_root, upstream_inputs(verified), settings, repository_root,
+            resolved_config_sha256=verified.provenance.resolved_config_sha256,
+        )
+    reader.verify(reader.pin(pointer).reference)
     latest = accepted_handoff(run_root, JOB_ID)
     if latest is None or latest.sha256 != reference.sha256 or latest.path != reference.path:
         raise ExportError("OpenVEX acceptance changed during report loading", reason=Reason.INPUT_STALE,

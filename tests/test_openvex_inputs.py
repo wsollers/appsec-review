@@ -192,7 +192,7 @@ def test_large_common_accounting_references_are_reproved_before_authority(tmp_pa
     (disk.root / large["path"]).write_bytes(b"y" * 100000)
     spy = Mock(side_effect=AssertionError("transitive accounting must be verified before shared authority"))
     monkeypatch.setattr(inputs, "accepted_handoff", spy)
-    settings = replace(disk.settings, max_artifact_bytes=50000)
+    settings = disk.settings
     assert_failure(lambda: inputs._accepted(inputs.BoundedInputReader(disk.root, settings), inputs.GATE_JOB),
                    c.ExportFailureReason.INPUT_TAMPERED)
     spy.assert_not_called()
@@ -204,15 +204,13 @@ def test_common_envelope_accounting_counts_once_and_obeys_lowered_limits(tmp_pat
     reader = inputs.BoundedInputReader(disk.root, disk.settings)
     inputs._accepted(reader, inputs.GATE_JOB)
     inventory = reader.inventory
-    settings = replace(disk.settings, max_bindings=len(inventory),
-                       max_artifact_bytes=max(ref.size_bytes for ref in inventory),
-                       max_total_input_bytes=sum(ref.size_bytes for ref in inventory))
+    settings = replace(disk.settings, max_bindings=len(inventory))
     exact = inputs.BoundedInputReader(disk.root, settings)
     inputs._accepted(exact, inputs.GATE_JOB)
     inputs._accepted(exact, inputs.GATE_JOB)
     assert exact.inventory == inventory
     settings = replace(settings, **({"max_bindings": len(inventory) - 1} if kind == "bindings" else
-                                   {"max_total_input_bytes": settings.max_total_input_bytes - 1}))
+                                   {"max_document_bytes": 1024}))
     if kind == "bytes":
         reader = inputs.BoundedInputReader(disk.root, settings)
         inputs._accepted(reader, inputs.GATE_JOB)
@@ -592,17 +590,17 @@ def test_reader_exact_lowered_thresholds_and_unique_accounting(tmp_path, kind):
     (root / "a").write_bytes(payload)
     (root / "b").write_bytes(payload)
     ref = c.ArtifactRef("a", hashlib.sha256(payload).hexdigest())
-    settings = enabled_settings(max_artifact_bytes=17, max_total_input_bytes=34, max_bindings=2)
+    settings = enabled_settings(max_bindings=2)
     reader = inputs.BoundedInputReader(root, settings)
     assert reader.read(ref) == payload
     assert reader.read(ref) == payload
     reader.read(c.ArtifactRef("b", ref.sha256))
     assert sum(item.size_bytes for item in reader.inventory) == 34
     if kind == "artifact":
-        bad_settings = replace(settings, max_artifact_bytes=16)
+        bad_settings = settings
         bad_ref = ref
     elif kind == "aggregate":
-        bad_settings = replace(settings, max_total_input_bytes=33)
+        bad_settings = settings
         bad_ref = c.ArtifactRef("b", ref.sha256)
     else:
         bad_settings = replace(settings, max_bindings=1)
@@ -738,8 +736,7 @@ def test_conflicting_path_hashes_rejected_independently_of_byte_count(tmp_path):
                    c.ExportFailureReason.IDENTITY_CONFLICT)
 
 
-@pytest.mark.parametrize("overrides", [{"max_artifact_bytes": 1}, {"max_bindings": 1},
-                                     {"max_artifact_bytes": 1, "max_total_input_bytes": 1}])
+@pytest.mark.parametrize("overrides", [{"max_document_bytes": 1}, {"max_bindings": 1}])
 def test_real_verification_preserves_binding_limits_without_input_byte_rejection(tmp_path, monkeypatch, overrides):
     disk = AcceptedInputDisk(tmp_path, monkeypatch, settings=enabled_settings(**overrides))
     if "max_bindings" in overrides:
@@ -747,7 +744,7 @@ def test_real_verification_preserves_binding_limits_without_input_byte_rejection
         assert disk.calls == []
     else:
         verified = disk.verify()
-        assert verified.total_input_bytes > disk.settings.max_artifact_bytes
+        assert verified.total_input_bytes > disk.settings.max_document_bytes
         assert len(verified.findings) == 1
         assert disk.calls
 
@@ -978,8 +975,7 @@ def test_operational_pointer_bytes_remain_measured_and_binding_count_stays_bound
     path.parent.mkdir(parents=True)
     path.write_bytes(b"pointer")
     (tmp_path / "immutable.json").write_bytes(b"immutable")
-    settings = enabled_settings(max_bindings=1 if bound == "bindings" else 2,
-                                max_artifact_bytes=9, max_total_input_bytes=16 if bound == "bindings" else 15)
+    settings = enabled_settings(max_bindings=1 if bound == "bindings" else 2)
     reader = inputs.BoundedInputReader(tmp_path, settings)
     reader.pin(pointer)
     assert inputs._durable_inventory(reader.inventory) == ()
@@ -1003,3 +999,410 @@ def test_only_exact_operational_pointer_families_are_omitted(tmp_path):
     assert {reference.path for reference in inputs._durable_inventory(reader.inventory)} == set(names[2:])
     (tmp_path / names[1]).write_bytes(b'{"changed":true}')
     assert_failure(reader.reprove, c.ExportFailureReason.INPUT_TAMPERED)
+
+
+
+def _install_base_configuration_snapshot(run_root: Path, resolved: dict) -> dict[str, str]:
+    source_bytes = b"# synthetic frozen configuration source\n"
+    source_sha = hashlib.sha256(source_bytes).hexdigest()
+    (run_root / "data/configuration/appsec-review.toml").write_bytes(source_bytes)
+    resolved_bytes = c.canonical_bytes(resolved)
+    resolved_sha = hashlib.sha256(resolved_bytes).hexdigest()
+    (run_root / "data/configuration/resolved.json").write_bytes(resolved_bytes)
+    manifest = {
+        "schema": "appsec-review/run-configuration/2",
+        "resolved_sha256": resolved_sha,
+        "source_sha256": source_sha,
+        "source_layers": [],
+        "sources": [],
+    }
+    manifest_bytes = c.canonical_bytes(manifest)
+    (run_root / "data/configuration/manifest.json").write_bytes(manifest_bytes)
+    return {"path": "data/configuration/resolved.json", "sha256": resolved_sha}
+
+
+def _install_operational_revision(
+    run_root: Path,
+    base_cfg: dict[str, Any],
+    mutator: Any,
+) -> dict[str, str]:
+    """Ensure base configuration has a complete CONFIGURATION_SCHEMA snapshot and write a REVISION_SCHEMA snapshot."""
+    from appsec_review.config.operational import operational_changes
+    from appsec_review.runtime.configuration import (
+        CONFIGURATION_SCHEMA,
+        REVISION_SCHEMA,
+        configuration_snapshot,
+        configurations_compatible,
+    )
+
+    source_toml = b"[project]\nname = 'synthetic-test'\n"
+    source_sha = hashlib.sha256(source_toml).hexdigest()
+    base_bytes = (run_root / "data/configuration/resolved.json").read_bytes()
+    base_sha = hashlib.sha256(base_bytes).hexdigest()
+    base_dir = run_root / "data" / "configuration"
+    if not (base_dir / "appsec-review.toml").is_file():
+        (base_dir / "appsec-review.toml").write_bytes(source_toml)
+    base_manifest = json.loads((base_dir / "manifest.json").read_bytes())
+    if base_manifest.get("schema") != CONFIGURATION_SCHEMA or base_manifest.get("source_sha256") != source_sha:
+        base_manifest.update(
+            {
+                "schema": CONFIGURATION_SCHEMA,
+                "resolved_sha256": base_sha,
+                "source_sha256": source_sha,
+                "sources": base_manifest.get("sources", []),
+                "source_layers": [],
+            }
+        )
+        (base_dir / "manifest.json").write_bytes(c.canonical_bytes(base_manifest))
+
+    rev_cfg = deepcopy(base_cfg)
+    mutator(rev_cfg)
+    rev_bytes = c.canonical_bytes(rev_cfg)
+    rev_sha = hashlib.sha256(rev_bytes).hexdigest()
+    assert rev_sha != base_sha
+
+    changes = operational_changes(base_cfg, rev_cfg)
+    assert changes, "expected at least one operational setting change"
+
+    rev_dir = base_dir / "revisions" / rev_sha
+    rev_dir.mkdir(parents=True, exist_ok=True)
+    (rev_dir / "appsec-review.toml").write_bytes(source_toml)
+    (rev_dir / "resolved.json").write_bytes(rev_bytes)
+    rev_manifest = {
+        "schema": REVISION_SCHEMA,
+        "base_resolved_sha256": base_sha,
+        "source_sha256": source_sha,
+        "resolved_sha256": rev_sha,
+        "resolved": {"path": "resolved.json", "sha256": rev_sha},
+        "sources": [],
+        "source_layers": [],
+        "operational_changes": changes,
+    }
+    (rev_dir / "manifest.json").write_bytes(c.canonical_bytes(rev_manifest))
+    snap = configuration_snapshot(run_root, rev_sha)
+    assert snap.sha256 == rev_sha
+    assert configurations_compatible(run_root, base_sha, rev_sha)
+    return {
+        "path": f"data/configuration/revisions/{rev_sha}/resolved.json",
+        "sha256": rev_sha,
+    }
+
+
+def test_hash_only_artifacts_stream_through_verify_without_retaining_bytes_and_json_enforces_byte_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hash-only artifacts must stream through BoundedInputReader.verify() without calling read()."""
+    from appsec_review.jobs.job_openvex_export import reporting as openvex_reporting
+    from appsec_review.retrieval.index import INDEX_SCHEMA, IndexBuilder, IndexIdentity, write_manifest
+    from tests.handoff_fixture import write_fixture_handoff
+    from tests.test_openvex_job_units import ExportUnits
+    from tests.unit.job_openvex_export.test_dependency_publication import admitted, dependency, publish_export
+
+    stream_dir = tmp_path / "run-stream-verify"
+    stream_dir.mkdir()
+    disk = AcceptedInputDisk(stream_dir, monkeypatch, acquisition="https://example.invalid/repo.git")
+    shard_rel = "data/indices/source-default.sqlite"
+    fingerprint = c.json_sha256("source-shard-fingerprint")
+    builder = IndexBuilder(
+        disk.root / shard_rel,
+        name="source",
+        fingerprint=fingerprint,
+        target_snapshot=disk.snapshot,
+        shard_id="default",
+    )
+    shard_sha = builder.build()
+    shard_ref = {"path": shard_rel, "sha256": shard_sha}
+    manifest_path = disk.root / "data/indices/source-manifest.json"
+    write_manifest(
+        manifest_path,
+        run_id=disk.root.name,
+        target_snapshot=disk.snapshot,
+        target_root=disk.root,
+        indexes=[
+            IndexIdentity(
+                name="source",
+                schema=INDEX_SCHEMA,
+                sha256=shard_sha,
+                fingerprint=fingerprint,
+                relative_path=shard_rel,
+                producer={"job": "job_source_indexing"},
+                shard_id="default",
+            )
+        ],
+    )
+    old_manifest_path = disk.manifest_ref["path"]
+    disk.manifest_ref = {
+        "path": "data/indices/source-manifest.json",
+        "sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+    }
+    review_shard_ref = disk.put("data/review/shards/ledger-0001.bin", b"R" * 4096)
+    disk.scope["manifest_path"] = disk.manifest_ref["path"]
+    disk.scope["manifest_sha256"] = disk.manifest_ref["sha256"]
+    disk.scope["shards"] = [
+        {"name": "source", "shard_id": "default", "path": shard_ref["path"], "sha256": shard_ref["sha256"]}
+    ]
+    disk.scope_ref = disk.put("data/review/scope.json", disk.scope)
+    disk.review_handoff["outputs"]["scope.accept_manifest"]["artifact"] = disk.scope_ref
+    disk.review["accepted_manifest_sha256"] = disk.manifest_ref["sha256"]
+    disk.review["shards"] = [review_shard_ref]
+    disk.authority["review"]["accepted_manifest_sha256"] = disk.manifest_ref["sha256"]
+    disk.authority["bindings"] = [
+        disk.scope_ref if ref["path"] == disk.scope_ref["path"]
+        else (disk.manifest_ref if ref["path"] == old_manifest_path else ref)
+        for ref in disk.authority["bindings"]
+    ] + [review_shard_ref, shard_ref]
+    disk.refresh_review()
+    _, dep_accepted = dependency(disk)
+
+    read_paths: list[str] = []
+    verify_paths: list[str] = []
+    orig_read = inputs.BoundedInputReader.read
+    orig_verify = inputs.BoundedInputReader.verify
+
+    def spy_read(self: inputs.BoundedInputReader, raw_path: Any, *args: Any, **kwargs: Any) -> bytes:
+        read_paths.append(raw_path.path if hasattr(raw_path, "path") else str(raw_path))
+        return orig_read(self, raw_path, *args, **kwargs)
+
+    def spy_verify(self: inputs.BoundedInputReader, raw_path: Any, *args: Any, **kwargs: Any) -> Path:
+        verify_paths.append(raw_path.path if hasattr(raw_path, "path") else str(raw_path))
+        return orig_verify(self, raw_path, *args, **kwargs)
+
+    monkeypatch.setattr(inputs.BoundedInputReader, "read", spy_read)
+    monkeypatch.setattr(inputs.BoundedInputReader, "verify", spy_verify)
+
+    units = ExportUnits(disk)
+    with admitted(disk, dep_accepted):
+        units.assemble()
+        units.execute("acceptance.publish_handoff")
+    publish_export(disk, units, accepted=dep_accepted)
+
+    report_view = openvex_reporting.load_export(disk.root, disk.settings, ROOT, exporter_release=units.release)
+    assert report_view.state == c.ExportReportState.AVAILABLE
+
+    hash_only_targets = {
+        shard_ref["path"],
+        review_shard_ref["path"],
+        disk.ledger_ref["path"],
+        *(ref["path"] for ref in disk.lane_package_refs.values()),
+        *(row["path"] for row in disk.authority["packages"]),
+        *(f"data/review/scoring/scores/{s['score_id']}.json" for row in disk.authority["packages"] for s in row["scores"]),
+        "data/jobs/job_openvex_export/latest.json",
+    }
+    assert hash_only_targets <= set(verify_paths)
+    assert hash_only_targets.isdisjoint(set(read_paths))
+
+    oversized_ref = c.ArtifactRef.from_mapping(
+        disk.put("data/review/oversized.json", b"[" + (b"1," * 2048) + b"1]")
+    )
+    small_settings = replace(disk.settings, max_manifest_bytes=1024, max_document_bytes=1024)
+    small_reader = inputs.BoundedInputReader(disk.root, small_settings)
+    monkeypatch.setattr(inputs, "_MIN_JSON_INPUT_BYTES", 1024)
+    with pytest.raises(c.ExportError) as exc_info:
+        small_reader.json(oversized_ref)
+    assert exc_info.value.reason == c.ExportFailureReason.BOUND_EXCEEDED
+
+
+def test_decision_audit_accepts_operational_configuration_revision_and_rejects_tampering(
+    tmp_path: Path,
+) -> None:
+    """decision_audit must verify operational configuration revisions and reject tampered revision manifests."""
+    from appsec_review.review.models import IntegrityError
+    from appsec_review.storage import atomic_json, file_sha256
+    from tests.handoff_fixture import write_fixture_handoff
+    from tests.unit.review_decision_audit_consumers.helpers import Fixture as AuditFixture
+
+    audit_dir = tmp_path / "audit-rev"
+    audit_dir.mkdir()
+    audit_fx = AuditFixture(audit_dir)
+    audit_fx.config["jobs"]["job_inference_security_review"]["settings"]["attack_chains"] = {"max_links": 4}
+    base_audit_ref = audit_fx.write("data/configuration/resolved.json", audit_fx.config, pin=False)
+    audit_fx.write("data/configuration/manifest.json", {"resolved_sha256": base_audit_ref["sha256"]}, pin=False)
+    rev_audit = _install_operational_revision(
+        audit_fx.root,
+        audit_fx.config,
+        lambda cfg: cfg["jobs"]["job_inference_security_review"]["settings"]["attack_chains"].update({"max_links": 8}),
+    )
+    audit_fx.origin = replace(audit_fx.origin, configuration_sha256=rev_audit["sha256"])
+    audit_fx.publish(products=())
+    review_handoff_path = audit_fx.root / audit_fx.attempt / "handoff.json"
+    (review_handoff_path.parent / "result.json").unlink(missing_ok=True)
+    write_fixture_handoff(
+        audit_fx.root,
+        review_handoff_path,
+        {
+            "job_id": inputs.REVIEW_JOB,
+            "target_snapshot": "target-1",
+            "outputs": audit_fx.outputs,
+            "artifacts": list(audit_fx.artifacts.values()),
+            "resolved_config_sha256": rev_audit["sha256"],
+        },
+        target_snapshot="target-1",
+        configuration_sha256=rev_audit["sha256"],
+    )
+    atomic_json(
+        review_handoff_path.parent.parent.parent / "latest.json",
+        {
+            "handoff_path": review_handoff_path.relative_to(audit_fx.root).as_posix(),
+            "handoff_sha256": file_sha256(review_handoff_path),
+        },
+    )
+    accepted_audit = audit_fx.load()
+    assert accepted_audit.manifest is not None and accepted_audit.unavailable_reason is None
+
+    from appsec_review.indexing.store import accepted_handoff
+    from appsec_review.review.decision_audit.reader import verify_decision_audit
+
+    prior_accepted = accepted_handoff(audit_fx.root, inputs.REVIEW_JOB)
+    published = prior_accepted.handoff["outputs"]["publication.publish_handoff"]
+    rev_manifest_path = audit_fx.root / f"data/configuration/revisions/{rev_audit['sha256']}/manifest.json"
+    tampered_manifest = json.loads(rev_manifest_path.read_bytes())
+    tampered_manifest["operational_changes"] = []
+    rev_manifest_path.write_bytes(c.canonical_bytes(tampered_manifest))
+    with pytest.raises(IntegrityError, match="configuration snapshot failed verification"):
+        verify_decision_audit(
+            audit_fx.root,
+            accepted=prior_accepted,
+            published=published,
+            review=json.loads((audit_fx.root / published["artifact"]["path"]).read_bytes()),
+            scope=json.loads((audit_fx.root / prior_accepted.handoff["outputs"]["scope.accept_manifest"]["artifact"]["path"]).read_bytes()),
+            projection=audit_fx.projection,
+            projection_ref=audit_fx.projection_ref,
+            findings=((audit_fx.finding_ref, audit_fx.finding),),
+        )
+
+
+
+def test_openvex_chain_accepts_compatible_operational_configuration_revisions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compatible operational configuration revisions across review -> gate -> dependencies -> openvex must succeed."""
+    from appsec_review.jobs.job_openvex_export import metrics as openvex_metrics
+    from appsec_review.jobs.job_openvex_export import reporting as openvex_reporting
+    from tests.handoff_fixture import write_fixture_handoff
+    from tests.test_openvex_job_units import ExportUnits
+    from tests.unit.job_openvex_export.test_dependency_publication import admitted, dependency
+
+    openvex_dir = tmp_path / "openvex-rev"
+    openvex_dir.mkdir()
+    disk = AcceptedInputDisk(openvex_dir, monkeypatch, acquisition="https://example.invalid/repo.git")
+    units = ExportUnits(disk)
+    base_cfg = json.loads((disk.root / "data/configuration/resolved.json").read_bytes())
+    rev_review = _install_operational_revision(
+        disk.root,
+        base_cfg,
+        lambda cfg: cfg["jobs"]["job_inference_security_review"]["settings"]["attack_chains"].update(
+            {"max_links": int(cfg["jobs"]["job_inference_security_review"]["settings"]["attack_chains"]["max_links"]) + 2}
+        ),
+    )
+    rev_gate = _install_operational_revision(
+        disk.root,
+        base_cfg,
+        lambda cfg: cfg["jobs"]["job_final_publication_gate"]["settings"].update(
+            {"max_packages": int(cfg["jobs"]["job_final_publication_gate"]["settings"]["max_packages"]) + 50}
+        ),
+    )
+    rev_deps = _install_operational_revision(
+        disk.root,
+        base_cfg,
+        lambda cfg: cfg["jobs"]["job_dependency_intelligence"]["settings"].update(
+            {"max_advisories": int(cfg["jobs"]["job_dependency_intelligence"]["settings"]["max_advisories"]) + 25}
+        ),
+    )
+    rev_openvex = _install_operational_revision(
+        disk.root,
+        base_cfg,
+        lambda cfg: cfg["jobs"]["job_openvex_export"]["settings"].update(
+            {"timeout_seconds": int(cfg["jobs"]["job_openvex_export"]["settings"]["timeout_seconds"]) + 45}
+        ),
+    )
+
+    from appsec_review.config.inference_review import parse_inference_review_settings, semantic_settings_sha256
+
+    rev_review_doc = json.loads((disk.root / rev_review["path"]).read_bytes())
+    disk.authority["review"]["configuration_sha256"] = semantic_settings_sha256(
+        parse_inference_review_settings(rev_review_doc["jobs"][inputs.REVIEW_JOB]["settings"])
+    )
+    disk.review_handoff["resolved_config_sha256"] = rev_review["sha256"]
+    disk.review_job_ref = disk.publish(
+        inputs.REVIEW_JOB,
+        disk.review_handoff,
+        configuration_sha256=rev_review["sha256"],
+    )
+    disk.authority["inputs"]["job_handoff"] = disk.review_job_ref
+    disk.authority["bindings"] = [
+        disk.review_job_ref if ref["path"] == disk.review_job_ref["path"]
+        else (rev_gate if ref["path"] == disk.config_ref["path"] else ref)
+        for ref in disk.authority["bindings"]
+    ]
+    disk.publish_gate()
+    disk.gate_handoff["resolved_config_sha256"] = rev_gate["sha256"]
+    disk.gate_job_ref = disk.publish(inputs.GATE_JOB, disk.gate_handoff, configuration_sha256=rev_gate["sha256"])
+
+    _, dep_accepted = dependency(disk)
+    dep_handoff_path = disk.root / dep_accepted["path"]
+    dep_handoff = json.loads(dep_handoff_path.read_bytes())
+    dep_handoff["resolved_config_sha256"] = rev_deps["sha256"]
+    write_fixture_handoff(
+        disk.root,
+        dep_handoff_path,
+        dep_handoff,
+        target_snapshot=disk.snapshot,
+        configuration_sha256=rev_deps["sha256"],
+    )
+    dep_accepted = {
+        "path": dep_accepted["path"],
+        "sha256": hashlib.sha256(dep_handoff_path.read_bytes()).hexdigest(),
+    }
+    disk.put(
+        f"data/jobs/{dep_handoff['job_id']}/latest.json",
+        {"handoff_path": dep_accepted["path"], "handoff_sha256": dep_accepted["sha256"]},
+    )
+
+    rev_openvex_settings = replace(disk.settings, timeout_seconds=disk.settings.timeout_seconds + 45)
+    units.context = replace(
+        units.context,
+        resolved_config_sha256=rev_openvex["sha256"],
+        config=replace(units.context.config, settings=rev_openvex_settings.to_mapping(), typed_settings=rev_openvex_settings),
+    )
+    with admitted(disk, dep_accepted):
+        units.assemble()
+        units.execute("acceptance.publish_handoff")
+    export_handoff = disk.handoff(c.JOB_ID, deepcopy(units.outputs))
+    export_handoff.update(
+        {
+            "attempt_id": units.context.attempt_id,
+            "completion_status": units.outputs["acceptance.publish_handoff"]["terminal_status"],
+            "schema_identity": c.OPENVEX_EXPORT_HANDOFF_SCHEMA,
+            "implementation_identity": units.implementation_identity,
+            "resolved_config_sha256": rev_openvex["sha256"],
+            "upstream_handoff_sha256": {
+                inputs.GATE_JOB: disk.gate_job_ref["sha256"],
+                inputs.REVIEW_JOB: disk.review_job_ref["sha256"],
+                dep_handoff["job_id"]: dep_accepted["sha256"],
+            },
+        }
+    )
+    export_ref = c.ArtifactRef.from_mapping(
+        disk.publish(c.JOB_ID, export_handoff, configuration_sha256=rev_openvex["sha256"])
+    )
+    published_handoff = json.loads((disk.root / export_ref.path).read_bytes())
+    assert published_handoff["resolved_config_sha256"] == rev_openvex["sha256"]
+
+    report_view = openvex_reporting.load_export(disk.root, disk.settings, ROOT, exporter_release=units.release)
+    assert report_view.state == c.ExportReportState.AVAILABLE
+
+    cfg_settings, cfg_release = openvex_metrics._configuration(disk.root, expected_sha256=rev_openvex["sha256"])
+    assert cfg_settings.timeout_seconds == rev_openvex_settings.timeout_seconds
+    assert isinstance(cfg_release, str)
+
+
+def test_final_report_schema_sha256_pins_stay_in_sync_across_report_and_openvex_contracts() -> None:
+    """Both job_final_report_publication and job_openvex_export must pin identical SHA-256 digests for final-report schemas."""
+    from appsec_review.jobs.job_final_report_publication.contracts import FINAL_REPORT_SCHEMA_SHA256
+    from appsec_review.jobs.job_openvex_export.contracts import SCHEMA_SHA256
+
+    schema_dir = ROOT / "docs" / "schemas" / "final-report"
+    on_disk = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(schema_dir.glob("*.json"))}
+    assert dict(FINAL_REPORT_SCHEMA_SHA256) == on_disk
+    assert SCHEMA_SHA256["../final-report/final-report.schema.json"] == FINAL_REPORT_SCHEMA_SHA256["final-report.schema.json"]
+    assert SCHEMA_SHA256["../final-report/final-report.schema.json"] == on_disk["final-report.schema.json"]

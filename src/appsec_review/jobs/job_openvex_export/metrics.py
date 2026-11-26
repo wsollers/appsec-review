@@ -58,12 +58,22 @@ def _bounded_json(run_root: Path, relative: str, limit: int) -> tuple[dict[str, 
     return parse_json_bytes(payload, max_bytes=limit), payload
 
 
-def _configuration(run_root: Path) -> tuple[OpenVexExportSettings | None, str]:
+def _configuration(
+    run_root: Path, expected_sha256: str | None = None,
+) -> tuple[OpenVexExportSettings | None, str]:
     manifest, _ = _bounded_json(run_root, "data/configuration/manifest.json", _CONFIG_BYTES)
     resolved, payload = _bounded_json(run_root, "data/configuration/resolved.json", _CONFIG_BYTES)
+    base_sha = manifest.get("resolved_sha256")
     if (manifest.get("schema") != "appsec-review/run-configuration/2"
-            or hashlib.sha256(payload).hexdigest() != manifest.get("resolved_sha256")):
+            or not isinstance(base_sha, str)
+            or hashlib.sha256(payload).hexdigest() != base_sha):
         raise ValueError("OpenVEX frozen configuration integrity mismatch")
+    if expected_sha256 is not None and expected_sha256 != base_sha:
+        from appsec_review.runtime.configuration import configuration_snapshot, configurations_compatible
+        snapshot = configuration_snapshot(run_root, expected_sha256)
+        if not configurations_compatible(run_root, expected_sha256, base_sha):
+            raise ValueError("OpenVEX configuration revision is incompatible with immutable run configuration")
+        resolved = dict(snapshot.document)
     jobs = resolved.get("jobs")
     if not isinstance(jobs, Mapping):
         raise ValueError("OpenVEX frozen configuration has no jobs table")

@@ -255,9 +255,14 @@ def render_markdown(report: Mapping[str, Any], *, evidence_ids: int, gap_ids: in
         lines.append(f"- {code(item['chain_id'])}: {code(item['status'])}; artifact {code(item['artifact']['path'])}")
         card = card_by_id.get(item["chain_id"])
         if card:
+            boundary = (
+                "reported domain transition (not a source-resolved boundary)"
+                if card["trust_boundary_crossed"] == "[unverified link]"
+                else f"source-resolved boundary {code(card['trust_boundary_crossed'])}"
+            )
             lines.append(
                 f"  - composed severity {code(card['composed_severity'])}; "
-                f"source-resolved boundary {code(card['trust_boundary_crossed'])}; "
+                f"{boundary}; "
                 "component claims (not path order): " + ", ".join(code(s["claim_id"]) for s in card["steps"])
             )
     lines += [""]

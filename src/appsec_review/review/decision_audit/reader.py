@@ -679,7 +679,21 @@ def verify_decision_audit(run_root: Path, *, accepted: Any, published: Mapping[s
     _require(metadata_path == (store.audit_root / "publication.json").as_posix(),
              "audit publication descriptor is outside the accepted audit directory")
     metadata = store.document({"path": metadata_path, "sha256": store.pins.get(metadata_path)}, audit=True)
-    config_ref = {"path": "data/configuration/resolved.json", "sha256": handoff["resolved_config_sha256"]}
+    config_sha = handoff["resolved_config_sha256"]
+    _require(isinstance(config_sha, str) and len(config_sha) == 64, "invalid review configuration identity")
+    try:
+        from appsec_review.runtime.configuration import configuration_directory, configuration_snapshot
+        from appsec_review.storage.shared import safe_path
+        revision_resolved = safe_path(root, f"data/configuration/revisions/{config_sha}/resolved.json")
+        if revision_resolved.is_file():
+            config_dir = configuration_directory(root, config_sha)
+            configuration_snapshot(root, config_sha)
+            config_rel = (config_dir / "resolved.json").relative_to(root).as_posix()
+        else:
+            config_rel = "data/configuration/resolved.json"
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise IntegrityError("decision audit configuration snapshot failed verification") from exc
+    config_ref = {"path": config_rel, "sha256": config_sha}
     store.admit(config_ref)
     frozen = store.document(config_ref)
     settings = DecisionAuditSettings.from_mapping(

@@ -165,20 +165,58 @@ def test_escapes_cover_every_tex_special_and_break_long_identifiers() -> None:
 
 @pytest.mark.parametrize("escape", [tex, tex_mono], ids=["prose", "monospace"])
 def test_long_unbroken_tex_text_has_short_source_lines_without_losing_text(escape) -> None:
-    value = "A" * 210000
+    from appsec_review.reporting.text import _TEX_SOURCE_LINE_BYTES
+
+    value = "A" * 20000
     escaped = escape(value)
-    assert max(len(line.encode("utf-8")) for line in escaped.splitlines()) < 200000
+    # _join_tex checks width >= 4096 before emitting the next atomic token ('A' or '\allowbreak{}') plus '%'.
+    assert max(len(line.encode("utf-8")) for line in escaped.splitlines()) <= _TEX_SOURCE_LINE_BYTES + len(r"\allowbreak{}") + 1
     assert escaped.replace("%\n", "").replace(r"\allowbreak{}", "") == value
 
 
-@pytest.mark.parametrize("escape", [tex, tex_mono], ids=["prose", "monospace"])
-def test_tex_source_wrapping_keeps_escape_commands_intact(escape) -> None:
-    value = r"\%{}_$&#^~" * 512
-    escaped = escape(value)
-    assert "%\n" in escaped
-    expected = "".join(tex(char).replace(r"\allowbreak{}", "") for char in value)
-    assert escaped.replace("%\n", "").replace(r"\allowbreak{}", "") == expected
+def test_join_tex_enforces_4096_utf8_byte_limit_with_multibyte_and_codepoint_escapes() -> None:
+    from appsec_review.reporting.text import _TEX_SOURCE_LINE_BYTES, _join_tex
 
+    assert _TEX_SOURCE_LINE_BYTES == 4096
+    # 16-UTF-8-byte word ('é€é€é€a': 7 chars, 16 UTF-8 bytes) + space (17 bytes): 240 * 17 + 16 == 4096 UTF-8 bytes.
+    # Byte-based wrapping wraps every line at <= 4096 UTF-8 bytes (< 2,000 chars), whereas char-counting would exceed 9,000 bytes.
+    multibyte_word = "é€é€é€a"
+    assert len(multibyte_word) == 7 and len(multibyte_word.encode("utf-8")) == 16
+    prose_utf8 = tex(" ".join([multibyte_word] * 600))
+    prose_lines = prose_utf8.splitlines()
+    assert len(prose_lines) >= 2
+    for line in prose_lines:
+        assert len(line.encode("utf-8")) <= 4096
+        assert len(line) < 2000
+    assert prose_utf8.replace("\n", " ") == " ".join([multibyte_word] * 600)
+
+    # Combined multi-byte UTF-8 + [U+XXXX] replacement token ('🔒'*7 + 'é'*8 -> 7*32 + 8*2 == 240 UTF-8 bytes, 15 chars):
+    # 16 * 241 + 240 == 4096 UTF-8 bytes, so every wrapped line satisfies len(line.encode('utf-8')) <= 4096 without splitting escapes.
+    escaped_lock = tex("🔒")
+    mixed_word = ("🔒" * 7) + ("é" * 8)
+    mixed_rendered = tex(" ".join([mixed_word] * 40))
+    mixed_lines = mixed_rendered.splitlines()
+    assert len(mixed_lines) >= 2
+    for line in mixed_lines:
+        assert len(line.encode("utf-8")) <= 4096
+        assert line.count("U+1F512") == line.count(escaped_lock)
+
+    # Direct _join_tex on unspaced 2-byte UTF-8 ('é') wraps content at <= 4096 UTF-8 bytes before trailing '%', never splitting UTF-8 bytes.
+    unspaced = _join_tex(["é"] * 4500)
+    for line in unspaced.splitlines():
+        content = line.removesuffix("%")
+        assert content.encode("utf-8").decode("utf-8") == content
+        assert len(content.encode("utf-8")) <= 4096
+
+    # Unspaced boundary cases with [U+4E2D] ('中') and [U+1F512] ('🔒') at 4094/4095/4096 bytes never split any escape command.
+    for pad_chars in (2047, 2048):
+        sample = ("é" * pad_chars) + "中🔒tail"
+        for escape in (tex, tex_mono):
+            rendered = escape(sample)
+            for line in rendered.splitlines():
+                assert line.encode("utf-8").decode("utf-8") == line
+                assert line.count("U+4E2D") == line.count(escape("中"))
+                assert line.count("U+1F512") == line.count(escape("🔒"))
 
 def test_cli_writes_files_and_rejects_bad_input(run_dir: Path, tmp_path: Path, capsys) -> None:
     out = tmp_path / "out"

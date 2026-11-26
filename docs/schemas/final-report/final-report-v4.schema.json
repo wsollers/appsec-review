@@ -29,7 +29,7 @@
             "name": {
               "enum": [
                 "dev", "prod", "copilot-dev", "copilot-prod", "copilot-carbon-prod",
-                "copilot-dev-astra-6.2", "copilot-dev-gemini"
+                "copilot-dev-astra-6.2", "copilot-dev-gemini", "wsollers1-dev"
               ]
             },
             "sha256": {
@@ -78,7 +78,7 @@
     "radar_tracker": {"$ref": "security-radar-tracker-v2.schema.json"},
     "attack_chain_cards": {
       "type": "array", "maxItems": 10000,
-      "items": {"$ref": "final-report.schema.json#/$defs/attack_chain_card"}
+      "items": {"$ref": "#/$defs/attack_chain_card"}
     },
     "remediation_roadmap": {"$ref": "final-report-v3.schema.json#/properties/remediation_roadmap"},
     "named_coverage_gaps": {
@@ -108,6 +108,115 @@
       "if": {"properties": {"reachable_supply_chain_advisories_count": {"type": "null"}}},
       "then": {"properties": {"reachable_supply_chain_gap_reasons": {"minItems": 1}}},
       "else": {"properties": {"reachable_supply_chain_gap_reasons": {"maxItems": 0}}}
+    }
+    },
+  "$defs": {
+    "attack_chain_card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chain_id",
+        "status",
+        "composed_severity",
+        "severity_gap",
+        "trust_boundary_crossed",
+        "step_count",
+        "steps",
+        "gap_count"
+      ],
+      "properties": {
+        "chain_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "composed_severity": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "unrated"
+          ]
+        },
+        "severity_gap": {
+          "enum": [
+            "chain_severity_unrated",
+            null
+          ]
+        },
+        "trust_boundary_crossed": {
+          "const": "[unverified link]"
+        },
+        "step_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gap_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "step_index",
+              "role",
+              "claim_id",
+              "finding_package_id",
+              "title",
+              "domain_id",
+              "technical_severity"
+            ],
+            "properties": {
+              "step_index": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "role": {
+                "enum": [
+                  "component",
+                  "entry",
+                  "hop",
+                  "sink"
+                ]
+              },
+              "claim_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "finding_package_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "domain_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "technical_severity": {
+                "enum": [
+                  "critical",
+                  "high",
+                  "medium",
+                  "low",
+                  "unrated"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

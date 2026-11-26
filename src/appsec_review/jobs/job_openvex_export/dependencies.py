@@ -14,7 +14,7 @@ from .contracts import (
     ArtifactRef, ExportFailureReason as Reason, VerifiedInputs, canonical_bytes, source_product_id,
 )
 from .cve_reachability import project_dependency_advisories_to_openvex
-from .inputs import BoundedInputReader, _accepted, _ref, _require
+from .inputs import BoundedInputReader, _accepted, _ref, _require, _require_compatible_configurations
 from .settings import OpenVexExportSettings
 
 DEPENDENCY_JOB = "job_dependency_intelligence"
@@ -31,8 +31,11 @@ def read_dependency_inputs(
     accepted = _accepted(reader, DEPENDENCY_JOB, optional=True)
     if accepted is None:
         return None
-    _require(accepted.handoff["resolved_config_sha256"] == resolved_config_sha256,
-             "dependency export configuration differs from the certified gate", Reason.IDENTITY_CONFLICT)
+    _require_compatible_configurations(
+        reader, accepted.handoff.get("resolved_config_sha256"), resolved_config_sha256,
+        message="dependency export configuration differs from the certified gate",
+        reason=Reason.IDENTITY_CONFLICT,
+    )
     output = accepted.handoff["outputs"]["acceptance.publish_handoff"]
     published_ref = output.get("artifact")
     _require(published_ref is not None, "accepted dependency output omits its domain artifact",
