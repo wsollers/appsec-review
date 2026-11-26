@@ -86,7 +86,7 @@ def frozen_export_settings(
 ) -> tuple[OpenVexExportSettings | None, str]:
     configuration, _ = frozen_configuration(run_root, expected_sha256)
     job = configuration.get("jobs", {}).get(JOB_ID)
-    settings = None if job is None else OpenVexExportSettings.from_mapping(job["settings"])
+    settings = None if job is None else OpenVexExportSettings.from_frozen_mapping(job["settings"])
     releases = configuration.get("review_policy", {}).get("releases", {})
     return settings, releases.get(JOB_ID, releases.get("platform", "undeclared"))
 
@@ -117,7 +117,7 @@ def _recorded_settings(reader: BoundedInputReader, accepted: Mapping[str, Any]) 
         raise ExportError("accepted export configuration snapshot is invalid",
                           reason=Reason.INPUT_TAMPERED, phase=ExportPhase.ACCEPT) from exc
     config = reader.json(ArtifactRef((directory / "resolved.json").relative_to(reader.root).as_posix(), identity))
-    recorded = OpenVexExportSettings.from_mapping(config["jobs"][JOB_ID]["settings"])
+    recorded = OpenVexExportSettings.from_frozen_mapping(config["jobs"][JOB_ID]["settings"])
     _require(compatible_settings(recorded, reader.settings), "accepted export uses different settings",
              Reason.IDENTITY_CONFLICT, phase=ExportPhase.ACCEPT)
     return recorded

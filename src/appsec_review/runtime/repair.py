@@ -522,6 +522,28 @@ def _planning_repair_context(config: AppConfig, run_root: Path, jobs: Sequence[J
     return context
 
 
+_MISSING_STRICTNESS = {"not_applicable": 0, "gap": 1, "reject": 2}
+
+
+def _compatible_input_requirement(previous: Any, current_inputs: list[Any]) -> bool:
+    if not isinstance(previous, Mapping):
+        return False
+    if previous in current_inputs:
+        return True
+    old_rank = _MISSING_STRICTNESS.get(previous.get("missing"))
+    if old_rank is None:
+        return False
+    fixed = {key: value for key, value in previous.items() if key != "missing"}
+    for candidate in current_inputs:
+        if not isinstance(candidate, Mapping):
+            continue
+        new_rank = _MISSING_STRICTNESS.get(candidate.get("missing"))
+        if (new_rank is not None and new_rank >= old_rank
+                and {key: value for key, value in candidate.items() if key != "missing"} == fixed):
+            return True
+    return False
+
+
 def compatible_dataset_change(previous: Mapping[str, Any], current: Mapping[str, Any]) -> bool:
     """Whether a job's dataset contract only gained datasets or input requirements since ``previous``.
 
@@ -558,7 +580,7 @@ def compatible_dataset_change(previous: Mapping[str, Any], current: Mapping[str,
         old_inputs, new_inputs = old_contract.get("inputs"), new_contract.get("inputs")
         if not isinstance(old_inputs, list) or not isinstance(new_inputs, list):
             return False
-        if any(item not in new_inputs for item in old_inputs):
+        if not all(_compatible_input_requirement(item, new_inputs) for item in old_inputs):
             return False
     return True
 

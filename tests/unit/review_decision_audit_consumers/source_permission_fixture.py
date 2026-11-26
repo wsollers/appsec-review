@@ -19,6 +19,7 @@ from tests.handoff_fixture import write_fixture_handoff
 ROOT = Path(__file__).resolve().parents[3]
 GATE = "job_final_publication_gate"
 DOSSIER = "job_dossier_publication"
+OPENVEX = "job_openvex_export"
 SCANNER = ("job_evidence_collection", "static_tool_observations", "observations", "scanner-fixture")
 POST_BUILD = ("job_post_build_security_assessment", "build_security", "build_security", "hardening-fixture")
 HISTORY = ("job_source_history_analysis", "history_signals", "history", "history-fixture")
@@ -28,7 +29,7 @@ class SourceRun:
     def __init__(self, base: Path, *, run_id="audit-source-run"):
         self.root = base / run_id
         self.target = "fixture-target"
-        jobs = sorted({REVIEW_JOB, GATE, DOSSIER, HISTORY[0], *(producer for producer, _ in ORIGINAL_AUDIT_SOURCES)})
+        jobs = sorted({REVIEW_JOB, GATE, DOSSIER, OPENVEX, HISTORY[0], *(producer for producer, _ in ORIGINAL_AUDIT_SOURCES)})
         config = {"build_capture": tomllib.loads((ROOT / "appsec-review.toml").read_text())["build_capture"],
                   "jobs": {name: {"name": name, "settings": {}, "workers": 1, "steps": {}} for name in jobs}}
         atomic_json(self.root / "data/configuration/resolved.json", config)

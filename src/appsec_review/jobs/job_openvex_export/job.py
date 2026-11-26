@@ -31,7 +31,7 @@ _SCHEMA_DIRECTORY = "steps/load/tasks/verify_inputs/schemas/openvex-export"
 
 
 def _settings(unit: UnitContext) -> OpenVexExportSettings:
-    settings = OpenVexExportSettings.from_mapping(unit.job.config.settings)
+    settings = OpenVexExportSettings.from_frozen_mapping(unit.job.config.settings)
     settings.require_enabled()
     return settings
 
@@ -42,7 +42,7 @@ def _release(unit: UnitContext) -> str:
 
 
 def _validate(context: Any, _result: Any) -> None:
-    settings = OpenVexExportSettings.from_mapping(context.config.settings)
+    settings = OpenVexExportSettings.from_frozen_mapping(context.config.settings)
     settings.require_enabled()
     if tuple(context.config.steps) != tuple(TOPOLOGY) or any(
             tuple(context.config.step(step).tasks) != tasks for step, tasks in TOPOLOGY.items()):

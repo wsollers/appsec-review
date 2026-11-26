@@ -72,6 +72,20 @@ class OpenVexExportSettings:
             raise ValueError("jobs.job_openvex_export.settings must define exactly its documented keys")
         return cls(**dict(value))
 
+    @classmethod
+    def from_frozen_mapping(cls, value: Mapping[str, Any]) -> OpenVexExportSettings:
+        """Rehydrate frozen run-snapshot settings, stripping valid retired pre-8a016cff input-byte keys."""
+        if not isinstance(value, Mapping):
+            raise ValueError("jobs.job_openvex_export.settings must define exactly its documented keys")
+        retired = set(value) & {"max_artifact_bytes", "max_total_input_bytes"}
+        if not retired:
+            return cls.from_mapping(value)
+        for key in retired:
+            item = value[key]
+            if type(item) is not int or item <= 0:
+                raise ValueError(f"jobs.job_openvex_export.settings.{key} must be a positive integer")
+        return cls.from_mapping({k: v for k, v in value.items() if k not in {"max_artifact_bytes", "max_total_input_bytes"}})
+
     def to_mapping(self) -> dict[str, Any]:
         return {**asdict(self), "author_kind": self.author_kind.value}
 

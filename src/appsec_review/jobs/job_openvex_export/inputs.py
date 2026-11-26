@@ -13,7 +13,7 @@ from typing import Any, Iterator
 
 from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.runtime.configuration import configuration_snapshot, configurations_compatible
-from appsec_review.config.inference_review import parse_inference_review_settings, semantic_settings_sha256
+from appsec_review.config.inference_review import parse_frozen_inference_review_settings, semantic_settings_sha256
 from appsec_review.indexing.store import AcceptedHandoff, accepted_handoff
 from appsec_review.interchange import HANDOFF_SCHEMA as JOB_HANDOFF_SCHEMA
 from appsec_review.runtime.inputs import decode_consumed_handoff as decode_handoff
@@ -404,7 +404,7 @@ def _validate_export_configuration(
 ) -> None:
     jobs = resolved["jobs"]
     with _errors(reader.phase, Reason.CONFIGURATION_INVALID):
-        frozen = OpenVexExportSettings.from_mapping(jobs["job_openvex_export"]["settings"])
+        frozen = OpenVexExportSettings.from_frozen_mapping(jobs["job_openvex_export"]["settings"])
         frozen.require_enabled()
         frozen.validate_prerequisites(gate_enabled=jobs[GATE_JOB]["settings"]["enabled"],
                                       review_enabled=REVIEW_JOB in jobs)
@@ -414,7 +414,7 @@ def _validate_export_configuration(
 
 def _review_policy_digests(reader: BoundedInputReader, resolved: Mapping[str, Any]) -> tuple[str, str]:
     with _errors(reader.phase, Reason.CONFIGURATION_INVALID):
-        review_settings = parse_inference_review_settings(resolved["jobs"][REVIEW_JOB]["settings"])
+        review_settings = parse_frozen_inference_review_settings(resolved["jobs"][REVIEW_JOB]["settings"])
     semantic = semantic_settings_sha256(review_settings)
     policy = policy_sha256(review_settings.ship_block,
                           review_settings.verification.require_distinct_model_for_ship_blocking)

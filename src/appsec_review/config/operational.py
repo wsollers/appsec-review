@@ -570,6 +570,39 @@ OPERATIONAL_SETTINGS = (
     OperationalSetting('job_poc_generation', ("settings", "retry", 'retry_on_invalid_output'), category="coverage", value_type="boolean"),
 )
 
+# Operational settings retired from shipped TOML in 8a016cff (T-5028/T-5035). Not configurable on new runs,
+# but admitted when comparing pre-8a016cff immutable run snapshots during parent-linked recovery.
+RETIRED_OPERATIONAL_SETTINGS: tuple[OperationalSetting, ...] = (
+    OperationalSetting('job_inference_security_review', ('settings', 'attack_chains', 'max_challenge_cells'), category='coverage', value_type='nonnegative_integer'),
+    OperationalSetting('job_inference_security_review', ('settings', 'attack_chains', 'max_queries'), category='coverage', value_type='positive_integer'),
+    OperationalSetting('job_inference_security_review', ('settings', 'attack_chains', 'max_turns'), category='coverage', value_type='positive_integer'),
+    OperationalSetting('job_openvex_export', ('settings', 'max_artifact_bytes'), category='coverage', value_type='positive_integer'),
+    OperationalSetting('job_openvex_export', ('settings', 'max_total_input_bytes'), category='coverage', value_type='positive_integer'),
+    OperationalSetting('job_remediation_planning', ('settings', 'bounds', 'max_workspace_bytes'), category='coverage', value_type='positive_integer'),
+    OperationalSetting('job_remediation_planning', ('settings', 'bounds', 'max_workspace_files'), category='coverage', value_type='positive_integer'),
+)
+
+# Existing operational settings whose default values were newly materialized in resolved_document["runtime"].
+_IMPLICIT_OPERATIONAL_DEFAULTS: dict[tuple[str, ...], float] = {
+    ('runtime', 'operation_progress_interval_seconds'): 60.0,
+    ('runtime', 'operation_sample_interval_seconds'): 1.0,
+}
+
+
+def _valid_operational_value(setting: OperationalSetting, value: Any) -> bool:
+    if setting.value_type == "memory":
+        return isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*[mg]", value) is not None
+    if setting.value_type == "boolean":
+        return type(value) is bool
+    if setting.value_type == "backoff":
+        return (isinstance(value, (list, tuple)) and len(value) <= 16 and
+                all(type(item) is int and 0 <= item <= 3600 for item in value) and
+                list(value) == sorted(value))
+    integral = setting.value_type.endswith("integer")
+    numeric = type(value) is int if integral else type(value) in (int, float)
+    return numeric and (type(value) is int or math.isfinite(value)) and (
+        value >= 0 if setting.value_type.startswith("nonnegative") else value > 0)
+
 
 class MaterialConfigurationChange(ValueError):
     """A configuration change needs more than operational-setting admission."""
@@ -599,6 +632,8 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
                 raise MaterialConfigurationChange(str(exc)) from exc
     declarations = {setting.resolved_path: setting for setting in OPERATIONAL_SETTINGS}
     source_declarations = {setting.source_path: setting for setting in OPERATIONAL_SETTINGS}
+    retired_declarations = {setting.resolved_path: setting for setting in RETIRED_OPERATIONAL_SETTINGS}
+    retired_source_declarations = {setting.source_path: setting for setting in RETIRED_OPERATIONAL_SETTINGS}
     changes: list[dict[str, Any]] = []
     material: list[str] = []
 
@@ -650,6 +685,14 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
                     right_dev = right_jobs.get(key[1], {}).get("development") if isinstance(right_jobs, Mapping) and isinstance(right_jobs.get(key[1]), Mapping) else None
                     _validate_development_change(key[1], left_dev, right_dev)
                     continue
+                retired_prof = retired_declarations.get(key) or retired_source_declarations.get(key)
+                if retired_prof is not None:
+                    for present in ([first[key]] if key in first else []) + ([second[key]] if key in second else []):
+                        if not _valid_operational_value(retired_prof, present):
+                            raise MaterialConfigurationChange(
+                                "operational setting must retain " + retired_prof.value_type + ": "
+                                + ".".join((*path, "document", *key)))
+                    continue
                 if key not in declarations and key not in source_declarations:
                     material.append(".".join((*path, "document", *key)))
             # Source-layer digests are provenance, not authority. Effective leaf values are
@@ -676,37 +719,45 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
             return
         setting = declarations.get(path)
         if setting is not None:
-            def valid(value: Any) -> bool:
-                if setting.value_type == "memory":
-                    return isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*[mg]", value) is not None
-                if setting.value_type == "boolean":
-                    return type(value) is bool
-                if setting.value_type == "backoff":
-                    return (isinstance(value, (list, tuple)) and len(value) <= 16 and
-                            all(type(item) is int and 0 <= item <= 3600 for item in value) and
-                            list(value) == sorted(value))
-                integral = setting.value_type.endswith("integer")
-                numeric = type(value) is int if integral else type(value) in (int, float)
-                return numeric and (type(value) is int or math.isfinite(value)) and (
-                    value >= 0 if setting.value_type.startswith("nonnegative") else value > 0)
-
-            if not valid(left) or not valid(right):
+            if not _valid_operational_value(setting, left) or not _valid_operational_value(setting, right):
                 raise MaterialConfigurationChange(
                     "operational setting must retain " + setting.value_type + ": " + ".".join(path))
             changes.append({"job_id": setting.job_id, "path": list(setting.path),
                             "category": setting.category, "before": left, "after": right})
             return
+        retired_leaf = retired_declarations.get(path)
+        if retired_leaf is not None:
+            if not _valid_operational_value(retired_leaf, left) or not _valid_operational_value(retired_leaf, right):
+                raise MaterialConfigurationChange(
+                    "operational setting must retain " + retired_leaf.value_type + ": " + ".".join(path))
+            changes.append({"job_id": retired_leaf.job_id, "path": list(retired_leaf.path),
+                            "category": retired_leaf.category, "before": left, "after": right})
+            return
         if isinstance(left, Mapping) and isinstance(right, Mapping):
             for key in sorted(set(left) | set(right)):
+                child_path = (*path, key)
                 if key not in left or key not in right:
                     if not path and key in ("configuration_profile", "configuration_overlay"):
                         compare(left.get(key, {}), right.get(key, {}), (key,))
-                    elif _development((*path, key)):
-                        compare(left.get(key), right.get(key), (*path, key))
+                    elif _development(child_path):
+                        compare(left.get(key), right.get(key), child_path)
+                    elif child_path in _IMPLICIT_OPERATIONAL_DEFAULTS and child_path in declarations:
+                        default = _IMPLICIT_OPERATIONAL_DEFAULTS[child_path]
+                        compare(left.get(key, default), right.get(key, default), child_path)
+                    elif child_path in retired_declarations:
+                        retired_setting = retired_declarations[child_path]
+                        for present in ([left[key]] if key in left else []) + ([right[key]] if key in right else []):
+                            if not _valid_operational_value(retired_setting, present):
+                                raise MaterialConfigurationChange(
+                                    "operational setting must retain " + retired_setting.value_type + ": "
+                                    + ".".join(child_path))
+                        changes.append({"job_id": retired_setting.job_id, "path": list(retired_setting.path),
+                                        "category": retired_setting.category,
+                                        "before": left.get(key), "after": right.get(key)})
                     else:
-                        material.append(".".join((*path, key)))
+                        material.append(".".join(child_path))
                 else:
-                    compare(left[key], right[key], (*path, key))
+                    compare(left[key], right[key], child_path)
             return
         material.append(".".join(path))
 

@@ -27,17 +27,15 @@ DATASETS = (
 )
 
 
+from appsec_review.jobs.decision_audit_inputs import original_audit_source_inputs
 from appsec_review.runtime.contracts import (
     Availability, DispatchClass, EvidenceAuthority, InputChannel, InputRequirement,
     JobContract, MissingPolicy, TargetAccess,
 )
 
 CONTRACT = JobContract(
-    inputs=(
+    inputs=original_audit_source_inputs((
         InputRequirement("job_review_intake", "handoff", "appsec-review/job-handoff/2",
-                         authority=EvidenceAuthority.PRODUCER_EVIDENCE,
-                         availability=Availability.OPTIONAL, missing=MissingPolicy.NOT_APPLICABLE),
-        InputRequirement("job_dependency_intelligence", "handoff", "appsec-review/job-handoff/2",
                          authority=EvidenceAuthority.PRODUCER_EVIDENCE,
                          availability=Availability.OPTIONAL, missing=MissingPolicy.NOT_APPLICABLE),
         InputRequirement("job_dependency_intelligence", "sca_reachability", "appsec-review/sca-reachability/1",
@@ -81,7 +79,7 @@ CONTRACT = JobContract(
               ("review_decision_bases", "appsec-review/decision-basis/1"),
               ("review_audit_continuations", "application/x-ndjson"),
           )),
-    ),
+    )),
     schedule_after=('job_final_publication_gate',),
     dispatch=DispatchClass.REVIEW_GRAPH,
     target_access=TargetAccess.ACCEPTED_EVIDENCE,

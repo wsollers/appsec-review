@@ -1486,14 +1486,16 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             from .cbmc import CbmcSettings
             typed_settings = CbmcSettings.from_mapping(settings)
         elif job_id == "job_inference_security_review":
-            from .inference_review import parse_inference_review_settings
-            typed_settings = parse_inference_review_settings(settings)
+            from .inference_review import parse_frozen_inference_review_settings, parse_inference_review_settings
+            typed_settings = (parse_frozen_inference_review_settings(settings)
+                              if _snapshot is not None else parse_inference_review_settings(settings))
         elif job_id == "job_dossier_publication":
             from appsec_review.jobs.job_dossier_publication.settings import DossierPublicationSettings
             typed_settings = DossierPublicationSettings.from_mapping(settings)
         elif job_id == "job_openvex_export":
             from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
-            typed_settings = OpenVexExportSettings.from_mapping(settings)
+            typed_settings = (OpenVexExportSettings.from_frozen_mapping(settings)
+                              if _snapshot is not None else OpenVexExportSettings.from_mapping(settings))
         elif job_id == "job_threat_model_generation":
             typed_settings = parse_threat_model_settings(settings)
         elif job_id == "job_remediation_planning":
@@ -1605,10 +1607,13 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         raise ValueError("[orchestration.dagster.pools] must be a table")
     resolved_document["runtime"]["metadata_dir"] = str(
         document["runtime"].get("metadata_dir", "runs/metadata"))
-    resolved_document["runtime"]["operation_progress_interval_seconds"] = (
-        runtime.operation_progress_interval_seconds)
-    resolved_document["runtime"]["operation_sample_interval_seconds"] = (
-        runtime.operation_sample_interval_seconds)
+    snap_runtime = _snapshot.document.get("runtime", {}) if _snapshot is not None else None
+    if snap_runtime is None or "operation_progress_interval_seconds" in snap_runtime:
+        resolved_document["runtime"]["operation_progress_interval_seconds"] = (
+            runtime.operation_progress_interval_seconds)
+    if snap_runtime is None or "operation_sample_interval_seconds" in snap_runtime:
+        resolved_document["runtime"]["operation_sample_interval_seconds"] = (
+            runtime.operation_sample_interval_seconds)
     resolved_document.setdefault("tools", {})["disable_grype"] = tool_capabilities.disable_grype
     resolved_document["tools"]["enable_swift"] = tool_capabilities.enable_swift
     resolved_document["tools"]["enable_cve_bin_tool"] = tool_capabilities.enable_cve_bin_tool

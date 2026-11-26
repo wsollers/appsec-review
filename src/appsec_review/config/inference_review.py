@@ -773,6 +773,27 @@ def _poc(value: object, enabled_providers: tuple[str, ...]) -> PocSettings:
     )
 
 
+_RETIRED_ATTACK_CHAIN_KEYS: dict[str, bool] = {
+    "max_challenge_cells": False,
+    "max_queries": True,
+    "max_turns": True,
+}
+
+
+def parse_frozen_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecurityReviewSettings:
+    """Parse frozen run-snapshot inference settings, stripping valid retired pre-8a016cff operational keys."""
+    if isinstance(value, Mapping):
+        chains = value.get("attack_chains")
+        if isinstance(chains, Mapping) and (set(chains) & set(_RETIRED_ATTACK_CHAIN_KEYS)):
+            for key, strictly_positive in _RETIRED_ATTACK_CHAIN_KEYS.items():
+                if key in chains:
+                    item = chains[key]
+                    if type(item) is not int or (item <= 0 if strictly_positive else item < 0):
+                        raise ValueError(f"jobs.job_inference_security_review.settings.attack_chains.{key} is invalid")
+            value = {**value, "attack_chains": {k: v for k, v in chains.items() if k not in _RETIRED_ATTACK_CHAIN_KEYS}}
+    return parse_inference_review_settings(value)
+
+
 def parse_inference_review_settings(value: Mapping[str, Any]) -> InferenceSecurityReviewSettings:
     """Validate ``jobs.job_inference_security_review.settings`` into frozen typed settings."""
     settings = _table(value, _PREFIX, {"rounds", "teams", "lanes", "packages", "budgets", "retry", "models",

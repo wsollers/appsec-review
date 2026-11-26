@@ -82,7 +82,7 @@ def _configuration(
     job = jobs[JOB_ID]
     if not isinstance(job, Mapping) or not isinstance(job.get("settings"), Mapping):
         raise ValueError("OpenVEX frozen job settings are unavailable")
-    settings = OpenVexExportSettings.from_mapping(job["settings"])
+    settings = OpenVexExportSettings.from_frozen_mapping(job["settings"])
     policy = resolved.get("review_policy", {})
     if not isinstance(policy, Mapping) or not isinstance(policy.get("releases", {}), Mapping):
         raise ValueError("OpenVEX frozen release policy is invalid")
