@@ -345,7 +345,6 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     policy = getattr(unit.job, "review_policy", ReviewPolicy())
     components = ("platform", "validation", ADAPTERS[capability].tool_id) if capability in ADAPTERS else (
         "platform", "validation")
-    reusable, reuse_reason = policy.releases.require(*components)
     settings = unit.job.config.settings
     limits = ArchiveLimits(int(settings["archive_member_limit"]), int(settings["archive_expanded_bytes"]),
                            int(settings["archive_member_bytes"]), int(settings["archive_ratio_limit"]),
@@ -374,24 +373,6 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
         "parser": PARSER_IDENTITY, "normalizer": NORMALIZER_IDENTITY,
         **({"scanner_input": presented} if presented is not None else {}),
         "configuration": {key: settings[key] for key in sorted(settings) if key != "scanner_identities"}})).hexdigest()
-    checkpoint = unit.job.run_root / "data" / "artifact-security" / "attempts" / unit.job.attempt_id / "checkpoints" / capability / (fingerprint + ".json")
-    if not reusable:
-        unit.job.events.write("CHECKPOINT_MISSED", artifact_id=artifact["artifact_id"],
-                              action=capability, reason=reuse_reason)
-    if reusable and checkpoint.is_file():
-        pointer = json.loads(checkpoint.read_text(encoding="utf-8"))
-        if pointer.get("fingerprint") != fingerprint:
-            raise FrameworkIntegrityError("artifact-security checkpoint fingerprint changed")
-        result_artifact = pointer["result_artifact"]
-        prior = json.loads(_safe_file(unit.job.run_root, result_artifact).read_text(encoding="utf-8"))
-        if prior.get("fingerprint") != fingerprint:
-            raise FrameworkIntegrityError("artifact-security checkpoint fingerprint changed")
-        for identity in prior.get("raw_artifacts", ()):
-            _safe_file(unit.job.run_root, identity)
-        consume_native_references(unit.job.run_root, [
-            *([prior["native_output"]] if prior.get("native_output") else []),
-            *prior.get("native_reports", {}).values()])
-        return {**prior, "reused": True, "result_artifact": result_artifact}
     root = unit.job.attempt_root / "artifacts" / "asa" / artifact["artifact_id"][-12:] / capability / uuid.uuid4().hex
     root.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -564,9 +545,6 @@ def _scan_one(unit: UnitContext, artifact: Mapping[str, Any], capability: str,
     digest = hashlib.sha256(payload).hexdigest()
     result_artifact = immutable_bytes(
         unit.job.run_root, f"data/artifact-security/shards/{capability}/{digest}/result.json", payload)
-    if reusable:
-        immutable_bytes(unit.job.run_root, checkpoint.relative_to(unit.job.run_root).as_posix(),
-                        canonical_json({"fingerprint": fingerprint, "result_artifact": result_artifact}))
     return {**result, "result_artifact": result_artifact}
 
 

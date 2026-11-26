@@ -213,3 +213,7 @@ def test_container_manifests_and_pmd_rules_are_hash_locked_to_runtime_policy() -
     lock = json.loads((ROOT / "rules" / "pmd" / "rules.lock.json").read_text(encoding="utf-8"))
     actual = hashlib.sha256((ROOT / "rules" / "pmd" / "java-security.xml").read_bytes()).hexdigest()
     assert lock["sha256"] == actual
+
+
+def test_removed_intra_attempt_checkpoint_validator_is_absent() -> None:
+    assert not hasattr(job, "_valid_checkpoint")

@@ -482,8 +482,10 @@ def reuse_checkpoint(run_root: Path, scope_id: str, identity: str, *, attempt_id
         for entry in sorted(attempts_dir.iterdir(), key=lambda item: item.name, reverse=True):
             if entry.name == attempt_id or entry.is_symlink() or not entry.is_dir():
                 continue
+            attempt_record = run_root / "data" / "jobs" / JOB_ID / "attempts" / entry.name
+            if (attempt_record / "claim.json").is_file() and not (attempt_record / "handoff.json").is_file():
+                continue
             candidates.append(entry / "scopes" / scope_id / "checkpoint.json")
-    candidates.append(run_root / "data" / "code-graph" / "scopes" / scope_id / "checkpoint.json")
     for candidate in candidates:
         reused = _load_valid_checkpoint(run_root, candidate, scope_id, identity)
         if reused is not None:

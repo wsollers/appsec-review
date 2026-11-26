@@ -43,8 +43,7 @@ from .native_advisories import (
 )
 from .reachability import DependencyIntelligenceSettings, OsvSnapshotSource, evaluate_sca_reachability
 from .resolution import deduplicate_repositories, normalize_dependencies, repository_identity
-from .scorecard import (ScorecardCache, ScorecardCacheError, ScorecardClient, ScorecardError,
-                        Transport, https_get)
+from .scorecard import ScorecardClient, ScorecardError, Transport, https_get
 
 
 JOB_ID = "job_dependency_intelligence"
@@ -406,41 +405,18 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                                  max_response_bytes=int(settings["max_response_bytes"]),
                                  timeout_seconds=int(settings["timeout_seconds"]), retries=int(settings["retries"]),
                                  transport=scorecard_transport)
-        cache = ScorecardCache(unit.unit_root / "scorecard-cache",
-                               max_age_seconds=int(settings["cache_max_age_seconds"]),
-                               max_response_bytes=int(settings["max_response_bytes"]),
-                               lock_timeout_seconds=int(settings["cache_lock_timeout_seconds"]))
         records, gaps = [], []
         root = unit.unit_root / "artifacts" / "scorecards"
-        cache_hits = 0
         for group in deduplicated["repositories"]:
             repository = group["repository"]
-            raw = None
-            cache_metadata: dict[str, Any] = {"status": "miss"}
             try:
-                raw, cache_metadata = cache.load(repository)
-                if raw is not None:
-                    record, raw = client.normalize(repository, raw)
-                    cache_hits += 1
-            except (ScorecardCacheError, ScorecardError) as exc:
-                raw = None
-                cache_metadata = {"status": "invalid"}
-                gaps.extend(_gap(dependency_id, "scorecard_cache_invalid", str(exc))
-                            for dependency_id in group["dependency_ids"])
-            try:
-                if raw is None:
-                    record, raw = client.fetch(repository)
-                    try:
-                        cache_metadata = cache.store(repository, raw)
-                    except (OSError, ScorecardCacheError) as exc:
-                        cache_metadata = {"status": "write_failed"}
-                        gaps.extend(_gap(dependency_id, "scorecard_cache_write_failure", str(exc))
-                                    for dependency_id in group["dependency_ids"])
+                record, raw = client.fetch(repository)
                 path = root / f"{group['repository_id']}.json"
                 atomic_bytes(path, raw)
                 artifact = _artifact(unit.job.run_root, path)
                 records.extend({**record, "dependency_id": dependency_id,
-                                "repository_id": group["repository_id"], "cache": cache_metadata,
+                                "repository_id": group["repository_id"],
+                                "cache": {"status": "disabled"},
                                 "response_artifact": artifact}
                                for dependency_id in group["dependency_ids"])
             except ScorecardError as exc:
@@ -460,7 +436,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
                         gap["request_url"] = exc.url
                 gaps.extend(scoped_gaps)
         return {"records": records, "gaps": gaps, "request_count": client.requests,
-                "repository_count": len(deduplicated["repositories"]), "cache_hit_count": cache_hits,
+                "repository_count": len(deduplicated["repositories"]), "cache_hit_count": 0,
                 "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
 
     def native_advisory_lookup(unit: UnitContext) -> Mapping[str, Any]:
@@ -513,7 +489,7 @@ def build_job(*, infer: Infer | None = None, scorecard_transport: Transport = ht
             producer_artifacts=producer_artifacts, tool_identity={**tool_identity, **provenance},
             parser_identity=ADVISORY_PARSER_IDENTITY, normalizer_identity=ADVISORY_NORMALIZER_IDENTITY,
             mapping_identity=ADVISORY_MAPPING_IDENTITY)
-        shard_path = (unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id
+        shard_path = (unit.job.run_root / "data" / "indices" / "observations" / "attempts" / JOB_ID / unit.job.attempt_id
                       / f"{ADVISORY_SHARD_ID}-{fingerprint}.sqlite")
         builder = IndexBuilder(shard_path, name="observations", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint, shard_id=ADVISORY_SHARD_ID)

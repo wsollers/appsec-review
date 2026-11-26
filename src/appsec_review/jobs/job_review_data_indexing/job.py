@@ -109,20 +109,31 @@ def _bound_composed_product(derived: Derived, query_set: str, maximum: int) -> D
     return derived
 
 
-def _resolved_document(run_root: Path) -> dict[str, Any]:
+def _resolved_document(run_root: Path, expected_sha256: str | None = None) -> dict[str, Any]:
+    from appsec_review.graph.settings import _active_config_sha256
     configuration = run_root / "data" / "configuration"
     manifest = json.loads((configuration / "manifest.json").read_text(encoding="utf-8"))
-    if file_sha256(configuration / "resolved.json") != manifest.get("resolved_sha256"):
+    resolved_path = configuration / "resolved.json"
+    base_sha = manifest.get("resolved_sha256")
+    if file_sha256(resolved_path) != base_sha:
         raise ValueError("run-owned resolved configuration hash mismatch")
-    return json.loads((configuration / "resolved.json").read_text(encoding="utf-8"))
+    target_sha = _active_config_sha256(run_root, expected_sha256)
+    if target_sha is not None and target_sha != base_sha:
+        from appsec_review.runtime.configuration import configuration_snapshot
+        return dict(configuration_snapshot(run_root, target_sha).document)
+    if target_sha is not None and target_sha == base_sha and manifest.get("schema") is not None:
+        from appsec_review.runtime.configuration import configuration_snapshot
+        return dict(configuration_snapshot(run_root, target_sha).document)
+    return json.loads(resolved_path.read_text(encoding="utf-8"))
 
 
-def _resolved_steps(run_root: Path, *, include_disabled: bool = False) -> dict[str, list[str]]:
-    configuration = run_root / "data" / "configuration"
-    manifest = json.loads((configuration / "manifest.json").read_text(encoding="utf-8"))
-    if file_sha256(configuration / "resolved.json") != manifest.get("resolved_sha256"):
-        raise ValueError("run-owned resolved configuration hash mismatch")
-    document = json.loads((configuration / "resolved.json").read_text(encoding="utf-8"))
+def _resolved_steps(
+    run_root: Path,
+    *,
+    include_disabled: bool = False,
+    expected_sha256: str | None = None,
+) -> dict[str, list[str]]:
+    document = _resolved_document(run_root, expected_sha256)
     return {job_id: list((value.get("steps") or {}).keys())
             for job_id, value in sorted((document.get("jobs") or {}).items())
             if include_disabled or resolved_job_is_enabled(job_id, value)}
@@ -344,15 +355,18 @@ def build_job(*, providers: Providers = registry_providers,
             raise ValueError("accepted index snapshot differs from the graph target snapshot")
         job_ids, declarations, consumes = providers()
         registered_jobs = job_ids
+        config_sha = getattr(unit.job, "resolved_config_sha256", None)
+        resolved_doc = _resolved_document(run_root, config_sha)
         file_job_steps = {job_id: steps for job_id, steps in _resolved_steps(
-            run_root, include_disabled=True).items() if job_id in job_ids}
-        resolved_jobs = (_resolved_document(run_root).get("jobs") or {})
+            run_root, include_disabled=True, expected_sha256=config_sha).items() if job_id in job_ids}
+        resolved_jobs = (resolved_doc.get("jobs") or {})
         disabled = {job_id for job_id, value in resolved_jobs.items()
                     if not resolved_job_is_enabled(job_id, value)}
         from appsec_review.runtime.contracts import DispatchClass
         from appsec_review.runtime.registry import builtin_contracts
         contracts = builtin_contracts()
-        active = {name for name in _resolved_steps(run_root)
+        active_steps = _resolved_steps(run_root, expected_sha256=config_sha)
+        active = {name for name in active_steps
                   if name not in contracts or contracts[name].dispatch is DispatchClass.REVIEW_GRAPH} - downstream_jobs()
         job_ids = tuple(job_id for job_id in job_ids if job_id in active)
         declarations = {job_id: values for job_id, values in declarations.items() if job_id in active}
@@ -364,9 +378,9 @@ def build_job(*, providers: Providers = registry_providers,
             candidate = (run_root / str(shard["relative_path"])).resolve()
             if run_root.resolve() not in candidate.parents or file_sha256(candidate) != shard["sha256"]:
                 raise ValueError(f"restored shard failed verification: {'/'.join(shard_key(shard))}")
-        job_steps = {job_id: steps for job_id, steps in _resolved_steps(run_root).items()
+        job_steps = {job_id: steps for job_id, steps in active_steps.items()
                      if job_id in active}
-        feeds = feed_pins(unit.job.repository_root, _resolved_document(run_root),
+        feeds = feed_pins(unit.job.repository_root, resolved_doc,
                           int(settings_of(unit)["feed_max_age_days"]),
                           max_age_overrides={str(key): int(value) for key, value in dict(
                               settings_of(unit).get("feed_max_age_days_overrides") or {}).items()})

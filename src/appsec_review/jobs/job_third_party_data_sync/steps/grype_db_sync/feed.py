@@ -361,8 +361,23 @@ def verify(settings: GrypeSettings, *, now: datetime | None = None,
     return {**identity, "tool": tool, "schema_version": manifest["schema_version"], "built": manifest["built"]}
 
 
-def consumer_settings(repository_root: Path, run_root: Path) -> GrypeSettings:
-    document = json.loads((run_root / "data/configuration/resolved.json").read_bytes())
+def consumer_settings(
+    repository_root: Path,
+    run_root: Path,
+    *,
+    resolved_config_sha256: str | None = None,
+) -> GrypeSettings:
+    from appsec_review.graph.settings import _active_config_sha256
+    from appsec_review.storage import file_sha256
+    target_sha = _active_config_sha256(run_root, resolved_config_sha256)
+    base_resolved = run_root / "data/configuration/resolved.json"
+    if isinstance(target_sha, str) and target_sha and (
+        not base_resolved.is_file() or file_sha256(base_resolved) != target_sha
+    ):
+        from appsec_review.runtime.configuration import configuration_snapshot
+        document = configuration_snapshot(run_root, target_sha).document
+    else:
+        document = json.loads(base_resolved.read_bytes())
     values = document["jobs"]["job_third_party_data_sync"]["steps"]["grype_db_sync"]["settings"]
     return GrypeSettings.from_mapping(repository_root, values)
 

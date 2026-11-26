@@ -30,9 +30,7 @@ DATASETS = (
               "Scanner streams, container scratch, copied feed databases and read-only input mount placeholders.",
               artifacts=(_A + "/artifacts/asa/**", _A + "/steps/analyze/tasks/*/containers/**",
                          _A + "/steps/analyze/tasks/*/target-inputs/**",
-                         _A + "/steps/analyze/tasks/*/installer-records/**",
-                         "data/artifact-security/checkpoints/*/*.json",
-                         "data/artifact-security/attempts/*/checkpoints/*/*.json"), reason=RAW),
+                         _A + "/steps/analyze/tasks/*/installer-records/**"), reason=RAW),
 )
 
 from appsec_review.runtime.contracts import (

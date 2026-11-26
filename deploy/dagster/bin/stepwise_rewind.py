@@ -14,6 +14,8 @@ from appsec_review.acceptance.normalize import digest as normalized_digest, norm
 from appsec_review.acceptance.state import StateError, valid_corpus_tag
 from appsec_review.orchestration.topology import tagged_upstream_handoffs
 from appsec_review.runtime.release import digest, read_document
+from appsec_review.runtime.configuration import configuration_snapshot, configurations_compatible
+from appsec_review.runtime.handoff import frozen_job_config_sha256
 from appsec_review.runtime.repair import (
     PLAN_SCHEMA, REPAIR_SCHEMA, current_binding, verify_publication,
 )
@@ -134,7 +136,8 @@ def verify_plan(run_root, state, plan, runtime):
     if not binding or not binding.get("repair"):
         raise StateError("repair plan has not been admitted")
     admitted = read_document(verify_reference(run_root, binding["repair"]))
-    if admitted != {**plan, "schema": REPAIR_SCHEMA, "admitted": True}:
+    admitted_plan = {key: value for key, value in admitted.items() if key != "configuration"}
+    if admitted_plan != {**plan, "schema": REPAIR_SCHEMA, "admitted": True}:
         raise StateError("plan is stale or is not the currently admitted repair")
     if (runtime["run_id"] != state.app_run_id or runtime["binding"] != binding
             or runtime["release_sha256"] != binding["release_sha256"]
@@ -152,12 +155,19 @@ def verify_plan(run_root, state, plan, runtime):
             or plan["dependencies"] != {item["job_id"]: item["dependencies"] for item in state.topology}
             or any(item["action"] not in {"RUN", "INVALIDATE", "REUSE", "REVALIDATE"} for item in plan["decisions"])):
         raise StateError("plan decisions/dependencies do not match the stepwise topology")
-    manifest = read_document(run_root / "data/configuration/manifest.json")
-    if (runtime["resolved_config_sha256"] != plan["resolved_config_sha256"]
-            or manifest["resolved_sha256"] != plan["resolved_config_sha256"]
-            or file_sha256(run_root / "data/configuration/resolved.json") != plan["resolved_config_sha256"]
-            or file_sha256(run_root / "data/configuration/appsec-review.toml") != manifest["source_sha256"]):
+    if runtime["resolved_config_sha256"] != plan["resolved_config_sha256"]:
         raise StateError("frozen configuration differs from the admitted repair")
+    try:
+        base_snapshot = configuration_snapshot(run_root)
+        plan_snapshot = configuration_snapshot(run_root, plan["resolved_config_sha256"])
+        if "configuration" in admitted:
+            verify_reference(run_root, admitted["configuration"])
+            if admitted["configuration"] != reference(run_root, plan_snapshot.directory / "manifest.json"):
+                raise StateError("frozen configuration differs from the admitted repair")
+        if not configurations_compatible(run_root, base_snapshot.sha256, plan_snapshot.sha256):
+            raise StateError("frozen configuration differs from the admitted repair")
+    except (KeyError, OSError, ValueError) as exc:
+        raise StateError("frozen configuration differs from the admitted repair") from exc
     return binding
 
 
@@ -266,7 +276,7 @@ def apply_rewind(root, path, acceptance_root, state, plan, runtime, masks):
                     or provenance.read_bytes() != verify_reference(walk, baseline["provenance"]).read_bytes()):
                 raise StateError(f"{job_id}: reacceptance does not match this walk")
             admitted_claim_changes(walk, prior, baseline, job_id, read_document(claim_path),
-                                   read_document(key), document, masks)
+                                   read_document(key), document, masks, run_root=run_root)
             advertised_inventory_changes(run_root, walk, baseline, job_id, read_document(claim_path),
                                          read_document(key), document, masks)
             verified_mount_path_changes(run_root, walk, baseline, job_id, read_document(claim_path),
@@ -289,7 +299,7 @@ def apply_rewind(root, path, acceptance_root, state, plan, runtime, masks):
     return True
 
 
-def admitted_claim_changes(walk, evidence, baseline, job_id, claim, expected, actual, masks):
+def admitted_claim_changes(walk, evidence, baseline, job_id, claim, expected, actual, masks, *, run_root=None):
     """Account only for verified repair bookkeeping in the published claim, not arbitrary hashes."""
     original = read_document(verify_reference(walk, baseline["claim"]))
     planned = evidence["plan"]["unit_decisions"][job_id]
@@ -300,7 +310,21 @@ def admitted_claim_changes(walk, evidence, baseline, job_id, claim, expected, ac
         raise StateError("replay checkpoint decisions differ from the admitted plan")
     left, right = normalize_value(original, masks), normalize_value(claim, masks)
     changes = []
-    for key in ("repair_admission_sha256", "unit_reuse"):
+    allowed = ["repair_admission_sha256", "unit_reuse"]
+    config_swap = None
+    if (run_root is not None
+            and original.get("resolved_config_sha256") != claim.get("resolved_config_sha256")
+            and claim.get("resolved_config_sha256") == evidence["plan"]["resolved_config_sha256"]
+            and configurations_compatible(
+                run_root, str(original.get("resolved_config_sha256") or ""),
+                str(claim.get("resolved_config_sha256") or ""))):
+        old_cfg = configuration_snapshot(run_root, original["resolved_config_sha256"])
+        new_cfg = configuration_snapshot(run_root, claim["resolved_config_sha256"])
+        if (claim.get("configuration") == reference(run_root, new_cfg.directory / "manifest.json")
+                and claim.get("job_config_sha256") == frozen_job_config_sha256(new_cfg.document, job_id)):
+            allowed.extend(("resolved_config_sha256", "configuration", "job_config_sha256"))
+            config_swap = (old_cfg, new_cfg)
+    for key in allowed:
         if left.get(key) != right.get(key):
             changes.append({"field": key, "expected": left.get(key), "actual": right.get(key)})
             right[key] = left.get(key)
@@ -316,6 +340,16 @@ def admitted_claim_changes(walk, evidence, baseline, job_id, claim, expected, ac
                                  "sha256": normalized_digest(normalize_value(claim, masks))}):
         raise StateError("claim artifact signature differs from its resolving evidence")
     new_signature.update(old_signature)
+    if config_swap is not None:
+        old_cfg, new_cfg = config_swap
+        old_paths = {masks.text(ref["path"]) for ref in old_cfg.artifacts(run_root)}
+        new_paths = {masks.text(ref["path"]) for ref in new_cfg.artifacts(run_root)}
+        old_entries = [entry for entry in expected["artifacts"] if entry["path"] in old_paths]
+        if len(old_entries) == len(old_paths) and sum(1 for entry in actual["artifacts"] if entry["path"] in new_paths) == len(new_paths):
+            actual["artifacts"] = sorted(
+                [*(entry for entry in actual["artifacts"] if entry["path"] not in new_paths), *deepcopy(old_entries)],
+                key=lambda item: canonical_json(item),
+            )
     return changes
 
 
@@ -430,7 +464,12 @@ def verified_mount_path_changes(run_root, walk, baseline, job_id, claim, expecte
     if read_document(verify_reference(walk, baseline["key"])) != expected:
         raise StateError("mount baseline key differs from its preserved evidence")
     for key in ("repository_root", "target_root", "source_fingerprint", "resolved_config_sha256"):
-        if not original.get(key) or original[key] != claim.get(key):
+        if not original.get(key):
+            raise StateError(f"mount comparison requires unchanged claim {key}")
+        if original[key] != claim.get(key):
+            if key == "resolved_config_sha256" and configurations_compatible(
+                    run_root, str(original[key]), str(claim.get(key) or "")):
+                continue
             raise StateError(f"mount comparison requires unchanged claim {key}")
     if (origin.get("application_run_id") != run_root.name or origin.get("job_id") != job_id
             or origin.get("attempt") != original["attempt_id"]
@@ -645,7 +684,7 @@ def replay_comparison(run_root, walk, state, item, attempt, document, masks):
             expected = read_document(verify_reference(walk, baseline["key"]))
             actual = deepcopy(document)
             control_changes = admitted_claim_changes(
-                walk, evidence, baseline, item["job_id"], claim, expected, actual, masks)
+                walk, evidence, baseline, item["job_id"], claim, expected, actual, masks, run_root=run_root)
             inventory_changes = advertised_inventory_changes(
                 run_root, walk, baseline, item["job_id"], claim, expected, actual, masks)
             mount_changes = verified_mount_path_changes(

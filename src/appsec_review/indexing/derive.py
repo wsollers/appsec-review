@@ -124,7 +124,8 @@ def publish_derived(
             return {**document, "reused": True, "shared_receipt": ref}
     safe_path(run_root, path.relative_to(run_root).as_posix())
     safe_path(run_root, checkpoint.relative_to(run_root).as_posix())
-    if path.is_file() and checkpoint.is_file():
+    allow_legacy = shared is None or shared._claim().get("recovery_boundary") != "whole_job"
+    if allow_legacy and path.is_file() and checkpoint.is_file():
         document = json.loads(checkpoint.read_text(encoding="utf-8"))
         identity = document.get("index_identity", {})
         if (document.get("schema") != DERIVED_SCHEMA or document.get("fingerprint") != fingerprint
@@ -137,7 +138,7 @@ def publish_derived(
             _, ref = shared.legacy("derived-index", fingerprint, reference(run_root, checkpoint),
                                    computation=computation, dependencies=(reference(run_root, path),))
         return {**document, "reused": True, "shared_receipt": ref}
-    if checkpoint.exists():
+    if allow_legacy and checkpoint.exists():
         raise ValueError("derived checkpoint has no immutable shard")
     derived = build()
     builder = IndexBuilder(path, name=index, fingerprint=fingerprint, target_snapshot=snapshot, shard_id=shard_id)

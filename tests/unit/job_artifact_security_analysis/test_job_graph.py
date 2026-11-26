@@ -664,17 +664,11 @@ def test_scan_one_covers_checkpoint_reuse_runner_outcomes_and_native_reports(
     elf = _seed_artifact(run_root, "data/build/u/app.elf")
     lock = _seed_artifact(run_root, "data/build/u/Cargo.lock", b"version = 3\n", kind="lockfile")
 
-    # Built-in scan + checkpoint reuse + tampered checkpoint fingerprint
+    # Built-in scan executes directly without intra-attempt checkpoint files
     first = security._scan_one(ctx, elf, "native", None)
     assert first["reused"] is False and first["terminal_status"] == "COMPLETED_WITH_GAPS"
-    reused = security._scan_one(ctx, elf, "native", None)
-    assert reused["reused"] is True
-    ckpt_path = run_root / reused["result_artifact"]["path"]
-    tampered = json.loads(ckpt_path.read_text(encoding="utf-8"))
-    tampered["fingerprint"] = "0" * 64
-    ckpt_path.write_text(json.dumps(tampered), encoding="utf-8")
-    with pytest.raises(security.FrameworkIntegrityError, match="identity changed"):
-        security._scan_one(ctx, elf, "native", None)
+    second = security._scan_one(ctx, elf, "native", None)
+    assert second["reused"] is False and second["fingerprint"] == first["fingerprint"]
 
     class _Runner:
         def __init__(self, ident, fn):
