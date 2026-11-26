@@ -256,7 +256,8 @@ def finding_input(lead: Lead, *, settings: TriageSettings, reader: ExcerptReader
     excerpt: list[str] | None = None
     note: str | None = None
     if lead.start_line is None or not lead.path:
-        note = "the lead has no source line"
+        note = ("compiled binary hardening observation (no source line applies; rate by rule_semantics)"
+                if lead.family == "post_build_hardening" else "the lead has no source line")
     else:
         try:
             lines, reason = reader(lead)

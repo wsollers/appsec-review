@@ -727,13 +727,16 @@ class RetrievalCore:
                         r"data/jobs/[a-z][a-z0-9_]*/attempts/attempt_[0-9]+/"
                         r"shared/native-output/[0-9a-f]{64}\.json"),
                     "execution_reference": (
-                        r"data/(?:codeql/scopes/[^/]+/queries/.+/executions/query|"
+                        r"data/(?:codeql/(?:attempts/attempt_[0-9]+/)?scopes/[^/]+/queries/.+/executions/query|"
                         r"jobs/[a-z][a-z0-9_]*/attempts/attempt_[0-9]+/.+)/receipt\.json|"
                         r"data/jobs/job_evidence_collection/attempts/attempt_[0-9]+/steps/[^/]+/tasks/[^/]+/"
                         r"scratch/(?:invocation_[0-9]+/)?attempt_[0-9]+/execution\.json|"
                         r"data/jobs/job_artifact_security_analysis/attempts/attempt_[0-9]+/steps/analyze/tasks/"
-                        r"[^/]+/containers/[^/]+/execution\.json|"
-                        r"data/clang-static/[A-Za-z0-9._-]+/(?:tidy|analyze)/execution\.json"),
+                        r"[^/]+/containers/[^/]+(?:/[0-9a-f]+)?/execution\.json|"
+                        r"data/jobs/job_cbmc_analysis/attempts/attempt_[0-9]+/artifacts/cbmc/executions/[0-9]+/"
+                        r"execution\.json|"
+                        r"data/clang-static/[A-Za-z0-9._-]+/(?:attempts/attempt_[0-9]+/[0-9a-f]{64}/execution-[0-9]+/)?"
+                        r"(?:tidy|analyze)/execution\.json"),
                 }[field]
                 if not re.fullmatch(pattern, path):
                     raise RetrievalIntegrityError("common observation artifact path is outside its allowed namespace")

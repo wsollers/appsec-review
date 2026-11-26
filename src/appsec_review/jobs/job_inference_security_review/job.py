@@ -34,7 +34,11 @@ from appsec_review.guidance.routing import unit_sources
 from appsec_review.indexing.store import open_shard
 from appsec_review.jobs.job_security_tagging.crosswalk import load_crosswalk
 from appsec_review.jobs.job_security_tagging.taxonomy import load_vocabulary
-from appsec_review.retrieval.core import RetrievalCore, resolve_context_manifest, retrieval_caller
+from appsec_review.retrieval.core import (
+    RetrievalCore, RetrievalGap, RetrievalLimits, resolve_context_manifest, retrieval_caller,
+)
+
+_REVIEW_RETRIEVAL_LIMITS = RetrievalLimits(timeout_ms=10_000)
 from appsec_review.retrieval.observations import SEVERITY_ORDER
 from appsec_review.review import hunt_plan, obligations, ship_block, tool_rules
 from appsec_review.review.budget import JobBudget
@@ -252,9 +256,10 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
     vocabulary, crosswalk = _taxonomy(root)
     registry = load_registry(root)
     core = RetrievalCore(Path(run_root).parent, run_id, manifest_sha256=manifest_sha256,
-                         manifest_path=manifest_path)
+                         manifest_path=manifest_path, limits=_REVIEW_RETRIEVAL_LIMITS)
+    index_names = review_index_names(core.manifest["indexes"])
     query_sets = set(_read(Path(run_root), scope_out["artifact"])["query_sets"])
-    return ReviewContext(
+    ctx = ReviewContext(
         run_root=Path(run_root), run_id=run_id, repository_root=root, settings=settings, core=core, infer=infer,
         attempt_id=Path(attempt_root).name,
         result_cache=cache_from_settings(settings.result_cache, sha256_hex({"run_id": run_id, "attempt_id": Path(attempt_root).name})),
@@ -269,9 +274,15 @@ def review_context(*, run_root: Path, run_id: str, attempt_root: Path, repositor
                          for key, values in packages_doc["rule_predicates"].items()},
         source_languages=dict(scope_out["source_languages"]),
         build_unit_languages={key: tuple(value) for key, value in scope_out["build_unit_languages"].items()},
-        index_names=review_index_names(core.manifest["indexes"]),
+        index_names=index_names,
         available_sources=run_sources(query_sets),
         max_page_size=settings.packages.max_page_size, max_depth=settings.packages.max_depth)
+    if index_names:
+        try:
+            ctx._population(index_names)
+        except RetrievalGap:
+            pass
+    return ctx
 
 
 def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path | None = None) -> Job:
@@ -327,7 +338,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         pin_bundle(unit.job.run_root, guidance.bundle, files={"prompt.md": guidance.text})
         core = RetrievalCore(Path(unit.job.run_root).parent, unit.job.run_id,
                              manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
-                             manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
+                             manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"],
+                             limits=_REVIEW_RETRIEVAL_LIMITS)
 
         def read_excerpt(lead):
             with retrieval_caller(job_id=JOB_ID, caller_kind="lead_triage", if_unset=True):
@@ -374,7 +386,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         scope = _scope(unit)
         core = RetrievalCore(Path(unit.job.run_root).parent, unit.job.run_id,
                              manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
-                             manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
+                             manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"],
+                             limits=_REVIEW_RETRIEVAL_LIMITS)
         collection = sorted_collection(triaged_collection(unit, scope))
         package_settings = PackageSettings.from_review_settings(settings)
         with retrieval_caller(job_id=JOB_ID, caller_kind="hunt_planning", if_unset=True):
@@ -413,7 +426,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
             # Slices of dataflow-bounded leads read verified source through the same accepted custody as triage.
             core = RetrievalCore(Path(unit.job.run_root).parent, unit.job.run_id,
                                  manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
-                                 manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
+                                 manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"],
+                                 limits=_REVIEW_RETRIEVAL_LIMITS)
             collection = triaged_collection(unit, scope)
             # The hunting campaign plan orders both lanes' hunt selection (the lead lane's manifest carries the
             # same hunted flags, so excluded-leads.json agrees); disabled or fallen back, the rank selects.
@@ -609,7 +623,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         if affected:
             core = RetrievalCore(Path(unit.job.run_root).parent, unit.job.run_id,
                                  manifest_sha256=unit.output("scope.accept_manifest")["manifest_sha256"],
-                                 manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"])
+                                 manifest_path=unit.job.run_root / unit.output("scope.accept_manifest")["manifest_path"],
+                                 limits=_REVIEW_RETRIEVAL_LIMITS)
             with retrieval_caller(job_id=JOB_ID, caller_kind="claim_merge", if_unset=True):
                 entity_paths = {entity: stages.locate_entity_path(core, entity) for entity in affected}
         merged = stages.merge_claims(lanes, shards, entities, unit.output("scope.assemble_scope")["components"],
@@ -652,7 +667,8 @@ def build_job(*, infer: Callable[..., Any] | None = None, repository_root: Path 
         evidence = AcceptedEvidenceSource(
             RetrievalCore(Path(unit.job.run_root).parent, scope.run_id,
                           manifest_sha256=scope.manifest_sha256,
-                          manifest_path=scope.manifest_path), scope)
+                          manifest_path=scope.manifest_path,
+                          limits=_REVIEW_RETRIEVAL_LIMITS), scope)
         # impact_class is derived from the run-pinned MITRE CWE catalog (decision 11); an unpinned or
         # mismatched catalog derives nothing, and a stale one derives with the stale gap recorded.
         catalog = ImpactCatalog.from_reference(load_cwe_reference(unit.job.run_root))

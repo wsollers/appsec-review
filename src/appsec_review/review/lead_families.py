@@ -662,7 +662,17 @@ def collect_leads(scope: AcceptedScope, triage: Mapping[str, LeadTriage] | None 
                 coverage_gaps=tuple(ScopeGap(scanner_of(payload), row["identity"], "partial", gap)
                                     for gap in payload.get("gaps", ()) if isinstance(gap, str) and gap)))
 
-    for shard in scope.producer("post_build_hardening").shards:
+    post_build_shards = scope.producer("post_build_hardening").shards
+    post_build_relations = _relations(scope, post_build_shards)
+    post_build_subjects = {
+        entity["identity"]: (
+            str(entity["kind"]),
+            str(entity["name"] or entity["identity"]),
+            entity["payload"] if isinstance(entity.get("payload"), Mapping) else {},
+        )
+        for entity in scope.store.entities(post_build_shards, kinds=tuple(sorted(ARTIFACT_KINDS)))
+    }
+    for shard in post_build_shards:
         for row in scope.store.entities((shard,), kinds=("tool_observation",)):
             payload = row["payload"]
             if payload.get("producer") != "deterministic-build-security-rules":
@@ -676,10 +686,37 @@ def collect_leads(scope: AcceptedScope, triage: Mapping[str, LeadTriage] | None 
                 continue
             reported, native, basis = severity_for("post_build_hardening", payload)
             path, line, exact = _location(row)
+            related = tuple(sorted(set(post_build_relations.get(row["identity"], ()))))
+            check_id = str(payload.get("check_id") or "unknown")
+            check_key = check_id.split(".", 1)[1] if "." in check_id else check_id
+            subjects: list[str] = []
+            observed_flags: list[str] = []
+            for target, role in related:
+                if role != "artifact" or target not in post_build_subjects:
+                    continue
+                kind_label, name_label, subject_payload = post_build_subjects[target]
+                fmt = str(subject_payload.get("format") or "").strip()
+                subjects.append(f"{fmt + ' ' if fmt else ''}{kind_label} {name_label}")
+                hardening = subject_payload.get("hardening")
+                if isinstance(hardening, Mapping) and check_key in hardening:
+                    flag_val = hardening[check_key]
+                    rendered = str(flag_val).lower() if isinstance(flag_val, bool) else str(flag_val)
+                    flag_clause = f"{check_key}={rendered}"
+                    if flag_clause not in observed_flags:
+                        observed_flags.append(flag_clause)
+            subject_clause = f" on {', '.join(subjects)}" if subjects else ""
+            details = [item for item in (
+                *observed_flags,
+                _message(payload),
+                f"build_root={payload['build_root']}"
+                if isinstance(payload.get("build_root"), str) and payload["build_root"] else None,
+            ) if item]
+            detail_clause = f" ({'; '.join(details)})" if details else ""
+            hardening_message = f"post-build hardening check {check_id} FAILED{subject_clause}{detail_clause}"[:_MESSAGE_BOUND]
             add(Lead(row["identity"], "post_build_hardening", "deterministic-build-security-rules",
-                     str(payload.get("check_id") or "unknown"), native, reported, basis, _message(payload),
+                     check_id, native, reported, basis, hardening_message,
                      _cwes(payload), path, line, exact, str(shard["name"]), str(shard.get("shard_id", "default")),
-                     scope.shard_sha256(shard)))
+                     scope.shard_sha256(shard), related=related))
 
     from appsec_review.indexing.products import load_control_assessment
     control_cache: dict[str, Any] = {}

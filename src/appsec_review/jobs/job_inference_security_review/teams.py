@@ -24,6 +24,7 @@ record. Only :class:`IntegrityError` propagates. The lane's events are sealed in
 """
 from __future__ import annotations
 
+import copy
 from collections import defaultdict
 from appsec_review.storage.shared import PublicationThreadPoolExecutor as ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field, replace
@@ -198,6 +199,7 @@ class ReviewContext:
     native_continuity: Any = None
     _native_continuity_loaded: bool = False
     _bundles: dict[str, dict[str, Any]] = field(default_factory=dict)
+    _populations: dict[tuple[str, ...], dict[str, Any]] = field(default_factory=dict)
     _symbols: dict[str, str | None] = field(default_factory=dict)
     _path_symbols: dict[str, tuple[tuple[int, int | None, str], ...]] = field(default_factory=dict)
     _pinned: set[str] = field(default_factory=set)
@@ -210,8 +212,21 @@ class ReviewContext:
     def profile(self, role: Role) -> ModelProfileSettings:
         return self.settings.profile_for(role)
 
+    def _population(self, indexes: Sequence[str]) -> dict[str, Any]:
+        core = getattr(self, "core", None)
+        if core is None:
+            return review_population(None, indexes, job_id="job_inference_security_review")
+        key = tuple(sorted(set(indexes)))
+        with self._lock:
+            cached = self._populations.get(key)
+        if cached is None:
+            computed = review_population(core, key, job_id="job_inference_security_review")
+            with self._lock:
+                cached = self._populations.setdefault(key, computed)
+        return copy.deepcopy(cached)
+
     def review_grant(self, role: Role, indexes: Sequence[str], *, expand: bool = False):
-        population = review_population(self.core, indexes, job_id="job_inference_security_review")
+        population = self._population(indexes)
         candidates = set(self.role_tools.get(role.value, ())) & IN_PROCESS_TOOLS
         if expand:
             candidates.add(EXPAND_TOOL)
@@ -226,8 +241,7 @@ class ReviewContext:
                    "max_queries": capability.max_queries,
                    "max_turns": capability.max_turns, "page_size": capability.page_size}
         if population is None:
-            population = review_population(getattr(self, "core", None), capability.indexes,
-                                           job_id="job_inference_security_review")
+            population = self._population(capability.indexes)
         binary = BINARY_INDEX in capability.indexes and population["binary"]["known_row_count"] > 0
         query_sources = review_query_sources(capability.tools, population)
         receipt["query_sources"] = list(query_sources)
@@ -1128,19 +1142,20 @@ def _run_team_scoped(ctx: ReviewContext, work: PackageWork, *, launch: bool,
                      not_launched_reason: str = "") -> TeamResult:
     result = TeamResult(work.package_id, work.lane, work.unit_key, leads=_lead_ids(work),
                         package_entities=frozenset(work.entities), warrant_scope=_warrant_scope(work))
-    routing = route(ctx, work)
-    result.routing = {key: value for key, value in routing.items() if key != "gaps"}
-    result.gaps.extend(routing["gaps"])
-    reds = _red_cells(ctx, work, routing)
-    if not launch:
-        _skip(result, work, reds, not_launched_reason or "not launched", GapClass.BUDGET_GAP)
-        return result
-    admitted = ctx.budget.reserve(work.lane)
-    if not admitted:
-        ctx = replace(ctx, allow_new_calls=False)
-        result.gaps.append(make_gap(GapClass.BUDGET_GAP, work.package_id,
-                                    f"new team work not admitted: job budget exhausted ({ctx.budget.snapshot().exhausted})"))
+    reds: list[_Cell] = []
     try:
+        routing = route(ctx, work)
+        result.routing = {key: value for key, value in routing.items() if key != "gaps"}
+        result.gaps.extend(routing["gaps"])
+        reds = _red_cells(ctx, work, routing)
+        if not launch:
+            _skip(result, work, reds, not_launched_reason or "not launched", GapClass.BUDGET_GAP)
+            return result
+        admitted = ctx.budget.reserve(work.lane)
+        if not admitted:
+            ctx = replace(ctx, allow_new_calls=False)
+            result.gaps.append(make_gap(GapClass.BUDGET_GAP, work.package_id,
+                                        f"new team work not admitted: job budget exhausted ({ctx.budget.snapshot().exhausted})"))
         with ctx.semaphore.acquire(work.lane):
             result.launched = admitted
             _run_rounds(ctx, work, routing, reds, result)

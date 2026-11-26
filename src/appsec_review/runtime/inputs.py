@@ -382,6 +382,7 @@ class InputReads:
     lock: RLock = field(default_factory=RLock)
     producers: dict[str, tuple[Mapping[str, Any], tuple[DatasetDeclaration, ...]]] = field(default_factory=dict)
     prior_producers: dict[str, tuple[Mapping[str, Any], tuple[DatasetDeclaration, ...]]] = field(default_factory=dict)
+    verified_shards: set[tuple[str, str, str, str]] = field(default_factory=set)
     violation: str | None = None
 
     def check(self) -> None:
@@ -565,19 +566,28 @@ def observe_shard(root: Path, shard: Mapping[str, Any]) -> None:
     digest = context.upstream_handoffs.get(producer)
     if digest is None:
         raise ValueError(f"undeclared or unsupplied shard producer: {producer}")
+    relative, sha = shard["relative_path"], shard["sha256"]
+    shard_key = (str(producer), str(digest), str(relative), str(sha))
+    from appsec_review.storage.validation import observed_digest
+    with reads.lock:
+        already_verified = shard_key in reads.verified_shards
+    if already_verified:
+        if observed_digest(root, safe_path(root, relative)) != sha:
+            raise ValueError("consumed shard bytes changed")
+        return
     handoff, _declarations = reads.producer(producer)
     owned = input_shard_owner(root, shard)
     requirement = reads.requirement(producer, owned.output_kind, InputChannel.HANDOFF)
     if requirement.schema != owned.schema or requirement.authority != owned.authority:
         raise ValueError("consumed dataset schema or authority differs from input contract")
-    relative, sha = shard["relative_path"], shard["sha256"]
     if not any(ref["path"] == relative and ref["sha256"] == sha for ref in handoff["artifacts"]):
         raise ValueError("consumed shard is not bound to supplied producer output")
-    from appsec_review.storage.validation import observed_digest
     if observed_digest(root, safe_path(root, relative)) != sha:
         raise ValueError("consumed shard bytes changed")
     reads.record(requirement, {"path": relative, "sha256": sha, "handoff_sha256": digest,
                                "attempt_id": handoff["attempt_id"], "target_snapshot": handoff["target_snapshot"]})
+    with reads.lock:
+        reads.verified_shards.add(shard_key)
 
 
 @_read_boundary

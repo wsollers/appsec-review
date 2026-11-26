@@ -101,7 +101,24 @@ def accepted_feed_pins(run_root: Path) -> tuple[Mapping[str, Any] | None, str | 
     except (RetrievalGap, OSError, LookupError, ValueError) as exc:  # unavailable is reported, never clean
         return None, f"accepted index pointer is unavailable ({type(exc).__name__})"
     if handoff.get("job_id") != INDEXING_JOB:
-        return None, f"the accepted index set was not published by {INDEXING_JOB}; no feed pins are bound"
+        expected_indexing_sha = (handoff.get("upstream_handoff_sha256") or {}).get(INDEXING_JOB)
+        if not isinstance(expected_indexing_sha, str):
+            return None, f"the accepted index set was not published by {INDEXING_JOB}; no feed pins are bound"
+        from appsec_review.runtime.consume import (
+            UpstreamIntegrityError, UpstreamNotPinnedError, accepted_upstream,
+        )
+        try:
+            indexing_upstream = accepted_upstream(run_root, INDEXING_JOB, required=False)
+        except UpstreamIntegrityError as exc:
+            raise RetrievalIntegrityError(str(exc)) from exc
+        except UpstreamNotPinnedError as exc:
+            return None, f"accepted {INDEXING_JOB} handoff is not pinned ({exc})"
+        if indexing_upstream is None:
+            return None, f"accepted {INDEXING_JOB} handoff is unavailable"
+        if indexing_upstream.sha256 != expected_indexing_sha:
+            raise RetrievalIntegrityError(
+                f"accepted {INDEXING_JOB} handoff does not match the accepted index lineage")
+        handoff = indexing_upstream.handoff
     reference = ((handoff.get("outputs") or {}).get(INPUTS_UNIT) or {}).get("artifact")
     if not isinstance(reference, Mapping) or not isinstance(reference.get("path"), str):
         return None, f"the accepted {INDEXING_JOB} handoff records no {INPUTS_UNIT} artifact with feed pins"
