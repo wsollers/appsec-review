@@ -430,7 +430,35 @@ target_link_libraries(smoke_server PRIVATE smoke_zlib)
     points = {pt["name"]: pt for pt in discovered["build_units"][0]["build_points"]}
     assert points["smoke_synthetic"]["headers"] == []
     assert points["smoke_synthetic"]["include_dirs"] == []
-    assert points["smoke_server"]["headers"] == ["src/cache.h", "src/request.h", "src/util.h"]
+    assert points["smoke_server"]["headers"] == ["src/cache.h", "src/request.h", "src/util.h", "third_party/zlib/zlib.h"]
     assert points["smoke_server"]["include_dirs"] == ["third_party/zlib"]
     assert points["smoke_zlib"]["headers"] == ["third_party/zlib/zlib.h"]
     assert points["smoke_zlib"]["include_dirs"] == ["third_party/zlib"]
+
+
+def test_cmake_build_interface_genex_and_alias_targets_propagate_transitive_headers(tmp_path):
+    unit = context(tmp_path, SYSTEMS)
+    cmake = b"""\
+cmake_minimum_required(VERSION 3.20)
+project(genex_alias LANGUAGES C CXX)
+add_library(core_zlib STATIC third_party/zlib/zutil.c)
+target_include_directories(core_zlib PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib/inc>
+    $<INSTALL_INTERFACE:include/zlib>
+)
+add_library(third_party::zlib ALIAS core_zlib)
+add_executable(gateway src/gateway.cpp)
+target_link_libraries(gateway PRIVATE third_party::zlib)
+"""
+    entries = [
+        source(unit, "CMakeLists.txt", cmake, None),
+        source(unit, "third_party/zlib/zutil.c", b'#include "zconf.h"\n', "C"),
+        source(unit, "third_party/zlib/inc/zconf.h", b"typedef int z_off_t;\n", "C/C++"),
+        source(unit, "src/gateway.cpp", b'#include "zconf.h"\nint main() { return 0; }\n', "C++"),
+    ]
+    unit.outputs[PARTITION] = partition(entries)
+    discovered = handler(SYSTEMS)(unit)
+    points = {pt["name"]: pt for pt in discovered["build_units"][0]["build_points"]}
+    assert points["core_zlib"]["include_dirs"] == ["third_party/zlib/inc"]
+    assert points["gateway"]["include_dirs"] == ["third_party/zlib/inc"]
+    assert points["gateway"]["headers"] == ["third_party/zlib/inc/zconf.h"]

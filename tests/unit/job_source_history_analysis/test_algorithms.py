@@ -284,10 +284,11 @@ def test_cmake_non_code_preserved_while_editorconfig_and_prose_txt_excluded():
     commit = change()
     commit["files"] = [
         {"path": p, "current_path": p, "added": 4, "deleted": 1}
-        for p in ("CMakeLists.txt", ".editorconfig", "src/main.cpp")
+        for p in ("CMakeLists.txt", "config/settings.ini", ".editorconfig", "src/main.cpp")
     ]
     eligible = {
         "CMakeLists.txt": {"line_count": 40, "language": None},
+        "config/settings.ini": {"line_count": 12, "language": None},
         ".editorconfig": {"line_count": 10, "language": None},
         "src/main.cpp": {"line_count": 50, "language": "C++"},
     }
@@ -297,7 +298,44 @@ def test_cmake_non_code_preserved_while_editorconfig_and_prose_txt_excluded():
         minor_author_share=0.6, fix_interval_days=30, filters=txt_rules,
     )
     assert computed["files"]["CMakeLists.txt"]["exclusion"] is None
-    assert computed["files"]["CMakeLists.txt"]["rank_eligibility"] == "non_code"
+    assert computed["files"]["CMakeLists.txt"]["rank_eligibility"] == "eligible"
+    assert computed["files"]["config/settings.ini"]["rank_eligibility"] == "non_code"
     assert computed["files"]["CMakeLists.txt"]["change_count"] == 1
     assert computed["files"][".editorconfig"]["rank_eligibility"] == "excluded:tooling"
     assert computed["files"]["src/main.cpp"]["rank_eligibility"] == "eligible"
+
+
+def test_security_relevant_build_asm_and_template_headers_are_sii_eligible() -> None:
+    assert signals.SCORING_IDENTITY == "appsec-review/history-normalizer/4"
+    sii_paths = (
+        "Dockerfile",
+        "deploy/Containerfile",
+        "Makefile",
+        "CMakeLists.txt",
+        "arch/x86/entry.S",
+        "arch/x86/boot.s",
+        "crypto/aes_ni.asm",
+        "include/detail/parser.ipp",
+        "include/math/vec.inl",
+        "include/containers/ring.tpp",
+        "macos/keychain.mm",
+        "macos/bridge.m",
+    )
+    commit = change()
+    commit["files"] = [
+        {"path": p, "current_path": p, "added": 6, "deleted": 2}
+        for p in (*sii_paths, "config/defaults.ini")
+    ]
+    eligible = {p: {"line_count": 30, "language": None} for p in (*sii_paths, "config/defaults.ini")}
+    computed = signals.compute_signals(
+        [commit], {HEAD: {}}, {}, eligible=eligible, roots=[(".", "root")],
+        anchor_time=STAMP, window_months=6, half_life_days=1,
+        minor_author_share=0.6, fix_interval_days=30,
+        filters=signals.FilterRules(
+            generated=(), lockfile=(), fixture=(), documentation=("*.md", "*.txt"),
+            vendored=(), test=(), formatting_balance_tolerance=0.1,
+        ),
+    )
+    for path in sii_paths:
+        assert computed["files"][path]["rank_eligibility"] == "eligible", path
+    assert computed["files"]["config/defaults.ini"]["rank_eligibility"] == "non_code"

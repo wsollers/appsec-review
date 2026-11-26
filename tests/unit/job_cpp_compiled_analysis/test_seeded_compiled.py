@@ -25,7 +25,11 @@ def _run(staged, executor, name: str, *, seeded_settings=sc.SEEDED, ir=None):
     outputs = {"catalog.projects": {"projects": {sc.CASE: staged.cataloged}}}
     if ir is not None:
         outputs["ir.projects"] = ir
+    import shutil
     unit = staged.unit(f"{name}.projects", outputs, seeded=seeded_settings)
+    attempt_case = staged.run_root / "data" / "cpp" / "attempts" / unit.job.attempt_id / "projects" / sc.CASE
+    shutil.copytree(staged.case_root / "source", attempt_case / "source", dirs_exist_ok=True)
+    shutil.copyfile(staged.case_root / "normalized-compile-commands.json", attempt_case / "normalized-compile-commands.json")
     return _handlers(executor)[f"{name}.projects"].handler(unit), unit
 
 
@@ -1114,7 +1118,9 @@ def test_seeded_helpers_and_failure_branches(tmp_path: Path) -> None:
     # _source_cfgs: timed_out, oom_killed, unusable receipt, missing .cfg.txt, and module.gaps.
     staged = sc.stage(tmp_path / "cfg_edges")
     unit = staged.unit("ir.projects")
-    root = staged.run_root / "data" / "cpp" / "projects" / sc.CASE
+    import shutil
+    root = staged.run_root / "data" / "cpp" / "attempts" / unit.job.attempt_id / "projects" / sc.CASE
+    shutil.copytree(staged.case_root, root, dirs_exist_ok=True)
     subset = staged.cataloged["compile_commands"][:1]
     settings = seeded.settings_of(unit)
 

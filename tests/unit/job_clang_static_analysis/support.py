@@ -53,7 +53,7 @@ def _unit(tmp_path: Path) -> UnitContext:
     unit_root.mkdir(parents=True, exist_ok=True)
     job = SimpleNamespace(
         run_root=run_root, repository_root=tmp_path, target_root=tmp_path / "target",
-        source_fingerprint="f" * 64, config=SimpleNamespace(settings=SETTINGS),
+        source_fingerprint="f" * 64, config=SimpleNamespace(job_id=JOB_ID, settings=SETTINGS),
         attempt_id="attempt_0001",
     )
     return UnitContext(job, "analyze.scopes", "analyze", "scopes", unit_root,

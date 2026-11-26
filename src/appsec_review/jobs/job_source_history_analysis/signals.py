@@ -16,13 +16,14 @@ from typing import Any
 
 from appsec_review.jobs.component_ownership import resolve_root_ownership
 
-from .filters import formatting_change, is_test_path, path_exclusion
+from .filters import formatting_change, is_security_relevant_build_or_code_path, is_test_path, path_exclusion
 from .settings import FilterRules
 from .window import window_start as calendar_window_start
 
 
 RULES_IDENTITY = "appsec-review/history-change-rules/2"
-NORMALIZER_IDENTITY = "appsec-review/history-normalizer/3"
+NORMALIZER_IDENTITY = "appsec-review/history-normalizer/4"
+SCORING_IDENTITY = NORMALIZER_IDENTITY
 DAY = 86_400
 MAX_MESSAGE_BYTES = 65_536
 _REVERT_TRAILER = re.compile(r"This reverts commit ([0-9a-f]{40}|[0-9a-f]{64})")
@@ -254,7 +255,8 @@ def compute_signals(changes: list[Mapping[str, Any]], classes: Mapping[str, Mapp
         churn = item["added"] + item["deleted"]
         change_count = len(item["ranking"])
         exclusion = exclusions[path]
-        non_code = "language" in eligible[path] and eligible[path].get("language") is None
+        non_code = ("language" in eligible[path] and eligible[path].get("language") is None
+                    and not is_security_relevant_build_or_code_path(path))
         eligibility = (f"excluded:{exclusion['category']}" if exclusion else "no_ranking_changes" if not change_count
                        else "zero_size" if not lines else "non_code" if non_code else "eligible")
         shares = {author: _round(count / author_total) for author, count in sorted(item["authors"].items())}

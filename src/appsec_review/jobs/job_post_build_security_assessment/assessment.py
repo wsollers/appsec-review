@@ -26,7 +26,7 @@ INSPECTION_SCHEMA = "appsec-review/binary-inspection/1"
 RULE_VERSION = "build-security-rules/2"
 PARSER_VERSION = "build-security-binary-parser/2"
 NORMALIZER_VERSION = "build-security-command-normalizer/2"
-GUIDANCE_IDENTITY = "build-security-inference-guidance/1"
+GUIDANCE_IDENTITY = "build-security-inference-guidance/2"
 INFERENCE_PROPOSAL_SCHEMA = "appsec-review/build-security-inference-proposal/1"
 INFERENCE_RESPONSE_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["schema", "observations"],
