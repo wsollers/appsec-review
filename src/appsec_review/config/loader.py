@@ -1114,6 +1114,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
             overlay_source = Path(record["path"])
             overlay_sha256 = record["sha256"]
             overlay_document = copy.deepcopy(record["document"])
+        reject_development(overlay_document, "the capacity overlay")
         overlay_keys = overlay_capacity_keys(overlay_document)
         _apply_overlay(document, overlay_document)
         overlay_record = {"layer": OVERLAY_LAYER, "path": str(overlay_source), "sha256": overlay_sha256,
@@ -1604,6 +1605,10 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         raise ValueError("[orchestration.dagster.pools] must be a table")
     resolved_document["runtime"]["metadata_dir"] = str(
         document["runtime"].get("metadata_dir", "runs/metadata"))
+    resolved_document["runtime"]["operation_progress_interval_seconds"] = (
+        runtime.operation_progress_interval_seconds)
+    resolved_document["runtime"]["operation_sample_interval_seconds"] = (
+        runtime.operation_sample_interval_seconds)
     resolved_document.setdefault("tools", {})["disable_grype"] = tool_capabilities.disable_grype
     resolved_document["tools"]["enable_swift"] = tool_capabilities.enable_swift
     resolved_document["tools"]["enable_cve_bin_tool"] = tool_capabilities.enable_cve_bin_tool

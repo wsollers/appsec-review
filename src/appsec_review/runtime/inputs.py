@@ -605,11 +605,72 @@ def observe_external(root: Path, producer: str, output_kind: str, schema: str,
     reads.record(requirement, identity)
 
 
+_ATTEMPT_CONTEXT: ContextVar[Any | None] = ContextVar("appsec_attempt_input_context", default=None)
+
+
+@contextmanager
+def attempt_input_scope(context: Any) -> Iterator[None]:
+    token = _ATTEMPT_CONTEXT.set(context)
+    try:
+        yield
+    finally:
+        _ATTEMPT_CONTEXT.reset(token)
+
+
+def upstream_development_tainted(
+    run_root: Path,
+    upstream_handoffs: Mapping[str, str],
+    optional_prior_handoffs: Mapping[str, str] | None = None,
+) -> bool:
+    import re
+    from appsec_review.interchange import decode_handoff
+    from appsec_review.runtime.release import read_document
+    from appsec_review.storage.shared import safe_path
+    from appsec_review.storage.validation import observed_digest
+    pairs = (*upstream_handoffs.items(), *(optional_prior_handoffs or {}).items())
+    if not pairs:
+        return False
+    for producer, digest in pairs:
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", producer):
+            raise ValueError("invalid claimed upstream job identity")
+        matched_doc = None
+        latest = safe_path(run_root, f"data/jobs/{producer}/latest.json")
+        if latest.is_file():
+            pointer = read_document(latest)
+            if pointer.get("handoff_sha256") == digest and isinstance(pointer.get("handoff_path"), str):
+                candidate = safe_path(run_root, pointer["handoff_path"])
+                if candidate.is_file() and observed_digest(run_root, candidate) == digest:
+                    matched_doc = read_document(candidate)
+        if matched_doc is None:
+            attempts = safe_path(run_root, f"data/jobs/{producer}/attempts")
+            matches = []
+            if attempts.is_dir():
+                for path in sorted(attempts.glob("attempt_*/handoff.json")):
+                    path = safe_path(run_root, path.relative_to(run_root).as_posix())
+                    if observed_digest(run_root, path) == digest:
+                        matches.append(path)
+            if len(matches) != 1:
+                raise ValueError(f"expected exactly one accepted handoff for {producer}")
+            matched_doc = read_document(matches[0])
+        handoff = decode_handoff(matched_doc, run_id=run_root.name, job_id=producer)
+        if handoff.get("development_tainted") is True:
+            return True
+    return False
+
+
 @_read_boundary
 def observe_output(root: Path, producer: str, output_kind: str, reference: Mapping[str, Any],
                    *, prior: bool = False, _resolved: bool = False) -> None:
     reads = _READS.get()
     if reads is None:
+        attempt_ctx = _ATTEMPT_CONTEXT.get()
+        if attempt_ctx is not None and Path(root).resolve() == attempt_ctx.run_root.resolve():
+            development = None if prior else _development_record(
+                attempt_ctx, producer, output_kind, str(reference.get("path", "")))
+            if development is not None and not _resolved:
+                raise ValueError(
+                    f"development input override for {reference.get('path')} requires its consumer to open "
+                    "the file through runtime.inputs.input_file; the original bytes were not read")
         return
     if root.resolve() != reads.context.run_root.resolve():
         raise ValueError("consumed output belongs to a foreign run")
@@ -657,8 +718,11 @@ def input_file(root: Path, producer: str, output_kind: str, reference: Mapping[s
     from appsec_review.runtime.job import InputFile
     observe_output(root, producer, output_kind, reference, prior=prior, _resolved=True)
     reads = _READS.get()
-    if reads is not None and getattr(reads.context, "development_inputs", ()):
-        return reads.context.input_file(producer, output_kind, reference, prior=prior)
+    active_context = reads.context if reads is not None else _ATTEMPT_CONTEXT.get()
+    if (active_context is not None
+            and Path(root).resolve() == active_context.run_root.resolve()
+            and getattr(active_context, "development_inputs", ())):
+        return active_context.input_file(producer, output_kind, reference, prior=prior)
     original = {key: reference[key] for key in ("path", "sha256", "size_bytes") if key in reference}
     return InputFile(safe_path(root, str(reference.get("path", ""))), original, original, False)
 

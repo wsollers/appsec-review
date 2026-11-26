@@ -18,6 +18,14 @@ class OperationalSetting:
 
     @property
     def resolved_path(self) -> tuple[str, ...]:
+        if self.job_id is None:
+            return self.path
+        if len(self.path) == 3 and self.path[:2] == ("settings", "seeded_bounds"):
+            return ("jobs", self.job_id, "settings", "seeded", self.path[2])
+        return ("jobs", self.job_id, *self.path)
+
+    @property
+    def source_path(self) -> tuple[str, ...]:
         return ("jobs", self.job_id, *self.path) if self.job_id is not None else self.path
 
 
@@ -390,8 +398,6 @@ OPERATIONAL_SETTINGS = (
     OperationalSetting('job_remediation_planning', ('settings', 'bounds', 'max_source_bytes'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_remediation_planning', ('settings', 'bounds', 'max_source_files'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_remediation_planning', ('settings', 'bounds', 'max_text_chars'), category='coverage', value_type='positive_integer'),
-    OperationalSetting('job_remediation_planning', ('settings', 'bounds', 'max_workspace_bytes'), category='coverage', value_type='positive_integer'),
-    OperationalSetting('job_remediation_planning', ('settings', 'bounds', 'max_workspace_files'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_remediation_planning', ('settings', 'writer', 'max_input_tokens'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_remediation_planning', ('settings', 'writer', 'max_output_tokens'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_remediation_planning', ('settings', 'writer', 'max_queries'), category='coverage', value_type='nonnegative_integer'),
@@ -583,9 +589,31 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
     """Return exact admitted deltas, rejecting every other changed field."""
     if not isinstance(before, Mapping) or not isinstance(after, Mapping):
         raise ValueError("resolved configuration must be an object")
+    from .development import DEVELOPMENT_PROFILES, parse_job_development, reject_development
+    for doc in (before, after):
+        overlay = doc.get("configuration_overlay")
+        if isinstance(overlay, Mapping) and isinstance(overlay.get("document"), Mapping):
+            try:
+                reject_development(overlay["document"], "configuration_overlay")
+            except ValueError as exc:
+                raise MaterialConfigurationChange(str(exc)) from exc
     declarations = {setting.resolved_path: setting for setting in OPERATIONAL_SETTINGS}
+    source_declarations = {setting.source_path: setting for setting in OPERATIONAL_SETTINGS}
     changes: list[dict[str, Any]] = []
     material: list[str] = []
+
+    def _validate_development_change(job_id: str, left_dev: Any, right_dev: Any) -> None:
+        for side in (left_dev, right_dev):
+            if side is not None:
+                try:
+                    parse_job_development(job_id, side)
+                except ValueError as exc:
+                    raise MaterialConfigurationChange(str(exc)) from exc
+        if right_dev is not None:
+            after_profile = (after.get("configuration_profile") or {}).get("name", "dev")
+            if after_profile not in DEVELOPMENT_PROFILES:
+                raise MaterialConfigurationChange(
+                    f"development input overrides require an explicitly selected development profile, not {after_profile}")
 
     def compare(left: Any, right: Any, path: tuple[str, ...]) -> None:
         if _canonical(left) == _canonical(right):
@@ -612,7 +640,17 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
             for key in sorted(set(first) | set(second)):
                 if key in first and key in second and _canonical(first[key]) == _canonical(second[key]):
                     continue
-                if key not in declarations and not _development(key):
+                if _development(key):
+                    if path == ("configuration_overlay",):
+                        raise MaterialConfigurationChange(
+                            "development input overrides are not allowed in configuration_overlay")
+                    left_jobs = (left.get("document") or {}).get("jobs")
+                    right_jobs = (right.get("document") or {}).get("jobs")
+                    left_dev = left_jobs.get(key[1], {}).get("development") if isinstance(left_jobs, Mapping) and isinstance(left_jobs.get(key[1]), Mapping) else None
+                    right_dev = right_jobs.get(key[1], {}).get("development") if isinstance(right_jobs, Mapping) and isinstance(right_jobs.get(key[1]), Mapping) else None
+                    _validate_development_change(key[1], left_dev, right_dev)
+                    continue
+                if key not in declarations and key not in source_declarations:
                     material.append(".".join((*path, "document", *key)))
             # Source-layer digests are provenance, not authority. Effective leaf values are
             # validated below and the immutable layer bytes are verified by configuration_snapshot.
@@ -624,6 +662,15 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
                             "before": left, "after": right})
             return
         if _development(path):
+            left_jobs = before.get("jobs")
+            right_jobs = after.get("jobs")
+            left_dev = left if len(path) == 3 else (
+                left_jobs.get(path[1], {}).get("development")
+                if isinstance(left_jobs, Mapping) and isinstance(left_jobs.get(path[1]), Mapping) else None)
+            right_dev = right if len(path) == 3 else (
+                right_jobs.get(path[1], {}).get("development")
+                if isinstance(right_jobs, Mapping) and isinstance(right_jobs.get(path[1]), Mapping) else None)
+            _validate_development_change(path[1], left_dev, right_dev)
             changes.append({"job_id": path[1], "path": list(path[2:]), "category": "development",
                             "before": left, "after": right})
             return

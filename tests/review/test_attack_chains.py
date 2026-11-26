@@ -299,8 +299,9 @@ def test_ledger_rejects_forged_decision_and_component_adjudication(tmp_path):
         chain.proposal_from_json(forged)
 
 
-@pytest.mark.parametrize("values", [{"max_links": 1}, {"max_expansions": 0}, {"max_queries": True},
-                                   {"max_challenge_cells": -1}, {"allow_model_proof": True},
+@pytest.mark.parametrize("values", [{"max_links": 1}, {"max_expansions": 0}, {"max_paths": 0},
+                                   {"max_queries": 10}, {"max_turns": 4}, {"max_challenge_cells": 4},
+                                   {"allow_model_proof": True},
                                    {"continuity_producers": ["rule", "rule"]}, {"continuity_producers": ["rule"]},
                                    {"continuity_producers": [{}]}])
 def test_chain_bounds_and_commissioning_are_closed_and_typed(values):

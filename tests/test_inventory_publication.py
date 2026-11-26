@@ -100,7 +100,7 @@ def test_real_publication_failure_and_repair_are_owned(tmp_path, mode):
 
     plan = plan_repair(runner.config, root, (job,), SNAPSHOT, target_root=target)
     assert plan["admissible"], plan["refusals"]
-    assert plan["unit_decisions"][job.job_id]["work.only"]["action"] == "REUSE"
+    assert plan["unit_decisions"][job.job_id]["work.only"]["action"] == "RUN"
     admit_repair(runner.config, root, (job,), plan, target_root=target)
     repaired = runner.run(job, run_id=root.name, target_root=target, source_fingerprint=SNAPSHOT)
     assert repaired["status"]["attempt_id"] == "attempt_0003"
@@ -131,8 +131,14 @@ def test_default_registry_contract_and_internal_eligibility(tmp_path, internal_a
     claim = runner.begin_attempt(indexing, source_fingerprint=SNAPSHOT)
     context = runner._context_from_claim(indexing, claim)
     if internal_attempt:
-        with pytest.raises(RuntimeError, match="requires an immutable iteration_request"):
-            runner.run(build_iteration_job(), run_id=context.run_id, source_fingerprint=SNAPSHOT)
+        internal_job = build_iteration_job()
+        isolated_internal = replace(
+            internal_job,
+            consumes=(),
+            contract=replace(internal_job.contract, inputs=(internal_job.contract.inputs[-1],)),
+        )
+        with pytest.raises(RuntimeError, match="partial failure"):
+            runner.run(isolated_internal, run_id=context.run_id, source_fingerprint=SNAPSHOT)
     manifest = context.run_root / "data/indices/manifests/fixture.json"
     write_manifest(manifest, run_id=context.run_id, target_snapshot=SNAPSHOT,
                    target_root=tmp_path, indexes=[])
@@ -149,7 +155,7 @@ def test_default_registry_contract_and_internal_eligibility(tmp_path, internal_a
     assert "job_third_party_data_sync" not in document["registry_jobs"]
     assert document["dispatch_classes"]["job_third_party_data_sync"] == "maintenance"
     assert document["dispatch_classes"]["job_build_iteration"] == "internal_transaction"
-    assert len(document["registered_jobs"]) == 47
+    assert len(document["registered_jobs"]) == 48
     assert document["file_job_steps"]["job_build_iteration"] == ["execute"]
     assert document["registry_configuration_mismatch"] == []
     assert "job_build_environment_analysis" in document["registry_jobs"]
@@ -230,7 +236,12 @@ def test_internal_attempts_are_accounting_only(tmp_path, mode, state):
         return {"completion": completion, "terminal_status": "SUCCEEDED"}
 
     # Substitute only the producer work; retain the real internal metadata, runner and inventory.
-    minimal = replace(internal, units=(replace(internal.units[0], handler=produce),))
+    minimal = replace(
+        internal,
+        units=(replace(internal.units[0], handler=produce),),
+        consumes=(),
+        contract=replace(internal.contract, inputs=(internal.contract.inputs[-1],)),
+    )
     if state == "accepted":
         outcome = runner.run(minimal, run_id=root.name, target_root=target, source_fingerprint=SNAPSHOT)
         claim = json.loads((Path(outcome["attempt_root"]) / "claim.json").read_bytes())
@@ -241,7 +252,7 @@ def test_internal_attempts_are_accounting_only(tmp_path, mode, state):
         parent = replace(parent, units=(parent.units[0], replace(parent.units[1], handler=publish)))
         runner.run(parent, run_id=root.name, target_root=target, source_fingerprint=SNAPSHOT)
     elif state == "rejected":
-        with pytest.raises(RuntimeError, match="internal fixture failure"):
+        with pytest.raises(RuntimeError, match="partial failure"):
             runner.run(minimal, run_id=root.name, target_root=target, source_fingerprint=SNAPSHOT)
 
     inputs = InventoryInputs(

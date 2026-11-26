@@ -37,21 +37,25 @@ def _latest_claim(run_root: Path, job_id: str) -> dict[str, Any] | None:
 
 
 def check_lookup(config: AppConfig, run_root: Path, job_id: str, lookup: Callable[..., Any],
-                 arguments: Sequence[Any] = (), *, original: bool = False) -> dict[str, Any]:
+                 arguments: Sequence[Any] = (), *, original: bool = False,
+                 registry: Any | None = None) -> dict[str, Any]:
     """Run ``lookup(run_root, *arguments)`` with the job's inputs resolved as its next attempt would."""
     from appsec_review.observability import EventLog, PipelineLog
-    from appsec_review.runtime.inputs import input_read_scope, selected_handoffs
+    from appsec_review.runtime.consume import upstream_scope
+    from appsec_review.runtime.inputs import attempt_input_scope, input_read_scope, selected_handoffs
     from appsec_review.runtime.job import JobContext
     from appsec_review.runtime.registry import builtin_registry
     from appsec_review.runtime.selection import active_job_ids
-    job = builtin_registry().build(job_id)
+    job = (registry or builtin_registry()).build(job_id)
     job_config = config.job(job_id)
     if not original and job_config.development is None:
         raise ValueError(f"no development input override is configured for {job_id} in profile {config.profile}")
     claim = _latest_claim(run_root, job_id)
     upstream = (dict(claim.get("upstream_handoffs", {})) if claim is not None else
                 selected_handoffs(job, run_root, None, enabled=set(active_job_ids(config, config.jobs))))
-    with tempfile.TemporaryDirectory(prefix="appsec-dev-check-") as scratch:
+    scratch_base = config.runtime.metadata_dir if config.runtime.metadata_dir.is_dir() else (
+        run_root.parent if run_root.parent.is_dir() else None)
+    with tempfile.TemporaryDirectory(prefix="appsec-dev-check-", dir=scratch_base) as scratch:
         events = EventLog(Path(scratch) / "events.jsonl", PipelineLog(Path(scratch)), {
             "run_id": run_root.name, "job_id": job_id, "attempt_id": "development-check",
             "trigger": "manual", "orchestrator": "development-check", "dagster_run_id": "-"})
@@ -72,7 +76,10 @@ def check_lookup(config: AppConfig, run_root: Path, job_id: str, lookup: Callabl
                                    "upstream_handoffs": upstream, "development_inputs": list(records)}
         reads = None
         try:
-            with input_read_scope(context) as reads:
+            with attempt_input_scope(context), \
+                    upstream_scope(run_root, job_id, upstream, contract=job.contract,
+                                   optional_prior_handoffs=context.optional_prior_handoffs), \
+                    input_read_scope(context) as reads:
                 outcome["result"] = lookup(run_root, *arguments)
             outcome["status"] = "returned"
         except Exception as error:  # noqa: BLE001 - the lookup's own exception is the answer
