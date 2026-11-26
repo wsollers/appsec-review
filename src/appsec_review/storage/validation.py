@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import wraps
+import os
 from pathlib import Path
 from threading import RLock
 from typing import Any, Callable, Iterator, ParamSpec, TypeVar
@@ -33,12 +34,18 @@ class ValidationContext:
     admitted_receipts: dict[str, Any] = field(default_factory=dict)
     admitted_manifests: dict[str, Any] = field(default_factory=dict)
     lock: Any = field(default_factory=RLock)
+    _run_root_real: str = field(init=False, repr=False, compare=False)
+    _run_root_prefix: str = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        self._run_root_real = os.path.realpath(self.run_root)
+        self._run_root_prefix = os.path.join(self._run_root_real, "")
 
     def _resolved(self, path: Path) -> Path:
-        resolved = path.resolve()
-        if self.run_root not in resolved.parents:
+        real = os.path.realpath(path)
+        if real == self._run_root_real or not real.startswith(self._run_root_prefix):
             raise ValueError("validation object escapes its run")
-        return resolved
+        return Path(real)
 
     def remember(self, path: Path, digest: str) -> None:
         """Record bytes this context wrote and hashed itself, keyed by inode alias."""
@@ -46,9 +53,7 @@ class ValidationContext:
         with self.lock:
             self.aliases[_alias_key(path)] = digest
 
-    def observe(self, path: Path) -> str:
-        """Return the digest of ``path``, hashing an inode at most once per context."""
-        self._resolved(path)
+    def _observe_resolved(self, path: Path) -> str:
         with self.lock:
             before = _alias_key(path)
             cached = self.aliases.get(before)
@@ -59,15 +64,21 @@ class ValidationContext:
                 self.aliases[before] = actual
             return actual
 
+    def observe(self, path: Path) -> str:
+        """Return the digest of ``path``, hashing an inode at most once per context."""
+        self._resolved(path)
+        return self._observe_resolved(path)
+
     def digest(self, path: Path, expected: str) -> str:
         resolved = self._resolved(path)
         key = (resolved, expected)
         with self.lock:
-            admitted = self.admitted.get((resolved.relative_to(self.run_root).as_posix(), expected))
-            if admitted is not None and path.stat().st_size == admitted:
-                return expected
+            if self.admitted:
+                admitted = self.admitted.get((resolved.relative_to(self.run_root).as_posix(), expected))
+                if admitted is not None and path.stat().st_size == admitted:
+                    return expected
             if key not in self.hashes:
-                actual = self.observe(path)
+                actual = self._observe_resolved(path)
                 if actual != expected:
                     raise ValueError("target evidence integrity mismatch")
                 self.hashes[key] = actual

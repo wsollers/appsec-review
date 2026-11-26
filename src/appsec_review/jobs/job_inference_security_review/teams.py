@@ -214,15 +214,16 @@ class ReviewContext:
 
     def _population(self, indexes: Sequence[str]) -> dict[str, Any]:
         core = getattr(self, "core", None)
-        if core is None:
-            return review_population(None, indexes, job_id="job_inference_security_review")
+        cache = getattr(self, "_populations", None)
+        if core is None or cache is None:
+            return review_population(core, indexes, job_id="job_inference_security_review")
         key = tuple(sorted(set(indexes)))
         with self._lock:
-            cached = self._populations.get(key)
+            cached = cache.get(key)
         if cached is None:
             computed = review_population(core, key, job_id="job_inference_security_review")
             with self._lock:
-                cached = self._populations.setdefault(key, computed)
+                cached = cache.setdefault(key, computed)
         return copy.deepcopy(cached)
 
     def review_grant(self, role: Role, indexes: Sequence[str], *, expand: bool = False):
@@ -241,7 +242,7 @@ class ReviewContext:
                    "max_queries": capability.max_queries,
                    "max_turns": capability.max_turns, "page_size": capability.page_size}
         if population is None:
-            population = self._population(capability.indexes)
+            population = ReviewContext._population(self, capability.indexes)
         binary = BINARY_INDEX in capability.indexes and population["binary"]["known_row_count"] > 0
         query_sources = review_query_sources(capability.tools, population)
         receipt["query_sources"] = list(query_sources)
