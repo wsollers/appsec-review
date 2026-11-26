@@ -415,6 +415,8 @@ def handoff_input_projection(value: Mapping[str, Any]) -> dict[str, Any]:
     projection = {key: value[key] for key in keys}
     manifest = value["input_manifest"]
     projection["input_manifest_sha256"] = manifest["sha256"] if manifest is not None else None
+    if value.get("development_tainted") is True:
+        projection["development_tainted"] = True
     return projection
 
 
@@ -480,6 +482,8 @@ def decode_handoff(value: Any, *, run_id: str | None = None, job_id: str | None 
     if ("evidence_target_snapshot" in value
             and value["evidence_target_snapshot"] != value["target_snapshot"]):
         raise ValueError("contradictory handoff target identities")
+    if "development_tainted" in value:
+        _boolean(value["development_tainted"], "development_tainted")
     for key in ("resolved_config_sha256", "job_config_sha256", "dataset_contract_sha256", "input_set_sha256"):
         _hash(value[key], key)
     for key, digest in _mapping(value["upstream_handoff_sha256"], "upstream handoffs").items():
