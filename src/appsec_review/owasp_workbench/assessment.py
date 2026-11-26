@@ -285,7 +285,7 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
 
     parts = plan_parts(packages, estimate=estimate, budget=budget)
     outcomes: list[dict[str, Any]] = []
-    row_status: dict[str, str] = {}
+    outcomes_by_row: dict[str, list[dict[str, Any]]] = {}
     row_gaps: dict[str, list[str]] = {}
     for number, part in enumerate(parts):
         for row_id, gaps in part.gaps.items():
@@ -306,13 +306,26 @@ def investigate(*, repository_root: Path, run_root: Path, batch: Mapping[str, An
                                         correlation=correlation)
         outcomes.append(outcome)
         for row_id in part.row_ids:
-            row_status[row_id] = outcome["status"]
+            outcomes_by_row.setdefault(row_id, []).append(outcome)
             if outcome["proposal"] is None:
                 row_gaps.setdefault(row_id, []).extend(
                     f"{attempt['error_class']}: {attempt['error']}"
                     for attempt in outcome["attempts"] if attempt.get("error"))
-    results = [row for outcome in outcomes if outcome["proposal"] is not None
-               for row in outcome["proposal"]["results"]]
+    row_status = {row_id: _merge_status(items) for row_id, items in outcomes_by_row.items()}
+    merged_rows: dict[str, dict[str, Any]] = {}
+    for outcome in outcomes:
+        if outcome["proposal"] is None:
+            continue
+        for row in outcome["proposal"]["results"]:
+            rid = str(row["row_id"])
+            if rid not in merged_rows:
+                merged_rows[rid] = {**row, "obligations": list(row.get("obligations", ()))}
+            else:
+                seen_ids = {item.get("obligation_id") for item in merged_rows[rid]["obligations"]}
+                merged_rows[rid]["obligations"].extend(
+                    item for item in row.get("obligations", ()) if item.get("obligation_id") not in seen_ids
+                )
+    results = list(merged_rows.values())
     proposal = ({"schema": TURN_SCHEMA, "action": "final", "results": results}
                 if any(outcome["proposal"] is not None for outcome in outcomes) else None)
     receipts = [outcome["receipt"] for outcome in outcomes if outcome.get("receipt")]
@@ -379,14 +392,32 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
                        max_calls=settings.max_turns * policy.attempts,
                        max_response_bytes=int(profile["max_output_tokens"]) * 4,
                        context=CallContext(run_root, **correlation, batch_id=str(batch["batch_id"])))
+    current_view = part.view
+    max_tokens = int(profile["max_input_tokens"])
+    part_tag = number if parts > 1 else None
     for turn in range(settings.max_turns):
         retry_reason = None
         for retry in range(policy.attempts):
-            request = _request(part.view, batch=batch, role=role, guidance=guidance, text=text, profile=profile,
+            request = _request(current_view, batch=batch, role=role, guidance=guidance, text=text, profile=profile,
                                settings=settings, transcript=transcript, queries=queries, turn=turn, retry=retry,
-                               part=number if parts > 1 else None)
+                               part=part_tag)
             estimate = estimate_tokens(request)
-            if estimate > int(profile["max_input_tokens"]):
+            if estimate > max_tokens and transcript:
+                from .batching import trim as _trim_turn
+                trimmed_view, _, trimmed_after = _trim_turn(
+                    current_view,
+                    estimate=lambda candidate: estimate_tokens(_request(
+                        candidate, batch=batch, role=role, guidance=guidance, text=text, profile=profile,
+                        settings=settings, transcript=transcript, queries=queries, turn=turn, retry=retry,
+                        part=part_tag)),
+                    budget=max_tokens, before=estimate)
+                if trimmed_after <= max_tokens:
+                    current_view = trimmed_view
+                    request = _request(current_view, batch=batch, role=role, guidance=guidance, text=text,
+                                       profile=profile, settings=settings, transcript=transcript, queries=queries,
+                                       turn=turn, retry=retry, part=part_tag)
+                    estimate = trimmed_after
+            if estimate > max_tokens:
                 terminal = "input_budget"
                 break
             attempt = {"role": role, "guidance": guidance["bundle_sha256"],
@@ -637,11 +668,13 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
         row_reviewer = reviewer if package["row_id"] in ready_ids else empty
         assessed = accept_obligations(package, worker_rows.get(package["row_id"]), resolver)
         reviewed_obligations = accept_obligations(package, review_rows.get(package["row_id"]), resolver)
+        reviewed_ids = {item["obligation_id"]
+                        for item in (review_rows.get(package["row_id"]) or {}).get("obligations", ())}
         states, disagreements, gaps, refs, observations = [], [], [], [], []
         for first, second in zip(assessed, reviewed_obligations, strict=True):
             status = first["outcome"]
             review_status = second["outcome"]
-            reviewed = bool(review_rows.get(package["row_id"])) and first["obligation"].get("supported")
+            reviewed = first["obligation"]["obligation_id"] in reviewed_ids and bool(first["obligation"].get("supported"))
             disposition = ("independently_assessed" if reviewed and status == review_status
                            and status != "cannot_verify" else "dissent" if reviewed and status != review_status
                            else "unresolved" if reviewed else "pending")
@@ -668,9 +701,19 @@ def run_batch(*, repository_root: Path, run_root: Path, batch: Mapping[str, Any]
         status = ("not_satisfied" if "not_satisfied" in states else "satisfied"
                   if states and all(item == "satisfied" for item in states) else "cannot_verify")
         supported_items = [item for item in assessed if item["obligation"].get("supported")]
-        verification = ("dissent" if disagreements else "independently_assessed"
-                        if supported_items and all(item["disposition"] == "independently_assessed" for item in supported_items)
-                        else "pending" if package["row_id"] not in review_rows else "unresolved")
+        has_verified_violation = (
+            status == "not_satisfied"
+            and any(item["final_outcome"] == "not_satisfied" and item["disposition"] == "independently_assessed"
+                    for item in supported_items)
+        )
+        verification = (
+            "dissent" if disagreements else
+            "independently_assessed" if (
+                (supported_items and all(item["disposition"] == "independently_assessed" for item in supported_items))
+                or has_verified_violation
+            ) else
+            "pending" if not reviewed_ids else "unresolved"
+        )
         if status == "cannot_verify":
             gaps.append("material obligations remain unresolved; no safe/unsafe conclusion")
         # A batch dispatched in parts (batching.plan_parts) reports each row's own status and budget gaps.

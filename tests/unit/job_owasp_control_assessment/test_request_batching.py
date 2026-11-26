@@ -252,3 +252,165 @@ def test_settings_accept_the_inherited_dispositions_and_default_to_first_party()
     assert typed.source_dispositions.classify("src/request.cpp") == "first_party"
     with pytest.raises(ValueError, match="source_dispositions"):
         parse_settings({**configured, "source_dispositions": {"vendor": ["x"]}})
+
+
+def test_single_package_splits_across_obligations_preserving_excerpts_and_merges_proposals(tmp_path, monkeypatch):
+    monkeypatch.setattr(assessment, "_guidance", lambda *args: ({"bundle_sha256": "a" * 64}, "guidance"))
+    row = package(0, context_records=0)
+    evidence_records = []
+    obligations = []
+    for index in range(4):
+        eid = f"ev-{index}"
+        rec = {
+            **row["evidence_references"][0],
+            "evidence_id": eid,
+            "excerpt": EXCERPT * 25,
+            "reference": {
+                **row["evidence_references"][0]["reference"],
+                "source_identity": f"asr:source_file:{eid}",
+            },
+        }
+        evidence_records.append(rec)
+        obligations.append({
+            **row["proof_obligations"][0],
+            "obligation_id": f"row-00:subject-{index}",
+            "subject_id": f"subject-{index}",
+            "evidence_ids": [eid],
+        })
+    row["evidence_references"] = evidence_records
+    row["proof_obligations"] = obligations
+    row["expansion_identities"] = [rec["reference"]["source_identity"] for rec in evidence_records]
+
+    settings = OwaspSettings(True, AssessmentMode.ASSESSMENT, "reviewer", 60, 120, 8, 10, 4, 8)
+    base_profile = {"provider": "p", "model": "m", "reasoning": "high", "retries": 0, "timeout_seconds": 10,
+                    "max_input_tokens": 100000, "max_output_tokens": 2000}
+
+    def est(view):
+        req = assessment._request(
+            view, batch={"batch_id": "batch", "assignment": {"persona": None}},
+            role="control_assessor", guidance={"bundle_sha256": "a" * 64}, text="guidance",
+            profile=base_profile, settings=settings, transcript=(), queries=0, turn=0, retry=0, part=1)
+        return estimate_tokens(req)
+
+    full_tokens = est(assemble([row]))
+    single_slice_tokens = est(assemble([{
+        **row,
+        "proof_obligations": obligations[:1],
+        "evidence_references": evidence_records[:1],
+    }]))
+    budget = single_slice_tokens + max(200, (full_tokens - single_slice_tokens) // 3)
+    assert single_slice_tokens < budget < full_tokens
+
+    parts = plan_parts([row], estimate=est, budget=budget)
+    assert len(parts) >= 2
+    assert all(part.dispatch and part.estimate <= budget for part in parts)
+    assert all("excerpts" not in ((part.view.get("trimmed") or {}).get("tiers") or ()) for part in parts)
+
+    resolver = SimpleNamespace(scope=SimpleNamespace(run_id="run"),
+                               metrics={"attempts": 0, "denials": 0, "truncations": 0, "missing": 0})
+    calls = []
+
+    def infer(request, *, timeout_seconds):
+        calls.append(request)
+        pkg_view, = request.task_input["packages"]
+        return ModelResult({
+            "schema": assessment.TURN_SCHEMA,
+            "action": "final",
+            "results": [{
+                "row_id": pkg_view["row_id"],
+                "obligations": [
+                    {
+                        "obligation_id": item["obligation_id"],
+                        "subject_id": item["subject_id"],
+                        "outcome": "satisfied",
+                        "rationale": f"Verified {item['obligation_id']}.",
+                        "supporting": [],
+                        "contradictory": [],
+                        "assumptions": [],
+                        "evidence_requests": [],
+                        "hypotheses": [],
+                        "limitations": [],
+                    }
+                    for item in pkg_view["proof_obligations"]
+                    if item.get("supported")
+                ],
+            }],
+        })
+
+    profile = {**base_profile, "max_input_tokens": budget}
+    result = assessment.investigate(
+        repository_root=tmp_path, run_root=tmp_path, batch={"batch_id": "batch", "assignment": {"persona": None}},
+        packages=[row], role="control_assessor", settings=settings, resolver=resolver, profile=profile, infer=infer)
+    assert result["status"] == "succeeded"
+    assert result["row_status"] == {"row-00": "succeeded"}
+    assert len(calls) == len(parts)
+    merged_row, = result["proposal"]["results"]
+    assert [o["obligation_id"] for o in merged_row["obligations"]] == [o["obligation_id"] for o in obligations]
+
+    reused = assessment.investigate(
+        repository_root=tmp_path, run_root=tmp_path, batch={"batch_id": "batch", "assignment": {"persona": None}},
+        packages=[row], role="control_assessor", settings=settings, resolver=resolver, profile=profile, infer=infer)
+    assert reused["status"] == "reused" and len(calls) == len(parts)
+    assert [o["obligation_id"] for o in reused["proposal"]["results"][0]["obligations"]] == [
+        o["obligation_id"] for o in obligations
+    ]
+
+
+def test_investigate_dynamically_trims_view_when_retrieve_transcript_exceeds_budget(accepted, settings, tmp_path, monkeypatch):
+    monkeypatch.setattr(assessment, "_guidance", lambda *args: ({"bundle_sha256": "a" * 64}, "guidance"))
+    boundary = accepted({"src/request.cpp": EXCERPT * 20}, languages={"src/request.cpp": "C++"})
+    ev = boundary.resolver.materialize(boundary.files[0].identity, component_id="api")
+    row = package(0, evidence_id=ev["evidence_id"], context_records=10)
+    row["component"]["component_id"] = "api"
+    row["evidence_references"] = [ev]
+    row["proof_obligations"] = [{**row["proof_obligations"][0], "component_id": "api"}]
+    row["expansion_identities"] = [ev["reference"]["source_identity"]]
+    batch_obj = {"batch_id": "batch", "component_id": "api", "assignment": {"persona": "general"}}
+
+    probe_profile = {"provider": "p", "model": "m", "reasoning": "high", "retries": 0, "timeout_seconds": 10,
+                     "max_input_tokens": 100000, "max_output_tokens": 2000}
+    turn0_tokens = estimate_tokens(assessment._request(
+        assemble([row]), batch=batch_obj, role="control_assessor", guidance={"bundle_sha256": "a" * 64}, text="guidance",
+        profile=probe_profile, settings=settings, transcript=(), queries=0, turn=0, retry=0, part=None))
+    # Budget admits untrimmed turn 0, while turn 1 after retrieve exceeds untrimmed budget and trims context tiers.
+    budget = turn0_tokens + 10
+    calls = []
+
+    def infer(request, *, timeout_seconds):
+        calls.append(request)
+        if len(calls) == 1:
+            return ModelResult({
+                "schema": assessment.TURN_SCHEMA,
+                "action": "retrieve",
+                "requests": [{"source_identity": ev["reference"]["source_identity"], "locator": None}],
+            })
+        pkg_view, = request.task_input["packages"]
+        obl, = pkg_view["proof_obligations"]
+        return ModelResult({
+            "schema": assessment.TURN_SCHEMA,
+            "action": "final",
+            "results": [{
+                "row_id": pkg_view["row_id"],
+                "obligations": [{
+                    "obligation_id": obl["obligation_id"],
+                    "subject_id": obl["subject_id"],
+                    "outcome": "cannot_verify",
+                    "rationale": "Checked after retrieve.",
+                    "supporting": [],
+                    "contradictory": [],
+                    "assumptions": [],
+                    "evidence_requests": ["Need caller."],
+                    "hypotheses": [],
+                    "limitations": [],
+                }],
+            }],
+        })
+
+    result = assessment.investigate(
+        repository_root=tmp_path, run_root=tmp_path, batch=batch_obj, packages=[row], role="control_assessor",
+        settings=settings, resolver=boundary.resolver, profile={**probe_profile, "max_input_tokens": budget},
+        infer=infer)
+    assert result["status"] == "succeeded" and len(calls) == 2
+    assert "trimmed" not in calls[0].task_input
+    assert calls[1].task_input.get("trimmed") is not None
+    assert all(item["input_tokens_estimated"] <= budget for item in result["attempts"])

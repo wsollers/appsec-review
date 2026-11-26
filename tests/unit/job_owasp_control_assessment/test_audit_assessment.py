@@ -408,3 +408,133 @@ def test_prerequisite_cannot_authorize_unrelated_or_unresolved_evidence(accepted
     [result] = assessment.accept_obligations(package, proposal, boundary.resolver)
     assert result["outcome"] == "cannot_verify" and result["gaps"]
     assert not result["hypotheses"]
+
+
+def test_verified_violation_obligation_indexes_control_gap_despite_unresolved_sibling(accepted, settings, tmp_path):
+    sink1 = "void copy_indirect(char *s) {\n  char b[8]; strcpy(b, s);\n}\n"
+    sink2 = "void copy_direct(char *s) {\n  char b[8]; strcpy(b, s);\n}\n"
+    direct_caller = "void handle_request(int fd) {\n  char in[32]; recv(fd, in, sizeof(in), 0);\n  copy_direct(in);\n}\n"
+    indirect_caller = "void serve_once(int fd) {\n  handle_request(fd);\n}\n"
+    boundary = accepted(
+        {"sink1.c": sink1, "sink2.c": sink2, "handler.c": direct_caller, "server.c": indirect_caller},
+        languages={"sink1.c": "C", "sink2.c": "C", "handler.c": "C", "server.c": "C"},
+    )
+    ev_items, _ = component_evidence(boundary.resolver, "api", boundary.files, settings)
+    by_path = {item["reference"]["locator"]["path"]: item for item in ev_items}
+    sink1_ev, sink2_ev = by_path["sink1.c"], by_path["sink2.c"]
+    files_by_path = {item.path: item for item in boundary.files}
+    handler_ev = boundary.resolver.materialize(files_by_path["handler.c"].identity, component_id="api")
+    server_ev = boundary.resolver.materialize(files_by_path["server.c"].identity, component_id="api")
+
+    package = assessment_package(sink1_ev, RULE, row_id="row-v16-4-1")
+    pkg2 = assessment_package(sink2_ev, RULE, row_id="row-v16-4-1")
+    obl0 = {**deepcopy(package["proof_obligations"][0]), "obligation_id": "row-v16-4-1:obl-0"}
+    obl1 = {**deepcopy(pkg2["proof_obligations"][0]), "obligation_id": "row-v16-4-1:obl-1"}
+    package["proof_obligations"] = [obl0, obl1]
+    package["evidence_references"] = [sink1_ev, sink2_ev, handler_ev, server_ev]
+    package["expansion_identities"] = [
+        item["reference"]["source_identity"] for item in (sink1_ev, sink2_ev, handler_ev, server_ev)
+    ]
+
+    def make_turn(second_outcome: str):
+        o0 = proposal_for({**package, "proof_obligations": [obl0]}, sink1_ev["reference"], "not_satisfied",
+                          contradictory=[sink1_ev["reference"], server_ev["reference"]])["obligations"][0]
+        if second_outcome == "not_satisfied":
+            o1 = proposal_for({**package, "proof_obligations": [obl1]}, sink2_ev["reference"], "not_satisfied",
+                              contradictory=[sink2_ev["reference"], handler_ev["reference"]])["obligations"][0]
+        else:
+            o1 = {
+                "obligation_id": obl1["obligation_id"],
+                "subject_id": obl1["subject_id"],
+                "outcome": "cannot_verify",
+                "rationale": "Reviewer could not verify.",
+                "supporting": [],
+                "contradictory": [],
+                "assumptions": [],
+                "evidence_requests": ["Need runtime trace."],
+                "hypotheses": [],
+                "limitations": [],
+            }
+        return {"schema": assessment.TURN_SCHEMA, "action": "final",
+                "results": [{"row_id": package["row_id"], "obligations": [o0, o1]}]}
+
+    assessed = assessment.run_batch(
+        repository_root=ROOT, run_root=tmp_path / "confirmed", batch=BATCH, packages=[package],
+        settings=settings, worker_profile=PROFILE, reviewer_profile=PROFILE, resolver=boundary.resolver,
+        infer=lambda request, **_: ModelResult(make_turn("not_satisfied")))
+    applicability = {
+        "row_id": package["row_id"], "outcome": "applicable", "assessment_mode": "assessment",
+        "control_identity": "ASVS:5.0.0:V1.4.1", "component_id": "api", "project_id": "asr:project:1",
+        "target_id": boundary.scope.target_snapshot, "standard": "ASVS", "version": "5.0.0",
+        "profile": "L2", "evidence": [], "gaps": [],
+    }
+    [joined_row] = deterministic_join([applicability], assessed["results"])["results"]
+    assert [o["disposition"] for o in joined_row["obligations"]] == ["unresolved", "independently_assessed"]
+    assert joined_row["control_status"] == "not_satisfied"
+    assert joined_row["verification_status"] == "independently_assessed"
+    projection = extract_verified_control_gaps(
+        boundary.scope.run_id, "assessment", [joined_row], resolver=boundary.resolver)
+    assert projection["verified_gaps_indexed"] == 1
+
+    dissent_assessed = assessment.run_batch(
+        repository_root=ROOT, run_root=tmp_path / "dissent", batch=BATCH, packages=[package],
+        settings=settings, worker_profile=PROFILE, reviewer_profile=PROFILE, resolver=boundary.resolver,
+        infer=lambda request, **_: ModelResult(
+            make_turn("not_satisfied" if request.role == "control_assessor" else "cannot_verify")))
+    [dissent_row] = deterministic_join([applicability], dissent_assessed["results"])["results"]
+    assert dissent_row["verification_status"] == "dissent"
+    dissent_proj = extract_verified_control_gaps(
+        boundary.scope.run_id, "assessment", [dissent_row], resolver=boundary.resolver)
+    assert dissent_proj["verified_gaps_indexed"] == 0
+
+
+def test_accepted_inputs_aggregates_repeated_ownership_limitations_and_resolves_project_entity(
+    accepted, settings, monkeypatch
+):
+    from appsec_review.owasp_workbench import evidence as ev_mod
+
+    ambiguous_tag_rows = [
+        {
+            "identity": f"asr:tag_assignment:ambig-{i}",
+            "kind": "tag_assignment",
+            "index": "tags",
+            "shard_id": "default",
+            "payload": {"tag": "entry:http", "component_ownership": "ambiguous"},
+            "location": None,
+        }
+        for i in range(25)
+    ]
+    ambiguous_obs_rows = [
+        {
+            "identity": f"asr:tool_observation:ambig-{i}",
+            "kind": "tool_observation",
+            "index": "analysis",
+            "shard_id": "default",
+            "payload": {"component_ownership": "ambiguous"},
+            "location": None,
+        }
+        for i in range(15)
+    ]
+    project_row = {
+        "identity": "asr:project:deadbeef",
+        "kind": "project",
+        "index": "components",
+        "shard_id": "default",
+        "payload": {"name": "smoke-cpp"},
+        "location": None,
+    }
+    extra_shards = ({"name": "tags", "shard_id": "default", "sha256": "4" * 64, "producer": {"job": "job_security_tagging"}},)
+    boundary = accepted(
+        {"src/app.py": SQL},
+        extra_rows=[project_row, *ambiguous_tag_rows, *ambiguous_obs_rows],
+        extra_shards=extra_shards,
+    )
+    monkeypatch.setattr(ev_mod, "accept_manifest", lambda *args, **kwargs: boundary.scope)
+    monkeypatch.setattr(ev_mod, "EvidenceResolver", lambda *args, **kwargs: boundary.resolver)
+    inputs = ev_mod.accepted_inputs(
+        boundary.resolver.core, settings, manifest_path=Path("data/indices/manifests/accepted.json")
+    )
+    comp, = inputs["components"]
+    assert comp["project_id"] == "asr:project:deadbeef"
+    assert "accepted routing record has ambiguous or conflicting ownership (25 records)" in inputs["limitations"]
+    assert "api: accepted index record has ambiguous or conflicting ownership; 40 records omitted" in comp["limitations"]

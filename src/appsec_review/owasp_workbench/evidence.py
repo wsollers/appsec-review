@@ -483,6 +483,9 @@ def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any
     supported = supported_source
     hints: dict[str, list[Mapping[str, Any]]] = {}
     extras, gaps = [], []
+    ambiguous_records = 0
+    unresolved_locations = 0
+    non_subject_by_path: dict[str, int] = {}
     bound = settings.max_discovery_files * 8
     for number, row in enumerate(resolver.scope.store.entities(
             tuple(resolver.shards.values()), limit=bound + 1)):
@@ -494,7 +497,7 @@ def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any
         try:
             owner = resolver._component(row)
         except ValueError:
-            gaps.append("accepted index record has ambiguous or conflicting ownership; 1 record omitted")
+            ambiguous_records += 1
             continue
         if owner != component_id:
             continue
@@ -505,13 +508,22 @@ def component_evidence(resolver: EvidenceResolver, component_id: str, files: Any
                     and 1 <= location["start_line"] <= location["end_line"]):
                 hints.setdefault(location["path"], []).append(location)
             else:
-                gaps.append("accepted subject location is unresolved; 1 location omitted")
+                unresolved_locations += 1
         elif row["index"] not in _ROUTING_INDEXES and row["kind"] not in _SOURCE_KINDS:
             if location is not None:
-                gaps.append(f"{location['path']}: 1 located non-subject record omitted; "
-                            "source evidence is selected through the bounded source inventory")
+                non_subject_by_path[location["path"]] = non_subject_by_path.get(location["path"], 0) + 1
             else:
                 extras.append(row["identity"])
+    if ambiguous_records:
+        noun = "record" if ambiguous_records == 1 else "records"
+        gaps.append(f"accepted index record has ambiguous or conflicting ownership; {ambiguous_records} {noun} omitted")
+    if unresolved_locations:
+        noun = "location" if unresolved_locations == 1 else "locations"
+        gaps.append(f"accepted subject location is unresolved; {unresolved_locations} {noun} omitted")
+    for path, count in sorted(non_subject_by_path.items()):
+        noun = "record" if count == 1 else "records"
+        gaps.append(f"{path}: {count} located non-subject {noun} omitted; "
+                    "source evidence is selected through the bounded source inventory")
     # First-party review (T-165 dispositions; run 2026-11-17-0003 D-owasp_control_assessment-1): sources the
     # configured dispositions place outside first_party (vendored, sdk, generated, test) are not subjects.
     # The exclusion is a named gap with its count; scanners and indexes still cover those trees.
@@ -643,6 +655,7 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
     tag_shards = tuple(item for key, item in resolver.shards.items() if key[0] == "tags")
     tag_limit = settings.max_tag_records
     tag_scan_complete = True
+    ambiguous_routing = 0
     for number, row in enumerate(scope.store.entities(tag_shards, kinds=("tag_assignment",), limit=tag_limit + 1)):
         if number == tag_limit:
             tag_scan_complete = False
@@ -653,7 +666,7 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
         try:
             owner = resolver._component(row)
         except ValueError:
-            limitations.append("accepted routing record has ambiguous or conflicting ownership")
+            ambiguous_routing += 1
             continue
         if owner in routes:
             routes[owner].append({**_routing_record(row), "classifies_component": _classifying(row)})
@@ -670,11 +683,38 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
         try:
             owner = resolver._component(row)
         except ValueError:
-            limitations.append("accepted routing record has ambiguous or conflicting ownership")
+            ambiguous_routing += 1
             continue
         if owner not in context or len(context[owner]) > settings.max_evidence_per_component:
             continue
         context[owner].append(_routing_record(row))
+    if ambiguous_routing:
+        limitations.append(
+            "accepted routing record has ambiguous or conflicting ownership"
+            if ambiguous_routing == 1 else
+            f"accepted routing record has ambiguous or conflicting ownership ({ambiguous_routing} records)"
+        )
+    project_rows = sorted(
+        (row for row in scope.store.entities(tuple(resolver.shards.values()), kinds=("project",), limit=64)
+         if resolver._original(row) and str(row.get("identity") or "").startswith("asr:project:")),
+        key=lambda row: (0 if row.get("index") == "components" else 1 if row.get("index") == "source"
+                         else 2 if row.get("index") == "build" else 3, str(row.get("identity") or "")),
+    )
+
+    def _resolve_project_id(comp: Any, payload: Mapping[str, Any]) -> str:
+        explicit = payload.get("project_id")
+        if explicit:
+            return str(explicit)
+        comp_root = (str(comp.root or "").strip("./") or ".")
+        for proj in project_rows:
+            proj_payload = proj.get("payload") if isinstance(proj.get("payload"), Mapping) else {}
+            proj_root = str(proj_payload.get("root") or proj_payload.get("source_dir") or "").strip("./") or "."
+            if proj_root == comp_root or comp_root.startswith(proj_root + "/") or proj_root == ".":
+                return str(proj["identity"])
+        if project_rows:
+            return str(project_rows[0]["identity"])
+        return str(comp.identity)
+
     # Inventory walks are over accepted indices, never the target tree, and stop at named bounds.
     for component in sorted(scope.components, key=lambda item: item.component_id):
         raw = resolver._entity(component.identity)
@@ -685,14 +725,21 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
         except ValueError as exc:
             limitations.append(f"{component.component_id}: {exc}")
         files = []
+        ambiguous_sources = 0
         for source in scope.source_files:
             try:
                 owner = resolver._owner(source.path, scope.components, "component")
             except ValueError:
-                limitations.append(f"{component.component_id}: ambiguous source ownership excluded")
+                ambiguous_sources += 1
                 continue
             if owner == component:
                 files.append(source)
+        if ambiguous_sources:
+            limitations.append(
+                f"{component.component_id}: ambiguous source ownership excluded"
+                if ambiguous_sources == 1 else
+                f"{component.component_id}: ambiguous source ownership excluded ({ambiguous_sources} files)"
+            )
         cid = component.component_id
         cap = settings.max_evidence_per_component
         classifying = [item for item in routes[cid] if item["classifies_component"]]
@@ -732,7 +779,7 @@ def accepted_inputs(core: RetrievalCore, settings: OwaspSettings, *, manifest_pa
             "reading_rule": "Absent tags are unknown, never proof of absence.",
         }
         components.append({
-            "target_id": scope.target_snapshot, "project_id": str(payload.get("project_id") or component.identity),
+            "target_id": scope.target_snapshot, "project_id": _resolve_project_id(component, payload),
             "component_id": component.component_id, "paths": sorted(source.path for source in files),
             "languages": sorted({source.language for source in files if source.language}),
             "frameworks": _redact_data(list(payload.get("frameworks") or ())),

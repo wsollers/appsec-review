@@ -59,7 +59,12 @@ def _publish(fixture: FixtureRun, shards: list[tuple[str, str, dict[str, Any], l
     sha = file_sha256(manifest_path)
     reference = {"path": pointer["manifest_path"], "sha256": sha,
                  "size_bytes": manifest_path.stat().st_size}
-    handoff["artifacts"] = [reference]
+    existing = [item for item in handoff.get("artifacts", ()) if item["path"].startswith("data/indices/") and item["path"] != pointer["manifest_path"]]
+    added = [{"path": item.relative_path, "sha256": item.sha256,
+              "size_bytes": (run_root / item.relative_path).stat().st_size}
+             for item in identities if (item.producer or {}).get("job") == handoff["job_id"]]
+    by_path = {item["path"]: item for item in (*existing, *added, reference)}
+    handoff["artifacts"] = sorted(by_path.values(), key=lambda item: item["path"])
     for output in handoff["outputs"].values():
         if output.get("index_manifest", {}).get("path") == pointer["manifest_path"]:
             output["index_manifest"] = reference

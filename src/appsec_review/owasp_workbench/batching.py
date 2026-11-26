@@ -207,6 +207,78 @@ class Part:
         return tuple(str(package.get("row_id", f"row-{index}")) for index, package in enumerate(self.packages))
 
 
+def _slice_package_obligations(package: Mapping[str, Any],
+                               obligations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    cited = {identity for item in obligations for identity in item.get("evidence_ids", ())}
+    all_refs = list(package.get("evidence_references", ()))
+    refs = [record for record in all_refs if record.get("evidence_id") in cited]
+    expansion = sorted(
+        set(package.get("expansion_identities", ()))
+        | {record["reference"]["source_identity"] for record in all_refs
+           if isinstance(record.get("reference"), Mapping) and record["reference"].get("source_identity")}
+    )
+    sliced = {**package, "proof_obligations": list(obligations), "evidence_references": refs}
+    if expansion:
+        sliced["expansion_identities"] = expansion
+    return sliced
+
+
+def _split_obligations(package: Mapping[str, Any], *, estimate: Callable[[Mapping[str, Any]], int],
+                       budget: int) -> list[Part] | None:
+    all_obligations = list(package.get("proof_obligations", ()))
+    supported = [item for item in all_obligations if item.get("supported")]
+    unsupported = [item for item in all_obligations if not item.get("supported")]
+    if len(supported) <= 1:
+        return None
+    row_id = str(package.get("row_id", "row-0"))
+    headroom_budget = max(1, budget * 4 // 5)
+
+    def _fit_slice(items: Sequence[Mapping[str, Any]], *, include_unsupported: bool) -> list[Part] | None:
+        slice_obligations = [*items, *(unsupported if include_unsupported else ())]
+        sub_pkg = _slice_package_obligations(package, slice_obligations)
+        sub_view = assemble((sub_pkg,))
+        sub_size = estimate(sub_view)
+        target = headroom_budget if len(items) > 1 else budget
+        if sub_size <= target:
+            return [Part((sub_pkg,), sub_view, sub_size, True)]
+        sub_trimmed, sub_tiers, sub_after = trim(sub_view, estimate=estimate, budget=target, before=sub_size)
+        if "trimmed" in sub_trimmed:
+            sub_trimmed["trimmed"]["max_input_tokens"] = budget
+        if sub_after <= target and "excerpts" not in sub_tiers:
+            names = ", ".join(sub_tiers) if sub_tiers else "nothing trimmable"
+            gap = (f"input_budget: request estimate {sub_size} tokens exceeded max_input_tokens {budget}; trimmed "
+                   f"{names} to {sub_after} tokens; omitted material stays reachable only through bounded "
+                   "expansion by identity")
+            return [Part((sub_pkg,), sub_trimmed, sub_after, True, {row_id: (gap,)})]
+        if len(items) > 1:
+            middle = len(items) // 2
+            left = _fit_slice(items[:middle], include_unsupported=include_unsupported)
+            if left is None:
+                return None
+            right = _fit_slice(items[middle:], include_unsupported=False)
+            if right is None:
+                return None
+            return [*left, *right]
+        if target < budget:
+            sub_trimmed, sub_tiers, sub_after = trim(sub_view, estimate=estimate, budget=budget, before=sub_size)
+        if sub_after <= budget:
+            names = ", ".join(sub_tiers) if sub_tiers else "nothing trimmable"
+            gap = (f"input_budget: request estimate {sub_size} tokens exceeded max_input_tokens {budget}; trimmed "
+                   f"{names} to {sub_after} tokens; omitted material stays reachable only through bounded "
+                   "expansion by identity")
+            return [Part((sub_pkg,), sub_trimmed, sub_after, True, {row_id: (gap,)})]
+        return None
+
+    middle = len(supported) // 2
+    left = _fit_slice(supported[:middle], include_unsupported=True)
+    if left is None:
+        return None
+    right = _fit_slice(supported[middle:], include_unsupported=False)
+    if right is None:
+        return None
+    return [*left, *right]
+
+
 def plan_parts(packages: Sequence[Mapping[str, Any]], *, estimate: Callable[[Mapping[str, Any]], int],
                budget: int) -> list[Part]:
     """Split a batch until each part's request fits ``budget``; trim a lone row that does not.
@@ -226,6 +298,11 @@ def plan_parts(packages: Sequence[Mapping[str, Any]], *, estimate: Callable[[Map
                 *plan_parts(packages[middle:], estimate=estimate, budget=budget)]
     row_id = str(packages[0].get("row_id", "row-0"))
     trimmed, tiers, after = trim(view, estimate=estimate, budget=budget, before=size)
+    headroom_budget = max(1, budget * 4 // 5)
+    if after > headroom_budget or "excerpts" in tiers:
+        split = _split_obligations(packages[0], estimate=estimate, budget=budget)
+        if split is not None:
+            return split
     names = ", ".join(tiers) if tiers else "nothing trimmable"
     if after <= budget:
         gap = (f"input_budget: request estimate {size} tokens exceeded max_input_tokens {budget}; trimmed "
