@@ -789,3 +789,138 @@ def test_sdk_ephemeral_session_not_found_on_delete_succeeds_only_when_unpersiste
     with pytest.raises(ExecutionContractError, match="session deletion teardown failed"):
         copilot_sdk.send(request(), timeout_seconds=5)
     assert "copilot_teardown_unconfirmed" in quarantined
+def test_worker_close_cancels_tasks_with_grace_after_aclose_exhausts_deadline(monkeypatch):
+    monkeypatch.setattr("appsec_review.runtime.resources.quarantine_resources", lambda *_: None)
+    monkeypatch.setattr("appsec_review.runtime.execution_safety.retain_failure", lambda *_, **__: None)
+    worker = _copilot_worker._Worker()
+    loop = worker.loop = asyncio.new_event_loop()
+    events = {"aclose_cancelled": False, "task_unwound": False}
+
+    class SlowResource:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            try:
+                await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                events["aclose_cancelled"] = True
+                raise
+
+    async def setup():
+        await worker.stack.enter_async_context(SlowResource())
+
+        async def background():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                await asyncio.sleep(0.02)
+                events["task_unwound"] = True
+                raise
+
+        return asyncio.create_task(background())
+
+    bg_task = loop.run_until_complete(setup())
+    expired_deadline = _copilot_worker.time.monotonic() - 0.01
+    with pytest.raises(ExecutionContractError, match="client teardown exceeded its cancellation bound"):
+        worker.close(expired_deadline)
+    assert worker.poisoned is True
+    assert loop.is_closed()
+    assert bg_task.cancelled() and events["task_unwound"] is True
+    assert events["aclose_cancelled"] is True
+
+
+def test_worker_close_chains_client_and_task_cancellation_failures(monkeypatch):
+    monkeypatch.setattr("appsec_review.runtime.resources.quarantine_resources", lambda *_: None)
+    monkeypatch.setattr("appsec_review.runtime.execution_safety.retain_failure", lambda *_, **__: None)
+    worker = _copilot_worker._Worker()
+    loop = worker.loop = asyncio.new_event_loop()
+
+    class BrokenResource:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            raise RuntimeError("stack close boom")
+
+    async def setup():
+        await worker.stack.enter_async_context(BrokenResource())
+
+        async def bad_cleanup():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                raise ValueError("task cleanup boom")
+
+        return asyncio.create_task(bad_cleanup())
+
+    loop.run_until_complete(setup())
+    with pytest.raises(ExecutionContractError, match="cancellation cleanup failed") as exc_info:
+        worker.close(_copilot_worker.time.monotonic() + 2.0)
+    err = exc_info.value
+    assert worker.poisoned is True
+    assert loop.is_closed()
+    assert isinstance(err.__cause__, ExecutionContractError)
+    assert "client teardown failed" in str(err.__cause__)
+    assert isinstance(err.__cause__.__cause__, RuntimeError)
+    assert any("Prior client teardown failure" in note for note in getattr(err, "__notes__", ()))
+
+
+def test_sdk_delete_after_use_runs_when_session_setup_fails_after_create(sdk, monkeypatch):
+    import copilot
+    from appsec_review.runtime import resources
+
+    quarantined = []
+    monkeypatch.setattr(resources, "quarantine_resources", quarantined.append)
+    orig_client = copilot.CopilotClient
+
+    class FailEnterClient(orig_client):
+        async def create_session(self, **options):
+            sess = await super().create_session(**options)
+
+            async def broken_enter():
+                raise RuntimeError("session enter failed")
+
+            sess.__aenter__ = broken_enter
+            return sess
+
+    monkeypatch.setattr(copilot, "CopilotClient", FailEnterClient)
+
+    with pytest.raises(RuntimeError, match="session enter failed"):
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert sdk.deleted == ["test-session-1"]
+    assert quarantined == []
+
+    sdk.delete_error = RuntimeError(
+        "Failed to delete session test-session-2: Session file not found for test-session-2"
+    )
+    with pytest.raises(RuntimeError, match="session enter failed"):
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert quarantined == []
+
+
+def test_sdk_preserves_turn_and_disconnect_causes_when_delete_raises_not_found(sdk, monkeypatch):
+    from appsec_review.runtime import resources
+
+    quarantined = []
+    monkeypatch.setattr(resources, "quarantine_resources", quarantined.append)
+
+    sdk.failure = ProviderError("upstream gateway error", code="gateway", retryable=True)
+    sdk.delete_error = RuntimeError(
+        "Failed to delete session test-session-1: Session file not found for test-session-1"
+    )
+    with pytest.raises(ProviderError, match="upstream gateway error"):
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert quarantined == []
+
+    sdk.failure = None
+    sdk.exit_error = RuntimeError("disconnect failed")
+    sdk.delete_error = RuntimeError(
+        "Failed to delete session test-session-2: Session file not found for test-session-2"
+    )
+    with pytest.raises(ExecutionContractError, match="Copilot session teardown failed") as exc_info:
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
+    assert str(exc_info.value.__cause__) == "disconnect failed"
+    assert any("session deletion teardown failed" in note for note in getattr(exc_info.value, "__notes__", ()))
+    assert "copilot_teardown_unconfirmed" in quarantined

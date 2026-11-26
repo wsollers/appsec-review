@@ -414,3 +414,78 @@ def test_investigate_dynamically_trims_view_when_retrieve_transcript_exceeds_bud
     assert "trimmed" not in calls[0].task_input
     assert calls[1].task_input.get("trimmed") is not None
     assert all(item["input_tokens_estimated"] <= budget for item in result["attempts"])
+def test_assemble_scopes_limitations_routing_and_graph_context_per_component():
+    pkg_a = package(0, evidence_id="ev-a", context_records=2)
+    pkg_a["component"]["component_id"] = "component:alpha"
+    pkg_a["limitations"] = ["component:alpha: alpha-only cap", "row row-00 note"]
+    pkg_a["routing_context"] = [{"identity": "tag:alpha", "tag": "entry:http"}]
+    pkg_a["graph_context"] = [{"identity": "graph:alpha", "kind": "call"}]
+
+    pkg_b = package(1, evidence_id="ev-b", context_records=2)
+    pkg_b["component"]["component_id"] = "component:beta"
+    pkg_b["limitations"] = ["component:beta: beta-only cap", "row row-01 note"]
+    pkg_b["routing_context"] = [{"identity": "tag:beta", "tag": "entry:grpc"}]
+    pkg_b["graph_context"] = [{"identity": "graph:beta", "kind": "taint"}]
+
+    view = assemble([pkg_a, pkg_b])
+    comp_a = view["components"]["component:alpha"]
+    comp_b = view["components"]["component:beta"]
+    assert comp_a["limitations"] == ["component:alpha: alpha-only cap", "row row-00 note"]
+    assert comp_b["limitations"] == ["component:beta: beta-only cap", "row row-01 note"]
+    assert [item["identity"] for item in comp_a["routing_context"]] == ["tag:alpha"]
+    assert [item["identity"] for item in comp_b["routing_context"]] == ["tag:beta"]
+    assert [item["identity"] for item in comp_a["graph_context"]] == ["graph:alpha"]
+    assert [item["identity"] for item in comp_b["graph_context"]] == ["graph:beta"]
+
+
+def test_investigate_records_turn_1_input_budget_attempt_event_and_row_gap(accepted, settings, tmp_path, monkeypatch):
+    from appsec_review.observability import EventLog
+
+    monkeypatch.setattr(assessment, "_guidance", lambda *args: ({"bundle_sha256": "a" * 64}, "guidance"))
+    boundary = accepted({"src/request.cpp": EXCERPT * 30}, languages={"src/request.cpp": "C++"})
+    ev = boundary.resolver.materialize(boundary.files[0].identity, component_id="api")
+    row = package(0, evidence_id=ev["evidence_id"], context_records=0)
+    row["component"]["component_id"] = "api"
+    row["evidence_references"] = [{**ev, "excerpt": "short\n"}]
+    row["proof_obligations"] = [{**row["proof_obligations"][0], "component_id": "api"}]
+    row["expansion_identities"] = [ev["reference"]["source_identity"]]
+    batch_obj = {"batch_id": "batch", "component_id": "api", "assignment": {"persona": "general"}}
+
+    probe_profile = {"provider": "p", "model": "m", "reasoning": "high", "retries": 0, "timeout_seconds": 10,
+                     "max_input_tokens": 100000, "max_output_tokens": 2000}
+    turn0_tokens = estimate_tokens(assessment._request(
+        assemble([row]), batch=batch_obj, role="control_assessor", guidance={"bundle_sha256": "a" * 64}, text="guidance",
+        profile=probe_profile, settings=settings, transcript=(), queries=0, turn=0, retry=0, part=None))
+    budget = turn0_tokens + 5
+    events_path = tmp_path / "data" / "logs" / "pipeline.jsonl"
+    calls = []
+
+    def infer(request, *, timeout_seconds):
+        calls.append(request)
+        return ModelResult({
+            "schema": assessment.TURN_SCHEMA,
+            "action": "retrieve",
+            "requests": [{"source_identity": ev["reference"]["source_identity"], "locator": None}],
+        })
+
+    result = assessment.investigate(
+        repository_root=tmp_path, run_root=tmp_path, batch=batch_obj, packages=[row], role="control_assessor",
+        settings=settings, resolver=boundary.resolver, profile={**probe_profile, "max_input_tokens": budget},
+        infer=infer)
+    assert len(calls) == 1
+    assert result["status"] == "input_budget"
+    assert result["row_status"] == {"row-00": "input_budget"}
+    assert len(result["attempts"]) == 2
+    budget_attempt = result["attempts"][-1]
+    assert budget_attempt["turn"] == 1
+    assert budget_attempt["error_class"] == "input_budget"
+    assert budget_attempt["input_tokens_estimated"] > budget
+    assert any(gap.startswith("input_budget: turn 1 request estimate ") for gap in result["row_gaps"]["row-00"])
+    assert not any("model turns exhausted" in gap for gap in result["row_gaps"]["row-00"])
+    import json
+    logged = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines()]
+    budget_events = [
+        e for e in logged
+        if e["event_type"] == "OWASP_MODEL_ATTEMPT" and e["details"].get("error_class") == "input_budget"
+    ]
+    assert len(budget_events) == 1 and budget_events[0]["details"]["turn"] == 1

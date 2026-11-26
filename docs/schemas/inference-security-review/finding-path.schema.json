@@ -4,6 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema",
     "claim_id",
     "adjudication_id",
     "manifest_sha256",
@@ -17,6 +18,9 @@
     "counter_relations"
   ],
   "properties": {
+    "schema": {
+      "const": "appsec-review/finding-path/1"
+    },
     "claim_id": {
       "type": "string",
       "pattern": "^claim-[0-9a-f]{64}$"

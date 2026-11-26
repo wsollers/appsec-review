@@ -8,18 +8,17 @@ from typing import Any, Mapping, Sequence
 from appsec_review.config.inference_review import JOB_ID
 from appsec_review.jobs.completion_contracts import ATTACK_CHAIN_MANIFEST_SCHEMA
 from appsec_review.review import attack_chains as policy
-from appsec_review.review.capability import CellCapability
-from appsec_review.review.cells import RECEIPT_SCHEMA, CellSpec
+from appsec_review.review.cells import RECEIPT_SCHEMA
 from appsec_review.review.identity import make_id, sha256_hex
 from appsec_review.review.ledger import LedgerWriter, Projection
 from appsec_review.review.models import (
-    ClaimState, GapClass, IntegrityError, Lane, Role,
+    ClaimState, GapClass, IntegrityError, Role,
     make_gap,
 )
 from appsec_review.storage import atomic_json, canonical_json, file_sha256
 
 from . import finding_paths
-from .teams import ReviewContext, _admission_summary, _Cell
+from .teams import ReviewContext
 
 TASKS = {"composer": ("chain_composer", Role.ATTACK_CHAIN_ANALYST, "chain-composer-result"),
          "refuter": ("chain_refuter", Role.BLUE_TEAM_REFUTER, "chain-challenge-result"),
@@ -41,47 +40,14 @@ def read_artifact(run_root: Path, reference: Mapping[str, Any]) -> dict[str, Any
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _cell(ctx: ReviewContext, kind: str, inputs: Mapping[str, Any], entities: Sequence[str], identity: str) -> _Cell:
-    task, role, schema = TASKS[kind]
-    profile, bounds = ctx.profile(role), ctx.settings.attack_chains
-    package_sha = sha256_hex(inputs)
-    candidates, tools, population = ctx.review_grant(role, ctx.index_names)
-    capability = CellCapability.issue(
-        run_id=ctx.run_id, manifest_sha256=ctx.core.manifest_sha256, package_id=identity,
-        package_sha256=package_sha, role=role, round=0,
-        tools=tools,
-        indexes=ctx.index_names, entities=entities,
-        read_view_sha256=(getattr(ctx.core, "read_view_sha256", None)
-                          if kind in {"refuter", "weakest_link_verifier"} else None),
-        max_queries=min(profile.max_queries, bounds.max_queries),
-        max_turns=min(profile.max_turns, bounds.max_turns), page_size=min(ctx.max_page_size, 100),
-        max_depth=1, max_result_bytes=bounds.max_result_bytes)
-    guidance = ctx.bundle(role=role, persona="generalist", stack="generic", task=task,
-                          lane=Lane.HUNT, capability=capability, population=population)
-    spec = CellSpec(
-        manifest_sha256=ctx.core.manifest_sha256, lane=Lane.HUNT, package_id=identity,
-        package_sha256=package_sha, claim_id=None, role=role, persona="generalist", stack_profile="generic",
-        strategy=None, task=task, task_input=inputs, round=0, round_delta_sha256=None,
-        evidence_set=tuple(sorted(set(entities))), guidance_bundle_sha256=guidance["bundle"]["sha256"],
-        guidance_text=guidance["text"], provider=profile.provider, model=profile.model, reasoning=profile.reasoning,
-        max_input_tokens=profile.max_input_tokens,
-        max_output_tokens=profile.max_output_tokens,
-        timeout_seconds=profile.timeout_seconds, output_schema=f"appsec-review/{schema}/1",
-        validator_version=policy.POLICY,
-        admission=_admission_summary(candidates, capability, population, guidance["bundle"]))
-    return _Cell(spec, capability, kind)
-
-
-def effective_max_links(bounds: Any) -> int:
-    return bounds.max_links
-
-
 def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[Mapping[str, Any]], *,
-            extra_verifier_claims: set[str], seeds: Sequence[Mapping[str, Any]], out_dir: Path,
-            ledger_path: Path, stream: str, component_severities=None, component_units=None) -> dict[str, Any]:
+            seeds: Sequence[Mapping[str, Any]] = (), out_dir: Path,
+            ledger_path: Path, stream: str) -> dict[str, Any]:
     """Stable stage ID; inspect existing citations only. Seeds and component pairs are not inputs."""
+    _ = out_dir
     bounds = ctx.settings.attack_chains
     paths, gaps = [], set()
+    entity_cache: dict[tuple[Any, ...], Any] = {}
     limit = min(ctx.settings.rounds.max_attack_chains, bounds.max_candidates_per_composition)
     for record in sorted(adjudications, key=lambda item: item["claim_id"]):
         if record["state"] not in {ClaimState.SUPPORTED.value, ClaimState.CONFIRMED.value}:
@@ -99,15 +65,17 @@ def compose(ctx: ReviewContext, projection: Projection, adjudications: Sequence[
         counter = set(pred.get("contradicting", ())) & counted
         candidates = [r for r in relations if r.entity_kind == "dataflow_path" and r.predicate.value == finding_paths.REACH
                       and r.provenance is None and (r.relation_id in cited and r.kind.value == "supports"
-                      or finding_paths.cited_alternate(r))]
+                      or finding_paths.cited_alternate(r, cells=projection.cells))]
         if not candidates:
             gaps.add("reported_findings_without_cited_graph_path")
         for relation in sorted(candidates, key=lambda r: r.relation_id):
             if len(paths) >= limit:
                 gaps.add("reported_finding_path_assessment_limit")
                 break
-            path = finding_paths.assess(ctx, record, claim, relation,
-                                        counted=relation.relation_id in counted, counter_ids=counter)
+            path = finding_paths.assess(
+                ctx, record, claim, relation,
+                counted=relation.relation_id in counted, counter_ids=counter, cache=entity_cache,
+            )
             if path["status"] != "statically_supported":
                 gaps.add("reported_finding_path_not_statically_supported")
             ctx.schemas.validate("finding-path", path)
@@ -176,7 +144,8 @@ def verify_publication(run_root: Path, projection: Projection, reference: Mappin
                 or not view.history or view.history[-1].adjudication_id != path["adjudication_id"]
                 or relation is None or relation.claim_id != cid or relation.entity_kind != "dataflow_path"
                 or relation.predicate.value != finding_paths.REACH
-                or (relation.kind.value != "supports" and not finding_paths.cited_alternate(relation))
+                or (relation.kind.value != "supports"
+                    and not finding_paths.cited_alternate(relation, cells=projection.cells))
                 or (pin["shard_id"] == finding_paths.ALT_PATH_SHARD and path["status"] != "unverified")
                 or relation.provenance is not None or finding_paths.citation(relation) != pin
                 or any(ref not in relations or relations[ref].predicate.value != finding_paths.REACH

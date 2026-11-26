@@ -66,17 +66,35 @@ def assemble(packages: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     components: dict[str, dict[str, Any]] = {}
     manifests: list[Any] = []
     rows: list[dict[str, Any]] = []
-    component_limitations = _common([tuple(str(item) for item in package.get("limitations", ()))
-                                     for package in packages])
+    packages_by_cid: dict[str, list[Mapping[str, Any]]] = {}
+    for package in packages:
+        packages_by_cid.setdefault(str(package["component"]["component_id"]), []).append(package)
+    limitations_by_cid = {
+        cid: _common([tuple(str(item) for item in pkg.get("limitations", ())) for pkg in group])
+        for cid, group in packages_by_cid.items()
+    }
+
+    def _merge_component_records(group: Sequence[Mapping[str, Any]], field_name: str) -> list[Any]:
+        seen: set[bytes] = set()
+        merged: list[Any] = []
+        for pkg in group:
+            for item in pkg.get(field_name, ()):
+                encoded = canonical_json(item)
+                if encoded not in seen:
+                    seen.add(encoded)
+                    merged.append(item)
+        return merged
+
     for package in packages:
         component = package["component"]
         cid = str(component["component_id"])
         if cid not in components:
+            group = packages_by_cid[cid]
             components[cid] = {
                 **{key: component[key] for key in _SHARED_COMPONENT_KEYS if key in component},
-                "routing_context": list(package.get("routing_context", ())),
-                "graph_context": list(package.get("graph_context", ())),
-                "limitations": component_limitations,
+                "routing_context": _merge_component_records(group, "routing_context"),
+                "graph_context": _merge_component_records(group, "graph_context"),
+                "limitations": limitations_by_cid[cid],
             }
         manifest = package.get("retrieval_manifest")
         if manifest is not None and manifest not in manifests:
@@ -104,7 +122,7 @@ def assemble(packages: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "proof_obligations": [{key: value for key, value in item.items() if key not in procedure}
                                   for item in obligations],
             "limitations": [item for item in package.get("limitations", ())
-                            if str(item) not in component_limitations],
+                            if str(item) not in limitations_by_cid[cid]],
         })
     view: dict[str, Any] = {
         "rule": REQUEST_RULE, "reading_rule": READING_RULE,

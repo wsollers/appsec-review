@@ -6,20 +6,28 @@ import re
 from typing import Mapping
 
 from appsec_review.graph.contract import GRAPH_FACT_SCHEMA
+from appsec_review.retrieval.core import retrieval_caller
 from appsec_review.retrieval.graph import ALT_PATH_SHARD, ALT_SCHEMA, alternate_path_shard, cited_cpg_nodes, cited_path
 from appsec_review.retrieval.model import EntityKind, LogicalIdentity
 from appsec_review.retrieval.model import normalize_relative_path
 from appsec_review.review.evidence import _content_record, satisfies
 from appsec_review.review.identity import sha256_hex
-from appsec_review.review.models import IntegrityError
+from appsec_review.review.models import CellStatus, IntegrityError
 
+SCHEMA = "appsec-review/finding-path/1"
 REACH = "source_to_sink_reachability"
 GAP = "[unverified link]"
+MAX_PATH_QUERIES = 12
 
 
-def cited_alternate(relation):
+def cited_alternate(relation, cells=None):
     # Alternate CPG is indirect under predicate admission. Its existing claim-ledger citation
     # is context, not one of the finding package's counted/analyst-assessed supporting IDs.
+    if cells is not None and not any(
+        record.status is CellStatus.SUCCEEDED
+        for record in cells.get(relation.producing_cell_id, ())
+    ):
+        return False
     return (relation.shard_id == ALT_PATH_SHARD and relation.kind.value in {"supports", "qualifies"}
             and relation.complete and relation.retrieval_receipt_sha256 is not None)
 
@@ -47,15 +55,30 @@ def _span(location, snapshot):
     return {"path": path, "start_line": start, "end_line": end, "file_sha256": location["file_sha256"]}
 
 
-def assess(ctx, record, claim, relation, *, counted, counter_ids):
+@retrieval_caller(job_id="job_inference_security_review", caller_kind="finding_path_verification", if_unset=True)
+def assess(ctx, record, claim, relation, *, counted, counter_ids, cache=None):
     """Return only selected, static fields of one re-resolved graph record, with its original pins."""
     core = ctx.core
-    row = {"claim_id": claim.claim_id, "adjudication_id": record["adjudication_id"],
+    entity_cache = cache if isinstance(cache, dict) else {}
+    row = {"schema": SCHEMA, "claim_id": claim.claim_id, "adjudication_id": record["adjudication_id"],
            "manifest_sha256": core.manifest_sha256, "target_snapshot": core.manifest["target_snapshot"],
            "citation": citation(relation), "shard_sha256": None, "status": "unverified",
            "steps": [], "controls": [], "limitations": [], "counter_relations": sorted(counter_ids)}
     gaps = row["limitations"]
-    remaining = ctx.settings.attack_chains.max_queries
+    remaining = MAX_PATH_QUERIES
+
+    def cached_find(identity: str, indexes: tuple[str, ...] | None = None):
+        key = ("find", indexes, identity)
+        if key in entity_cache:
+            return entity_cache[key]
+        if not charge():
+            return None
+        found = core.find(identity=identity, limit=1) if indexes is None else core.find(
+            identity=identity, indexes=indexes, limit=1
+        )
+        if not found.get("truncated"):
+            entity_cache[key] = found
+        return found
 
     def charge():
         nonlocal remaining
@@ -77,9 +100,9 @@ def assess(ctx, record, claim, relation, *, counted, counter_ids):
         return unavailable("No unique commissioned graph shard and original retrieval receipt.")
     shard = shards[0]
     row["shard_sha256"] = shard["sha256"]
-    if not charge():
+    found = cached_find(relation.entity_id, (index,))
+    if found is None:
         return unavailable("Path verification query budget exhausted.")
-    found = core.find(identity=relation.entity_id, indexes=(index,), limit=1)
     if found["truncated"] or len(found["results"]) != 1:
         return unavailable("Cited path missing or ambiguous in the pinned graph.")
     entity = found["results"][0]
@@ -143,12 +166,11 @@ def assess(ctx, record, claim, relation, *, counted, counter_ids):
             symbol = None
         if symbol and symbol not in names:
             names[symbol] = None
-            if charge():
-                match = core.find(identity=symbol, limit=1)
-                if not match["truncated"] and len(match["results"]) == 1:
-                    exact = match["results"][0]
-                    if exact.get("identity") == symbol and exact.get("kind") == "symbol":
-                        names[symbol] = exact.get("name") or None
+            match = cached_find(symbol)
+            if match is not None and not match["truncated"] and len(match["results"]) == 1:
+                exact = match["results"][0]
+                if exact.get("identity") == symbol and exact.get("kind") == "symbol":
+                    names[symbol] = exact.get("name") or None
         role = step.get("role")
         if role not in {"source", "call", "step", "return", "sink"}:
             role = "step"
@@ -160,9 +182,9 @@ def assess(ctx, record, claim, relation, *, counted, counter_ids):
     # The producer attaches controls to the path, not to a particular hop. Never infer bypass.
     for guard in result.get("guards", ()):
         control = None
-        if isinstance(guard, str) and re.fullmatch(r"asr:guard_fact:[0-9a-f]{64}", guard) and charge():
-            found = core.find(identity=guard, indexes=("graph",), limit=1)
-            if not found["truncated"] and len(found["results"]) == 1:
+        if isinstance(guard, str) and re.fullmatch(r"asr:guard_fact:[0-9a-f]{64}", guard):
+            found = cached_find(guard, ("graph",))
+            if found is not None and not found["truncated"] and len(found["results"]) == 1:
                 fact = found["results"][0]
                 data = fact.get("payload", {})
                 detail = data.get("result", {})

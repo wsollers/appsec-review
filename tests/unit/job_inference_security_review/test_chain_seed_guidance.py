@@ -52,6 +52,7 @@ def test_registered_discovery_cells_pin_optional_seed_guidance(review_context, t
         "granted_tools": [tool for tool in cell.capability.tools if tool != "expand"],
         "max_queries": cell.capability.max_queries, "max_turns": cell.capability.max_turns,
         "page_size": cell.capability.page_size,
+        "query_sources": [], "query_procedures": {},
     }
     assert registry_role["output_schema"] == "red-compact"
     no_seed = {"claims": [], "no_claim": [], "blocked": []}

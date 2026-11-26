@@ -100,7 +100,7 @@ class _IndexGroups(dict[str, ShardGroup]):
     def __getitem__(self, name):
         group = super().__getitem__(name)
         work = _QUERY.get()
-        if work is not None and work.indexes is self:
+        if work is not None and work.indexes == self:
             work.consider(name)
         return group
 
@@ -505,7 +505,7 @@ class RetrievalCore:
 
     def _database(self, identity: Mapping[str, Any], deadline: float, *, capture=None) -> sqlite3.Connection:
         work = _QUERY.get()
-        if work is not None and work.indexes is self.indexes:
+        if work is not None and work.indexes == self.indexes:
             # A caller may already have a descriptor (e.g. a verified citation).
             work.consider(identity["name"])
         if self.selection is not None:
@@ -863,9 +863,59 @@ class RetrievalCore:
                             "mcp_session_id": invocation.get("mcp_session_id") if invocation else self.mcp_session_id,
                        })
 
+    _TOOL_INDEXES: dict[str, tuple[str, ...]] = {
+        "query_artifacts": ("artifacts", "observations", "evidence"),
+        "query_ci_configuration": ("observations", "evidence"),
+        "query_codeql": ("observations",),
+        "query_change_context": ("history",),
+        "query_hotspots": ("priority",),
+        "query_precomputed": ("precomputed",),
+        "query_observations": ("observations",),
+        "query_dataset_inventory": ("inventory",),
+        "query_build_security": ("build_security",),
+        "query_threat_boundaries": ("precomputed",),
+        "query_auth_surfaces": ("precomputed",),
+        "query_crypto_usage": ("precomputed",),
+        "query_input_surfaces": ("precomputed",),
+        "query_owasp_gaps": ("precomputed",),
+        "query_doc_drift": ("precomputed", "observations"),
+        "query_sca_reachability": ("precomputed", "observations", "inventory"),
+        "query_sanitizer_readiness": ("build_security", "inventory"),
+        "query_code_graph": ("graph",),
+        "query_cpg_slice": ("analysis",),
+        "query_call_paths": ("analysis",),
+        "cited_cpg_nodes": ("analysis",),
+        "query_syntax": ("analysis",),
+        "query_cfg_function": ("analysis",),
+        "query_guard_dominators": ("analysis",),
+        "query_debug_symbols": ("compiled", "graph"),
+        "list_codeql_databases": ("graph",),
+        "query_codeql_neighborhood": ("graph", "precomputed"),
+    }
+
+    def _declared_indexes(self, tool: str, parameters: Mapping[str, Any]) -> Iterable[str]:
+        if tool == "trace":
+            return self.indexes
+        if tool in {"read_excerpt", "resolve_evidence"}:
+            return ()
+        if "indexes" in parameters:
+            selected = parameters["indexes"]
+            return selected if selected else self.indexes
+        if tool == "query_engineering_signals":
+            fam = parameters.get("signal_family")
+            names: list[str] = []
+            if fam in {None, "history", "change_context"}:
+                names.extend(("precomputed", "history"))
+            if fam in {None, "priority"}:
+                names.append("priority")
+            if fam in {None, "test_coverage", "profile"}:
+                names.extend(("analysis", "observations", "evidence"))
+            return names
+        return self._TOOL_INDEXES.get(tool, ())
+
     def _execute(self, tool: str, parameters: Mapping[str, Any], operation: Callable[[float], tuple]) -> dict[str, Any]:
-        indexes = self.indexes if tool == "trace" else parameters.get("indexes", ())
-        with self._query_scope(tool, parameters, indexes=indexes or ()) as work:
+        indexes = self._declared_indexes(tool, parameters)
+        with self._query_scope(tool, parameters, indexes=indexes) as work:
             response = self._execute_response(work, operation)
             work.complete(response, duration_ms=response["duration_ms"])
             return response

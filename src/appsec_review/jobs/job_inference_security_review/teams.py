@@ -961,7 +961,8 @@ def route(ctx: ReviewContext, work: PackageWork) -> dict[str, Any]:
     for entry in document.get("context", ()):
         if entry.get("kind") not in {"build_unit", "build_action", "component"}:
             continue
-        rows = ctx.core.find(identity=entry["id"], limit=1)["results"]
+        with retrieval_caller(job_id="job_inference_security_review", caller_kind="package_assembly", if_unset=True):
+            rows = ctx.core.find(identity=entry["id"], limit=1)["results"]
         if not rows:
             continue
         payload = rows[0].get("payload") or {}
