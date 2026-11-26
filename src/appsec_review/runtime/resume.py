@@ -256,41 +256,43 @@ class ResumePlanner:
         decisions: list[ResumeDecision] = []
         dirty: set[str] = set()
         from appsec_review.runtime.dependencies import semantic_dependencies
+        from appsec_review.storage.validation import validation_scope
         inputs = semantic_dependencies(self.jobs, self.dependencies)
-        for job in self.jobs:
-            ancestors = set(upstream_closure(job.job_id, inputs, set(inputs)))
-            selected = input_projection(job, upstream, self.dependencies, self.propagating)
-            if force_from == job.job_id:
-                dirty.add(job.job_id)
-                decision = ResumeDecision(job.job_id, "RUN", ("forced rerun from named job",))
-            elif invalidated:
-                dirty.add(job.job_id)
-                decision = ResumeDecision(job.job_id, "INVALIDATE", ("transitive downstream invalidation",))
-            elif ancestors & dirty:
-                # An ancestor will run, so this job's upstream pins are unknown until dispatch. When
-                # everything that is its own still verifies, the runtime decides at dispatch (REVALIDATE:
-                # reuse only if every pinned upstream is then equivalent, else run); otherwise it runs.
-                dirty.add(job.job_id)
-                reasons, handoff_hash = self.accepted(job, selected, ignore_upstream=True)
-                if reasons:
-                    decision = ResumeDecision(job.job_id, "INVALIDATE",
-                                              ("transitive downstream invalidation", *reasons))
+        with validation_scope(self.run_root):
+            for job in self.jobs:
+                ancestors = set(upstream_closure(job.job_id, inputs, set(inputs)))
+                selected = input_projection(job, upstream, self.dependencies, self.propagating)
+                if force_from == job.job_id:
+                    dirty.add(job.job_id)
+                    decision = ResumeDecision(job.job_id, "RUN", ("forced rerun from named job",))
+                elif invalidated:
+                    dirty.add(job.job_id)
+                    decision = ResumeDecision(job.job_id, "INVALIDATE", ("transitive downstream invalidation",))
+                elif ancestors & dirty:
+                    # An ancestor will run, so this job's upstream pins are unknown until dispatch. When
+                    # everything that is its own still verifies, the runtime decides at dispatch (REVALIDATE:
+                    # reuse only if every pinned upstream is then equivalent, else run); otherwise it runs.
+                    dirty.add(job.job_id)
+                    reasons, handoff_hash = self.accepted(job, selected, ignore_upstream=True)
+                    if reasons:
+                        decision = ResumeDecision(job.job_id, "INVALIDATE",
+                                                  ("transitive downstream invalidation", *reasons))
+                    else:
+                        decision = ResumeDecision(
+                            job.job_id, "REVALIDATE",
+                            ("upstream will run; own identities and accepted handoff match, reuse decided at dispatch",),
+                            handoff_hash)
                 else:
-                    decision = ResumeDecision(
-                        job.job_id, "REVALIDATE",
-                        ("upstream will run; own identities and accepted handoff match, reuse decided at dispatch",),
-                        handoff_hash)
-            else:
-                reasons, handoff_hash = self.accepted(job, selected)
-                if reasons:
-                    if job.propagate_handoff:
-                        dirty.add(job.job_id)
-                    decision = ResumeDecision(job.job_id, "RUN", tuple(reasons))
-                else:
-                    decision = ResumeDecision(job.job_id, "REUSE", ("all declared identities and artifacts match",), handoff_hash)
-                    if job.propagate_handoff:
-                        upstream[job.job_id] = str(handoff_hash)
-            decisions.append(decision)
+                    reasons, handoff_hash = self.accepted(job, selected)
+                    if reasons:
+                        if job.propagate_handoff:
+                            dirty.add(job.job_id)
+                        decision = ResumeDecision(job.job_id, "RUN", tuple(reasons))
+                    else:
+                        decision = ResumeDecision(job.job_id, "REUSE", ("all declared identities and artifacts match",), handoff_hash)
+                        if job.propagate_handoff:
+                            upstream[job.job_id] = str(handoff_hash)
+                decisions.append(decision)
         if emit_event:
             PipelineLog(self.run_root).write("RESUME_PLANNED", run_id=self.run_root.name,
                 message="resume decisions computed", details={"decisions": [item.as_dict() for item in decisions]})

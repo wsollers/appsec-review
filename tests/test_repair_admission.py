@@ -1279,3 +1279,25 @@ def test_cli_can_force_post_index_jobs_and_exposes_nonexecuting_recovery():
         assert args.force_from == job_id
     assert parser().parse_args(["failure-replay", "--run-id", "2026-11-06-0001",
                                 "--job-id", "job_fixture", "--attempt-id", "attempt_0001"]).command == "failure-replay"
+
+
+def test_plan_repair_shares_validation_scope_without_rehashing_shared_artifacts(tmp_path, monkeypatch):
+    import appsec_review.storage.validation as validation
+    from appsec_review.storage.atomic import file_sha256 as raw_sha256
+
+    config, jobs, _ = fixture(tmp_path, ("job_a", "job_b", "job_c", "job_d"))
+    dependencies = {"job_a": (), "job_b": ("job_a",), "job_c": ("job_a",), "job_d": ("job_b", "job_c")}
+    graph = GraphRunner(config, jobs, dependencies=dependencies)
+    first = graph.run(target_root=tmp_path, source_fingerprint="none")
+    root = config.runtime.runs_dir / first["run_id"]
+
+    hashed: list[Path] = []
+    def counted(candidate: Path) -> str:
+        hashed.append(Path(candidate))
+        return raw_sha256(candidate)
+    monkeypatch.setattr(validation, "file_sha256", counted)
+
+    plan = plan_repair(config, root, jobs, "none", force_from="job_b", dependencies=dependencies)
+    assert plan["admissible"] is True
+    job_a_claim = next(p for p in (root / "data/jobs/job_a/attempts").glob("*/claim.json"))
+    assert hashed.count(job_a_claim) == 1

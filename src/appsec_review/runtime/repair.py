@@ -555,6 +555,19 @@ def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_f
                 target_root: Path | None = None, force_from: str | None = None,
                 historical_rerun: bool = False, dependencies: Mapping[str, Sequence[str]] | None = None,
                 successor: bool = False) -> dict[str, Any]:
+    from appsec_review.storage.validation import validation_scope
+    with validation_scope(run_root):
+        return _plan_repair_in_scope(
+            config, run_root, jobs, source_fingerprint, target_root=target_root,
+            force_from=force_from, historical_rerun=historical_rerun,
+            dependencies=dependencies, successor=successor)
+
+
+def _plan_repair_in_scope(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_fingerprint: str, *,
+                          target_root: Path | None = None, force_from: str | None = None,
+                          historical_rerun: bool = False,
+                          dependencies: Mapping[str, Sequence[str]] | None = None,
+                          successor: bool = False) -> dict[str, Any]:
     from appsec_review.runtime.resume import ResumePlanner
     from appsec_review.runtime.dependencies import graph_dependencies
     release = load_release(config.runtime.repository_root)

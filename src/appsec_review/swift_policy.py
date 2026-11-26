@@ -32,8 +32,12 @@ def is_swift_language(value: object) -> bool:
     return isinstance(value, str) and value.strip().lower() == "swift"
 
 
+_SWIFT_LANGUAGE_KEYS = frozenset({"language", "source_language", "producer_language"})
+_SWIFT_PATH_KEYS = frozenset({"path", "file", "source", "source_path", "relative_path"})
+
+
 def is_swift_path(value: object) -> bool:
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or ".swift" not in value.lower():
         return False
     return PurePosixPath(value.replace("\\", "/")).suffix.lower() == ".swift"
 
@@ -59,15 +63,27 @@ def swift_enabled_from_run(run_root: Path) -> bool:
 
 
 def _explicit_swift(value: object, key: str | None = None) -> bool:
-    if isinstance(value, Mapping):
-        return any(_explicit_swift(item, str(name)) for name, item in value.items())
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+    value_type = type(value)
+    if value_type is dict:
+        return any(_explicit_swift(item, name if type(name) is str else str(name))
+                   for name, item in value.items())
+    if value_type is list or value_type is tuple:
         return any(_explicit_swift(item, key) for item in value)
-    name = (key or "").lower()
-    if name in {"language", "source_language", "producer_language"} and is_swift_language(value):
-        return True
-    if name in {"path", "file", "source", "source_path", "relative_path"} and is_swift_path(value):
-        return True
+    if value_type in (int, float, bool, type(None), bytes, bytearray):
+        return False
+    if value_type is not str:
+        if isinstance(value, Mapping):
+            return any(_explicit_swift(item, str(name)) for name, item in value.items())
+        if isinstance(value, Sequence):
+            return any(_explicit_swift(item, key) for item in value)
+        return False
+    if not key:
+        return False
+    name = key.lower()
+    if name in _SWIFT_LANGUAGE_KEYS:
+        return is_swift_language(value)
+    if name in _SWIFT_PATH_KEYS:
+        return is_swift_path(value)
     return False
 
 

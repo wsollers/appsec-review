@@ -809,15 +809,22 @@ def _validate_payload_database(run_root: Path, database: sqlite3.Connection, ide
         _verify_selected_custody(run_root, manifest,
                                  _selected_custody_rows(database) if custody_rows is None else custody_rows, selection)
     if not swift_enabled and identity.producer.get("job") != "job_target_catalog":
-        if any(is_swift_path(str(row[0])) for row in database.execute("SELECT path FROM locations")):
+        if any(is_swift_path(str(row[0])) for row in database.execute(
+                "SELECT path FROM locations WHERE typeof(path) != 'text' OR instr(lower(path), '.swift') > 0")):
             raise ValueError(f"index contains Swift-derived locations while tools.enable_swift=false: "
                              f"{identity.name}/{identity.shard_id}")
-        for kind, payload_json in database.execute("SELECT kind, payload_json FROM entities"):
+        for kind, payload_json in database.execute(
+                "SELECT kind, payload_json FROM entities "
+                "WHERE typeof(payload_json) != 'text' OR NOT json_valid(payload_json) "
+                "OR instr(lower(payload_json), 'swift') > 0 OR instr(payload_json, '\\u') > 0"):
             payload = json.loads(str(payload_json))
             if kind == "coverage_cell" and swift_coverage_cell_is_gap(payload):
                 continue
             reject_swift_derived(payload, enabled=False, context=f"index {identity.name}/{identity.shard_id}")
-        for (payload_json,) in database.execute("SELECT payload_json FROM relations"):
+        for (payload_json,) in database.execute(
+                "SELECT payload_json FROM relations "
+                "WHERE typeof(payload_json) != 'text' OR NOT json_valid(payload_json) "
+                "OR instr(lower(payload_json), 'swift') > 0 OR instr(payload_json, '\\u') > 0"):
             reject_swift_derived(json.loads(str(payload_json)), enabled=False,
                                  context=f"index {identity.name}/{identity.shard_id}")
     entities = frozenset(str(row[0]) for row in database.execute("SELECT identity FROM entities"))

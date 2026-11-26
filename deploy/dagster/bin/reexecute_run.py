@@ -188,7 +188,8 @@ def execute_request(request: dict) -> dict:
     if reasons:
         raise ValueError("re-execution requires verified stopped workers: " + "; ".join(reasons))
 
-    with DagsterInstance.get() as instance, WorkspaceProcessContext(
+    from appsec_review.storage.validation import validation_scope
+    with validation_scope(root), DagsterInstance.get() as instance, WorkspaceProcessContext(
             instance, WorkspaceFileTarget(paths=["/opt/dagster/home/workspace.yaml"])) as workspace:
         verified_dispatches = []
         for prior in instance.get_runs(filters=RunsFilter(tags={"appsec/application_run_id": root.name})):
