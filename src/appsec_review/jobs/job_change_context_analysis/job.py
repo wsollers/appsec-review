@@ -100,10 +100,28 @@ def _accepted_outputs(run_root: Path, handoff: Mapping[str, Any]) -> Mapping[str
 def _resolved_job_settings(run_root: Path, job_id: str) -> Mapping[str, Any]:
     """Read another job's settings from the run-owned, hash-verified resolved configuration."""
     from appsec_review.runtime.configuration import configuration_snapshot
-    accepted = _accepted_handoff(run_root, job_id, required=True)
-    assert accepted is not None
-    snapshot = configuration_snapshot(run_root, accepted[0]["resolved_config_sha256"])
-    return snapshot.document["jobs"][job_id]["settings"]
+    accepted = _accepted_handoff(run_root, job_id, required=False)
+    config_sha = (
+        accepted[0].get("resolved_config_sha256")
+        if accepted is not None and isinstance(accepted[0], Mapping)
+        else None
+    )
+    configuration = run_root / "data" / "configuration"
+    manifest_path = configuration / "manifest.json"
+    resolved_path = configuration / "resolved.json"
+    if isinstance(config_sha, str) and config_sha:
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if config_sha == manifest.get("resolved_sha256") and manifest.get("schema") is None:
+                if file_sha256(resolved_path) != config_sha:
+                    raise ValueError("configuration snapshot hash mismatch")
+                return json.loads(resolved_path.read_text(encoding="utf-8"))["jobs"][job_id]["settings"]
+        snapshot = configuration_snapshot(run_root, config_sha)
+        return snapshot.document["jobs"][job_id]["settings"]
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if file_sha256(resolved_path) != manifest.get("resolved_sha256"):
+        raise ValueError("configuration snapshot hash mismatch")
+    return json.loads(resolved_path.read_text(encoding="utf-8"))["jobs"][job_id]["settings"]
 
 
 def _load_catalog(run_root: Path) -> dict[str, Any]:
@@ -732,118 +750,117 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
             mapping_identity="git-blob-binding+tree-sitter-span/1")
         source = source_of(unit)
         shard_id = SHARD_ID + (f"-{source_key(source)}" if source.get("root", ".") != "." else "")
-        path = run_root / "data" / "indices" / "history" / shard_id / f"{fingerprint}.sqlite"
+        path = run_root / "data" / "indices" / "history" / "attempts" / PRODUCER / unit.job.attempt_id / shard_id / f"{fingerprint}.sqlite"
         eligible = loaded.get("eligible", {})
-        if not path.exists():
-            builder = IndexBuilder(path, name="history", fingerprint=fingerprint, target_snapshot=snapshot, shard_id=shard_id)
-            change_ids: dict[str, str] = {}
-            review_ids: dict[int, str] = {}
-            review_system = sources_doc.get("sources", {}).get("review", {}).get("source", settings.review.source)
-            deployment_ids: dict[str, str] = {}
-            deployments = {item["deployment_id"]: item for item in (sources_doc.get("deployments") or {}).get("events", ())}
+        builder = IndexBuilder(path, name="history", fingerprint=fingerprint, target_snapshot=snapshot, shard_id=shard_id)
+        change_ids: dict[str, str] = {}
+        review_ids: dict[int, str] = {}
+        review_system = sources_doc.get("sources", {}).get("review", {}).get("source", settings.review.source)
+        deployment_ids: dict[str, str] = {}
+        deployments = {item["deployment_id"]: item for item in (sources_doc.get("deployments") or {}).get("events", ())}
 
-            def change_entity(change_id: str) -> str:
-                if change_id in change_ids:
-                    return change_ids[change_id]
-                record = records[change_id]
-                identity = LogicalIdentity.derive(EntityKind.CHANGE, snapshot, {
-                    "vcs": "git", **source_identity(source), "change_id": change_id})
-                change_ids[change_id] = identity.value
-                flags = [name for name, value in (
-                    ("sprawling", record["sprawl"]["sprawling"]), ("off_hours", record["schedule"].get("off_hours")),
-                    ("pre_deployment", record["deployment"].get("pre_deployment")),
-                    ("unapproved_mainline", record["review"].get("unapproved_mainline")),
-                    ("stale_approval", record["review"].get("stale_approval")),
-                    ("fast_review", record["review"].get("fast_approval") or record["review"].get("fast_merge")),
-                    ("untested_production", record["tests"].get("untested_production"))) if value]
-                payload = {**record, "producer": PRODUCER, "rules": change_metrics.RULES_IDENTITY,
-                           "snapshot_commit": loaded["snapshot_commit"], "flags": flags, "source": source}
-                builder.add_entity(EntityRecord(identity, change_id, change_id[:12],
-                                                " ".join(["change context change", change_id, *flags]), payload))
-                review = (record["facts"].get("review_record") or {})
-                if review.get("pull_request"):
-                    number = int(review["pull_request"])
-                    if number not in review_ids:
-                        review_identity = LogicalIdentity.derive(EntityKind.REVIEW_UNIT, snapshot,
-                                                                 {"system": review_system, "pull_request": number,
-                                                                  **source_identity(source)})
-                        review_ids[number] = review_identity.value
-                        builder.add_entity(EntityRecord(review_identity, f"pr:{number}", f"pull request {number}",
-                                                        f"review unit pull request {number}",
-                                                        {**review, "producer": PRODUCER, "source": review_system,
-                                                         "repository_source": source}))
-                    builder.add_relation(RelationRecord(RelationKind.SUPPORTS, review_ids[number], identity.value, True, 1.0))
-                deployment_id = record["deployment"].get("deployment_id")
-                if deployment_id in deployments:
-                    if deployment_id not in deployment_ids:
-                        deployment_identity = LogicalIdentity.derive(EntityKind.DEPLOYMENT_EVENT, snapshot,
-                                                                     {"deployment_id": deployment_id})
-                        deployment_ids[deployment_id] = deployment_identity.value
-                        builder.add_entity(EntityRecord(deployment_identity, deployment_id, deployment_id,
-                                                        f"deployment event {deployments[deployment_id]['environment']}",
-                                                        {**deployments[deployment_id], "producer": PRODUCER}))
-                    builder.add_relation(RelationRecord(RelationKind.SUPPORTS, deployment_ids[deployment_id],
-                                                        identity.value, True, 1.0, payload={"relation": "shipped"}))
-                return identity.value
+        def change_entity(change_id: str) -> str:
+            if change_id in change_ids:
+                return change_ids[change_id]
+            record = records[change_id]
+            identity = LogicalIdentity.derive(EntityKind.CHANGE, snapshot, {
+                "vcs": "git", **source_identity(source), "change_id": change_id})
+            change_ids[change_id] = identity.value
+            flags = [name for name, value in (
+                ("sprawling", record["sprawl"]["sprawling"]), ("off_hours", record["schedule"].get("off_hours")),
+                ("pre_deployment", record["deployment"].get("pre_deployment")),
+                ("unapproved_mainline", record["review"].get("unapproved_mainline")),
+                ("stale_approval", record["review"].get("stale_approval")),
+                ("fast_review", record["review"].get("fast_approval") or record["review"].get("fast_merge")),
+                ("untested_production", record["tests"].get("untested_production"))) if value]
+            payload = {**record, "producer": PRODUCER, "rules": change_metrics.RULES_IDENTITY,
+                       "snapshot_commit": loaded["snapshot_commit"], "flags": flags, "source": source}
+            builder.add_entity(EntityRecord(identity, change_id, change_id[:12],
+                                            " ".join(["change context change", change_id, *flags]), payload))
+            review = (record["facts"].get("review_record") or {})
+            if review.get("pull_request"):
+                number = int(review["pull_request"])
+                if number not in review_ids:
+                    review_identity = LogicalIdentity.derive(EntityKind.REVIEW_UNIT, snapshot,
+                                                             {"system": review_system, "pull_request": number,
+                                                              **source_identity(source)})
+                    review_ids[number] = review_identity.value
+                    builder.add_entity(EntityRecord(review_identity, f"pr:{number}", f"pull request {number}",
+                                                    f"review unit pull request {number}",
+                                                    {**review, "producer": PRODUCER, "source": review_system,
+                                                     "repository_source": source}))
+                builder.add_relation(RelationRecord(RelationKind.SUPPORTS, review_ids[number], identity.value, True, 1.0))
+            deployment_id = record["deployment"].get("deployment_id")
+            if deployment_id in deployments:
+                if deployment_id not in deployment_ids:
+                    deployment_identity = LogicalIdentity.derive(EntityKind.DEPLOYMENT_EVENT, snapshot,
+                                                                 {"deployment_id": deployment_id})
+                    deployment_ids[deployment_id] = deployment_identity.value
+                    builder.add_entity(EntityRecord(deployment_identity, deployment_id, deployment_id,
+                                                    f"deployment event {deployments[deployment_id]['environment']}",
+                                                    {**deployments[deployment_id], "producer": PRODUCER}))
+                builder.add_relation(RelationRecord(RelationKind.SUPPORTS, deployment_ids[deployment_id],
+                                                    identity.value, True, 1.0, payload={"relation": "shipped"}))
+            return identity.value
 
-            unit_ids: dict[tuple[str, str], str] = {}
-            limits = {"files": settings.ranking_top_files, "functions": settings.ranking_top_functions,
-                      "components": settings.ranking_top_components}
-            for scope, limit in limits.items():
-                for key in (signals_doc or {}).get("rankings", {}).get(scope, [])[:limit]:
-                    value = signals_doc[scope][key]
-                    location = None
-                    if scope == "files":
-                        facts = eligible[key]
-                        location = SourceLocation(
-                            target_snapshot=snapshot, path=key, file_sha256=facts["sha256"], start_byte=0,
-                            end_byte=int(facts["size_bytes"]), start_line=1, end_line=int(facts["span_lines"]),
-                            start_column=1, end_column=1, producer_location={"vcs": "git", "scope": "file"},
-                            mapping_method="git-blob-binding" if facts["exact"] else "git-path-binding",
-                            confidence=1.0 if facts["exact"] else 0.5, ambiguous=not facts["exact"])
-                    elif scope == "functions":
-                        span = value["location"]
-                        location = SourceLocation(
-                            target_snapshot=snapshot, path=value["path"], file_sha256=value["file_sha256"],
-                            start_byte=int(span["start_byte"]), end_byte=int(span["end_byte"]),
-                            start_line=int(span["start_line"]), end_line=int(span["end_line"]),
-                            start_column=int(span["start_column"]), end_column=int(span["end_column"]),
-                            producer_location={"tree_sitter_node": value["function"]["identity"],
-                                               "attribution": "surviving-line"},
-                            mapping_method="tree-sitter-span+git-blame", confidence=1.0)
-                    native = {"files": {"scope": "file", "path": key}, "components": {"scope": "component", "component_id": key},
-                              "functions": {"scope": "function", "path": value.get("path"), "file_sha256": value.get("file_sha256"),
-                                            "start_line": (value.get("function") or {}).get("start_line"),
-                                            "end_line": (value.get("function") or {}).get("end_line"),
-                                            "type": (value.get("function") or {}).get("type")}}[scope]
-                    identity = LogicalIdentity.derive(EntityKind.CHANGE_CONTEXT_SIGNAL, snapshot, {
-                        **native, **source_identity(source)})
-                    unit_ids[(scope, key)] = identity.value
-                    flags = sorted(name for name, metric in value["metrics"].items() if metric)
-                    name = (value.get("function") or {}).get("name") or key
-                    payload = {key_: value[key_] for key_ in value if key_ != "location"}
-                    payload.update({"producer": PRODUCER, "rules": change_metrics.RULES_IDENTITY,
-                                    "priority_identity": change_metrics.PRIORITY_IDENTITY, "authority": AUTHORITY,
-                                    "snapshot_commit": loaded["snapshot_commit"], "rank": value["priority"]["rank"],
-                                    "score": value["priority"]["score"], "source": source,
-                                    "source_path": eligible.get(key, {}).get("source_path")})
-                    text = (f"change context {value['scope']} {name} rank {value['priority']['rank']} "
-                            f"score {value['priority']['score']} " + " ".join(flags))
-                    builder.add_entity(EntityRecord(identity, f"{value['scope']}:{key}", name, text, payload, location))
-                    for change_id in value["supporting_changes"]:
-                        builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value,
-                                                            change_entity(change_id), True, 1.0))
-            for (scope, key), identity in unit_ids.items():
+        unit_ids: dict[tuple[str, str], str] = {}
+        limits = {"files": settings.ranking_top_files, "functions": settings.ranking_top_functions,
+                  "components": settings.ranking_top_components}
+        for scope, limit in limits.items():
+            for key in (signals_doc or {}).get("rankings", {}).get(scope, [])[:limit]:
                 value = signals_doc[scope][key]
-                if scope == "files" and ("components", value.get("component_id")) in unit_ids:
-                    builder.add_relation(RelationRecord(RelationKind.CONTAINS, unit_ids[("components", value["component_id"])],
-                                                        identity, True, 1.0))
-                if scope == "functions" and ("files", value["path"]) in unit_ids:
-                    builder.add_relation(RelationRecord(RelationKind.CONTAINS, unit_ids[("files", value["path"])],
-                                                        identity, True, 1.0))
-            for area, status, gap in coverage_rows(unit):
-                builder.add_coverage(area, status, gap)
-            builder.build()
+                location = None
+                if scope == "files":
+                    facts = eligible[key]
+                    location = SourceLocation(
+                        target_snapshot=snapshot, path=key, file_sha256=facts["sha256"], start_byte=0,
+                        end_byte=int(facts["size_bytes"]), start_line=1, end_line=int(facts["span_lines"]),
+                        start_column=1, end_column=1, producer_location={"vcs": "git", "scope": "file"},
+                        mapping_method="git-blob-binding" if facts["exact"] else "git-path-binding",
+                        confidence=1.0 if facts["exact"] else 0.5, ambiguous=not facts["exact"])
+                elif scope == "functions":
+                    span = value["location"]
+                    location = SourceLocation(
+                        target_snapshot=snapshot, path=value["path"], file_sha256=value["file_sha256"],
+                        start_byte=int(span["start_byte"]), end_byte=int(span["end_byte"]),
+                        start_line=int(span["start_line"]), end_line=int(span["end_line"]),
+                        start_column=int(span["start_column"]), end_column=int(span["end_column"]),
+                        producer_location={"tree_sitter_node": value["function"]["identity"],
+                                           "attribution": "surviving-line"},
+                        mapping_method="tree-sitter-span+git-blame", confidence=1.0)
+                native = {"files": {"scope": "file", "path": key}, "components": {"scope": "component", "component_id": key},
+                          "functions": {"scope": "function", "path": value.get("path"), "file_sha256": value.get("file_sha256"),
+                                        "start_line": (value.get("function") or {}).get("start_line"),
+                                        "end_line": (value.get("function") or {}).get("end_line"),
+                                        "type": (value.get("function") or {}).get("type")}}[scope]
+                identity = LogicalIdentity.derive(EntityKind.CHANGE_CONTEXT_SIGNAL, snapshot, {
+                    **native, **source_identity(source)})
+                unit_ids[(scope, key)] = identity.value
+                flags = sorted(name for name, metric in value["metrics"].items() if metric)
+                name = (value.get("function") or {}).get("name") or key
+                payload = {key_: value[key_] for key_ in value if key_ != "location"}
+                payload.update({"producer": PRODUCER, "rules": change_metrics.RULES_IDENTITY,
+                                "priority_identity": change_metrics.PRIORITY_IDENTITY, "authority": AUTHORITY,
+                                "snapshot_commit": loaded["snapshot_commit"], "rank": value["priority"]["rank"],
+                                "score": value["priority"]["score"], "source": source,
+                                "source_path": eligible.get(key, {}).get("source_path")})
+                text = (f"change context {value['scope']} {name} rank {value['priority']['rank']} "
+                        f"score {value['priority']['score']} " + " ".join(flags))
+                builder.add_entity(EntityRecord(identity, f"{value['scope']}:{key}", name, text, payload, location))
+                for change_id in value["supporting_changes"]:
+                    builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value,
+                                                        change_entity(change_id), True, 1.0))
+        for (scope, key), identity in unit_ids.items():
+            value = signals_doc[scope][key]
+            if scope == "files" and ("components", value.get("component_id")) in unit_ids:
+                builder.add_relation(RelationRecord(RelationKind.CONTAINS, unit_ids[("components", value["component_id"])],
+                                                    identity, True, 1.0))
+            if scope == "functions" and ("files", value["path"]) in unit_ids:
+                builder.add_relation(RelationRecord(RelationKind.CONTAINS, unit_ids[("files", value["path"])],
+                                                    identity, True, 1.0))
+        for area, status, gap in coverage_rows(unit):
+            builder.add_coverage(area, status, gap)
+        builder.build()
         identity = IndexIdentity("history", "appsec-review/retrieval-index/2", file_sha256(path), fingerprint,
                                  _rel(run_root, path), {"job": PRODUCER, "vcs": "git", **source_identity(source)},
                                  tuple(gaps), shard_id)
@@ -856,7 +873,8 @@ def build_job(*, executor_factory: ExecutorFactory | None = None) -> Job:
                        target_root=(unit.job.target_root or Path()).resolve(), indexes=[*base, identity],
                        upstream_manifests=({"path": _rel(run_root, upstream_path), "sha256": upstream_sha},))
         load_verified_manifest(run_root, manifest_path, file_sha256(manifest_path))
-        return {"index_identity": asdict(identity), "manifest": _artifact(run_root, manifest_path),
+        return {"index_identity": asdict(identity), "shard_artifact": _artifact(run_root, path),
+                "manifest": _artifact(run_root, manifest_path),
                 "gaps": gaps, "terminal_status": _status(gaps)}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:

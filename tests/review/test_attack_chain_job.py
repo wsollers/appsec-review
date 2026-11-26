@@ -17,7 +17,7 @@ from appsec_review.review.budget import JobBudget
 from appsec_review.review.evidence import resolve_relation
 from appsec_review.storage import file_sha256
 from appsec_review.review.ledger import LedgerWriter, merge_shards, project, relation_json
-from appsec_review.review.models import ClaimState, IntegrityError, Predicate, RelationKind
+from appsec_review.review.models import CellRecord, CellStatus, ClaimState, IntegrityError, Lane, Predicate, RelationKind, Role
 from tests.dossier_fixture import seed
 from tests.fixtures.inference_review.acceptance import JOB, ROOT
 from tests.review.test_attack_chains import SCHEMAS, claims
@@ -103,6 +103,11 @@ def fixture(tmp_path, mode):
         left = replace(left, affected_entities=(ids["sink"],))
     root = core.run_root / "data" / "check"
     writer = LedgerWriter(root / "input.jsonl", "adjudication")
+    writer.cell_terminal(CellRecord(
+        cell_id=CELL, lane=Lane.LEAD, package_id="pkg-1", role=Role.RED_TEAM_ANALYST,
+        persona="generalist", stack_profile="generic", task="lead_red", claim_id=None,
+        status=CellStatus.SUCCEEDED, attempts=1,
+    ))
     for claim in (left, right):
         writer.propose_claim(claim)
         writer.transition(claim.claim_id, ClaimState.PROPOSED, ClaimState.SUPPORTED, reason="adjudication",
@@ -130,7 +135,7 @@ def fixture(tmp_path, mode):
                 "supporting": cited, "contradicting": counter}]},
                {"state": "confirmed", "claim_id": right.claim_id, "adjudication_id": "adjudication-" + "b" * 64,
                 "counted_relation_ids": [], "predicates": []}]
-    compose = chains.compose(ctx, projection, records, extra_verifier_claims=set(), seeds=[{"seed": "untrusted"}],
+    compose = chains.compose(ctx, projection, records, seeds=[{"seed": "untrusted"}],
                              out_dir=root, ledger_path=root / "compose.jsonl", stream="compose")
     refute = chains.challenge(ctx, compose, None, kind="refuter", out_dir=root,
                               ledger_path=root / "refute.jsonl", stream="refute")
@@ -210,3 +215,150 @@ def test_cited_stored_alternate_path_is_static_noncounted_context(tmp_path, mode
             assert text in report
         assert report.index("receiveNote") < report.index("checkNote") < report.index("storeNote")
     assert dossier["evidence"] == []  # Not a new finding-support citation.
+
+def test_finding_paths_attributes_retrieval_memoizes_entities_and_validates_schema(tmp_path, monkeypatch):
+    import json
+    from appsec_review.retrieval.core import retrieval_caller
+
+    runs, ids = accepted_graph_run(
+        tmp_path,
+        lambda ids_map, add, condition, sink_span, call: (
+            add("shared_sym", EntityRecord(
+                LogicalIdentity.derive(EntityKind.SYMBOL, SNAPSHOT, {"name": "sharedSym"}),
+                "sharedSym", "sharedSym", "", {},
+            )),
+            add("ordered", graph_entity(
+                Family.DATAFLOW_PATH,
+                {"source_identity": ids_map["entry"], "sink_identity": ids_map["sink"], "step_locations_sha256": "b" * 64},
+                {
+                    **results_for(Family.DATAFLOW_PATH, sink=ids_map["sink"], entry=ids_map["entry"]),
+                    "steps": [
+                        {"n": 0, "location": asdict(condition), "role": "source", "symbol": ids_map["shared_sym"]},
+                        {"n": 1, "location": asdict(sink_span), "role": "call", "symbol": ids_map["shared_sym"]},
+                        {"n": 2, "location": asdict(call), "role": "sink", "symbol": ids_map["shared_sym"]},
+                    ],
+                    "hop_count": 2,
+                    "truncated_steps": False,
+                    "guards": [ids_map["guard"]],
+                    "sanitizers": [],
+                },
+                call,
+            )),
+        ),
+        family=Family.DATAFLOW_PATH,
+    )
+    core = RetrievalCore(runs, RUN_ID)
+    find_calls: list[str] = []
+    orig_find = core.find
+
+    def tracked_find(*, identity: str, **kwargs):
+        find_calls.append(identity)
+        return orig_find(identity=identity, **kwargs)
+
+    monkeypatch.setattr(core, "find", tracked_find)
+
+    settings = load_config(ROOT / "appsec-review.toml").job(JOB).typed_settings
+    ctx = SimpleNamespace(
+        run_root=core.run_root, run_id=RUN_ID, core=core, schemas=SCHEMAS,
+        budget=JobBudget(tmp_path / "budget", settings.budgets), settings=settings,
+    )
+    left, _ = claims()
+    left = replace(left, affected_entities=(ids["sink"],))
+    root = core.run_root / "data" / "check"
+    writer = LedgerWriter(root / "input.jsonl", "adjudication")
+    writer.cell_terminal(CellRecord(
+        cell_id=CELL, lane=Lane.LEAD, package_id="pkg-1", role=Role.RED_TEAM_ANALYST,
+        persona="generalist", stack_profile="generic", task="lead_red", claim_id=None,
+        status=CellStatus.SUCCEEDED, attempts=1,
+    ))
+    writer.propose_claim(left)
+    writer.transition(left.claim_id, ClaimState.PROPOSED, ClaimState.SUPPORTED, reason="supported")
+    writer.transition(left.claim_id, ClaimState.SUPPORTED, ClaimState.CONFIRMED, reason="adjudication",
+                      adjudication_id="adjudication-" + "b" * 64)
+    with retrieval_caller(job_id="job_inference_security_review", caller_kind="test_setup"):
+        rel = resolve_relation(core, claim_id=left.claim_id, predicate=Predicate.SOURCE_TO_SINK_REACHABILITY,
+                               kind=RelationKind.SUPPORTS, entity_id=ids["ordered"], producing_cell_id=CELL,
+                               retrieval_receipt_sha256=RECEIPT)
+    writer.add_relation(rel)
+    writer.seal()
+    projection = project(merge_shards([writer.path]).events)
+    records = [{
+        "state": "confirmed", "claim_id": left.claim_id, "adjudication_id": "adjudication-" + "b" * 64,
+        "counted_relation_ids": [rel.relation_id],
+        "predicates": [{"predicate": rel.predicate.value, "supporting": [rel.relation_id], "contradicting": []}],
+    }]
+
+    find_calls.clear()
+    compose = chains.compose(ctx, projection, records, seeds=[], out_dir=root,
+                             ledger_path=root / "compose.jsonl", stream="compose")
+    refute = chains.challenge(ctx, compose, None, kind="refuter", out_dir=root,
+                              ledger_path=root / "refute.jsonl", stream="refute")
+    verify = chains.challenge(ctx, compose, refute, kind="weakest_link_verifier", out_dir=root,
+                              ledger_path=root / "verify.jsonl", stream="verify")
+    manifest = chains.verify_publication(core.run_root, projection, verify["attack_chain_manifest"], SCHEMAS, RUN_ID)
+    assert len(manifest["finding_paths"]) == 1
+    path = manifest["finding_paths"][0]
+    assert path["schema"] == "appsec-review/finding-path/1"
+    SCHEMAS.validate("finding-path", path)
+    assert SCHEMAS.errors("finding-path", {k: v for k, v in path.items() if k != "schema"})
+    assert SCHEMAS.errors("finding-path", {**path, "schema": "appsec-review/finding-path/0"})
+
+    # shared_sym appeared in all 3 steps, yet memoization looks it up once.
+    assert find_calls.count(ids["shared_sym"]) == 1
+
+    log_path = core.run_root / "data" / "logs" / "pipeline.jsonl"
+    events = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    retrieval_events = [e for e in events if e["event_type"] in {"RETRIEVAL_QUERY", "RETRIEVAL_SUBOP_COMPLETED"}]
+    assert retrieval_events
+    assert all(e["job_id"] == "job_inference_security_review" for e in retrieval_events)
+    assert all(e["details"].get("caller_kind") in {"test_setup", "finding_path_verification"} for e in retrieval_events)
+
+
+@pytest.mark.parametrize("cell_status", [CellStatus.FAILED, CellStatus.TIMED_OUT, None])
+def test_cited_alternate_cpg_ignores_non_succeeded_cells(tmp_path, cell_status):
+    core, ids = stored_alternate(tmp_path, "alt_json")
+    settings = load_config(ROOT / "appsec-review.toml").job(JOB).typed_settings
+    ctx = SimpleNamespace(
+        run_root=core.run_root, run_id=RUN_ID, core=core, schemas=SCHEMAS,
+        budget=JobBudget(tmp_path / "budget", settings.budgets), settings=settings,
+    )
+    left, _ = claims()
+    left = replace(left, affected_entities=(ids["sink"],))
+    root = core.run_root / "data" / "check"
+    writer = LedgerWriter(root / "input.jsonl", "adjudication")
+    if cell_status is not None:
+        writer.cell_terminal(CellRecord(
+            cell_id=CELL, lane=Lane.LEAD, package_id="pkg-1", role=Role.RED_TEAM_ANALYST,
+            persona="generalist", stack_profile="generic", task="lead_red", claim_id=None,
+            status=cell_status, attempts=1, gap_ids=("gap-" + "1" * 64,),
+        ))
+    writer.propose_claim(left)
+    writer.transition(left.claim_id, ClaimState.PROPOSED, ClaimState.SUPPORTED, reason="supported")
+    writer.transition(left.claim_id, ClaimState.SUPPORTED, ClaimState.CONFIRMED, reason="adjudication",
+                      adjudication_id="adjudication-" + "b" * 64)
+    rel = resolve_relation(core, claim_id=left.claim_id, predicate=Predicate.SOURCE_TO_SINK_REACHABILITY,
+                           kind=RelationKind.QUALIFIES, entity_id=ids["ordered"], producing_cell_id=CELL,
+                           retrieval_receipt_sha256=RECEIPT)
+    writer.add_relation(rel)
+    writer.seal()
+    projection = project(merge_shards([writer.path]).events)
+    records = [{
+        "state": "confirmed", "claim_id": left.claim_id, "adjudication_id": "adjudication-" + "b" * 64,
+        "counted_relation_ids": [], "predicates": [],
+    }]
+    compose = chains.compose(ctx, projection, records, seeds=[], out_dir=root,
+                             ledger_path=root / "compose.jsonl", stream="compose")
+    refute = chains.challenge(ctx, compose, None, kind="refuter", out_dir=root,
+                              ledger_path=root / "refute.jsonl", stream="refute")
+    verify = chains.challenge(ctx, compose, refute, kind="weakest_link_verifier", out_dir=root,
+                              ledger_path=root / "verify.jsonl", stream="verify")
+    manifest = chains.verify_publication(core.run_root, projection, verify["attack_chain_manifest"], SCHEMAS, RUN_ID)
+    assert manifest["finding_paths"] == []
+
+
+def test_chain_composition_exports_severity_rank_and_max_severity() -> None:
+    from appsec_review.review.chain_composition import SEVERITY_RANK, max_severity
+
+    assert SEVERITY_RANK["critical"] > SEVERITY_RANK["high"] > SEVERITY_RANK["medium"] > SEVERITY_RANK["low"]
+    assert max_severity("low", "high", "medium") == "high"
+    assert max_severity(None, "unknown") is None

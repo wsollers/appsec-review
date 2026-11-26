@@ -719,6 +719,13 @@ class SharedArtifacts:
                 and safe_path(self.run_root, f"{REQUESTS}/{namespace}/{fingerprint}").exists()):
             raise ValueError("repair cannot relabel an unresolved or incompatible named computation as legacy; "
                              "regenerate it with a new computation identity or use a successor run")
+        if claim.get("recovery_boundary") == "whole_job" and binding.exists():
+            for _, value in self._requests(namespace, fingerprint):
+                actor = value.get("actor", {})
+                if (actor.get("job_id") == self.actor["job_id"]
+                        and actor.get("attempt_id") != self.actor["attempt_id"]
+                        and value.get("object") == obj):
+                    return dict(obj)
         if binding.exists():
             raise ValueError("named immutable publication has no complete producer receipt")
         receipt = self.legacy(namespace, fingerprint, obj, computation=computation or {})[1]

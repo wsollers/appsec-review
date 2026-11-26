@@ -221,9 +221,11 @@ operator context is in [source-history operations](source-history-analysis.md).
 
 ### `analyze`
 
-1. Classify changes from bounded messages and accepted review labels. Compute file/component
-   churn, frequency, author and recency signals; apply ranking exclusions to generated,
-   vendored, fixture, documentation, lockfile, bulk and formatting work as configured.
+1. Classify changes from bounded messages and accepted review labels against accepted
+   `catalog_documents` file identities. Compute file/component churn, frequency, author and recency
+   signals; retain SII code eligibility for `Dockerfile*`, `.S`/`.s`/`.asm` assembly, and C++
+   `.ipp`/`.inl`/`.tpp` implementation headers while applying ranking exclusions to non-code/tooling
+   files, generated, vendored, fixture, documentation, lockfile, bulk and formatting work as configured.
 2. Select highest-churn eligible files for bounded blame, co-change and line-history analysis.
    Divergent files do not acquire exact line attribution.
 3. Obtain bounded Tree-sitter spans only for supported, exact files. Verify grammar/image,
@@ -262,7 +264,10 @@ flowchart LR
   git --> normalize["acquire.normalize_changes"]
   normalize --> github["acquire.github_enrichment"]
   resolve --> changelog["acquire.changelog_history"]
-  normalize --> signals["analyze.compute_signals"]
+  catalog --> signals["analyze.compute_signals"]
+  catalog --> sii["filters: SII code vs non_code / tooling rules"]
+  normalize --> sii
+  sii --> signals
   github --> signals
   signals --> spans["analyze.line_history + analyze.symbol_spans"]
   spans --> rank["analyze.rank"]
@@ -324,12 +329,14 @@ See [job interchange](../architecture/job-interchange.md).
 
 ## Resume and invalidation
 
-Target bytes alone exclude VCS metadata, so this job adds `history_identity` and
-`_run_history_identity`: bounded source metadata, refs/HEAD, object format, shallow boundaries
-and Git configuration hashes, using accepted component roots. It rechecks that identity at
-publication. The history index additionally binds normalized/ranked/hotspot/GitHub/change-log
-artifacts, raw log/message hashes, image, Git limits, full job settings and parser/rules/ranking/
-symbol/mapping identities. Changing any of these selects a new shard even if ranks happen to
-look unchanged. Transport state is not itself a freshness timer. Retryable canonical outcomes
-prevent whole-job reuse; otherwise immutable identity checks and selective invalidation follow
-[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
+Target bytes alone exclude VCS metadata, so whole-job reuse adds `history_identity` and
+`_run_history_identity` (bounded source metadata, refs/HEAD, object format, shallow boundaries and
+Git configuration hashes across accepted component roots) alongside accepted upstream handoffs,
+configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities, rechecking that identity at publication. Retryable
+canonical outcomes prevent whole-job reuse, and any failed or invalidated job re-executes as a
+whole in a fresh `attempts/<attempt_id>/` workspace without salvaging partial unit checkpoints. The
+content-addressed history index binds normalized/ranked/hotspot/GitHub/change-log artifacts, raw
+log/message hashes, image, Git limits, full job settings and parser/rules/ranking/symbol/mapping
+identities. See [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [source-history-analysis](source-history-analysis.md#tuning-and-whole-job-recovery-job_source_history_analysis).

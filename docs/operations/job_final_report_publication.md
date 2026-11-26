@@ -29,11 +29,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L220) |
-| `load` | `load.accepted_gate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L104) |
-| `report` | `report.assemble` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L118) |
-| `report` | `report.render` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L171) |
-| `report` | `report.render_pdf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L198) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L235) |
+| `load` | `load.accepted_gate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L118) |
+| `report` | `report.assemble` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L132) |
+| `report` | `report.render` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L186) |
+| `report` | `report.render_pdf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L213) |
 
 ### Accepted input declarations
 
@@ -284,8 +284,10 @@ the renderer receipt's actual outcome, not the pre-render declaration in `final-
 
 ## Resume and invalidation
 
-The job has no model or independent result cache. [Runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability)
-binds the gate pin, configuration, target/input and component identities; changed gate bytes or
-display settings invalidate the report without re-adjudicating the review. Before publication
-the handler revalidates bindings and rerenders, rather than trusting stale Markdown.
-Artifact-bearing unit results are not portable failed-attempt checkpoints.
+The job has no model, independent result cache, or sub-job unit salvage. Whole-job
+[runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) binds the accepted gate
+pin, configuration (up to compatible `[operational.*]` tuning), dataset contract, target/input and
+component identities; changed gate bytes or material display settings invalidate the report without
+re-adjudicating the review, and any rerun re-executes as a whole in a fresh
+`attempts/<attempt_id>/` workspace, revalidating bindings and rerendering Markdown/HTML/PDF. See
+[job-local operational tuning](job-tuning.md) and [final-report](final-report.md#tuning-and-whole-job-recovery-job_final_report_publication).

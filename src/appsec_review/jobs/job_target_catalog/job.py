@@ -66,6 +66,9 @@ class TargetCatalogFailed(CatalogError, RuntimeError):
     """Bounded target catalog execution failed."""
 
 
+MAX_CPP_SYMBOLS = 50_000
+
+
 def _target(unit: UnitContext) -> Path:
     if unit.job.target_root is None:
         raise CatalogConfigurationError("review target is required")
@@ -87,7 +90,7 @@ def _run_artifact(unit: UnitContext, path: Path) -> dict[str, Any]:
 def _fingerprint(unit: UnitContext, name: str, artifacts: list[Mapping[str, Any]]) -> str:
     return index_fingerprint(
         name=name, target_snapshot=unit.job.source_fingerprint, producer_artifacts=artifacts,
-        tool_identity={"producer": "job_target_catalog"}, parser_identity="catalog-parser/2",
+        tool_identity={"producer": "job_target_catalog"}, parser_identity="catalog-parser/3",
         normalizer_identity="retrieval-normalizer/1+" + POLICY_IDENTITY, mapping_identity="source-map/1",
     )
 
@@ -563,9 +566,17 @@ def build_job(*, fail_task: str | None = None) -> Job:
         builder = IndexBuilder(path, name="analysis", fingerprint=fingerprint,
                                target_snapshot=unit.job.source_fingerprint)
         pattern = re.compile(r"^\s*(?:def|class|function|func|interface|struct|enum)\s+([A-Za-z_$][\w$]*)")
+        truncated = False
         for item in partition_out["files"]:
             if not source_in_scope(item) or item["language"] is None:
                 continue
+            if len(symbols) >= MAX_CPP_SYMBOLS:
+                truncated = True
+                gap_records.append(producer_gap(
+                    GapCode.TRUNCATED, "symbol index bound reached",
+                    unit_id=unit.unit_id, scope_id="symbols",
+                ))
+                break
             if item["size_bytes"] > 16 * 1024 * 1024:
                 gap_records.append(producer_gap(
                     GapCode.TRUNCATED, f"{item['path']}: symbol source byte bound reached",
@@ -592,8 +603,9 @@ def build_job(*, fail_task: str | None = None) -> Job:
                 if item["language"] in {"C", "C++", "C/C++"}:
                     file_id = LogicalIdentity.derive(EntityKind.SOURCE_FILE, unit.job.source_fingerprint,
                                                      {"path": item["path"], "sha256": item["sha256"]})
-                    for hit in extract_c_family_symbols(decoded, limit=50_000 - len(symbols) + 1):
-                        if len(symbols) >= 50_000:
+                    for hit in extract_c_family_symbols(decoded, limit=MAX_CPP_SYMBOLS - len(symbols) + 1):
+                        if len(symbols) >= MAX_CPP_SYMBOLS:
+                            truncated = True
                             gap_records.append(producer_gap(
                                 GapCode.TRUNCATED, "symbol index bound reached",
                                 unit_id=unit.unit_id, scope_id="symbols",
@@ -634,6 +646,13 @@ def build_job(*, fail_task: str | None = None) -> Job:
                                 producer_location={"parser": "bounded-declaration-pattern", "line": number},
                                 mapping_method="source-line-exact", confidence=1.0,
                             )
+                            if len(symbols) >= MAX_CPP_SYMBOLS:
+                                truncated = True
+                                gap_records.append(producer_gap(
+                                    GapCode.TRUNCATED, "symbol index bound reached",
+                                    unit_id=unit.unit_id, scope_id="symbols",
+                                ))
+                                break
                             builder.add_entity(EntityRecord(symbol_id, match.group(1), match.group(1), line.rstrip(),
                                                             {"language": item["language"],
                                                              "generated": bool(item.get("generated")),
@@ -641,19 +660,13 @@ def build_job(*, fail_task: str | None = None) -> Job:
                             builder.add_relation(RelationRecord(RelationKind.DEFINES, file_id.value,
                                                                 symbol_id.value, True, 1.0))
                             symbols.append(symbol_id.value)
-                        if len(symbols) >= 50_000:
-                            gap_records.append(producer_gap(
-                                GapCode.TRUNCATED, "symbol index bound reached",
-                                unit_id=unit.unit_id, scope_id="symbols",
-                            ))
-                            break
                         offset += len(line.encode())
             except (OSError, UnicodeError):
                 gap_records.append(producer_gap(
                     GapCode.PARSER_ERROR, f"{item['path']}: text decode failed",
                     unit_id=unit.unit_id, scope_id=str(item["path"]),
                 ))
-            if len(symbols) >= 50_000:
+            if truncated:
                 break
         gap_records = _dedup_gaps(gap_records)
         builder.add_coverage("declarations", "complete" if not gap_records else "partial",

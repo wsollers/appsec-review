@@ -29,6 +29,13 @@ def fixture(root, ids=("job_fixture",)):
         for job_id in ids:
             if job_id != "job_fixture":
                 stream.write(f'\n[jobs.{job_id}]\nname = "{job_id}"\nworkers = 1\n')
+                if job_id == "job_target_catalog":
+                    stream.write(
+                        "[jobs.job_target_catalog.settings]\n"
+                        "max_document_files = 100\n"
+                        "max_document_file_bytes = 65536\n"
+                        "max_document_records = 1000\n"
+                    )
     write_release(root, ids)
     config = load_config(config_path)
     calls = []
@@ -109,18 +116,108 @@ def test_branch_selective_force_and_repaired_job_preserve_independent_branch(tmp
     assert len(calls) == 5
 
 
-def _published_planning_context(tmp_path, orchestration):
+@pytest.fixture(scope="module")
+def planning_upstream_seed(tmp_path_factory):
+    import re
+    from unittest.mock import patch
+    from appsec_review.jobs.job_build_environment_analysis import build_job as environment_job
+    from appsec_review.jobs.job_review_intake import build_job as intake_job
+    from appsec_review.jobs.job_review_intake.job import source_fingerprint
+    from appsec_review.jobs.job_target_catalog import build_job as catalog_job
+    import contextlib
+    import os
+
+    @contextlib.contextmanager
+    def _blocking_seed_lock(lock_path: Path):
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as handle:
+            if os.name != "nt":
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            else:
+                yield
+
+    ids = ("job_review_intake", "job_target_catalog", "job_build_environment_analysis",
+           "job_target_analysis_plan", "job_cpp_compiled_analysis")
+    worker_base = tmp_path_factory.getbasetemp()
+    session_base = worker_base.parent if worker_base.name.startswith("popen-gw") else worker_base
+    seed_dir = session_base / "planning-upstream-seed"
+    ready_marker = seed_dir / ".seed-meta.json"
+    with _blocking_seed_lock(session_base / "planning-upstream-seed.lock"):
+        if not ready_marker.exists():
+            seed_dir.mkdir(mode=0o700, exist_ok=True)
+            seed_dir.chmod(0o700)
+            target = seed_dir / "target"
+            target.mkdir(exist_ok=True)
+            (target / "setup.sh").write_bytes(b"SDK_ROOT=tools/sdk\n")
+            keep = set(ids)
+            header_re = re.compile(r"^\s*\[\[?([^\]]+?)\]?\]\s*(?:#.*)?$")
+            kept_lines: list[str] = []
+            skip = False
+            for line in (Path(__file__).resolve().parents[1] / "appsec-review.toml").read_text(
+                encoding="utf-8"
+            ).splitlines(keepends=True):
+                match = header_re.match(line)
+                if match:
+                    section = match.group(1).strip()
+                    skip = section.startswith("jobs.") and section.split(".", 2)[1] not in keep
+                if not skip:
+                    kept_lines.append(line)
+            base_text = "".join(kept_lines)
+            policy = '[review_policy]\nmode = "strict"\napproved_first_party_projects = []'
+            toml_text = base_text.replace(
+                policy,
+                '[review_policy]\nmode = "first_party_managed"\nproject_id = "synthetic-environment"\n'
+                'approved_first_party_projects = ["synthetic-environment"]\n'
+                f'target_root = {json.dumps(str(target))}\ncustody = "application_private_v1"',
+            )
+            with patch("os.fsync", lambda _fd: None):
+                write_release(seed_dir, ids)
+                config_path = seed_dir / "appsec-review.toml"
+                config_path.write_bytes(toml_text.encode("utf-8"))
+                seed_config = load_config(config_path)
+                source = source_fingerprint(target)
+                result = GraphRunner(
+                    seed_config, [intake_job(), catalog_job(), environment_job()]
+                ).run(target_root=target, source_fingerprint=source)
+                ready_marker.write_text(
+                    json.dumps({"run_id": result["run_id"], "source": source}),
+                    encoding="utf-8",
+                )
+        meta = json.loads(ready_marker.read_text(encoding="utf-8"))
+    seed_config = load_config(seed_dir / "appsec-review.toml")
+    return seed_dir, seed_config, seed_dir / "target", meta["source"], meta["run_id"], ids
+
+
+def _published_planning_context(tmp_path, planning_upstream_seed, orchestration):
+    import shutil
+    from dataclasses import replace
     from appsec_review.jobs.job_build_environment_analysis import build_job as environment_job
     from appsec_review.jobs.job_review_intake import build_job as intake_job
     from appsec_review.jobs.job_target_analysis_plan import build_job as planning_job
     from appsec_review.jobs.job_target_catalog import build_job as catalog_job
-    from tests.integration.job_build_environment_analysis.support import _published
 
-    ids = ("job_review_intake", "job_target_catalog", "job_build_environment_analysis",
-           "job_target_analysis_plan", "job_cpp_compiled_analysis")
-    write_release(tmp_path, ids)
-    config, root, source, _ = _published(tmp_path, reusable=True, mode="first_party_managed")
-    target = tmp_path / "target"
+    seed_dir, seed_config, target, source, run_id, ids = planning_upstream_seed
+    shutil.copytree(seed_dir / "runs", tmp_path / "runs")
+    shutil.copytree(seed_dir / "release-src", tmp_path / "release-src")
+    shutil.copy2(seed_dir / "implementation-release.json", tmp_path / "implementation-release.json")
+    shutil.copy2(seed_dir / "appsec-review.toml", tmp_path / "appsec-review.toml")
+    config = replace(
+        seed_config,
+        source_path=tmp_path / "appsec-review.toml",
+        runtime=replace(
+            seed_config.runtime,
+            repository_root=tmp_path,
+            runs_dir=tmp_path / "runs",
+            data_dir=tmp_path / "data",
+            metadata_dir=tmp_path / "metadata",
+        ),
+    )
+    root = config.runtime.runs_dir / run_id
     planner = planning_job(infer=lambda *_args, **_kwargs: pytest.fail("unexpected model call"))
     output = JobRunner(config).run(planner, run_id=root.name, target_root=target,
                                    source_fingerprint=source, orchestration=orchestration)
@@ -140,9 +237,9 @@ def planning_unit_io(monkeypatch):
     {"workflow": "wave1_review"},
     {"workflow": "standalone"},
 ], ids=["single-job", "graph", "standalone"])
-def test_repair_preserves_verified_planning_launch_context(tmp_path, orchestration):
+def test_repair_preserves_verified_planning_launch_context(tmp_path, planning_upstream_seed, orchestration):
     config, root, target, source, jobs, output, ids = _published_planning_context(
-        tmp_path, orchestration)
+        tmp_path, planning_upstream_seed, orchestration)
     claim_path = Path(output["attempt_root"]) / "claim.json"
     original = claim_path.read_bytes()
     (tmp_path / "release-src/job_cpp_compiled_analysis/job.py").write_text("VERSION = 2\n")
@@ -160,9 +257,9 @@ def test_repair_preserves_verified_planning_launch_context(tmp_path, orchestrati
 
 @pytest.mark.usefixtures("planning_unit_io")
 @pytest.mark.parametrize("damage", ["claim", "environment"])
-def test_repair_context_does_not_authorize_changed_claim_or_environment(tmp_path, damage):
+def test_repair_context_does_not_authorize_changed_claim_or_environment(tmp_path, planning_upstream_seed, damage):
     config, root, target, source, jobs, output, _ = _published_planning_context(
-        tmp_path, {"workflow": "target_analysis_plan"})
+        tmp_path, planning_upstream_seed, {"workflow": "target_analysis_plan"})
     if damage == "claim":
         path = Path(output["attempt_root"]) / "claim.json"
         path.write_bytes(path.read_bytes() + b"\n")
@@ -203,12 +300,14 @@ def test_successful_portable_unit_is_admitted_into_fresh_attempt(tmp_path):
     old_claim = (old / "claim.json").read_bytes()
     fixed = replace(job, units=(*job.units, Unit("work.bad", lambda context: {"fixed": True})))
     plan = plan_repair(config, root, (fixed,), "none")
-    assert plan["unit_decisions"]["job_fixture"]["work.only"]["action"] == "REUSE"
+    assert plan["unit_decisions"]["job_fixture"]["work.only"] == {
+        "action": "RUN", "reason": "whole-job attempt; no prior cell reuse",
+    }
     assert plan["unit_decisions"]["job_fixture"]["work.bad"]["action"] == "RUN"
     admit_repair(config, root, (fixed,), plan)
     result = runner.run(fixed, run_id=root.name)
     assert result["status"]["attempt_id"] == "attempt_0002"
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert (old / "claim.json").read_bytes() == old_claim
     assert json.loads((old / "status.json").read_bytes())["status"] == "FAILED"
 
@@ -295,15 +394,17 @@ def test_hash_bound_artifact_checkpoint_reuses_stopped_work_without_rewriting_hi
         verify_dispatch_stop(config, root, "interrupted-dispatch", instance=instance)
     plan = plan_repair(config, root, (job,), "none")
     assert plan["admissible"], plan["refusals"]
-    assert plan["unit_decisions"][job.job_id]["work.only"]["action"] == "REUSE"
+    assert plan["unit_decisions"][job.job_id]["work.only"] == {
+        "action": "RUN", "reason": "whole-job attempt; no prior cell reuse",
+    }
     assert plan["unit_decisions"][job.job_id]["work.bad"]["action"] == "RUN"
     admit_repair(config, root, (job,), plan)
     outcome = runner.run(job, run_id=root.name)
-    assert calls == ["attempt_0001"]
+    assert calls == ["attempt_0001", "attempt_0002"]
     assert outcome["status"]["attempt_id"] == "attempt_0002"
     assert {name: (old / name).read_bytes() for name in original} == original
     status = json.loads((Path(outcome["attempt_root"]) / "steps/work/tasks/only/status.json").read_bytes())
-    assert status["reused_checkpoint"] == plan["unit_decisions"][job.job_id]["work.only"]["checkpoint"]
+    assert "reused_checkpoint" not in status
 
 
 @pytest.mark.parametrize("damage", ["missing", "tampered", "symlink"])
@@ -320,8 +421,9 @@ def test_artifact_checkpoint_refuses_unverified_bytes(tmp_path, damage):
             artifact.symlink_to(target)
     plan = plan_repair(config, root, (job,), "none")
     decisions = plan["unit_decisions"][job.job_id]
-    assert decisions["work.only"]["action"] == "RUN"
-    assert "checkpoint admission refused:" in decisions["work.only"]["reason"]
+    assert decisions["work.only"] == {
+        "action": "RUN", "reason": "whole-job attempt; no prior cell reuse",
+    }
     assert decisions["work.bad"]["action"] == "RUN"
 
 
@@ -764,11 +866,13 @@ def test_inspected_checkpoint_cannot_change_after_new_attempt_claim(tmp_path):
     plan = plan_repair(config, root, (broken,), "none")
     admit_repair(config, root, (broken,), plan)
     claim = runner.begin_attempt(broken, run_id=root.name)
-    assert claim["unit_reuse"]["work.only"]["action"] == "REUSE"
-    old_result = root / "data/jobs/job_fixture/attempts/attempt_0001/steps/work/tasks/only/result.json"
-    old_result.write_text('{"changed": true}\n')
-    with pytest.raises(ValueError):
-        runner.execute_or_reuse_unit(broken, claim, "work.only")
+    assert claim["unit_reuse"]["work.only"] == {
+        "action": "RUN", "reason": "whole-job attempt; no prior cell reuse",
+    }
+    tampered = {**claim, "unit_reuse": {**claim["unit_reuse"], "work.only": {"action": "REUSE", "reason": "forced"}}}
+    atomic_json(root / claim["attempt_path"] / "claim.json", tampered)
+    with pytest.raises(ValueError, match="whole-job recovery"):
+        runner.execute_or_reuse_unit(broken, tampered, "work.only")
     assert not (root / claim["attempt_path"] / "published.json").exists()
 
 
@@ -847,32 +951,54 @@ def test_compatible_shared_computation_survives_explicit_repair(tmp_path):
     from appsec_review.runtime.datasets import artifact_only
     from appsec_review.runtime.release import digest
     from appsec_review.storage.shared import RECEIPT_SCHEMA, SharedArtifacts, put_bytes, verify_receipt
-    config, (job,), _ = fixture(tmp_path)
+    config, (upstream_job, consumer_job), _ = fixture(tmp_path, ("job_fixture", "job_consumer"))
     computations = []
+    key = digest({"request": "stable"})
     def produce(unit):
         owner = SharedArtifacts.for_job(unit.job)
-        key = digest({"request": "stable"})
         hit = owner.lookup("fixture", key)
         if hit is None:
-            computations.append(unit.job.attempt_id)
+            computations.append((unit.job.config.job_id, unit.job.attempt_id))
             ref = owner.computed("fixture", key, put_bytes(unit.job.run_root, b"stable"),
                                  computation={"request": "stable"})
         else:
             _, ref = hit
         return {"artifact": ref}
-    declaration = artifact_only(
+    up_decl = artifact_only(
         "cache", "work", "inventory", RECEIPT_SCHEMA, "Fixture computations",
         artifacts=("data/jobs/job_fixture/attempts/*/shared/fixture/*.json",), reason="offline fixture")
-    job = replace(job, units=(Unit("work.only", produce),), datasets=(declaration,))
-    first = JobRunner(config).run(job)
-    root = config.runtime.runs_dir / first["status"]["run_id"]
-    plan = plan_repair(config, root, (job,), "none", force_from=job.job_id)
-    admit_repair(config, root, (job,), plan)
-    second = JobRunner(config).run(job, run_id=root.name)
-    receipt = verify_receipt(root, second["result"]["outputs"]["work.only"]["artifact"])
-    assert receipt["mode"] == "reused"
-    assert computations == ["attempt_0001"]
-    assert receipt["producer_receipt"] == first["result"]["outputs"]["work.only"]["artifact"]
+    down_decl = artifact_only(
+        "cache", "work", "inventory", RECEIPT_SCHEMA, "Fixture computations",
+        artifacts=("data/jobs/job_consumer/attempts/*/shared/fixture/*.json",), reason="offline fixture")
+    upstream_job = replace(upstream_job, units=(Unit("work.only", produce),), datasets=(up_decl,))
+    from appsec_review.runtime.contracts import InputRequirement, JobContract
+    consumer_job = replace(
+        consumer_job,
+        units=(Unit("work.only", produce),),
+        datasets=(down_decl,),
+        consumes=(upstream_job.job_id,),
+        contract=JobContract(inputs=(InputRequirement(upstream_job.job_id, "handoff", "appsec-review/job-handoff/2"),)),
+    )
+    runner = JobRunner(config)
+    first_up = runner.run(upstream_job)
+    root = config.runtime.runs_dir / first_up["status"]["run_id"]
+    first_attempt_bytes = (Path(first_up["attempt_root"]) / "handoff.json").read_bytes()
+    same_plan = plan_repair(config, root, (upstream_job, consumer_job), "none", force_from=upstream_job.job_id)
+    admit_repair(config, root, (upstream_job, consumer_job), same_plan)
+    second_up = runner.run(upstream_job, run_id=root.name)
+    assert verify_receipt(root, second_up["result"]["outputs"]["work.only"]["artifact"])["mode"] == "computed"
+    assert computations == [("job_fixture", "attempt_0001"), ("job_fixture", "attempt_0002")]
+    assert (Path(first_up["attempt_root"]) / "handoff.json").read_bytes() == first_attempt_bytes
+    pins = {upstream_job.job_id: second_up["handoff_sha256"]}
+    first_down = runner.run(consumer_job, run_id=root.name, upstream_handoffs=pins)
+    down_plan = plan_repair(config, root, (upstream_job, consumer_job), "none", force_from=consumer_job.job_id)
+    admit_repair(config, root, (upstream_job, consumer_job), down_plan)
+    second_down = runner.run(consumer_job, run_id=root.name, upstream_handoffs=pins)
+    for outcome in (first_down, second_down):
+        receipt = verify_receipt(root, outcome["result"]["outputs"]["work.only"]["artifact"])
+        assert receipt["mode"] == "reused"
+        assert receipt["producer_receipt"] == second_up["result"]["outputs"]["work.only"]["artifact"]
+    assert computations == [("job_fixture", "attempt_0001"), ("job_fixture", "attempt_0002")]
 
 
 def test_publication_refuses_incompatible_receipt_even_when_lookup_is_bypassed(tmp_path):
@@ -922,19 +1048,24 @@ def test_shared_producer_change_invalidates_its_real_consumer_not_an_independent
             "fixture", key, put_bytes(unit.job.run_root, b"value"), computation={"request": "shared calculation"}))
         return {"artifact": ref}
     measured = []
-    for job in jobs[:2]:
+    for index, job in enumerate(jobs[:2]):
         declaration = artifact_only(
             "cache", "work", "inventory", RECEIPT_SCHEMA, "Fixture computations",
             artifacts=(f"data/jobs/{job.job_id}/attempts/*/shared/fixture/*.json",), reason="offline fixture")
-        measured.append(replace(job, units=(Unit("work.only", shared),), datasets=(declaration,)))
+        from appsec_review.runtime.contracts import InputRequirement, JobContract
+        measured.append(replace(
+            job, units=(Unit("work.only", shared),), datasets=(declaration,),
+            consumes=("job_a",) if index == 1 else (),
+            contract=JobContract(inputs=(InputRequirement("job_a", "handoff", "appsec-review/job-handoff/2"),)) if index == 1 else JobContract(),
+        ))
     measured.append(jobs[2])
-    edges = {job.job_id: () for job in jobs}
+    edges = {"job_a": (), "job_b": ("job_a",), "job_c": ()}
     graph = GraphRunner(config, measured, dependencies=edges)
     first = graph.run(target_root=tmp_path, source_fingerprint="none")
     (tmp_path / "release-src/job_a/job.py").write_text("VERSION = 2\n")
     write_release(tmp_path, (job.job_id for job in jobs))
     decisions = graph.plan(first["run_id"], "none")
-    assert [item.action for item in decisions] == ["RUN", "RUN", "REUSE"]
+    assert [item.action for item in decisions] == ["RUN", "INVALIDATE", "REUSE"]
     assert any("cached computation from job_a" in reason for reason in decisions[1].reasons)
 
 

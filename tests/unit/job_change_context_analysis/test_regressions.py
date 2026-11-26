@@ -296,3 +296,46 @@ def test_real_function_priority_publication_boosts_only_the_matching_callable(tm
     assert files[0]["composite_modifiers"]["change_context_boost"] == 0
     assert functions[0]["item_id"] == "hot"
     assert functions[0]["score"] == pytest.approx(.65 / 1.15)
+
+
+def test_whole_job_retry_isolates_history_shard_per_attempt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from appsec_review.retrieval.index import load_verified_manifest, write_manifest
+
+    unit1, outputs1 = _pipeline(tmp_path, {HEAD: {"direct_push": True}})
+    run_root = unit1.job.run_root
+    upstream_manifest = run_root / "data/indices/manifests/upstream.json"
+    write_manifest(
+        upstream_manifest,
+        run_id=unit1.job.run_id,
+        target_snapshot=unit1.job.source_fingerprint,
+        target_root=(unit1.job.target_root or tmp_path).resolve(),
+        indexes=[],
+    )
+    up_sha = file_sha256(upstream_manifest)
+    monkeypatch.setattr(job, "resolve_context_manifest", lambda _ctx: (upstream_manifest, up_sha))
+
+    idx_unit1 = replace(
+        unit1,
+        unit_id="publish.index_change_context",
+        step_id="publish",
+        task_id="index_change_context",
+        unit_root=unit1.job.attempt_root / "steps/publish/tasks/index_change_context",
+        outputs=outputs1,
+    )
+    idx1 = handler(idx_unit1)(idx_unit1)
+    rel1 = idx1["index_identity"]["relative_path"]
+    assert rel1.startswith("data/indices/history/attempts/job_change_context_analysis/attempt_0001/")
+    (run_root / rel1).write_bytes(b"corrupt-attempt-1-shard")
+
+    attempt2_root = run_root / f"data/jobs/{job.PRODUCER}/attempts/attempt_0002"
+    idx_unit2 = replace(
+        idx_unit1,
+        job=replace(idx_unit1.job, attempt_id="attempt_0002", attempt_root=attempt2_root),
+        unit_root=attempt2_root / "steps/publish/tasks/index_change_context",
+    )
+    idx2 = handler(idx_unit2)(idx_unit2)
+    rel2 = idx2["index_identity"]["relative_path"]
+    assert rel2.startswith("data/indices/history/attempts/job_change_context_analysis/attempt_0002/")
+    assert rel2 != rel1
+    manifest2, _ = load_verified_manifest(run_root, run_root / idx2["manifest"]["path"], idx2["manifest"]["sha256"])
+    assert [entry["relative_path"] for entry in manifest2["indexes"]] == [rel2]

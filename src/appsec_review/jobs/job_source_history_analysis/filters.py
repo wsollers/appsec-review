@@ -15,7 +15,7 @@ from appsec_review.path_globs import compile_glob, matches
 from .settings import FilterRules
 
 
-FILTER_IDENTITY = "appsec-review/history-path-filters/1"
+FILTER_IDENTITY = "appsec-review/history-path-filters/2"
 FORMATTING_IDENTITY = "appsec-review/history-formatting-rules/1"
 _FORMATTING_PREFIX = re.compile(r"^(style|format|fmt|lint)(\([^)]{0,64}\))?!?:", re.I)
 _FORMATTING_WORDS = re.compile(
@@ -48,9 +48,28 @@ _TOOLING_CONFIG_PATTERNS = (
 )
 
 
+_SECURITY_RELEVANT_BASENAME_RE = re.compile(
+    r"^(?:dockerfile(?:\.[\w.-]+)?|containerfile(?:\.[\w.-]+)?|"
+    r"cmakelists\.txt|gnumakefile|makefile(?:\.[\w.-]+)?|"
+    r"meson\.build|meson_options\.txt|configure\.(?:ac|in)|makefile\.am)$",
+    re.I,
+)
+_SECURITY_RELEVANT_EXTS = frozenset({
+    ".s", ".asm", ".nasm", ".ipp", ".inl", ".tpp", ".txx", ".inc", ".m", ".mm", ".cmake", ".mk",
+})
+
+
 def _is_build_or_manifest_txt(path: str) -> bool:
     basename = path.rsplit("/", 1)[-1]
     return bool(_NON_DOCUMENTATION_TXT.fullmatch(basename))
+
+
+def is_security_relevant_build_or_code_path(path: str) -> bool:
+    basename = path.rsplit("/", 1)[-1]
+    if _SECURITY_RELEVANT_BASENAME_RE.fullmatch(basename):
+        return True
+    dot = basename.rfind(".")
+    return dot > 0 and basename[dot:].lower() in _SECURITY_RELEVANT_EXTS
 
 
 def path_exclusion(path: str, rules: FilterRules) -> dict[str, str] | None:

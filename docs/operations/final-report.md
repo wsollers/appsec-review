@@ -257,8 +257,9 @@ Standalone severity and ship-block status are unchanged.
 The labels `chain_elevated_findings_count` and `chain_elevated_count` count participating
 publishable findings, not a demonstrated increase over standalone severity. The chain card's
 `trust_boundary_crossed` display text combines component security-domain IDs (or
-`application_trust_boundary` as a fallback); it is not a resolved trust-zone identity or proof
-of a breached boundary. The composed rating still comes only from the certified manifest.
+`application_trust_boundary` as a fallback), and Markdown, HTML, and PDF renderers label unverified
+`[unverified link]` transitions as `"reported domain transition (not a source-resolved boundary)"`;
+it is not a resolved trust-zone identity or proof of a breached boundary. The composed rating still comes only from the certified manifest.
 
 JSON and event telemetry preserve nulls and their reasons, keeping metric reasons separate from
 coverage reasons. Funnel rates with an unavailable corroboration numerator/denominator are also
@@ -542,9 +543,9 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.max_packages` | `10000` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_packages` | `10000` | coverage | positive integer; exact parser/cross-field bounds† |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_final_publication_gate/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_final_publication_gate/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 
@@ -569,14 +570,14 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
 | `[global] reporting.telemetry_report.max_pdf_bytes` | `16777216` | coverage | 1..67108864; cross-field checks apply |
-| `[global] reporting.telemetry_report.max_tex_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
-| `[global] reporting.telemetry_report.timeout_seconds` | `600` | execution | positive integer; exact parser/cross-field bounds? |
-| `settings.markdown_evidence_ids` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.markdown_gap_ids` | `16` | coverage | positive integer; exact parser/cross-field bounds? |
+| `[global] reporting.telemetry_report.max_tex_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds† |
+| `[global] reporting.telemetry_report.timeout_seconds` | `600` | execution | positive integer; exact parser/cross-field bounds† |
+| `settings.markdown_evidence_ids` | `8` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.markdown_gap_ids` | `16` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.max_pdf_bytes` | `16777216` | coverage | 1..67108864; cross-field checks apply |
 | `settings.render_timeout_seconds` | `600` | execution | 1..600; cross-field checks apply |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_final_report_publication/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_final_report_publication/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

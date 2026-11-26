@@ -340,30 +340,30 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.brief.declaration_lines` | `30` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.brief.max_brief_bytes` | `131072` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.brief.max_source_files` | `64` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.brief.view_bytes` | `49152` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.brief.view_source_lines` | `160` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.brief.view_type_declarations` | `6` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.build.command_timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds? |
-| `settings.build.object_limit` | `512` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.build.output_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.build.workspace_bytes_limit` | `1073741824` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.build.workspace_file_limit` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_candidates` | `16` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.models.default.max_input_tokens` | `32000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.models.default.max_output_tokens` | `8000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.models.default.max_queries` | `8` | coverage | integer >=0; exact parser/cross-field bounds? |
-| `settings.models.default.max_turns` | `6` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.models.default.timeout_seconds` | `600` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.retry.max_attempts` | `2` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.brief.declaration_lines` | `30` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.brief.max_brief_bytes` | `131072` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.brief.max_source_files` | `64` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.brief.view_bytes` | `49152` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.brief.view_source_lines` | `160` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.brief.view_type_declarations` | `6` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.build.command_timeout_seconds` | `300` | execution | positive integer; exact parser/cross-field bounds† |
+| `settings.build.object_limit` | `512` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.build.output_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.build.workspace_bytes_limit` | `1073741824` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.build.workspace_file_limit` | `20000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_candidates` | `16` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.models.default.max_input_tokens` | `32000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.models.default.max_output_tokens` | `8000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.models.default.max_queries` | `8` | coverage | integer >=0; exact parser/cross-field bounds† |
+| `settings.models.default.max_turns` | `6` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.models.default.timeout_seconds` | `600` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.retry.max_attempts` | `2` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.retry.retry_on_timeout` | `true` | coverage | true or false; existing retry validation |
-| `settings.workers` | `1` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.workers` | `1` | execution | positive integer; exact parser/cross-field bounds† |
 | `settings.retry.retry_on_provider_error` | `true` | coverage | true/false; maximum attempts and deadline still apply |
 | `settings.retry.retry_on_invalid_output` | `true` | coverage | true/false; maximum attempts and deadline still apply |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_poc_generation/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_poc_generation/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

@@ -5,7 +5,7 @@ from dataclasses import FrozenInstanceError, replace
 import pytest
 
 from appsec_review.jobs.job_openvex_export.contracts import AuthorKind, domain_sha256
-from appsec_review.jobs.job_openvex_export.settings import OpenVexExportSettings
+from appsec_review.jobs.job_openvex_export.settings import _BOUNDS, OpenVexExportSettings
 from tests.openvex_support import enabled_settings, settings_mapping
 
 
@@ -78,21 +78,22 @@ def test_unsafe_nonempty_values_are_invalid_even_when_disabled(name: str, value:
 @pytest.mark.parametrize("name", [name for name, value in settings_mapping().items() if type(value) is int])
 def test_all_bounds_are_positive_closed_integers(name: str) -> None:
     defaults = settings_mapping()
-    maximum = defaults[name]
-    assert getattr(OpenVexExportSettings.from_mapping(defaults), name) == maximum
-    low = {name: 1}
-    low.update(author="a", action_statement="a", role="", repository_iri="")
-    if name == "max_total_input_bytes":
-        low["max_artifact_bytes"] = 1
+    default_value = defaults[name]
+    maximum = _BOUNDS[name]
+    assert default_value < maximum
+    assert getattr(OpenVexExportSettings.from_mapping(defaults), name) == default_value
+    assert getattr(OpenVexExportSettings.from_mapping(settings_mapping(**{name: maximum})), name) == maximum
+    low = {name: 1, "author": "a", "action_statement": "a", "role": "", "repository_iri": ""}
     assert getattr(OpenVexExportSettings.from_mapping(settings_mapping(**low)), name) == 1
     for invalid in (0, -1, maximum + 1, True, 1.0, "1", None):
         with pytest.raises(ValueError, match=name):
             OpenVexExportSettings.from_mapping(settings_mapping(**{name: invalid}))
 
 
-def test_individual_input_must_fit_total_bound() -> None:
-    with pytest.raises(ValueError, match="max_total_input_bytes"):
-        OpenVexExportSettings.from_mapping(settings_mapping(max_artifact_bytes=2, max_total_input_bytes=1))
+@pytest.mark.parametrize("removed", ["max_artifact_bytes", "max_total_input_bytes"])
+def test_removed_input_byte_settings_are_rejected(removed: str) -> None:
+    with pytest.raises(ValueError, match="exactly"):
+        OpenVexExportSettings.from_mapping(settings_mapping(**{removed: 1024}))
 
 
 @pytest.mark.parametrize("enabled", [0, 1, "false", None])

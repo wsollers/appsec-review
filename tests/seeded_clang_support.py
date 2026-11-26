@@ -111,7 +111,7 @@ class Staged(SimpleNamespace):
                                 source_fingerprint=SNAPSHOT, events=Events(), attempt_id="attempt_0001", run_id="run",
                                 input_manifest_path=self.manifest_path, input_manifest_sha256=self.manifest_sha,
                                 review_policy=policy,
-                                config=SimpleNamespace(settings=settings)),
+                                config=SimpleNamespace(job_id=job_id, settings=settings)),
             unit_id=unit_id, unit_root=unit_root, output=lambda key: values[key])
 
 

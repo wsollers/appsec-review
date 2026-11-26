@@ -58,7 +58,7 @@ from appsec_review.interchange import producer_gap
 
 
 SCHEMA = "appsec-review/project-build-dispatch/3"
-EXECUTOR_IDENTITY = "appsec-review/build-container-executor/3"
+EXECUTOR_IDENTITY = "appsec-review/build-container-executor/4"
 REPAIR_CACHE_SCHEMA = "appsec-review/build-image-repair-cache/1"
 BUILD_FAMILIES = ("native", "rust", "go", "java", "node", "dotnet", "python", "php", "wasm")
 STATIC_LANES = ("global", *BUILD_FAMILIES)
@@ -348,9 +348,11 @@ def _probe_environment(recipe: Mapping[str, Any]) -> dict[str, str]:
             environment["CMAKE_BUILD_TYPE"] = "RelWithDebInfo"
         for flag_var in ("CFLAGS", "CXXFLAGS"):
             current = environment.get(flag_var, "").strip()
+            if not current:
+                continue
             tokens = current.split()
             if not any(tok == "-g" or (tok.startswith("-g") and len(tok) > 2) for tok in tokens):
-                environment[flag_var] = f"{current} -g".strip() if current else "-g"
+                environment[flag_var] = f"{current} -g"
     for key, protected in project_dependency_environment(recipe).items():
         if key in {"MAVEN_OPTS", "GRADLE_USER_HOME"}:
             continue

@@ -133,6 +133,7 @@ _IMAGE_PROVIDED_ENVIRONMENT: dict[str, dict[str, str]] = {
     "native": {"CC": "clang", "CXX": "clang++"},
 }
 _NATIVE_PREFERRED_COMPILERS: dict[str, str] = {"c": "clang", "cxx": "clang++"}
+_NATIVE_IMAGE_COMPILER_ENV = frozenset({"CC", "CXX", "CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER"})
 _TOOLCHAIN_REDIRECT_ENV = frozenset({
     "PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "COMPILER_PATH", "GCC_EXEC_PREFIX",
     "CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "OBJC_INCLUDE_PATH",
@@ -148,12 +149,18 @@ def _has_native_compiler_arg_override(argv: Sequence[str]) -> bool:
         return False
     executable = PurePosixPath(str(argv[0])).name
     if executable == "cmake":
+        after_passthrough = False
         for index, arg in enumerate(argv[1:], start=1):
+            if arg == "--":
+                after_passthrough = True
+                continue
             if _CMAKE_COMPILER_CACHE_VAR.fullmatch(arg):
                 return True
             if arg == "-D" and index + 1 < len(argv) and _CMAKE_BARE_COMPILER_CACHE_VAR.fullmatch(argv[index + 1]):
                 return True
-    elif executable in {"make", "gmake"}:
+            if (after_passthrough or "--build" in argv[1:]) and _MAKE_COMPILER_VAR_ARG.fullmatch(arg):
+                return True
+    elif executable in {"make", "gmake", "ninja"}:
         return any(_MAKE_COMPILER_VAR_ARG.fullmatch(arg) for arg in argv[1:])
     return False
 
@@ -164,19 +171,33 @@ def _strip_native_compiler_arg_overrides(argv: list[Any]) -> list[Any]:
     executable = PurePosixPath(argv[0]).name
     if executable == "cmake":
         cleaned: list[str] = [argv[0]]
+        is_build_invocation = "--build" in argv[1:]
+        after_passthrough = False
+        stripped_passthrough_var = False
         index = 1
         while index < len(argv):
             arg = argv[index]
+            if arg == "--":
+                after_passthrough = True
+                cleaned.append(arg)
+                index += 1
+                continue
             if _CMAKE_COMPILER_CACHE_VAR.fullmatch(arg):
                 index += 1
                 continue
             if arg == "-D" and index + 1 < len(argv) and _CMAKE_BARE_COMPILER_CACHE_VAR.fullmatch(argv[index + 1]):
                 index += 2
                 continue
+            if (after_passthrough or is_build_invocation) and _MAKE_COMPILER_VAR_ARG.fullmatch(arg):
+                stripped_passthrough_var = True
+                index += 1
+                continue
             cleaned.append(arg)
             index += 1
+        if stripped_passthrough_var and cleaned and cleaned[-1] == "--":
+            cleaned.pop()
         return cleaned if cleaned != argv else argv
-    if executable in {"make", "gmake"}:
+    if executable in {"make", "gmake", "ninja"}:
         cleaned = [argv[0], *(arg for arg in argv[1:] if not _MAKE_COMPILER_VAR_ARG.fullmatch(arg))]
         return cleaned if cleaned != argv else argv
     return argv
@@ -1842,8 +1863,8 @@ def normalize_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any] | 
             # come from target docs or host assumptions and conflict with image-owned compiler
             # verification.
             environment = dict(value["environment"])
-            environment.pop("CC", None)
-            environment.pop("CXX", None)
+            for compiler_key in _NATIVE_IMAGE_COMPILER_ENV:
+                environment.pop(compiler_key, None)
             value["environment"] = environment
         for field in ("configure_commands", "build_commands"):
             commands = value.get(field)
@@ -1986,7 +2007,7 @@ def validate_build_recipe(recipe: Mapping[str, Any], unit: Mapping[str, Any]) ->
                 errors.append(f"environment key is unsafe: {key}")
             if not isinstance(value, str) or len(value.encode("utf-8")) > 1024 or "\0" in value:
                 errors.append(f"environment value is invalid: {key}")
-            if profile == "native" and key in {"CC", "CXX"}:
+            if profile == "native" and key in _NATIVE_IMAGE_COMPILER_ENV:
                 errors.append(f"environment key is owned by the native build image: {key}")
             elif profile == "native" and key in _TOOLCHAIN_REDIRECT_ENV:
                 errors.append(f"environment key overrides image toolchain resolution: {key}")

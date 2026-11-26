@@ -177,20 +177,45 @@ class ResumePlanner:
             claim = read_document(safe_path(self.run_root, handoff["resolving_paths"]["attempt"] + "/claim.json"))
             if claim.get("deployment_identity") != deployment_identity(self.config.runtime.repository_root):
                 reasons.append("deployment image/scripts identity changed")
+            from appsec_review.config.development import DEVELOPMENT_PROFILES
+            from appsec_review.runtime.inputs import upstream_development_tainted
             reasons.extend(job.development_reuse_reasons(
                 self.config.job(job.job_id), self.config.runtime.repository_root, claim))
+            handoff_tainted = (
+                handoff.get("development_tainted") is True
+                or claim.get("development_tainted") is True
+                or bool(claim.get("development_input_overrides"))
+            )
+            if handoff_tainted and self.config.profile not in DEVELOPMENT_PROFILES:
+                reasons.append(
+                    f"accepted handoff is development-tainted and cannot be reused in profile {self.config.profile}")
+            prior_handoffs = dict(claim.get("optional_prior_handoffs", {}))
             if contract is not None:
                 from appsec_review.jobs.job_build_environment_analysis.job import optional_prior_environment_handoffs
-                if dict(claim.get("optional_prior_handoffs", {})) != optional_prior_environment_handoffs(contract):
+                prior_handoffs = optional_prior_environment_handoffs(contract)
+                if dict(claim.get("optional_prior_handoffs", {})) != prior_handoffs:
                     reasons.append("planning optional prior handoffs identity changed")
+            if not ignore_upstream:
+                upstream_tainted = upstream_development_tainted(self.run_root, upstream, prior_handoffs)
+                if upstream_tainted and self.config.profile not in DEVELOPMENT_PROFILES:
+                    reasons.append(
+                        f"upstream handoff is development-tainted and cannot be consumed in profile {self.config.profile}")
+                expected_tainted = (self.config.job(job.job_id).development is not None) or upstream_tainted
+                if (bool(handoff.get("development_tainted") is True) != expected_tainted
+                        or bool(claim.get("development_tainted") is True) != expected_tainted):
+                    reasons.append("development taint status changed")
             from appsec_review.runtime.release import load_release
             from appsec_review.runtime.repair import ComputationAdmission
             from appsec_review.storage.shared import verify_receipt
             release = load_release(self.config.runtime.repository_root)
             if release is not None:
+                allow_tainted = self.config.profile in DEVELOPMENT_PROFILES and (
+                    handoff_tainted if ignore_upstream else expected_tainted
+                )
                 admission = ComputationAdmission(
                     release, self.config.review_policy.releases.view(), self.config.resolved_sha256,
                     deployment_identity(self.config.runtime.repository_root), job.job_id, job.schema_identity,
+                    allow_development_tainted=allow_tainted,
                     candidate_configuration=self.config)
                 for artifact in handoff["artifacts"]:
                     parts = PurePosixPath(artifact["path"]).parts
@@ -256,9 +281,17 @@ class ResumePlanner:
         decisions: list[ResumeDecision] = []
         dirty: set[str] = set()
         from appsec_review.runtime.dependencies import semantic_dependencies
+        from appsec_review.runtime.inputs import upstream_development_tainted
         from appsec_review.storage.validation import validation_scope
         inputs = semantic_dependencies(self.jobs, self.dependencies)
+        tainted_jobs: set[str] = set()
         with validation_scope(self.run_root):
+            for prod_id, digest in upstream.items():
+                try:
+                    if upstream_development_tainted(self.run_root, {prod_id: digest}):
+                        tainted_jobs.add(prod_id)
+                except (OSError, ValueError, KeyError, TypeError):
+                    pass
             for job in self.jobs:
                 ancestors = set(upstream_closure(job.job_id, inputs, set(inputs)))
                 selected = input_projection(job, upstream, self.dependencies, self.propagating)
@@ -274,6 +307,15 @@ class ResumePlanner:
                     # reuse only if every pinned upstream is then equivalent, else run); otherwise it runs.
                     dirty.add(job.job_id)
                     reasons, handoff_hash = self.accepted(job, selected, ignore_upstream=True)
+                    expected_plan_tainted = (
+                        self.config.job(job.job_id).development is not None
+                        or bool(ancestors & tainted_jobs)
+                    )
+                    if not reasons and handoff_hash is not None:
+                        current_tainted = upstream_development_tainted(
+                            self.run_root, {job.job_id: handoff_hash})
+                        if current_tainted != expected_plan_tainted:
+                            reasons = ("development taint status changed",)
                     if reasons:
                         decision = ResumeDecision(job.job_id, "INVALIDATE",
                                                   ("transitive downstream invalidation", *reasons))
@@ -292,6 +334,12 @@ class ResumePlanner:
                         decision = ResumeDecision(job.job_id, "REUSE", ("all declared identities and artifacts match",), handoff_hash)
                         if job.propagate_handoff:
                             upstream[job.job_id] = str(handoff_hash)
+                if decision.action == "REUSE" and decision.handoff_sha256 is not None:
+                    if upstream_development_tainted(self.run_root, {job.job_id: str(decision.handoff_sha256)}):
+                        tainted_jobs.add(job.job_id)
+                elif (self.config.job(job.job_id).development is not None
+                        or bool(ancestors & tainted_jobs)):
+                    tainted_jobs.add(job.job_id)
                 decisions.append(decision)
         if emit_event:
             PipelineLog(self.run_root).write("RESUME_PLANNED", run_id=self.run_root.name,

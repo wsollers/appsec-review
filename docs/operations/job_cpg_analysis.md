@@ -86,7 +86,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_cpg_analysis/test_cpg_analysis_graph.py` |
 | live | None declared |
-| unit | `tests/unit/job_cpg_analysis/test_audit_closure.py`<br>`tests/unit/job_cpg_analysis/test_contract.py`<br>`tests/unit/job_cpg_analysis/test_export_and_seeded.py`<br>`tests/unit/job_cpg_analysis/test_handlers.py`<br>`tests/test_cpg_export.py`<br>`tests/test_seeded_cpg.py` |
+| unit | `tests/unit/job_cpg_analysis/test_audit_closure.py`<br>`tests/unit/job_cpg_analysis/test_contract.py`<br>`tests/unit/job_cpg_analysis/test_export_and_seeded.py`<br>`tests/unit/job_cpg_analysis/test_handlers.py`<br>`tests/test_cpg_export.py`<br>`tests/test_seeded_cpg.py`<br>`tests/test_analyzer_attempt_scopes.py` |
 
 ### Dagster placement
 
@@ -339,21 +339,19 @@ The permanent-looking limitation is still a cost that a specific walk must expli
 
 ## Resume and invalidation
 
-The scope checkpoint binds accepted scope/database, container database hash, adapter/argv,
-tool identity, CPG byte ceiling and seeded identities, including selected observation provenance,
-priorities and total/omitted/outside-scope/unlocated accounting. Reuse validates generation and
-export receipts, compile databases, retained streams, parsed export, ledger, CPG manifest and
-indexed artifacts by their run-owned identities. Missing or changed evidence fails integrity;
-it is not a cache miss. Failed seeded builds and exports are not reused; unseeded gap-bearing
-results may be. Disabled work must not reuse enabled success as
-coverage. [Image pins](image-pin-verification.md) and [signing](signing.md) are shared gates.
-The [source](../../src/appsec_review/jobs/job_cpg_analysis/job.py) is authoritative where legacy
-operations prose says all export is absent: seeded per-function export exists, general CPG/PDG
-coverage does not. Generated bindings remain
-[T-147](../TODO.md).
+Job is the atomic recovery boundary: accepted upstream handoffs allow reusing the entire accepted
+job when inputs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities match, while any failed, invalidated, or forced job
+re-executes all selected scopes inside attempt-local directories
+(`data/code-index/joern/<scope-id>/attempts/<attempt-id>/`) without reading another attempt's or a
+run-wide scope checkpoint ([analyzer attempt scopes](analyzer-attempt-scopes.md)). Within-attempt
+verification validates generation/export receipts, compile databases, retained streams, parsed
+export, ledger, CPG manifest and indexed artifacts against run-owned identities; missing or changed
+evidence fails closed. Disabled work never reuses enabled success as coverage.
+[Image pins](image-pin-verification.md) and [signing](signing.md) are shared gates; the
+[source](../../src/appsec_review/jobs/job_cpg_analysis/job.py) is authoritative for seeded
+per-function export. Generated bindings remain [T-147](../TODO.md).
 
-The CSV reader and job adapters are mounted application sources, not Joern image assets.
-These changes require no Joern image rebuild or query compilation. Any later authorized
-deployment must follow the source-measurement/reload policy without changing disabled dispatch.
-Offline inert-fixture checks do not establish native exclusion behavior, image readiness,
-integration, acceptance or live review results.
+The CSV reader and job adapters are mounted application sources, not Joern image assets, so source
+edits deploy via signed-source reload at an explicit run boundary rather than a Joern image
+rebuild. See [job-local operational tuning](job-tuning.md) and [cpp-index-jobs](cpp-index-jobs.md#tuning-and-whole-job-recovery-job_cpg_analysis).

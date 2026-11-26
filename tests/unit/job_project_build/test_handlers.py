@@ -102,6 +102,7 @@ def _unit_context(tmp_path: Path, *, unit_id: str = "probe.python", reusable: bo
         metadata_root=metadata_root,
         repository_root=ROOT,
         source_fingerprint=fp,
+        resolved_config_sha256="c" * 64,
         config=job_cfg,
         review_policy=policy,
         events=_events(),

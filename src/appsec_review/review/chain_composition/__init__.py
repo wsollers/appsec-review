@@ -1,10 +1,4 @@
-"""Multi-step cross-unit and cross-trust-boundary attack chain composition (T-173)."""
-from .composer import (
-    EVIDENCE_QUERYING_SKILL_ID,
-    compose_multi_step_chains,
-    evaluate_chain_elevation,
-    load_chain_querying_skill,
-)
+"""Multi-step cross-unit and cross-trust-boundary attack chain contracts (T-173)."""
 from .contracts import (
     AttackChainCompositionSettings,
     BoundaryCrossing,
@@ -25,10 +19,6 @@ __all__ = [
     "ComposedAttackChain",
     "DEFAULT_MAX_CHAIN_STEPS",
     "DEFAULT_MAX_STEPS",
-    "EVIDENCE_QUERYING_SKILL_ID",
     "SEVERITY_RANK",
-    "compose_multi_step_chains",
-    "evaluate_chain_elevation",
-    "load_chain_querying_skill",
     "max_severity",
 ]

@@ -869,7 +869,6 @@ def build_job() -> Job:
             parser_identity="tree-sitter-accepted-shards", normalizer_identity=MAPPING_IDENTITY + "+" + POLICY_IDENTITY,
             mapping_identity=GRAPH_IDENTITY)
         path = unit.job.run_root / "data" / "indices" / "priority" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / SHARD_ID / f"{fingerprint}.sqlite"
-        checkpoint_path = unit.unit_root / "artifacts" / f"index-checkpoint-{fingerprint}.json"
         # Upstream units declared their own gaps already; this unit declares only its own and carries the
         # merged list as ``aggregated_gaps`` so the job outcome holds one gap record per distinct reason.
         upstream_gaps = sorted(set([*syntax_output["gaps"], *graph_output["gaps"], *semantic_output["gaps"],
@@ -882,244 +881,226 @@ def build_job() -> Job:
                 data_cache[file_path] = _target_bytes(unit, file_path, files[file_path]["sha256"], files[file_path])
             return data_cache[file_path]
 
-        if not path.exists() or not checkpoint_path.exists():
-            builder = IndexBuilder(path, name="priority", fingerprint=fingerprint, target_snapshot=snapshot,
-                                   shard_id=SHARD_ID)
-            entity_ids: dict[str, str] = {}
-            evidence_ids: dict[str, str] = {}
+        builder = IndexBuilder(path, name="priority", fingerprint=fingerprint, target_snapshot=snapshot,
+                               shard_id=SHARD_ID)
+        entity_ids: dict[str, str] = {}
+        evidence_ids: dict[str, str] = {}
 
-            def evidence_entity(signal_id: str) -> str | None:
-                if signal_id in evidence_ids:
-                    return evidence_ids[signal_id]
-                record = evidence_records.get(signal_id)
-                if record is None:
-                    return None
-                identity = LogicalIdentity.derive(EntityKind.REVIEW_SIGNAL, snapshot, {"signal_id": signal_id})
-                if record.get("category") == "semantic_path":
-                    sink = record["sink"]
-                    location = _line_location(snapshot, data_of(sink["path"]), sink["path"], files[sink["path"]]["sha256"],
-                                              int(sink["start_line"]), int(sink["end_line"]), "codeql-sarif-flow-step",
-                                              1.0, {"producer": "codeql", "role": "sink", **source_native(files[sink["path"]])})
-                    text = (f"semantic_path {record['rule_id']} {record['source']['path']}:{record['source']['start_line']}"
-                            f" -> {sink['path']}:{sink['start_line']} steps {record['steps']}")
-                elif record.get("producer") == "semgrep":
-                    location = _line_location(snapshot, data_of(record["path"]), record["path"],
-                                              files[record["path"]]["sha256"], int(record["start_line"]),
-                                              int(record["end_line"]), "semgrep-line-location", 0.9,
-                                              {"producer": "semgrep", "rule_id": record["rule_id"],
-                                               **source_native(files[record["path"]])})
-                    text = f"{record['category']} {record['surface']} {record['rule_id']} semgrep"
+        def evidence_entity(signal_id: str) -> str | None:
+            if signal_id in evidence_ids:
+                return evidence_ids[signal_id]
+            record = evidence_records.get(signal_id)
+            if record is None:
+                return None
+            identity = LogicalIdentity.derive(EntityKind.REVIEW_SIGNAL, snapshot, {"signal_id": signal_id})
+            if record.get("category") == "semantic_path":
+                sink = record["sink"]
+                location = _line_location(snapshot, data_of(sink["path"]), sink["path"], files[sink["path"]]["sha256"],
+                                          int(sink["start_line"]), int(sink["end_line"]), "codeql-sarif-flow-step",
+                                          1.0, {"producer": "codeql", "role": "sink", **source_native(files[sink["path"]])})
+                text = (f"semantic_path {record['rule_id']} {record['source']['path']}:{record['source']['start_line']}"
+                        f" -> {sink['path']}:{sink['start_line']} steps {record['steps']}")
+            elif record.get("producer") == "semgrep":
+                location = _line_location(snapshot, data_of(record["path"]), record["path"],
+                                          files[record["path"]]["sha256"], int(record["start_line"]),
+                                          int(record["end_line"]), "semgrep-line-location", 0.9,
+                                          {"producer": "semgrep", "rule_id": record["rule_id"],
+                                           **source_native(files[record["path"]])})
+                text = f"{record['category']} {record['surface']} {record['rule_id']} semgrep"
+            else:
+                location = SourceLocation(snapshot, record["path"], record["file_sha256"], int(record["start_byte"]),
+                                          int(record["end_byte"]), int(record["start_line"]), int(record["end_line"]),
+                                          int(record["start_column"]), int(record["end_column"]),
+                                          {"producer": "tree-sitter", "rule_id": record["rule_id"],
+                                           **source_native(files[record["path"]])},
+                                          "tree-sitter-byte-and-point-exact", 1.0)
+                kind = "suppression " + str(record.get("tool")) if signal_id.startswith("sup-") else record["surface"]
+                text = f"{record['category']} {kind} {record['rule_id']} {record.get('basis')}"
+            payload = {**record, "authority": "review lead; not a finding"}
+            builder.add_entity(EntityRecord(identity, signal_id, str(record.get("rule_id")), text, payload, location))
+            evidence_ids[signal_id] = identity.value
+            if record.get("category") == "semantic_path":
+                previous = None
+                for step in record["flow_steps"]:
+                    point = step["location"]
+                    step_identity = LogicalIdentity.derive(EntityKind.REVIEW_FLOW_STEP, snapshot, {
+                        "path_id": signal_id, "ordinal": step["ordinal"], "source": point,
+                    })
+                    step_location = _line_location(
+                        snapshot, data_of(point["path"]), point["path"], files[point["path"]]["sha256"],
+                        int(point["start_line"]), int(point["end_line"]), "codeql-sarif-flow-step", 1.0,
+                        {"producer": "codeql", "path_id": signal_id, "ordinal": step["ordinal"],
+                         **source_native(files[point["path"]])})
+                    step_text = (f"flow step {step['ordinal']} of {signal_id} "
+                                 f"{point['path']}:{point['start_line']} {step['message']}")
+                    builder.add_entity(EntityRecord(step_identity, f"{signal_id}:{step['ordinal']}",
+                                                    f"flow step {step['ordinal']}", step_text,
+                                                    {"path_id": signal_id, "ordinal": step["ordinal"],
+                                                     "message": step["message"], "producer": "codeql",
+                                                     "basis": "verified_semantic_path"}, step_location))
+                    builder.add_relation(RelationRecord(RelationKind.CONTAINS, identity.value,
+                                                        step_identity.value, True, 1.0))
+                    if previous is not None:
+                        builder.add_relation(RelationRecord(RelationKind.FLOWS_TO, previous,
+                                                            step_identity.value, True, 1.0,
+                                                            payload={"path_id": signal_id}))
+                    previous = step_identity.value
+            return identity.value
+
+        for item in [*selected_files, *selected_functions]:
+            identity = LogicalIdentity.derive(EntityKind.PRIORITY_ITEM, snapshot, {"item_id": item["item_id"]})
+            entity_ids[item["item_id"]] = identity.value
+            record = facts[item["path"]]
+            if item["scope"] == "function":
+                location = SourceLocation(snapshot, item["path"], record["sha256"], int(item["start_byte"]),
+                                          int(item["end_byte"]), int(item["start_line"]), int(item["end_line"]),
+                                          int(item["start_column"]), int(item["end_column"]),
+                                          {"producer": "tree-sitter", "function_id": item["function_id"],
+                                           **source_native(files[item["path"]])},
+                                          "tree-sitter-byte-and-point-exact", 1.0)
+            else:
+                location = SourceLocation(snapshot, item["path"], record["sha256"], 0, int(record["size_bytes"]), 1,
+                                          max(1, int(record["line_count"])), 1, 1, {"producer": "tree-sitter",
+                                                                                    "scope": "file",
+                                                                                    **source_native(files[item["path"]])},
+                                          "tree-sitter-file-span", 1.0)
+            top = sorted(item["percentiles"].items(), key=lambda pair: (-pair[1], pair[0]))[:5]
+            text = (f"review priority {item['scope']} rank {item['rank']} score {item['score']} {item['language']} "
+                    f"{item['name']} top features " + " ".join(f"{name}={item['features'][name]}" for name, _ in top))
+            linked = item["evidence"][:evidence_limit]
+            payload = {**item, "evidence": linked, "evidence_truncated": max(0, len(item["evidence"]) - evidence_limit),
+                       "score_identity": ranking["identity"], "base_score_identity": scoring.SCORE_IDENTITY,
+                       "score_normalization": ranking["score_normalization"], "weights": ranking["weights"],
+                       "population": ranking["population"],
+                       "authority": "review-first ordering; never a vulnerability finding"}
+            builder.add_entity(EntityRecord(identity, item["item_id"], item["name"], text, payload, location))
+            for signal_id in linked:
+                target = evidence_entity(signal_id)
+                if target is not None:
+                    builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value, target, True, 1.0))
+        for item in selected_functions:
+            parent = entity_ids.get(f"file:{item['path']}")
+            if parent is not None:
+                builder.add_relation(RelationRecord(RelationKind.CONTAINS, parent, entity_ids[item["item_id"]],
+                                                    True, 1.0))
+        # Routing populations are bounded by their producers/extraction, not by the selected
+        # priority-item prefix. Package assembly applies its own configured context/hunt limits.
+        producer_pins: dict[str, dict[str, str]] = {}
+        for routing_kind, records in (("promoted_lead", ranking["promoted_leads"]),
+                                      ("hunt_candidate", ranking["hunt_queue"])):
+            for ordinal, item in enumerate(records):
+                routing_id = item["lead_id"] if routing_kind == "promoted_lead" else item["item_id"]
+                identity = LogicalIdentity.derive(EntityKind.REVIEW_SIGNAL, snapshot, {
+                    "routing_kind": routing_kind, "routing_id": routing_id})
+                file_path = item.get("path")
+                location = None
+                if file_path in files:
+                    location = _line_location(
+                        snapshot, data_of(file_path), file_path, files[file_path]["sha256"],
+                        int(item.get("start_line") or 1), int(item.get("end_line") or item.get("start_line") or 1),
+                        "priority-routing-source-span", 1.0,
+                        {"producer": JOB_ID, **source_native(files[file_path])})
                 else:
-                    location = SourceLocation(snapshot, record["path"], record["file_sha256"], int(record["start_byte"]),
-                                              int(record["end_byte"]), int(record["start_line"]), int(record["end_line"]),
-                                              int(record["start_column"]), int(record["end_column"]),
-                                              {"producer": "tree-sitter", "rule_id": record["rule_id"],
-                                               **source_native(files[record["path"]])},
-                                              "tree-sitter-byte-and-point-exact", 1.0)
-                    kind = "suppression " + str(record.get("tool")) if signal_id.startswith("sup-") else record["surface"]
-                    text = f"{record['category']} {kind} {record['rule_id']} {record.get('basis')}"
-                payload = {**record, "authority": "review lead; not a finding"}
-                builder.add_entity(EntityRecord(identity, signal_id, str(record.get("rule_id")), text, payload, location))
-                evidence_ids[signal_id] = identity.value
-                if record.get("category") == "semantic_path":
-                    previous = None
-                    for step in record["flow_steps"]:
-                        point = step["location"]
-                        step_identity = LogicalIdentity.derive(EntityKind.REVIEW_FLOW_STEP, snapshot, {
-                            "path_id": signal_id, "ordinal": step["ordinal"], "source": point,
-                        })
-                        step_location = _line_location(
-                            snapshot, data_of(point["path"]), point["path"], files[point["path"]]["sha256"],
-                            int(point["start_line"]), int(point["end_line"]), "codeql-sarif-flow-step", 1.0,
-                            {"producer": "codeql", "path_id": signal_id, "ordinal": step["ordinal"],
-                             **source_native(files[point["path"]])})
-                        step_text = (f"flow step {step['ordinal']} of {signal_id} "
-                                     f"{point['path']}:{point['start_line']} {step['message']}")
-                        builder.add_entity(EntityRecord(step_identity, f"{signal_id}:{step['ordinal']}",
-                                                        f"flow step {step['ordinal']}", step_text,
-                                                        {"path_id": signal_id, "ordinal": step["ordinal"],
-                                                         "message": step["message"], "producer": "codeql",
-                                                         "basis": "verified_semantic_path"}, step_location))
-                        builder.add_relation(RelationRecord(RelationKind.CONTAINS, identity.value,
-                                                            step_identity.value, True, 1.0))
-                        if previous is not None:
-                            builder.add_relation(RelationRecord(RelationKind.FLOWS_TO, previous,
-                                                                step_identity.value, True, 1.0,
-                                                                payload={"path_id": signal_id}))
-                        previous = step_identity.value
-                return identity.value
+                    gaps.append(f"{routing_kind}:{routing_id}: source_location_unavailable")
+                payload = {
+                    **item, "routing_kind": routing_kind, "routing_ordinal": ordinal,
+                    "authority": "provisional_navigation_lead",
+                    "run_id": unit.job.run_id, "target_snapshot": snapshot,
+                    "source_artifact": ranking_output["artifact"],
+                    "score_identity": ranking["identity"], "score_normalization": ranking["score_normalization"],
+                }
+                if routing_kind == "promoted_lead":
+                    producer = item["producer"]
+                    if producer not in producer_pins:
+                        handoff, digest = accepted_handoff(unit.job.run_root, producer)
+                        producer_pins[producer] = {
+                            "handoff_sha256": digest, "attempt_id": handoff["attempt_id"],
+                            "target_snapshot": handoff["target_snapshot"], "producer": producer,
+                        }
+                    payload["upstream"] = producer_pins[producer]
+                if routing_kind == "hunt_candidate":
+                    ranked = ranked_by_id[item["item_id"]]
+                    payload.update({key: ranked[key] for key in (
+                        "start_byte", "end_byte", "start_column", "end_column") if key in ranked})
+                    payload["gaps"] = ranked["gaps"]
+                    payload["semantic_path_lower_bound"] = ranked["semantic_path_lower_bound"]
+                builder.add_entity(EntityRecord(
+                    identity, f"{routing_kind}:{routing_id}", str(item.get("name") or item.get("rule_id")),
+                    f"{routing_kind} {routing_id} {item.get('summary') or item.get('hunt_priority_reason')}",
+                    payload, location))
+        selected_paths = {item["path"] for item in [*selected_files, *selected_functions]}
+        context_ids: dict[str, str] = {}
+        graph_neighbor_limit = int(settings["index"]["max_graph_neighbors"])
 
-            for item in [*selected_files, *selected_functions]:
-                identity = LogicalIdentity.derive(EntityKind.PRIORITY_ITEM, snapshot, {"item_id": item["item_id"]})
-                entity_ids[item["item_id"]] = identity.value
-                record = facts[item["path"]]
-                if item["scope"] == "function":
-                    location = SourceLocation(snapshot, item["path"], record["sha256"], int(item["start_byte"]),
-                                              int(item["end_byte"]), int(item["start_line"]), int(item["end_line"]),
-                                              int(item["start_column"]), int(item["end_column"]),
-                                              {"producer": "tree-sitter", "function_id": item["function_id"],
-                                               **source_native(files[item["path"]])},
-                                              "tree-sitter-byte-and-point-exact", 1.0)
-                else:
-                    location = SourceLocation(snapshot, item["path"], record["sha256"], 0, int(record["size_bytes"]), 1,
-                                              max(1, int(record["line_count"])), 1, 1, {"producer": "tree-sitter",
-                                                                                        "scope": "file",
-                                                                                        **source_native(files[item["path"]])},
-                                              "tree-sitter-file-span", 1.0)
-                top = sorted(item["percentiles"].items(), key=lambda pair: (-pair[1], pair[0]))[:5]
-                text = (f"review priority {item['scope']} rank {item['rank']} score {item['score']} {item['language']} "
-                        f"{item['name']} top features " + " ".join(f"{name}={item['features'][name]}" for name, _ in top))
-                linked = item["evidence"][:evidence_limit]
-                payload = {**item, "evidence": linked, "evidence_truncated": max(0, len(item["evidence"]) - evidence_limit),
-                           "score_identity": ranking["identity"], "base_score_identity": scoring.SCORE_IDENTITY,
-                           "score_normalization": ranking["score_normalization"], "weights": ranking["weights"],
-                           "population": ranking["population"],
-                           "authority": "review-first ordering; never a vulnerability finding"}
-                builder.add_entity(EntityRecord(identity, item["item_id"], item["name"], text, payload, location))
-                for signal_id in linked:
-                    target = evidence_entity(signal_id)
-                    if target is not None:
-                        builder.add_relation(RelationRecord(RelationKind.DERIVED_FROM, identity.value, target, True, 1.0))
-            for item in selected_functions:
-                parent = entity_ids.get(f"file:{item['path']}")
-                if parent is not None:
-                    builder.add_relation(RelationRecord(RelationKind.CONTAINS, parent, entity_ids[item["item_id"]],
-                                                        True, 1.0))
-            # Routing populations are bounded by their producers/extraction, not by the selected
-            # priority-item prefix. Package assembly applies its own configured context/hunt limits.
-            producer_pins: dict[str, dict[str, str]] = {}
-            for routing_kind, records in (("promoted_lead", ranking["promoted_leads"]),
-                                          ("hunt_candidate", ranking["hunt_queue"])):
-                for ordinal, item in enumerate(records):
-                    routing_id = item["lead_id"] if routing_kind == "promoted_lead" else item["item_id"]
-                    identity = LogicalIdentity.derive(EntityKind.REVIEW_SIGNAL, snapshot, {
-                        "routing_kind": routing_kind, "routing_id": routing_id})
-                    file_path = item.get("path")
-                    location = None
-                    if file_path in files:
-                        location = _line_location(
-                            snapshot, data_of(file_path), file_path, files[file_path]["sha256"],
-                            int(item.get("start_line") or 1), int(item.get("end_line") or item.get("start_line") or 1),
-                            "priority-routing-source-span", 1.0,
-                            {"producer": JOB_ID, **source_native(files[file_path])})
-                    else:
-                        gaps.append(f"{routing_kind}:{routing_id}: source_location_unavailable")
-                    payload = {
-                        **item, "routing_kind": routing_kind, "routing_ordinal": ordinal,
-                        "authority": "provisional_navigation_lead",
-                        "run_id": unit.job.run_id, "target_snapshot": snapshot,
-                        "source_artifact": ranking_output["artifact"],
-                        "score_identity": ranking["identity"], "score_normalization": ranking["score_normalization"],
-                    }
-                    if routing_kind == "promoted_lead":
-                        producer = item["producer"]
-                        if producer not in producer_pins:
-                            handoff, digest = accepted_handoff(unit.job.run_root, producer)
-                            producer_pins[producer] = {
-                                "handoff_sha256": digest, "attempt_id": handoff["attempt_id"],
-                                "target_snapshot": handoff["target_snapshot"], "producer": producer,
-                            }
-                        payload["upstream"] = producer_pins[producer]
-                    if routing_kind == "hunt_candidate":
-                        ranked = ranked_by_id[item["item_id"]]
-                        payload.update({key: ranked[key] for key in (
-                            "start_byte", "end_byte", "start_column", "end_column") if key in ranked})
-                        payload["gaps"] = ranked["gaps"]
-                        payload["semantic_path_lower_bound"] = ranked["semantic_path_lower_bound"]
-                    builder.add_entity(EntityRecord(
-                        identity, f"{routing_kind}:{routing_id}", str(item.get("name") or item.get("rule_id")),
-                        f"{routing_kind} {routing_id} {item.get('summary') or item.get('hunt_priority_reason')}",
-                        payload, location))
-            selected_paths = {item["path"] for item in [*selected_files, *selected_functions]}
-            context_ids: dict[str, str] = {}
-            graph_neighbor_limit = int(settings["index"]["max_graph_neighbors"])
+        def file_node(file_path: str) -> str | None:
+            selected = entity_ids.get(f"file:{file_path}")
+            if selected is not None:
+                return selected
+            if file_path in context_ids:
+                return context_ids[file_path]
+            if len(context_ids) >= graph_neighbor_limit:
+                return None
+            info = files[file_path]
+            file_bytes = data_of(file_path)
+            identity = LogicalIdentity.derive(EntityKind.REVIEW_CONTEXT_FILE, snapshot, {"path": file_path})
+            location = SourceLocation(snapshot, file_path, info["sha256"], 0, len(file_bytes), 1,
+                                      max(1, len(file_bytes.splitlines())), 1, 1,
+                                      {"producer": "accepted-source", "scope": "dependency-context",
+                                       **source_native(info)},
+                                      "accepted-file-span", 1.0)
+            builder.add_entity(EntityRecord(identity, file_path, file_path,
+                                            f"dependency context {file_path}",
+                                            {"path": file_path, "scope": "dependency-context",
+                                             **scope_fields(info), **source_native(info),
+                                             "authority": "graph context; not a vulnerability finding"}, location))
+            context_ids[file_path] = identity.value
+            return identity.value
 
-            def file_node(file_path: str) -> str | None:
-                selected = entity_ids.get(f"file:{file_path}")
-                if selected is not None:
-                    return selected
-                if file_path in context_ids:
-                    return context_ids[file_path]
-                if len(context_ids) >= graph_neighbor_limit:
-                    return None
-                info = files[file_path]
-                file_bytes = data_of(file_path)
-                identity = LogicalIdentity.derive(EntityKind.REVIEW_CONTEXT_FILE, snapshot, {"path": file_path})
-                location = SourceLocation(snapshot, file_path, info["sha256"], 0, len(file_bytes), 1,
-                                          max(1, len(file_bytes.splitlines())), 1, 1,
-                                          {"producer": "accepted-source", "scope": "dependency-context",
-                                           **source_native(info)},
-                                          "accepted-file-span", 1.0)
-                builder.add_entity(EntityRecord(identity, file_path, file_path,
-                                                f"dependency context {file_path}",
-                                                {"path": file_path, "scope": "dependency-context",
-                                                 **scope_fields(info), **source_native(info),
-                                                 "authority": "graph context; not a vulnerability finding"}, location))
-                context_ids[file_path] = identity.value
-                return identity.value
-
-            indexed_edges: set[tuple[str, str]] = set()
-            for edge in sorted(graph["edges"], key=lambda item: (item["from"], item["to"],
-                                                               -float(item["confidence"]), item["line"])):
-                if edge["from"] not in selected_paths and edge["to"] not in selected_paths:
-                    continue
-                edge_key = (edge["from"], edge["to"])
-                if edge_key in indexed_edges:
-                    continue
-                left, right = file_node(edge["from"]), file_node(edge["to"])
-                if left is None or right is None:
-                    gaps.append("dependency_graph_context_bound_reached")
-                    continue
-                exact = float(edge["confidence"]) >= 1.0
-                builder.add_relation(RelationRecord(
-                    RelationKind.DEPENDS_ON, left, right, exact, float(edge["confidence"]),
-                    None if exact else f"import resolved by {edge['method']}",
-                    {"method": edge["method"], "line": edge["line"]}))
-                indexed_edges.add(edge_key)
-            for item in selected_functions:
-                if f"file:{item['path']}" not in entity_ids and item["path"] in context_ids:
-                    builder.add_relation(RelationRecord(RelationKind.CONTAINS, context_ids[item["path"]],
-                                                        entity_ids[item["item_id"]], True, 1.0))
-            syntax_gaps = [gap for gap in syntax_output["gaps"]]
-            builder.add_coverage("complexity", "partial" if syntax_gaps else "complete",
-                                 "; ".join(bounded_gap_messages(syntax_gaps, 20)) or None)
-            builder.add_coverage("dependency-graph", "partial" if graph_output["gaps"] else "complete",
-                                 "; ".join(graph_output["gaps"][:20]) or None)
-            semgrep_status = semantic_output["semgrep_status"]
-            builder.add_coverage("semgrep-review-signals", "complete" if semgrep_status == "SUCCEEDED" else
-                                 "partial" if semgrep_status == "PARTIAL" else "unavailable",
-                                 "; ".join(semantic["semgrep"].get("gaps", [])[:10]) or None)
-            codeql_status = semantic_output["codeql_status"]
-            builder.add_coverage("codeql-semantic-paths", "complete" if codeql_status == "SUCCEEDED" else
-                                 "partial" if codeql_status == "PARTIAL" else "unavailable",
-                                 "; ".join(semantic["codeql"].get("gaps", [])[:10]) or None)
-            history_status = ranking_output["history_status"]
-            builder.add_coverage("history-hotspots", "complete" if history_status == "EXACT" else
-                                 "partial" if history_status == "PARTIAL" else "unavailable",
-                                 "; ".join(ranking_output["gaps"][:10]) or history_status)
-            builder.add_coverage("prioritization", "partial" if gaps or upstream_gaps else "complete",
-                                 f"indexed {len(selected_files)} of {len(ranking['files'])} files and "
-                                 f"{len(selected_functions)} of {len(ranking['functions'])} functions")
-            builder.add_coverage("priority-index-local-gaps", "partial" if gaps else "complete",
-                                 canonical_json(gaps).decode("utf-8"))
-            builder.build()
-            from appsec_review.storage.shared import immutable_bytes
-            immutable_bytes(unit.job.run_root, _rel(unit.job.run_root, checkpoint_path), canonical_json({
-                "schema": "priority-index-checkpoint/1", "fingerprint": fingerprint,
-                "index": _artifact(unit.job.run_root, path), "gaps": gaps}))
-        else:
-            checkpoint = read_json(unit.job.run_root, _artifact(unit.job.run_root, checkpoint_path))
-            if checkpoint.get("schema") != "priority-index-checkpoint/1" or checkpoint.get("fingerprint") != fingerprint:
-                raise ValueError("priority index checkpoint identity changed")
-            if checkpoint.get("index", {}).get("path") != _rel(unit.job.run_root, path):
-                raise ValueError("priority index checkpoint path changed")
-            IndexBuilder(path, name="priority", fingerprint=fingerprint, target_snapshot=snapshot,
-                         shard_id=SHARD_ID).attest_existing(checkpoint["index"]["sha256"])
-            with sqlite3.connect(f"file:{path.as_posix()}?mode=ro&immutable=1", uri=True) as database:
-                stored = database.execute("SELECT gap FROM coverage WHERE area = 'priority-index-local-gaps'").fetchall()
-            if stored != [(canonical_json(checkpoint["gaps"]).decode("utf-8"),)]:
-                raise ValueError("priority index checkpoint gaps differ from immutable shard")
-            gaps = list(checkpoint["gaps"])
+        indexed_edges: set[tuple[str, str]] = set()
+        for edge in sorted(graph["edges"], key=lambda item: (item["from"], item["to"],
+                                                           -float(item["confidence"]), item["line"])):
+            if edge["from"] not in selected_paths and edge["to"] not in selected_paths:
+                continue
+            edge_key = (edge["from"], edge["to"])
+            if edge_key in indexed_edges:
+                continue
+            left, right = file_node(edge["from"]), file_node(edge["to"])
+            if left is None or right is None:
+                gaps.append("dependency_graph_context_bound_reached")
+                continue
+            exact = float(edge["confidence"]) >= 1.0
+            builder.add_relation(RelationRecord(
+                RelationKind.DEPENDS_ON, left, right, exact, float(edge["confidence"]),
+                None if exact else f"import resolved by {edge['method']}",
+                {"method": edge["method"], "line": edge["line"]}))
+            indexed_edges.add(edge_key)
+        for item in selected_functions:
+            if f"file:{item['path']}" not in entity_ids and item["path"] in context_ids:
+                builder.add_relation(RelationRecord(RelationKind.CONTAINS, context_ids[item["path"]],
+                                                    entity_ids[item["item_id"]], True, 1.0))
+        syntax_gaps = [gap for gap in syntax_output["gaps"]]
+        builder.add_coverage("complexity", "partial" if syntax_gaps else "complete",
+                             "; ".join(bounded_gap_messages(syntax_gaps, 20)) or None)
+        builder.add_coverage("dependency-graph", "partial" if graph_output["gaps"] else "complete",
+                             "; ".join(graph_output["gaps"][:20]) or None)
+        semgrep_status = semantic_output["semgrep_status"]
+        builder.add_coverage("semgrep-review-signals", "complete" if semgrep_status == "SUCCEEDED" else
+                             "partial" if semgrep_status == "PARTIAL" else "unavailable",
+                             "; ".join(semantic["semgrep"].get("gaps", [])[:10]) or None)
+        codeql_status = semantic_output["codeql_status"]
+        builder.add_coverage("codeql-semantic-paths", "complete" if codeql_status == "SUCCEEDED" else
+                             "partial" if codeql_status == "PARTIAL" else "unavailable",
+                             "; ".join(semantic["codeql"].get("gaps", [])[:10]) or None)
+        history_status = ranking_output["history_status"]
+        builder.add_coverage("history-hotspots", "complete" if history_status == "EXACT" else
+                             "partial" if history_status == "PARTIAL" else "unavailable",
+                             "; ".join(ranking_output["gaps"][:10]) or history_status)
+        builder.add_coverage("prioritization", "partial" if gaps or upstream_gaps else "complete",
+                             f"indexed {len(selected_files)} of {len(ranking['files'])} files and "
+                             f"{len(selected_functions)} of {len(ranking['functions'])} functions")
+        builder.add_coverage("priority-index-local-gaps", "partial" if gaps else "complete",
+                             canonical_json(gaps).decode("utf-8"))
+        builder.build()
         aggregated = list(dict.fromkeys([*upstream_gaps, *gaps]))
         identity = IndexIdentity("priority", "appsec-review/retrieval-index/2", file_sha256(path), fingerprint,
                                  _rel(unit.job.run_root, path), {"job": JOB_ID, "unit": unit.unit_id},
@@ -1134,8 +1115,8 @@ def build_job() -> Job:
                        target_root=(unit.job.target_root or Path()).resolve(), indexes=[*base, identity],
                        upstream_manifests=({"path": _rel(unit.job.run_root, upstream_path), "sha256": upstream_sha},))
         load_verified_manifest(unit.job.run_root, manifest_path, file_sha256(manifest_path))
-        return {"index_identity": asdict(identity), "manifest": _artifact(unit.job.run_root, manifest_path),
-                "checkpoint": _artifact(unit.job.run_root, checkpoint_path),
+        return {"index_identity": asdict(identity), "shard_artifact": _artifact(unit.job.run_root, path),
+                "manifest": _artifact(unit.job.run_root, manifest_path),
                 "gaps": gaps, "aggregated_gaps": aggregated, "terminal_status": _status(gaps)}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:

@@ -34,11 +34,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L391) |
-| `correlate` | `correlate.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L307) |
-| `crosscheck` | `crosscheck.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L230) |
-| `load` | `load.accepted_inputs` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L149) |
-| `normalize` | `normalize.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L203) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L401) |
+| `correlate` | `correlate.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L317) |
+| `crosscheck` | `crosscheck.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L240) |
+| `load` | `load.accepted_inputs` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L159) |
+| `normalize` | `normalize.scopes` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_code_graph_index/job.py#L213) |
 
 ### Accepted input declarations
 
@@ -586,12 +586,14 @@ Known limitations still require the walk's explicit expected-cause decision.
 
 ## Resume and invalidation
 
-Scope identity binds snapshot, language/root/build unit, database/export identity/status/reasons,
+Whole-job reuse binds accepted upstream handoffs, source snapshot, configuration (up to compatible
+`[operational.*]` tuning), dataset contract, and implementation/schema/validation identities; any
+failed, invalidated, or forced job re-executes all scopes in a fresh `attempts/<attempt_id>/`
+workspace without salvaging partial unit or scope checkpoints across attempts. Content-addressed
+scope shards bind snapshot, language/root/build unit, database/export identity/status/reasons,
 seeds, file identities, catalog/column/normalizer releases, rules/settings/tool version and all
-secondary/analyzer/observation/priority shard references. A changed input rebuilds only affected
-scopes. Unlike accepted-input corruption, an unverifiable or out-of-custody matching **local output checkpoint**
-is skipped without deleting prior shard files and rebuilt by `reuse_checkpoint`; it is never republished.
-No CodeQL queries or models execute in this job. Shared composition is in
-[accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
-Generated task/language bindings remain
-[T-147](../TODO.md) and [T-157](../TODO.md).
+secondary/analyzer/observation/priority shard references, verifying custody before re-attestation
+without deleting prior shard files. No CodeQL queries or models execute in this job. Shared
+composition is in [accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets);
+see [job-local operational tuning](job-tuning.md) and [code-graph-index](code-graph-index.md#tuning-and-whole-job-recovery-job_code_graph_index). Generated task/language
+bindings remain [T-147](../TODO.md) and [T-157](../TODO.md).

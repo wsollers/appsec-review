@@ -124,8 +124,9 @@ def test_output_reader_uses_its_explicit_byte_bound_and_rejects_wrong_measured_s
     payload = b'{"status":"bound"}\n'
     (tmp_path / "artifact.json").write_bytes(payload)
     reference = ArtifactRef("artifact.json", hashlib.sha256(payload).hexdigest())
-    settings = enabled_settings(max_artifact_bytes=1)
+    settings = enabled_settings()
     assert read_output(tmp_path, reference, settings, max_bytes=len(payload)) == payload
+    assert read_output(tmp_path, reference, settings, max_bytes=None) == payload
     with pytest.raises(ExportError):
         read_output(tmp_path, reference, settings, max_bytes=len(payload) - 1)
     with pytest.raises(ExportError):
@@ -206,17 +207,17 @@ def test_admission_refuses_disabled_or_wrong_task_topology(tmp_path, monkeypatch
         units.job.execute(replace(units.context, config=replace(units.context.config, steps={})))
 
 
-def test_input_bytes_above_legacy_limits_export_and_reprove(tmp_path, monkeypatch):
-    disk = AcceptedInputDisk(tmp_path, monkeypatch, settings=enabled_settings(
-        max_artifact_bytes=1, max_total_input_bytes=1,
-    ))
+def test_input_bytes_above_output_limits_export_and_reprove(tmp_path, monkeypatch):
+    disk = AcceptedInputDisk(tmp_path, monkeypatch, settings=enabled_settings(max_document_bytes=2048))
     units = ExportUnits(disk)
     units.assemble()
     units.accept()
     bundle = read_accepted_export(disk.root, units.reference, disk.settings, ROOT)
+    verified = json.loads((disk.root / units.outputs["load.verify_inputs"]["artifact"]["path"]).read_bytes())
+    total_input = sum(item["size_bytes"] for item in verified["input_inventory"])
+    assert total_input > disk.settings.max_document_bytes
     assert bundle.result["statement_count"] == 1
     assert bundle.document is not None
-
 
 @pytest.mark.parametrize("artifact", ["document", "manifest", "result", "verified_inputs", "input"])
 def test_acceptance_reproves_each_artifact_and_original_inputs(tmp_path, monkeypatch, artifact):

@@ -120,7 +120,7 @@ values. `max_discovery_files`, `max_discovery_bytes`, `max_tag_records` and
 | `dynamic_authorized` | false | boolean | Authorization policy, not adapter availability; no runtime/manual evidence adapter is implemented |
 | `model.*` | enabled, `claude-cli`, `claude-haiku-5-5`, `medium`, 24000 / 6000 tokens, 120 s, 1 retry | complete selected model profile | Worker policy; separate job-level gate controls dispatch |
 | `models.reviewer.*` | same as worker | complete selected model profile | Separate fresh request context using original evidence, no prior worker answer/transcript |
-| `parser_versions.*` | component rules `"2"`; applicability rules `"4"`; batching rules `"1"`; evidence binding `"4"`; subject selection `"2"`; result validator `"4"` | strings | Must equal the versions the code implements (`owasp_workbench/versions.py`); the job's input validator refuses any other value |
+| `parser_versions.*` | component rules `"2"`; applicability rules `"4"`; batching rules `"2"`; evidence binding `"5"`; subject selection `"2"`; result validator `"4"` | strings | Must equal the versions the code implements (`owasp_workbench/versions.py`); the job's input validator refuses any other value |
 | `standards.<family>` | complete catalog pins in TOML | pinned catalog path/hash and upstream identity | Reviewed ASVS, MASVS, MASTG and risk-context catalogs |
 
 Selected model profiles require `enabled`, `provider`, `model`, `reasoning`, `max_input_tokens`,
@@ -129,6 +129,11 @@ size check: oversized batches split, and oversized single rows trim bounded cont
 order while retaining subject/reference identities. Inspect each part's receipt, estimates,
 trim/non-dispatch gaps and independent turn/query budget, not just the original batch count.
 See [request assembly](../architecture/owasp-control-workbench.md) for the exact trimming order.
+During `batching.assemble`, `component_packages` (`limitations` and `routing_context`) are scoped per
+`component_id` so one component's discovery/tag omissions never leak into unrelated component rows in
+the same batch. If cumulative conversation growth exceeds `max_input_tokens` on turn `>= 1` after an
+initial call succeeded, the worker records an `OWASP_MODEL_ATTEMPT` receipt (`input_budget`),
+appends the failed attempt, and records structured `row_gaps` rather than silently ending the loop.
 Enabling assessment requires both selected
 profiles enabled; enabling qualification requires both disabled. Token estimates bound requests;
 provider output, time, turn and retrieval limits are enforced. No prompt may widen these bounds.
@@ -161,9 +166,11 @@ Inspect these run-owned paths after a run:
 
 - `data/configuration/resolved.json` and configuration manifest: frozen global settings identity;
 - `data/guidance/<sha256>/`: exact hash-pinned worker/reviewer bundles;
-- `data/indexes/owasp/accepted.json`: accepted immutable shard manifest, mode, upstream identity
-  and resolved `assessment_bounds`;
-- `data/indexes/owasp/receipts/<semantic-key>.json`: shared-namespace model receipts;
+- `data/indexes/owasp/accepted.json`: accepted immutable shard manifest pointing to the winning
+  attempt's `<attempt_dir>/indexes/owasp_controls.sqlite`, mode, upstream identity and resolved
+  `assessment_bounds`;
+- `jobs/job_owasp_control_assessment/attempts/<attempt_id>/owasp/receipts/<semantic-key>.json`:
+  attempt-scoped model receipts (never shared across attempts);
 - the attempt's `artifacts/owasp-workbench/`: `standards-manifest.json`, `selection.json`,
   `component-classifications.json`, `target-class-ledger.json`, `applicability.json`,
   `validation-work.json`, `finding-packages.json`, `verified-results.json`,
@@ -235,28 +242,28 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.max_batch_size` | `12` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_batches` | `200` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_components` | `128` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_components_per_batch` | `5` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_discovery_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_discovery_files` | `512` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_evidence_per_component` | `60` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_queries` | `12` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_source_lines` | `120` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_subjects_per_control` | `8` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_tag_records` | `20000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.max_turns` | `4` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.model.max_input_tokens` | `24000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.model.max_output_tokens` | `6000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.model.retries` | `1` | coverage | integer >=0; exact parser/cross-field bounds? |
-| `settings.model.timeout_seconds` | `120` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.models.reviewer.max_input_tokens` | `24000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.models.reviewer.max_output_tokens` | `6000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.models.reviewer.retries` | `1` | coverage | integer >=0; exact parser/cross-field bounds? |
-| `settings.models.reviewer.timeout_seconds` | `120` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.max_batch_size` | `12` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_batches` | `200` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_components` | `128` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_components_per_batch` | `5` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_discovery_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_discovery_files` | `512` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_evidence_per_component` | `60` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_queries` | `12` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_source_lines` | `120` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_subjects_per_control` | `8` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_tag_records` | `20000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.max_turns` | `4` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.model.max_input_tokens` | `24000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.model.max_output_tokens` | `6000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.model.retries` | `1` | coverage | integer >=0; exact parser/cross-field bounds† |
+| `settings.model.timeout_seconds` | `120` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.models.reviewer.max_input_tokens` | `24000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.models.reviewer.max_output_tokens` | `6000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.models.reviewer.retries` | `1` | coverage | integer >=0; exact parser/cross-field bounds† |
+| `settings.models.reviewer.timeout_seconds` | `120` | coverage | positive integer; exact parser/cross-field bounds† |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

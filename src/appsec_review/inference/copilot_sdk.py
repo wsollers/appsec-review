@@ -11,8 +11,8 @@ from pathlib import Path
 import shutil
 from typing import Any, Sequence
 
-from .claude_cli import ModelOutputError, _plan_prompt, parse_model_payload
-from .request import ModelRequest, ModelResult, ReviewModelRequest, review_user_text
+from .claude_cli import ModelOutputError, parse_model_payload
+from .request import ModelRequest, ModelResult, ReviewModelRequest, plan_prompt, review_user_text
 from .errors import ProviderError
 from ._copilot_worker import ConnectionObservation, _cleanup_failure, _connection, _managed, _private_directory, _run, auth_home
 from .usage import Usage, reported_cache_write, token_count, total_reported
@@ -69,9 +69,15 @@ def _cleanup_ephemeral_turn_session(client, session_id: str, working: str) -> bo
 @asynccontextmanager
 async def _session_scope(session, state: dict[str, bool]):
     await session.__aenter__()
+    state["entered"] = True
     try:
         yield session
-    finally:
+    except BaseException as exc:
+        suppressed = await session.__aexit__(type(exc), exc, exc.__traceback__)
+        state["disconnected"] = True
+        if not suppressed:
+            raise
+    else:
         await session.__aexit__(None, None, None)
         state["disconnected"] = True
 
@@ -81,7 +87,8 @@ async def _delete_after_use(client, session_id: str, working: str, state: dict[s
     # CopilotClient runs with base_directory=auth_home(), whereas each turn isolates
     # config_directory=working. On delete_session, Copilot CLI 1.0.25+ checks base_directory
     # and raises "Session file not found"; accept that exact error only after clean disconnect
-    # when auth_home() has no session-state residue and per-turn scratch state is unheld and removed.
+    # (or pre-entry setup failure) when auth_home() has no session-state residue and per-turn
+    # scratch state is unheld and removed.
     try:
         yield
     finally:
@@ -89,14 +96,18 @@ async def _delete_after_use(client, session_id: str, working: str, state: dict[s
             await client.delete_session(session_id)
         except RuntimeError as exc:
             expected = f"Failed to delete session {session_id}: Session file not found for {session_id}"
-            if not (state["disconnected"] and str(exc) == expected
+            if not ((state["disconnected"] or not state["entered"]) and str(exc) == expected
                     and _cleanup_ephemeral_turn_session(client, session_id, working)):
+                _cleanup_ephemeral_turn_session(client, session_id, working)
                 raise
+        else:
+            if not _cleanup_ephemeral_turn_session(client, session_id, working):
+                raise _cleanup_failure(f"Copilot session {session_id} persisted after deletion")
 
 
 def _prompt_text(request: ModelRequest | ReviewModelRequest) -> str:
     if not isinstance(request, ReviewModelRequest):
-        return json.dumps(_plan_prompt(request), sort_keys=True)
+        return json.dumps(plan_prompt(request), sort_keys=True)
 
     return review_user_text(request)
 
@@ -138,7 +149,7 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
                 max_prompt_tokens=request.max_input_tokens, max_output_tokens=request.max_output_tokens)),
             on_event=observe,
         )
-        session_state = {"disconnected": False}
+        session_state = {"entered": False, "disconnected": False}
         async with (
             _managed(_delete_after_use(client, session.session_id, working, session_state), "session deletion"),
             _managed(_session_scope(session, session_state), "session"),
@@ -189,7 +200,6 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
                                  served_provider="copilot-sdk",
                                  usage_unavailable_reason="invalid_provider_usage" if invalid_usage else None)
             return Usage.from_result(result).normalize(result)
-
 
 def send(request: ModelRequest | ReviewModelRequest, *, timeout_seconds: int) -> ModelResult:
     observation = ConnectionObservation()

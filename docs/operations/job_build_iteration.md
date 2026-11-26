@@ -317,11 +317,13 @@ Walk acceptance cannot waive an integrity or cleanup failure as an expected miss
 
 `always_execute=True` and `propagate_handoff=False` prevent top-level handoff reuse from
 standing in for a new claimed transaction. `iteration_input_identity` hashes the exact verified
-pending request reference (or explicit absence). Reuse happens in `BuildIterations`, not by
-rerunning an arbitrary old request: `NodeBinding` includes source, topology, configuration,
+pending request reference (or explicit absence). Each dispatched job executes as a whole in a
+fresh `attempts/<attempt_id>/` workspace without generic cross-attempt unit salvage; transaction
+state lives in `BuildIterations`, where `NodeBinding` binds source, topology, configuration,
 recipe, image/toolchain, upstream product hashes, execution identity and output/selection policy.
 The controller verifies retained products and receipts, invalidates the affected dependent
-closure, and reconstructs or rolls back workspace generations under serialized custody.
-Crash recovery can finish indexing an already committed verified product; it cannot turn an
-uncommitted prepared receipt into success. Generic portable checkpoints are not a shortcut for
-these side effects; see [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
+closure, and reconstructs or rolls back workspace generations under serialized custody. Crash
+recovery can finish indexing an already committed verified product; it cannot turn an uncommitted
+prepared receipt into success. See
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [language-build](language-build.md#tuning-and-whole-job-recovery-job_build_iteration).

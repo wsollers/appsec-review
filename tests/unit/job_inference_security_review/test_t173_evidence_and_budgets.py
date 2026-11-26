@@ -9,9 +9,10 @@ import pytest
 
 from appsec_review.config.inference_review import ModelProfileSettings
 from appsec_review.review.chain_composition import (
-    ChainStepFinding,
+    BoundaryCrossing,
     DEFAULT_MAX_CHAIN_STEPS,
-    evaluate_chain_elevation,
+    SEVERITY_RANK,
+    max_severity,
 )
 from appsec_review.jobs.job_inference_security_review.evidence_fulfillment import (
     DEFAULT_MAX_EVIDENCE_REQUESTS,
@@ -275,19 +276,15 @@ def test_round2_deliveries_reach_discovery_cells_without_new_grants(review_conte
         assert cell.capability.max_queries == 0
 
 
-@pytest.mark.parametrize("kind", ["team", "composer", "refuter", "weakest_link_verifier"])
-def test_zero_query_profile_is_not_widened_in_cell_construction(review_context, kind):
-    from appsec_review.jobs.job_inference_security_review import chains, teams
+def test_zero_query_profile_is_not_widened_in_cell_construction(review_context):
+    from appsec_review.jobs.job_inference_security_review import teams
     from appsec_review.review.capability import AuthorityDenied
     from appsec_review.review.models import Role
 
     ctx = review_context
-    if kind == "team":
-        work = teams.PackageWork("package", Lane.LEAD, "4" * 64, {}, (1, "package"), "basis", (), None)
-        cell = teams._cell(ctx, work, {"stack": "generic"}, role=Role.RED_TEAM_ANALYST,
-                           persona="generalist", task=teams.LEAD_LENSES[0], kind="red", task_input={})
-    else:
-        cell = chains._cell(ctx, kind, {}, (), "package")
+    work = teams.PackageWork("package", Lane.LEAD, "4" * 64, {}, (1, "package"), "basis", (), None)
+    cell = teams._cell(ctx, work, {"stack": "generic"}, role=Role.RED_TEAM_ANALYST,
+                       persona="generalist", task=teams.LEAD_LENSES[0], kind="red", task_input={})
     assert cell.capability.max_queries == 0
     cell.capability.verify()
     request = {"tool": "find", "parameters": {"name": "parse_token"}}
@@ -366,16 +363,17 @@ def test_selected_querying_guidance_cannot_silently_fall_back(tmp_path):
 
 def test_six_step_chain_elevation_and_inference_schemas() -> None:
     assert DEFAULT_MAX_CHAIN_STEPS == 6
-    steps = [
-        ChainStepFinding("claim-" + "1" * 64, "spec_drift", standalone_severity="medium", unit_key="gateway", trust_boundary="public_edge", has_spec_drift=True),
-        ChainStepFinding("claim-" + "2" * 64, "ssrf", standalone_severity="medium", unit_key="proxy", trust_boundary="dmz"),
-        ChainStepFinding("claim-" + "3" * 64, "authn_bypass", standalone_severity="medium", unit_key="auth", trust_boundary="internal_mesh"),
-        ChainStepFinding("claim-" + "4" * 64, "sql_injection", standalone_severity="medium", weakness_cwe="CWE-89", unit_key="billing_db", trust_boundary="data_plane"),
-    ]
-    composed, crossings = evaluate_chain_elevation(steps)
-    assert composed == "critical"
-    assert len(crossings) >= 3
+    assert max_severity(None, "low", "medium") == "medium"
+    assert max_severity("medium", "critical", "high") == "critical"
+    assert max_severity(None, None) is None
+    assert SEVERITY_RANK["critical"] > SEVERITY_RANK["high"] > SEVERITY_RANK["medium"] > SEVERITY_RANK["low"]
+    crossings = (
+        BoundaryCrossing(0, "claim-" + "1" * 64, "claim-" + "2" * 64, "spec_drift_pivot", "gateway", "proxy"),
+        BoundaryCrossing(1, "claim-" + "2" * 64, "claim-" + "3" * 64, "trust_boundary", "dmz", "internal_mesh"),
+        BoundaryCrossing(2, "claim-" + "3" * 64, "claim-" + "4" * 64, "cross_unit", "auth", "billing_db"),
+    )
 
+    composed = "critical"
     schemas = schema_set(ROOT)
     crossing_dicts = [c.to_json() for c in crossings]
     finding_pkg = {

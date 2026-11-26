@@ -52,8 +52,11 @@ artifacts or compile actions. PE32 high-entropy VA is not applicable; Mach-O mag
 over an `.o` suffix; incomplete ELF tables retain partial facts and explicit unknowns. If truncated
 ELF headers prevent linked-image classification, PIE/RELRO/NOW remain `UNKNOWN`, not inapplicable.
 
-Inference is disabled by default. When a model client is centrally configured and injected, it
-receives only structured normalized flags, topology, deterministic results, and inspected facts.
+Inference is disabled by default. When a model client is centrally configured and injected,
+`_compact_inference_request` bounds the structured normalized flags, topology, deterministic
+results, and inspected facts to fit the configured input budget, recording raw versus submitted
+action/artifact/check/gap counts and emitting structured compaction gaps for any omitted items
+rather than failing the unit or silently dropping evidence.
 Every proposed observation must cite the selected deterministic check's complete resolving evidence
 set (action/compile-unit and artifact/hash aliases are resolved without crossing subjects).
 The selected scope is retained. The validator confirms it only
@@ -166,12 +169,12 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.model.max_input_tokens` | `32000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.model.max_output_tokens` | `8000` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.model.retries` | `1` | coverage | integer >=0; exact parser/cross-field bounds? |
-| `settings.model.timeout_seconds` | `120` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.model.max_input_tokens` | `32000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.model.max_output_tokens` | `8000` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.model.retries` | `1` | coverage | integer >=0; exact parser/cross-field bounds† |
+| `settings.model.timeout_seconds` | `120` | coverage | positive integer; exact parser/cross-field bounds† |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_post_build_security_assessment/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

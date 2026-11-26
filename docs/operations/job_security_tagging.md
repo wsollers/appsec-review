@@ -1018,15 +1018,16 @@ overflow are failures, not advisory gaps.
 
 ## Resume and invalidation
 
-Each tag-family shard fingerprint binds assignment content, target snapshot, vocabulary,
-capability rules, crosswalk, component topology and accepted manifest. Changed ownership or
-taxonomy invalidates the affected tagging projection; stale scope/taxonomy is rechecked within
-the attempt. The [runtime key](../architecture/jobs-and-runtime.md#wave-1-resumability) also
-requires exact upstream/configuration/component identities. Artifact-bearing results cannot be
-transplanted as portable failed-attempt checkpoints. When `settings.collation.model_pass.enabled`
-is `false` (the default), this path dispatches no model; when enabled, `collation.model_pass`
-executes through the recorded inference transport after deterministic collation.
-
+Whole-job [runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) requires
+matching accepted upstream handoffs, configuration (up to compatible `[operational.*]` tuning),
+dataset contract, and implementation/schema/validation identities; any failed or invalidated job
+re-executes in full inside a fresh `attempts/<attempt_id>/` workspace without transplanting
+failed-attempt unit checkpoints. Each content-addressed tag-family shard fingerprint binds
+assignment content, target snapshot, vocabulary, capability rules, crosswalk, component topology
+and accepted manifest, rechecking scope and taxonomy within the attempt. When
+`settings.collation.model_pass.enabled` is `false` (default), no model is dispatched; when enabled,
+`collation.model_pass` runs through the recorded inference transport after deterministic collation.
+See [job-local operational tuning](job-tuning.md) and [security-tagging](security-tagging.md#tuning-and-whole-job-recovery-job_security_tagging).
 ## Model usage
 
 Deterministic capability collection, `collation.collate_facets` and crosswalk derivation dispatch

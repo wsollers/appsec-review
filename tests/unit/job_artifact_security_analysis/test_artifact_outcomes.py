@@ -398,49 +398,45 @@ def test_nonreusable_results_and_indexes_bind_current_content_without_mutation(t
     assert all(row["result_artifact"] == scan2["result_artifact"] for row in findings)
 
 
-def test_released_input_reuses_exact_result_and_rejects_changed_bound_content(tmp_path):
+def test_fresh_attempt_reruns_scanner_without_checkpoint_files_and_claims_all_outputs(tmp_path):
     root = tmp_path / "run"
     artifact = _seed_artifact(root, payload=_minimal_elf64())
     ctx, outputs = _context(root, [artifact])
     _run(ctx, outputs, "blint", _scanner(ctx, [
         {"id": "CHECK_PIE", "filename": "binary", "severity": "high"}]))
     first = outputs["analyze.blint"]["observations"][0]
+    assert first["reused"] is False
+    assert not (root / "data/artifact-security/checkpoints").exists()
+    assert not (root / "data/artifact-security/attempts").exists()
     from appsec_review.jobs.job_artifact_security_analysis.datasets import DATASETS
     for path in sorted((root / "data/artifact-security").rglob("*.json")):
         relative = path.relative_to(root).as_posix()
         owners = [declaration for declaration in DATASETS
                   if any(fnmatch(relative, pattern) for pattern in declaration.artifacts)]
         assert len(owners) == 1
-        assert owners[0].output_kind == ("artifact_scanner_io" if "/checkpoints/" in relative
-                                        else "artifact_security_results")
+        assert owners[0].output_kind == "artifact_security_results"
     ctx2, next_outputs = _context(root, [artifact], attempt="attempt_0002")
-
-    def unexpected_execution(*args):
-        pytest.fail("unchanged released input must reuse the bound result")
-
-    _run(ctx2, next_outputs, "blint", unexpected_execution)
-    reused = next_outputs["analyze.blint"]["observations"][0]
-    assert reused["reused"] and reused["result_artifact"] == first["result_artifact"]
-    assert next_outputs["index.observations"]["index_manifest"] == outputs["index.observations"]["index_manifest"]
-    path = root / reused["result_artifact"]["path"]
-    changed = json.loads(path.read_text())
-    changed["observation"]["findings"][0]["severity"] = "low"
-    atomic_json(path, changed)
-    with publication_scope_for_owner(SharedArtifacts.for_job(ctx2.job)):
-        with pytest.raises(security.FrameworkIntegrityError, match="identity changed"):
-            security._scan_one(ctx2, artifact, "blint", unexpected_execution)
+    _run(ctx2, next_outputs, "blint", _scanner(ctx2, [
+        {"id": "CHECK_PIE", "filename": "binary", "severity": "high"}]))
+    second = next_outputs["analyze.blint"]["observations"][0]
+    assert second["reused"] is False
+    assert (
+        outputs["index.observations"]["index_identity"]["relative_path"]
+        != next_outputs["index.observations"]["index_identity"]["relative_path"]
+    )
 
 
-def test_reused_scan_reindexes_changed_coverage_without_rerunning_scanner(tmp_path):
+def test_second_attempt_reindexes_changed_coverage_in_isolated_shard(tmp_path):
     root = tmp_path / "run"
     artifact = _seed_artifact(root, payload=_minimal_elf64())
     ctx, first = _context(root, [artifact])
     _run(ctx, first, "blint", _scanner(ctx, []))
     ctx2, second = _context(root, [artifact], attempt="attempt_0002", producer_gaps=["upstream incomplete"])
-    _run(ctx2, second, "blint", lambda *args: pytest.fail("released scan must be reused"))
-    assert second["analyze.blint"]["observations"][0]["reused"]
+    _run(ctx2, second, "blint", _scanner(ctx2, []))
+    assert second["analyze.blint"]["observations"][0]["reused"] is False
     assert first["index.observations"]["index_manifest"] != second["index.observations"]["index_manifest"]
     path = root / second["index.observations"]["index_identity"]["relative_path"]
+    assert "attempts/job_artifact_security_analysis/attempt_0002/" in path.relative_to(root).as_posix()
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT status FROM coverage").fetchall() == [("partial",)]
     assert "upstream incomplete" in second["acceptance.publish_handoff"]["gaps"]

@@ -81,7 +81,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_cpp_symbol_index/test_cpp_symbol_index_graph.py` |
 | live | None declared |
-| unit | `tests/unit/job_cpp_symbol_index/test_contract.py`<br>`tests/unit/job_cpp_symbol_index/test_clangd_yaml.py`<br>`tests/unit/job_cpp_symbol_index/test_handlers.py`<br>`tests/unit/job_cpp_symbol_index/test_symbol_budget.py`<br>`tests/test_clangd_indexer_tool.py`<br>`tests/unit/job_code_graph_index/test_graph_truth.py::test_clangd_variable_reference_and_occurrences_survive_real_normalization` |
+| unit | `tests/unit/job_cpp_symbol_index/test_contract.py`<br>`tests/unit/job_cpp_symbol_index/test_clangd_yaml.py`<br>`tests/unit/job_cpp_symbol_index/test_handlers.py`<br>`tests/unit/job_cpp_symbol_index/test_symbol_budget.py`<br>`tests/test_clangd_indexer_tool.py`<br>`tests/unit/job_code_graph_index/test_graph_truth.py::test_clangd_variable_reference_and_occurrences_survive_real_normalization`<br>`tests/test_analyzer_attempt_scopes.py` |
 
 ### Dagster placement
 
@@ -367,15 +367,15 @@ asset lock or launch grant; build, smoke, integration and live acceptance were n
 
 ## Resume and invalidation
 
-The scope checkpoint binds schema, scope/source/compile identities, normalizer, tool pin and all
-index limits except worker count. Reuse verifies its shard, rewritten database and execution
-receipt as well as accepted inputs. The receipt's original stdout/stderr paths and hashes are
-checked through the public run-artifact verifier even if the checkpoint omits explicit raw pins.
-Execution/image/command identities must agree with the receipt; missing, changed or symlinked
-streams fail closed without rerunning or replacing evidence. Clangd's native YAML is this pinned
-stdout stream, not a detached `NativeResultReference` product.
-New executions use fresh identity/generation directories and retain their own checkpoint copy;
-changing a normalizer or limit never deletes prior raw streams, receipts, databases or shards.
-Partial outputs can be checkpointed by this producer: unchanged inputs do not promise a retry.
-A tool/source/compile/normalizer/limit change invalidates that scope, while other scopes remain
-independent. Composition follows [accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets).
+Job is the atomic recovery boundary: accepted upstream handoffs allow reusing the entire accepted
+job when inputs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities match, whereas any failed, invalidated, or forced job
+re-executes all scopes inside attempt-local directories
+(`data/code-index/clangd/<scope-id>/attempts/<attempt-id>/`) without consulting another attempt's
+or a run-wide scope checkpoint ([analyzer attempt scopes](analyzer-attempt-scopes.md)).
+Within-attempt verification checks the shard, rewritten database and execution receipt plus pinned
+stdout/stderr streams through the public run-artifact verifier; missing, changed or symlinked
+streams fail closed without overwriting prior streams, receipts, databases or shards. Clangd's
+native YAML is this pinned stdout stream, not a detached `NativeResultReference` product.
+Composition follows [accepted index sets](../architecture/python-and-retrieval.md#accepted-index-sets);
+see [job-local operational tuning](job-tuning.md) and [cpp-index-jobs](cpp-index-jobs.md#tuning-and-whole-job-recovery-job_cpp_symbol_index).

@@ -40,15 +40,20 @@ EXPORTER_COMPONENT = "openvex_export"
 VALIDATION_PROFILE = "appsec-review/openvex-export-validation/1"
 METRICS_SCHEMA = "appsec-review/openvex-metrics/1"
 MAX_JSON_DEPTH = 32
-MAX_PACKAGES = 10000
-MAX_BINDINGS = 30000
-MAX_ARTIFACT_BYTES = 67108864
-MAX_TOTAL_INPUT_BYTES = 536870912
-MAX_DOCUMENT_BYTES = 33554432
-MAX_MANIFEST_BYTES = 134217728
-MAX_ACTION_BYTES = 8192
-MAX_IDENTIFIER_BYTES = 2048
-MAX_TIMEOUT_SECONDS = 1800
+DEFAULT_PACKAGES = 10000
+DEFAULT_BINDINGS = 30000
+DEFAULT_DOCUMENT_BYTES = 33554432
+DEFAULT_MANIFEST_BYTES = 134217728
+DEFAULT_ACTION_BYTES = 8192
+DEFAULT_IDENTIFIER_BYTES = 2048
+DEFAULT_TIMEOUT_SECONDS = 1800
+MAX_PACKAGES = 1000000
+MAX_BINDINGS = 3000000
+MAX_DOCUMENT_BYTES = 536870912
+MAX_MANIFEST_BYTES = 1073741824
+MAX_ACTION_BYTES = 65536
+MAX_IDENTIFIER_BYTES = 16384
+MAX_TIMEOUT_SECONDS = 28800
 MAX_RESULT_BYTES = 1048576
 DOCUMENT_NAME = "openvex.json"
 MANIFEST_NAME = "openvex-manifest.json"
@@ -68,7 +73,10 @@ EVENT_NAMES = (
     "OPENVEX_EXPORT_COMPLETED", "OPENVEX_EXPORT_FAILED",
 )
 DURATION_BUCKETS = (0.01, 0.05, 0.1, 0.5, 1, 5, 15, 30, 60, 120)
-SIZE_BUCKETS = (1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 33554432)
+SIZE_BUCKETS = (
+    1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 33554432,
+    67108864, 134217728, 268435456, 536870912,
+)
 
 JsonObject = Mapping[str, Any]
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -756,14 +764,14 @@ def output_reference(output_prefix: str, filename: str, payload: bytes) -> Sized
 # Exact resources consumed by the offline validator, including transitive accepted-gate definitions.
 SCHEMA_SHA256: Mapping[str, str] = MappingProxyType({
     "openvex-dependencies.schema.json": "d91daa2be595fd3d1aa640ccfb7b733b0e7a113cfd0e615019d532ca8b9028a2",
-    "common.schema.json": "78e25d46161a3e4addf796ddbd9a964e73ee54c22c56f9d8f648f7f88303b6fc",
-    "manifest.schema.json": "64aed63dd5cc0df74d8d0b332c8a9a532d3764fcb7f100594174fa3f0f7dbfd9",
+    "common.schema.json": "060ac005dd0c3355a501bed53d83e30343c90e06b914a56a4d83c2d4fcae0f57",
+    "manifest.schema.json": "d3dee03c80e79a632d57095e6e7550abcf884d54217b27dd3af1de872f73f1f9",
     "result.schema.json": "b5321b7f4e736e55149ca3fce67b073c460e1f3473fc9b45eb40c0db0ace018a",
     "../final-report/common.schema.json": "5a81b5d22f8b55c5261e9b00b683f313a66e30f4263412815c2e22c70129add5",
     "../final-report/final-publication-gate.schema.json":
         "14b45f53dbde7265573137bbe1b458e167f9e298953c67a4510475e9241af252",
     "../final-report/final-report.schema.json":
-        "bb2b8e1613f4e0fd567657363257276035f351316749519c6756237a63afe1a7",
+        "1b1bf3fcc75285dec35691899fe37134005c37698833a5786f559250f12331a2",
     "upstream/openvex-v0.2.0.schema.json": UPSTREAM_SCHEMA_SHA256,
 })
 VALIDATION_PROFILE_SHA256 = domain_sha256("openvex-validation-profile/1", {

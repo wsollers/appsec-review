@@ -281,3 +281,77 @@ def test_unsupported_only_scope_survives_summary_without_unavailable_coverage(mo
     for index in clang:
         with sqlite3.connect(staged.run_root / index["relative_path"]) as db:
             assert db.execute("select * from coverage").fetchall() == []
+
+
+def test_clang_static_rejects_missing_or_mismatched_compile_unit_id_fail_closed(tmp_path) -> None:
+    from types import MappingProxyType, SimpleNamespace
+    from appsec_review.config.seeding import SeededSettings
+    from appsec_review.container_runtime.executor import ExecutionResult
+    from appsec_review.jobs.job_clang_static_analysis import JOB_ID as CSA_JOB_ID, TOOL_ID as CSA_TOOL_ID, seeded as csa_seeded
+    from appsec_review.jobs.job_clang_static_analysis.job import OUTPUT_SCHEMA, _analyze_scope
+    from appsec_review.runtime import UnitContext
+    from appsec_review.seeding.ledger import ScopeSeeds, Seed, SeedPlan, SeedSource
+    from .support import DIGEST, SETTINGS, _scope
+
+    scope = _scope(tmp_path)
+    run_root = tmp_path / "run"
+    unit_root = run_root / "data" / "jobs" / CSA_JOB_ID / "attempts" / "attempt_0001" / "steps" / "analyze" / "tasks" / "scopes"
+    unit_root.mkdir(parents=True, exist_ok=True)
+    job = SimpleNamespace(
+        run_root=run_root, repository_root=tmp_path, target_root=tmp_path / "target",
+        source_fingerprint="f" * 64, config=SimpleNamespace(job_id=CSA_JOB_ID, settings=SETTINGS),
+        attempt_id="attempt_0001",
+    )
+    unit = UnitContext(job, "analyze.scopes", "analyze", "scopes", unit_root, MappingProxyType({}))
+
+    def make_executor(unit_override: dict[str, object]):
+        class BadOutcomeExecutor:
+            def execute(self, request):
+                action = request.argv[1]
+                engine = "clang-tidy" if action == "tidy" else "clang-static-analyzer"
+                scratch = request.scratch_root
+                raw = scratch / "raw"
+                raw.mkdir(parents=True, exist_ok=True)
+                (raw / "stdout.bin").write_bytes(b"")
+                (raw / "stderr.bin").write_bytes(b"")
+                (scratch / "execution.json").write_text("{}", encoding="utf-8")
+                rows = json.loads((scratch / "compile_commands.json").read_text())
+                (scratch / f"{action}.json").write_text(json.dumps({
+                    "schema": OUTPUT_SCHEMA,
+                    "engine": engine,
+                    "truncated": False,
+                    "units": [{"file": r["file"], "exit_code": 0, "message": "", **unit_override} for r in rows],
+                    "diagnostics": [],
+                }), encoding="utf-8")
+                rel = lambda p: p.relative_to(run_root).as_posix()
+                return ExecutionResult(
+                    "appsec-review/container-execution/1", CSA_TOOL_ID,
+                    "appsec-review/tool-clang-static-analysis:1.0.0", DIGEST, DIGEST, "argv", (), {},
+                    "start", "end", 0, False, False, False, False,
+                    rel(raw / "stdout.bin"), rel(raw / "stderr.bin"), rel(scratch / "execution.json"),
+                    request.file_size_limit_bytes, False,
+                )
+        return BadOutcomeExecutor()
+
+    seed = Seed("main.cpp", 1, 1, (SeedSource("semgrep", "null-deref", "high", "id1", "upstream_observation"),), 1)
+    scope_seeds = ScopeSeeds("case-a", (seed,), 1, 0)
+    plan = SeedPlan({"case-a": scope_seeds}, 0, 0)
+    hood = csa_seeded.Neighborhood(
+        ranges={"fn:main": ("main.cpp", 1, 1)},
+        depth={"fn:main": 0},
+        seed_functions={("main.cpp", 1, 1): ("fn:main",)},
+        compile_units={"fn:main": "cu-1"},
+    )
+    run = csa_seeded.Run(
+        SeededSettings(mode="seeded", depth=2, seed_limit=200, unit_limit=200, include_scan_files=10),
+        plan, scope_seeds, hood,
+    )
+
+    missing = _analyze_scope(unit, scope, lambda _u: make_executor({}), run)
+    assert any("incomplete compile-unit outcomes" in g for g in missing["gaps"])
+    assert missing["seeded"]["resolved_seed_count"] == 0
+    assert list((run_root / "jobs" / CSA_JOB_ID).rglob("checkpoint.json")) == []
+
+    mismatched = _analyze_scope(unit, scope, lambda _u: make_executor({"compile_unit_id": "cu-foreign"}), run)
+    assert any("incomplete compile-unit outcomes" in g for g in mismatched["gaps"])
+    assert mismatched["seeded"]["resolved_seed_count"] == 0

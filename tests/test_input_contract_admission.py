@@ -92,15 +92,20 @@ def test_checkpoint_reuse_retains_original_hash_bound_input_read_receipts(tmp_pa
     fixed = replace(broken, units=(
         *consumer.units, Unit("work.stop", lambda unit: {"done": True}, ("work.read",))))
     dependencies = {producer.job_id: (), consumer.job_id: (producer.job_id,)}
+    old_attempt = root / f"data/jobs/{consumer.job_id}/attempts/attempt_0001"
+    old_status_bytes = (old_attempt / "status.json").read_bytes()
     plan = plan_repair(runner.config, root, (producer, fixed), SNAPSHOT,
                        target_root=target, dependencies=dependencies)
-    assert plan["unit_decisions"][consumer.job_id]["work.read"]["action"] == "REUSE"
+    assert plan["unit_decisions"][consumer.job_id]["work.read"] == {
+        "action": "RUN", "reason": "whole-job attempt; no prior cell reuse",
+    }
     admit_repair(runner.config, root, (producer, fixed), plan,
                  target_root=target, dependencies=dependencies)
     outcome = run(runner, fixed, target, root.name)
+    assert (old_attempt / "status.json").read_bytes() == old_status_bytes
     status = json.loads((Path(outcome["attempt_root"]) / "steps/work/tasks/read/status.json").read_bytes())
-    assert status["input_consumption"]["reads"] == []
-    assert status["reused_checkpoint"]
+    assert status["input_consumption"]["reads"]
+    assert "reused_checkpoint" not in status
     observations = read_input_observations(root, outcome["handoff"])
     assert observations["reads"][0]["handoff_sha256"] == first["handoff_sha256"]
     assert observations["reads"][0]["read"] is True
@@ -124,6 +129,7 @@ def _parent_input_fixture(tmp_path):
         "parent_run_id": "original-parent", "step_keys": ["reader__begin"],
         "retained_handoffs": {producer.job_id: first["handoff_sha256"]},
         "release_sha256": binding["release_sha256"], "binding_sha256": digest(binding),
+        "resolved_config_sha256": runner.config.resolved_sha256,
         "source_repair": None,
     }
     plan = {**body, "sha256": digest(body)}
@@ -295,11 +301,11 @@ def test_all_47_contract_config_output_and_dispatch_invariants():
     registry = builtin_registry()
     config = load_config(ROOT / "appsec-review.toml")
     rows = job_contract_matrix(config, registry)
-    assert len(rows) == 47
+    assert len(rows) == 48
     classes = {row["job_id"]: row["contract"]["dispatch"] for row in rows}
     assert classes["job_build_iteration"] == "internal_transaction"
     assert classes["job_third_party_data_sync"] == "maintenance"
-    assert sum(value == "review_graph" for value in classes.values()) == 45
+    assert sum(value == "review_graph" for value in classes.values()) == 46
     from appsec_review.orchestration.topology import wave1_dependencies, enabled_wave1_dependencies
     enabled = {row["job_id"] for row in rows if row["enabled"]}
     graph = enabled_wave1_dependencies(enabled, set(registry.job_ids()))

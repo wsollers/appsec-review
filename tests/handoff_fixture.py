@@ -32,6 +32,7 @@ def _freeze_configuration(run_root: Path, job_id: str) -> tuple[str, str]:
         else:
             config = load_config(Path(__file__).parents[1] / "appsec-review.toml")
             document = json.loads(config.resolved_json)
+            document.pop("configuration_host_pins", None)
             for name in ("fixture", "post", "live", "job_fixture", "branch_a", "branch_b",
                          "retrieval_producer", "specialized_producer", "consumer", job_id):
                 document["jobs"].setdefault(name, {"name": name, "workers": 1, "settings": {}, "steps": {}})

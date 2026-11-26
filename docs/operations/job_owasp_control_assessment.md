@@ -42,7 +42,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `characterization` | `characterization.classify_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py#L186) |
 | `characterization` | `characterization.load_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py#L179) |
 | `join` | `join.deterministic_join` | 1 | `owasp_verification` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py#L365) |
-| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py#L436) |
+| `publication` | `publication.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py#L440) |
 | `publication` | `publication.publish_indexes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py#L377) |
 | `standards_selection` | `standards_selection.ingest_catalogs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py#L167) |
 | `standards_selection` | `standards_selection.select_profiles` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_owasp_control_assessment/job.py#L173) |
@@ -173,7 +173,7 @@ These are job-level declarations; exact per-task selection is not declared ([T-1
 | acceptance | `tests/acceptance/job_owasp_control_assessment/test_subject_selection.py` |
 | integration | `tests/integration/job_owasp_control_assessment/test_subject_selection.py`<br>`tests/integration/job_owasp_control_assessment/test_dagster_owasp_workbench.py` |
 | live | None declared |
-| unit | `tests/unit/job_owasp_control_assessment/test_audit_assessment.py`<br>`tests/unit/job_owasp_control_assessment/test_audit_publication.py`<br>`tests/unit/job_owasp_control_assessment/test_c_subjects.py`<br>`tests/unit/job_owasp_control_assessment/test_closure.py`<br>`tests/unit/job_owasp_control_assessment/test_control_roles.py`<br>`tests/unit/job_owasp_control_assessment/test_network_service_class.py`<br>`tests/unit/job_owasp_control_assessment/test_tag_discovery.py`<br>`tests/unit/job_owasp_control_assessment/test_parser_versions.py`<br>`tests/unit/job_owasp_control_assessment/test_request_batching.py`<br>`tests/unit/job_owasp_control_assessment/test_contract.py`<br>`tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py`<br>`tests/unit/job_owasp_control_assessment/test_package_projection.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_acceptance.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_selection.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_settings.py`<br>`tests/unit/job_owasp_control_assessment/test_target_class.py`<br>`tests/unit/job_owasp_control_assessment/test_target_class_job.py`<br>`tests/test_owasp_assessment_job.py`<br>`tests/test_owasp_catalog_integrity.py`<br>`tests/test_owasp_downstream.py`<br>`tests/test_owasp_evidence_binding.py`<br>`tests/test_owasp_indexes.py`<br>`tests/test_owasp_proof_procedures.py`<br>`tests/test_owasp_telemetry.py`<br>`tests/test_owasp_workbench.py`<br>`tests/orchestration/dagster/test_owasp_workbench.py` |
+| unit | `tests/unit/job_owasp_control_assessment/test_audit_assessment.py`<br>`tests/unit/job_owasp_control_assessment/test_audit_publication.py`<br>`tests/unit/job_owasp_control_assessment/test_c_subjects.py`<br>`tests/unit/job_owasp_control_assessment/test_closure.py`<br>`tests/unit/job_owasp_control_assessment/test_control_roles.py`<br>`tests/unit/job_owasp_control_assessment/test_network_service_class.py`<br>`tests/unit/job_owasp_control_assessment/test_tag_discovery.py`<br>`tests/unit/job_owasp_control_assessment/test_parser_versions.py`<br>`tests/unit/job_owasp_control_assessment/test_request_batching.py`<br>`tests/unit/job_owasp_control_assessment/test_contract.py`<br>`tests/unit/job_owasp_control_assessment/test_discovery_boundaries.py`<br>`tests/unit/job_owasp_control_assessment/test_package_projection.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_acceptance.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_selection.py`<br>`tests/unit/job_owasp_control_assessment/test_subject_settings.py`<br>`tests/unit/job_owasp_control_assessment/test_target_class.py`<br>`tests/unit/job_owasp_control_assessment/test_target_class_job.py`<br>`tests/test_owasp_assessment_job.py`<br>`tests/test_owasp_catalog_integrity.py`<br>`tests/test_owasp_downstream.py`<br>`tests/test_owasp_evidence_binding.py`<br>`tests/test_owasp_indexes.py`<br>`tests/test_owasp_proof_procedures.py`<br>`tests/test_owasp_telemetry.py`<br>`tests/test_owasp_workbench.py`<br>`tests/orchestration/dagster/test_owasp_workbench.py`<br>`tests/test_analyzer_attempt_scopes.py` |
 
 ### Dagster placement
 
@@ -713,15 +713,16 @@ does not close it.
 
 ## Resume and invalidation
 
-The assessment receipt key binds mode, semantic packages, guidance hash, model policy,
-result-rule version and typed limits. Reuse rebinds every cited reference and revalidates the
-proposal; changed scope/content denies reuse. Worker and reviewer roles have distinct guidance
-and receipt identities. Component classification, applicability and validation-work fingerprints
-support scoped shard reuse; global inputs bind standards, retrieval/configuration and parsers.
-Changed controls, subjects or evidence invalidate their dependent batches, not unrelated results.
-[Runtime admission](../architecture/jobs-and-runtime.md#wave-1-resumability) and external feed
-identity still apply; artifact-bearing unit checkpoints are not generally portable.
-
+Job is the atomic recovery boundary: accepted upstream handoffs and external feed identities allow
+reusing the entire accepted job when configuration (up to compatible `[operational.*]` tuning),
+dataset contract, and implementation/schema/validation identities match, whereas any failed,
+invalidated, or forced job re-executes all component classification, package batching, worker/
+reviewer turns, and indexing inside attempt-scoped `attempts/<attempt_id>/` receipts and shards
+without salvaging partial batches or unit checkpoints from prior attempts. Within-attempt receipts
+bind mode, per-component semantic packages, guidance hash, model policy, result-rule/parser
+versions (`"2"`/`"5"`) and typed limits, revalidating every cited reference. See
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [owasp-control-assessment](owasp-control-assessment.md#tuning-and-whole-job-recovery-job_owasp_control_assessment).
 ## Model usage
 
 Only [control_assessor](../generated/guidance.md#roles-control_assessor) and

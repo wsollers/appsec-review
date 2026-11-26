@@ -49,8 +49,13 @@ def context_fixture(tmp_path, *, enabled=True, absent=False):
     typed = parse_inference_review_settings(settings)
     config = JobConfig(REVIEW_JOB, "inference_security_review", 1, None, settings, {}, typed)
     frozen = {"jobs": {REVIEW_JOB: {"settings": settings}}, "runtime": {"fixture": "full frozen identity"}}
+    source_ref = put(root, "data/configuration/appsec-review.toml", b"# synthetic\n")
     config_ref = put(root, "data/configuration/resolved.json", frozen)
-    put(root, "data/configuration/manifest.json", {"resolved_sha256": config_ref["sha256"]})
+    put(root, "data/configuration/manifest.json", {
+        "schema": "appsec-review/run-configuration/2",
+        "source_sha256": source_ref["sha256"],
+        "resolved_sha256": config_ref["sha256"],
+    })
     manifest_ref = put(root, "data/indices/scope.json", {"run_id": root.name, "target_snapshot": HASH})
     scope = AcceptedScope(root.name, root, root / manifest_ref["path"], manifest_ref["sha256"], HASH,
                           (), (), (), (), (), {}, ())
@@ -91,7 +96,7 @@ def context_fixture(tmp_path, *, enabled=True, absent=False):
                      input_manifest_path=scope.manifest_path, input_manifest_sha256=scope.manifest_sha256)
     unit = UnitContext(job, "publication.publish_handoff", "publication", "publish_handoff",
                        root / ATTEMPT / "steps/publication/tasks/publish_handoff", outputs)
-    return SimpleNamespace(root=root, scope=scope, unit=unit, config_ref=config_ref, claim=claim,
+    return SimpleNamespace(root=root, scope=scope, unit=unit, config_ref=config_ref, source_ref=source_ref, claim=claim,
                            frozen=frozen, scope_document=accepted, handoff=handoff, handoff_ref=handoff_ref,
                            outputs=outputs, settings=typed.decision_audit)
 
@@ -183,8 +188,13 @@ def gate_fixture(tmp_path, *, reason=None):
                   for name in ("publication.json", "manifest.json", "decision/shard-0001.jsonl",
                                "continuations/refs.jsonl", "source.json")]
     doc["bindings"].extend(audit_refs)
+    source_ref = put(root, "data/configuration/appsec-review.toml", b"# synthetic\n")
     config_ref = put(root, "data/configuration/resolved.json", {"jobs": {}})
-    put(root, "data/configuration/manifest.json", {"resolved_sha256": config_ref["sha256"]})
+    put(root, "data/configuration/manifest.json", {
+        "schema": "appsec-review/run-configuration/2",
+        "source_sha256": source_ref["sha256"],
+        "resolved_sha256": config_ref["sha256"],
+    })
     audit_reads = list(audit_refs)
     if reason != "legacy_unrecorded":
         doc["bindings"].append(config_ref)
@@ -203,7 +213,7 @@ def gate_fixture(tmp_path, *, reason=None):
         return UnitContext(job, name, step, task, attempt / "steps" / step / "tasks" / task, outputs or {})
 
     return SimpleNamespace(root=root, document=doc, audit=audit, audit_refs=audit_refs, job=job, unit=unit,
-                           config_ref=config_ref)
+                           config_ref=config_ref, source_ref=source_ref)
 
 
 def change_json(root, reference, **changes):

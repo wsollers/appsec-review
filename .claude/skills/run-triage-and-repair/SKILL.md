@@ -41,23 +41,29 @@ unrelated validation. Do not execute the manual command examples just because th
    external network/model/container boundaries, not the validator or admission decision under
    test. A build recipe replay executes a tool; it is not an offline unit test merely because its
    CLI has an `--offline` flag. Do not run target code or start services to diagnose automatically.
-4. **Repair and run focused units.** Fix the observed cause and necessary blockers, not unrelated
-   infrastructure. Check the regression fails for the old behavior and passes for the repair
-   when practical. Run only affected unit files/cases in the owning Linux environment, using a
-   unique `--basetemp=test/tmp/<session>` when concurrent. Record exact command, elapsed time,
-   result, tested revision and dirty-file delta; do not weaken assertions or extend timeouts to
-   hide a failure. Representative suites are [resume](../../../tests/test_wave1_resume.py),
-   [job runtime](../../../tests/test_job_runtime.py) and
-   [build replay](../../../tests/test_build_recipe_replay.py); select by the actual defect.
-5. **Establish implementation provenance.** Hand the integration owner the exact ready revision,
-   changed files and unit results before proposing a restart. Compare the deployed job/task
-   scripts, application release, image IDs, runner source, resolved configuration and declared
-   component releases with the tested implementation. [Job.identities](../../../src/appsec_review/runtime/job.py)
-   uses the per-job release or `platform`, plus `validation`; it does not fingerprint edited
-   Python source. Missing declarations disable reuse, not safety checks. Never claim an unchanged
-   release proves new code is deployed. Verify an actual supported script mount before reloading
-   only affected application processes; if scripts are baked in, report the rebuild coupling.
-   Keep active-run source fixed and do not mount the whole application to invent hot reload.
+4. **Repair in an isolated worktree and run focused units.** Keep the mounted checkout serving any
+   `STARTED` Dagster run (`~/projects/appsec-review`) frozen (`sitecustomize` verifies
+   `python-modules.json` on each new step subprocess). Branch an isolated WSL git worktree directly
+   off `main` (never chained onto another unmerged fix branch) and fix the observed cause and
+   necessary blockers, not unrelated infrastructure. Check the regression fails for the old behavior
+   and passes for the repair when practical. Run only affected `<10s` unit files/cases inside that
+   worktree (`PYTHONPATH="$PWD/src"`) in the owning Linux environment, using a unique
+   `--basetemp=test/tmp/<session>` when concurrent, and commit one coherent commit on the fix branch.
+   Record exact command, elapsed time, result, tested revision and dirty-file delta; do not weaken
+   assertions or extend timeouts to hide a failure. Representative suites are
+   [resume](../../../tests/test_wave1_resume.py), [job runtime](../../../tests/test_job_runtime.py)
+   and [build replay](../../../tests/integration/job_build_iteration/test_build_recipe_replay.py); select by the actual defect.
+5. **Establish implementation provenance at the epoch boundary.** Hand the integration owner the
+   exact ready revision, changed files and unit results before proposing a restart. Merge into
+   `main` and run `deploy/dagster/bin/lifecycle.py reload` only at an explicit run/epoch boundary
+   when no Dagster run is `STARTED`. Compare the deployed job/task scripts, application release,
+   image IDs, runner source, resolved configuration and declared component releases with the tested
+   implementation. [Job.identities](../../../src/appsec_review/runtime/job.py) uses the per-job
+   release or `platform`, plus `validation`; it does not fingerprint edited Python source. Missing
+   declarations disable reuse, not safety checks. Never claim an unchanged release proves new code
+   is deployed. Verify an actual supported script mount before reloading only affected application
+   processes; if scripts are baked in, report the rebuild coupling. Keep active-run source fixed
+   and do not mount the whole application to invent hot reload.
 6. **Prepare the admitted restart.** Inspect the existing
    [resume planner](../../../src/appsec_review/runtime/resume.py), exact target/configuration and
    invalidation closure. The commands below are templates using operator-supplied identities.
@@ -80,7 +86,9 @@ appsec-review --config appsec-review.toml resume --run-id RUN_ID --target TARGET
 ```
 
    The [public CLI](../../../src/appsec_review/cli.py) also supports an explicit configured
-   `--system` instead of `--target`. Do not guess a target, choose a latest run, fabricate an
+   `--system` instead of `--target`. For a Dagster targeted whole-job restart via [review-start.sh](../../../scripts/review-start.sh),
+   always supply both `--parent-run-id <DAGSTER_UUID>` and `--restart-from-job <JOB_ID>`
+   (`ops.py` rejects `--restart-from-job` without `--parent-run-id`). Do not guess a target, choose a latest run, fabricate an
    accepted pointer, overwrite old artifacts or loop indefinitely. If the frozen configuration
    must change, prepare a newly authorized run rather than editing the old run's configuration.
    Preserve refusal details and hand back an unmet prerequisite when admission fails.

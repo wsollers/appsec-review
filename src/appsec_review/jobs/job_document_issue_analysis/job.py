@@ -40,7 +40,8 @@ PROJECTION_RULE = "appsec-review/document-navigation/1"
 
 def _publish_projection(unit: UnitContext, core: RetrievalCore, ledger: Mapping[str, Any],
                         drift: Mapping[str, Any], artifact: Mapping[str, Any],
-                        drift_artifact: Mapping[str, Any]) -> Mapping[str, Any]:
+                        drift_artifact: Mapping[str, Any], *,
+                        shared: SharedArtifacts | None = None) -> Mapping[str, Any]:
     """Project bounded navigation records, never claims or adjudicated findings, after package assembly."""
     derived = Derived()
     derived.gap(UNADJUDICATED_GAP)
@@ -109,7 +110,8 @@ def _publish_projection(unit: UnitContext, core: RetrievalCore, ledger: Mapping[
         snapshot=unit.job.source_fingerprint,
         inputs={"ledger": dict(artifact), "drift": dict(drift_artifact),
                 "manifest_sha256": core.manifest_sha256, "max_records": bound},
-        build=lambda: derived, producer={"query_set": "document_context", "authority": "provisional"})
+        build=lambda: derived, producer={"query_set": "document_context", "authority": "provisional"},
+        shared=shared)
     manifest_path, manifest_sha = resolve_context_manifest(unit.job)
     path = unit.job.run_root / "data/document-issues" / unit.job.attempt_id / "retrieval-manifest.json"
     identities = [IndexIdentity(**item) for item in core.manifest["indexes"]
@@ -122,8 +124,9 @@ def _publish_projection(unit: UnitContext, core: RetrievalCore, ledger: Mapping[
     return {"index_identity": published["index_identity"],
             "index_manifest": {"path": path.relative_to(core.run_root).as_posix(), "sha256": file_sha256(path)},
             "shard_artifact": reference(core.run_root, core.run_root / published["index_identity"]["relative_path"]),
-            "checkpoint": reference(core.run_root, core.run_root / "data/indexing/checkpoints/precomputed/document-issues"
-                                    / f"{published['fingerprint']}.json"),
+            "checkpoint": (published["shared_receipt"] if published.get("shared_receipt") is not None else
+                           reference(core.run_root, core.run_root / "data/indexing/checkpoints/precomputed/document-issues"
+                                     / f"{published['fingerprint']}.json")),
             "gaps": published["gaps"]}
 
 
@@ -236,7 +239,7 @@ def build_job() -> Job:
             f"data/document-issues/{unit.job.attempt_id}/drift-issues.json",
             canonical_json(drift_report),
         )
-        projection = _publish_projection(unit, core, ledger, drift_report, artifact, drift_artifact)
+        projection = _publish_projection(unit, core, ledger, drift_report, artifact, drift_artifact, shared=shared)
 
         unit.job.events.write("DOCUMENT_ISSUES_PUBLISHED", **ledger["counts"])
         unit.job.events.write(

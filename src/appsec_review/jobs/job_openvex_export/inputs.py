@@ -12,6 +12,7 @@ import time
 from typing import Any, Iterator
 
 from appsec_review.applicability import resolved_configuration_identity
+from appsec_review.runtime.configuration import configuration_snapshot, configurations_compatible
 from appsec_review.config.inference_review import parse_inference_review_settings, semantic_settings_sha256
 from appsec_review.indexing.store import AcceptedHandoff, accepted_handoff
 from appsec_review.interchange import HANDOFF_SCHEMA as JOB_HANDOFF_SCHEMA
@@ -89,6 +90,9 @@ def _durable_inventory(inventory: tuple[SizedArtifactRef, ...]) -> tuple[SizedAr
                  and re.fullmatch(r"data/jobs/[^/]+/latest\.json", reference.path) is None)
 
 
+_MIN_JSON_INPUT_BYTES = 64 * 1024 * 1024
+
+
 class BoundedInputReader:
     """Hash exact run-owned bytes; count unique paths, not repeated verification work.
 
@@ -130,12 +134,15 @@ class BoundedInputReader:
             return candidate
 
     def _read(self, relative: str, digest: str | None, *,
-              retain_bytes: bool = True, declared_size: int | None = None) -> tuple[bytes, SizedArtifactRef]:
+              retain_bytes: bool = True, declared_size: int | None = None,
+              max_bytes: int | None = None) -> tuple[bytes, SizedArtifactRef]:
         with _errors(self.phase, Reason.INPUT_TAMPERED):
             path = self.path(relative)
             before = path.stat()
             _require(stat.S_ISREG(before.st_mode), "input is not a regular file",
                      Reason.INPUT_TAMPERED, phase=self.phase)
+            _require(max_bytes is None or before.st_size <= max_bytes,
+                     "JSON input exceeds its byte bound", Reason.BOUND_EXCEEDED, phase=self.phase)
             old = self._inventory.get(relative)
             if old is not None and digest is not None:
                 _require(old.sha256 == digest, "one input path has conflicting identities",
@@ -154,10 +161,12 @@ class BoundedInputReader:
                     chunk = stream.read(65536)
                     if not chunk:
                         break
+                    size += len(chunk)
+                    _require(max_bytes is None or size <= max_bytes,
+                             "JSON input exceeds its byte bound", Reason.BOUND_EXCEEDED, phase=self.phase)
                     if retain_bytes:
                         chunks.append(chunk)
                     hasher.update(chunk)
-                    size += len(chunk)
                 after = os.fstat(stream.fileno())
             _require(self._stamp(before) == self._stamp(after)
                      == self._stamp(self.path(relative).stat()) and size == after.st_size,
@@ -192,10 +201,14 @@ class BoundedInputReader:
         self._read(reference.path, reference.sha256, retain_bytes=False, declared_size=(
             reference.size_bytes if isinstance(reference, SizedArtifactRef) else None))
 
-    def json(self, reference: ArtifactRef) -> dict[str, Any]:
-        payload = self.read(reference)
+    def json(self, reference: ArtifactRef, *, max_bytes: int | None = None) -> dict[str, Any]:
+        limit = max_bytes if max_bytes is not None else max(self.settings.max_manifest_bytes, _MIN_JSON_INPUT_BYTES)
+        payload = self._read(
+            reference.path, reference.sha256, max_bytes=limit,
+            declared_size=reference.size_bytes if isinstance(reference, SizedArtifactRef) else None,
+        )[0]
         with _errors(self.phase, Reason.SCHEMA_INVALID):
-            return parse_json_bytes(payload, max_bytes=None)
+            return parse_json_bytes(payload, max_bytes=limit)
 
     @property
     def inventory(self) -> tuple[SizedArtifactRef, ...]:
@@ -306,7 +319,7 @@ def _accepted(reader: BoundedInputReader, job: str, *, optional: bool = False) -
     _require((accepted.path, accepted.sha256) == (reference.path, reference.sha256)
              and canonical_bytes(accepted.handoff) == canonical_bytes(handoff),
              "accepted job changed during verification", Reason.INPUT_STALE)
-    reader.read(reference)
+    reader.verify(reference)
     return accepted
 
 
@@ -318,16 +331,77 @@ def compatible_settings(original: OpenVexExportSettings, requested: OpenVexExpor
     )
 
 
-def _configuration(reader: BoundedInputReader, settings: OpenVexExportSettings
-                   ) -> tuple[ArtifactRef, ArtifactRef, dict[str, Any], str, str]:
-    manifest_ref = reader.pin("data/configuration/manifest.json").reference
-    manifest = reader.json(manifest_ref)
-    resolved_ref = ArtifactRef("data/configuration/resolved.json", manifest["resolved_sha256"])
-    resolved = reader.json(resolved_ref)
+def _pin_configuration_snapshot(
+    reader: BoundedInputReader, expected_sha256: str | None = None, *,
+    missing_reason: Reason = Reason.INPUT_STALE,
+    missing_message: str = "accepted handoff uses another frozen configuration",
+    record_in_inventory: bool = True,
+) -> tuple[ArtifactRef, ArtifactRef, dict[str, Any]]:
+    base_manifest_ref = reader.pin("data/configuration/manifest.json").reference
+    base_manifest = reader.json(base_manifest_ref)
+    base_ref = ArtifactRef("data/configuration/resolved.json", base_manifest["resolved_sha256"])
+    base_resolved = reader.json(base_ref)
     reader.check_deadline()
     with _errors(reader.phase, Reason.INPUT_TAMPERED):
-        _require(resolved_configuration_identity(reader.root) == resolved_ref.sha256,
-                 "resolved configuration identity changed", Reason.INPUT_TAMPERED)
+        _require(resolved_configuration_identity(reader.root) == base_ref.sha256,
+                 "resolved configuration identity changed", Reason.INPUT_TAMPERED, phase=reader.phase)
+    if expected_sha256 is None or expected_sha256 == base_ref.sha256:
+        return base_manifest_ref, base_ref, base_resolved
+    _require(isinstance(expected_sha256, str) and re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is not None,
+             missing_message, missing_reason, phase=reader.phase)
+    assert isinstance(expected_sha256, str)
+    rev_prefix = f"data/configuration/revisions/{expected_sha256}"
+    try:
+        reader.path(f"{rev_prefix}/manifest.json")
+    except ExportError as exc:
+        if exc.reason == Reason.INPUT_MISSING:
+            raise ExportError(missing_message, reason=missing_reason, phase=reader.phase) from exc
+        raise
+    with _errors(reader.phase, Reason.INPUT_TAMPERED):
+        snapshot = configuration_snapshot(reader.root, expected_sha256)
+    if record_in_inventory:
+        rev_manifest_ref = reader.pin(f"{rev_prefix}/manifest.json").reference
+        rev_manifest = reader.json(rev_manifest_ref)
+        _require(rev_manifest.get("resolved_sha256") == expected_sha256,
+                 "configuration revision manifest disagrees with its identity",
+                 Reason.INPUT_TAMPERED, phase=reader.phase)
+        rev_ref = ArtifactRef(f"{rev_prefix}/resolved.json", expected_sha256)
+        rev_resolved = reader.json(rev_ref)
+    else:
+        rev_manifest_ref = ArtifactRef(
+            f"{rev_prefix}/manifest.json",
+            hashlib.sha256((reader.root / f"{rev_prefix}/manifest.json").read_bytes()).hexdigest(),
+        )
+        rev_ref = ArtifactRef(f"{rev_prefix}/resolved.json", expected_sha256)
+        rev_resolved = dict(snapshot.document)
+    reader.check_deadline()
+    return rev_manifest_ref, rev_ref, rev_resolved
+
+
+def _require_compatible_configurations(
+    reader: BoundedInputReader, candidate_sha256: str | None, reference_sha256: str, *,
+    message: str, reason: Reason = Reason.INPUT_STALE, record_in_inventory: bool = True,
+) -> tuple[ArtifactRef, ArtifactRef, dict[str, Any]]:
+    _require(isinstance(candidate_sha256, str) and re.fullmatch(r"[0-9a-f]{64}", candidate_sha256) is not None,
+             message, reason, phase=reader.phase)
+    _, ref_config, _ = _pin_configuration_snapshot(
+        reader, reference_sha256, missing_reason=reason, missing_message=message,
+        record_in_inventory=False,
+    )
+    manifest_ref, config_ref, resolved = _pin_configuration_snapshot(
+        reader, candidate_sha256, missing_reason=reason, missing_message=message,
+        record_in_inventory=record_in_inventory,
+    )
+    if config_ref.sha256 != ref_config.sha256:
+        with _errors(reader.phase, Reason.INPUT_TAMPERED):
+            compatible = configurations_compatible(reader.root, config_ref.sha256, ref_config.sha256)
+        _require(compatible, message, reason, phase=reader.phase)
+    return manifest_ref, config_ref, resolved
+
+
+def _validate_export_configuration(
+    reader: BoundedInputReader, resolved: Mapping[str, Any], settings: OpenVexExportSettings,
+) -> None:
     jobs = resolved["jobs"]
     with _errors(reader.phase, Reason.CONFIGURATION_INVALID):
         frozen = OpenVexExportSettings.from_mapping(jobs["job_openvex_export"]["settings"])
@@ -335,14 +409,34 @@ def _configuration(reader: BoundedInputReader, settings: OpenVexExportSettings
         frozen.validate_prerequisites(gate_enabled=jobs[GATE_JOB]["settings"]["enabled"],
                                       review_enabled=REVIEW_JOB in jobs)
     _require(compatible_settings(frozen, settings), "export settings differ from immutable run configuration",
-             Reason.CONFIGURATION_INVALID)
+             Reason.CONFIGURATION_INVALID, phase=reader.phase)
+
+
+def _review_policy_digests(reader: BoundedInputReader, resolved: Mapping[str, Any]) -> tuple[str, str]:
     with _errors(reader.phase, Reason.CONFIGURATION_INVALID):
-        review_settings = parse_inference_review_settings(jobs[REVIEW_JOB]["settings"])
+        review_settings = parse_inference_review_settings(resolved["jobs"][REVIEW_JOB]["settings"])
     semantic = semantic_settings_sha256(review_settings)
     policy = policy_sha256(review_settings.ship_block,
                           review_settings.verification.require_distinct_model_for_ship_blocking)
+    return semantic, policy
+
+
+def _configuration(
+    reader: BoundedInputReader, settings: OpenVexExportSettings, *, expected_sha256: str | None = None,
+) -> tuple[ArtifactRef, ArtifactRef, dict[str, Any]]:
+    base_manifest_ref, base_ref, base_resolved = _pin_configuration_snapshot(reader)
+    if expected_sha256 is not None and expected_sha256 != base_ref.sha256:
+        _, _, export_resolved = _require_compatible_configurations(
+            reader, expected_sha256, base_ref.sha256,
+            message="export settings differ from immutable run configuration",
+            reason=Reason.CONFIGURATION_INVALID,
+            record_in_inventory=False,
+        )
+        _validate_export_configuration(reader, export_resolved, settings)
+    else:
+        _validate_export_configuration(reader, base_resolved, settings)
     reader.check_deadline()
-    return manifest_ref, resolved_ref, resolved, semantic, policy
+    return base_manifest_ref, base_ref, base_resolved
 
 
 def _preflight_review(reader: BoundedInputReader, handoff: Mapping[str, Any]
@@ -371,7 +465,7 @@ def _preflight_review(reader: BoundedInputReader, handoff: Mapping[str, Any]
     receipt_ref = _ref(_published(handoff, "publication.publish_claim_ledger")["artifact"])
     receipt = reader.json(receipt_ref)
     directory = PurePosixPath(receipt_ref.path).parent
-    reader.read(ArtifactRef((directory / "claim-ledger.jsonl").as_posix(), receipt["ledger_sha256"]))
+    reader.verify(ArtifactRef((directory / "claim-ledger.jsonl").as_posix(), receipt["ledger_sha256"]))
     projection = reader.json(ArtifactRef((directory / "projection.json").as_posix(), receipt["projection_file_sha256"]))
     chain_manifest = reader.json(_ref(review["attack_chain_manifest"]))
     for item in chain_manifest["items"]:
@@ -384,7 +478,7 @@ def _preflight_review(reader: BoundedInputReader, handoff: Mapping[str, Any]
         if reference.path.startswith(f"data/jobs/{REVIEW_JOB}/") and reference.path.endswith(".json"):
             reader.json(reference)
         else:
-            reader.read(reference)
+            reader.verify(reference)
     for view in chains.values():
         actors = [view["proposal"]["composer"], *(item["actor"] for item in view["challenges"])]
         for actor in actors:
@@ -399,7 +493,7 @@ def _preflight_review(reader: BoundedInputReader, handoff: Mapping[str, Any]
                     reader.json(ArtifactRef(name, record["receipt_sha256"]))
     reader.json(_ref(review["coverage_matrix"]))
     for shard in review["shards"]:
-        reader.read(_ref(shard))
+        reader.verify(_ref(shard))
     finding_root = PurePosixPath(review_ref.path).parent / "findings"
     score_root = PurePosixPath(_ref(_published(handoff, "scoring.score_claims")["artifact"]).path).parent / "scores"
     for entries, key, prefix, directory in (
@@ -434,7 +528,7 @@ def _manifest(reader: BoundedInputReader, reference: ArtifactRef, run_id: str, s
         if current == reference:
             root_document = document
         for raw in document["indexes"]:
-            reader.read(ArtifactRef(raw["relative_path"], raw["sha256"]))
+            reader.verify(ArtifactRef(raw["relative_path"], raw["sha256"]))
         pending.extend(_ref(raw) for raw in document.get("upstream_manifests", ()))
     reader.check_deadline()
     verified, digest = load_verified_manifest(reader.root, reader.path(reference.path), reference.sha256)
@@ -484,8 +578,10 @@ def _source(reader: BoundedInputReader, settings: OpenVexExportSettings, snapsho
             "no repository publisher, release or distribution identity is asserted."
         )
     if intake is not None:
-        _require(intake.handoff.get("resolved_config_sha256") == config_ref.sha256,
-                 "accepted intake configuration is stale", Reason.INPUT_STALE)
+        _require_compatible_configurations(
+            reader, intake.handoff.get("resolved_config_sha256"), config_ref.sha256,
+            message="accepted intake configuration is stale", reason=Reason.INPUT_STALE,
+        )
         intake_ref = _ref(_published(intake.handoff, "publish_intake.publish_handoff")["artifact"])
         document = reader.json(intake_ref)
         fingerprint = document["fingerprint"]
@@ -572,22 +668,33 @@ def _findings(reader: BoundedInputReader, gate: Mapping[str, Any], review: Mappi
     return tuple(findings)
 
 
-def verify_inputs(run_root: Path, settings: OpenVexExportSettings, repository_root: Path) -> VerifiedInputs:
+def verify_inputs(
+    run_root: Path, settings: OpenVexExportSettings, repository_root: Path, *,
+    resolved_config_sha256: str | None = None,
+) -> VerifiedInputs:
     """Re-prove accepted gate/review/scope/configuration without accessing a target checkout."""
     with _errors(ExportPhase.LOAD):
         with _errors(ExportPhase.LOAD, Reason.CONFIGURATION_INVALID):
             settings = OpenVexExportSettings.from_mapping(settings.to_mapping())
             settings.require_enabled()
         reader = BoundedInputReader(run_root, settings)
-        config_manifest_ref, config_ref, resolved, semantic, policy = _configuration(reader, settings)
+        config_manifest_ref, config_ref, resolved = _configuration(
+            reader, settings, expected_sha256=resolved_config_sha256,
+        )
         gate_job = _accepted(reader, GATE_JOB)
         review_job = _accepted(reader, REVIEW_JOB)
         assert gate_job is not None and review_job is not None
         _require(gate_job.handoff.get("upstream_handoff_sha256", {}).get(REVIEW_JOB) == review_job.sha256,
                  "gate was accepted against another review handoff", Reason.INPUT_STALE)
-        for accepted in (gate_job, review_job):
-            _require(accepted.handoff.get("resolved_config_sha256") == config_ref.sha256,
-                     "accepted handoff uses another frozen configuration", Reason.INPUT_STALE)
+        _, gate_config_ref, _ = _require_compatible_configurations(
+            reader, gate_job.handoff.get("resolved_config_sha256"), config_ref.sha256,
+            message="accepted handoff uses another frozen configuration", reason=Reason.INPUT_STALE,
+        )
+        _, _, review_resolved = _require_compatible_configurations(
+            reader, review_job.handoff.get("resolved_config_sha256"), gate_config_ref.sha256,
+            message="accepted handoff uses another frozen configuration", reason=Reason.INPUT_STALE,
+        )
+        semantic, policy = _review_policy_digests(reader, review_resolved)
         published = _published(gate_job.handoff, "acceptance.publish_handoff")
         _require(published.get("schema") == FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA,
                  "unsupported gate handoff schema", Reason.SCHEMA_INVALID)
@@ -597,10 +704,10 @@ def verify_inputs(run_root: Path, settings: OpenVexExportSettings, repository_ro
         _require(len(gate["packages"]) <= settings.max_packages, "gate package bound exceeded", Reason.BOUND_EXCEEDED)
         _require(len(gate["bindings"]) <= settings.max_bindings, "gate binding bound exceeded", Reason.BOUND_EXCEEDED)
         for raw in gate["bindings"]:
-            reader.read(_ref(raw))
+            reader.verify(_ref(raw))
         for name in ("inputs", "capabilities", "attachments"):
             for reference in _references(gate[name]):
-                reader.read(reference)
+                reader.verify(reference)
         review_ref, review, scope_ref, scope = _preflight_review(reader, review_job.handoff)
         with _errors(ExportPhase.LOAD, Reason.SCHEMA_INVALID):
             schemas = SchemaSet(Path(repository_root) / "docs" / "schemas" / "final-report")
@@ -614,7 +721,7 @@ def verify_inputs(run_root: Path, settings: OpenVexExportSettings, repository_ro
                                              max_packages=settings.max_packages, include_decision_audit=True)
         reader.check_deadline()
         certified_bindings = {_ref(raw) for raw in gate["bindings"]}
-        _require({_ref(raw) for raw in authoritative.document["bindings"]} | {config_ref} <= certified_bindings,
+        _require({_ref(raw) for raw in authoritative.document["bindings"]} | {gate_config_ref} <= certified_bindings,
                  "accepted gate omits authoritative review/configuration bindings", Reason.INPUT_STALE)
         # Completion is a pre-gate certified snapshot, never rediscovered from optional latest heads.
         document = {**authoritative.document, "capabilities": gate["capabilities"],
@@ -666,12 +773,16 @@ def verify_inputs(run_root: Path, settings: OpenVexExportSettings, repository_ro
         return result
 
 
-def reprove_inputs(run_root: Path, verified: VerifiedInputs, settings: OpenVexExportSettings,
-                   repository_root: Path) -> None:
+def reprove_inputs(
+    run_root: Path, verified: VerifiedInputs, settings: OpenVexExportSettings,
+    repository_root: Path, *, resolved_config_sha256: str | None = None,
+) -> None:
     """Re-run acceptance/custody and require the complete original input pin set."""
     with _errors(ExportPhase.ACCEPT):
         try:
-            current = verify_inputs(run_root, settings, repository_root)
+            current = verify_inputs(
+                run_root, settings, repository_root, resolved_config_sha256=resolved_config_sha256,
+            )
         except ExportError as exc:
             raise ExportError("OpenVEX inputs no longer verify at acceptance",
                               reason=exc.reason, phase=ExportPhase.ACCEPT) from exc

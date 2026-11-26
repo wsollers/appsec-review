@@ -662,12 +662,11 @@ not permission to accept the cost without the walk's expected-gap decision.
 
 ## Resume and invalidation
 
-There is no dossier-specific semantic cache. The [runtime admission key](../architecture/jobs-and-runtime.md#wave-1-resumability)
-binds accepted handoffs, source/configuration and implementation/validation identities.
-The dossier records additionally pin settings, source manifest and renderer/template/image
-identities. Changed optional producers, finding bytes or rendering settings invalidate downstream
-dossiers; the inputs are reverified both before creation and before publication. Item directories
-are immutable, not overwrite-in-place recovery targets; artifact-bearing units are not portable
-failed-attempt checkpoints. The handler is deterministic and dispatches no model.
-Audit availability, policy and certified source bindings are rechecked as inputs, not trusted
-merely because an earlier dossier rendered successfully.
+There is no dossier-specific semantic cache or sub-job unit salvage. Whole-job reuse via the
+[runtime admission key](../architecture/jobs-and-runtime.md#wave-1-resumability) binds accepted
+handoffs, source/configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities, while a failed or invalidated job re-executes all
+dossiers in a fresh `attempts/<attempt_id>/` workspace. Dossier records additionally pin settings,
+source manifest and renderer/template/image identities, reverifying inputs before creation and
+publication into immutable item directories. The handler is deterministic and dispatches no model.
+See [job-local operational tuning](job-tuning.md) and [dossier-publication](dossier-publication.md#tuning-and-whole-job-recovery-job_dossier_publication).

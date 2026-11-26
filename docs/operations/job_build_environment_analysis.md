@@ -233,9 +233,12 @@ defined in [job interchange](../architecture/job-interchange.md).
 ## Resume and invalidation
 
 The output binds `source_fingerprint`, `catalog_handoff_sha256`, the static `RULES` identity
-and the effective parser bounds. Source/catalog/configuration or implementation changes
-invalidate whole-job reuse under [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability).
-There is no per-script persistent cache. Its artifact-bearing analysis/publication results are
-not portable failed-attempt checkpoints. Planner reuse additionally rechecks the signed
-environment availability contract and exact reference: stale deliberately optional prior
-evidence becomes unavailable; missing or changed expected-current evidence blocks planning.
+and the effective parser bounds. Whole-job reuse requires matching source, catalog handoff,
+configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities under
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability); any failed or
+invalidated job re-executes in full inside a fresh `attempts/<attempt_id>/` workspace with no
+per-script persistent cache or failed-attempt unit salvage. Planner reuse additionally rechecks
+the signed environment availability contract and exact reference: stale deliberately optional prior
+evidence becomes unavailable; missing or changed expected-current evidence blocks planning. See
+[job-local operational tuning](job-tuning.md) and [build-environment-analysis](build-environment-analysis.md#tuning-and-whole-job-recovery-job_build_environment_analysis).

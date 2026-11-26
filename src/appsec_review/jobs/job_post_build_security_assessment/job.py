@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from appsec_review.interchange import bounded_gap_messages
+from appsec_review.interchange import GapCode, bounded_gap_messages, producer_gap
 
 from collections.abc import Mapping
 from dataclasses import asdict
@@ -505,10 +505,22 @@ def _validate_config(context, _result) -> None:
 
 
 def _compact_inference_request(request: Mapping[str, Any], budget_bytes: int) -> tuple[dict[str, Any], bytes]:
-    compacted = dict(request)
-    compacted["coverage_gaps"] = list(request.get("coverage_gaps", ()))[:40]
-    compact_records = []
-    for item in request.get("artifacts", ()):
+    target_bytes = min(budget_bytes, 40_000) if budget_bytes < 12_288 else min(budget_bytes // 3, 40_000)
+    raw_encoded = canonical_json(request)
+    if len(raw_encoded) <= target_bytes:
+        return dict(request), raw_encoded
+
+    raw_actions = list(request.get("actions", ()))
+    raw_artifacts = list(request.get("artifacts", ()))
+    raw_checks = list(request.get("deterministic_results", ()))
+    raw_gaps = list(request.get("coverage_gaps", ()))
+
+    artifact_tables_omitted = False
+    compact_records: list[dict[str, Any]] = []
+    for item in raw_artifacts:
+        for dropped in ("headers", "sections", "relocations", "archive_members", "symbols"):
+            if item.get(dropped):
+                artifact_tables_omitted = True
         entry = {key: item.get(key) for key in (
             "artifact_id", "sha256", "format", "kind", "architecture", "bits",
             "interpreter", "rpath", "runpath", "dependencies", "build_id",
@@ -518,61 +530,227 @@ def _compact_inference_request(request: Mapping[str, Any], budget_bytes: int) ->
             for extra in ("imports", "exports"):
                 vals = item.get(extra)
                 if isinstance(vals, list) and vals:
+                    if len(vals) > 32:
+                        artifact_tables_omitted = True
                     entry[extra] = vals[:32]
+        else:
+            if item.get("imports") or item.get("exports"):
+                artifact_tables_omitted = True
         compact_records.append(entry)
-    compacted["artifacts"] = compact_records
 
-    raw_actions = list(request.get("actions", ()))
     classified = [a for a in raw_actions if a.get("classification") not in {None, "unknown"}]
     chosen_actions = classified if classified else raw_actions
-    compact_actions = []
+    action_details_omitted = len(chosen_actions) < len(raw_actions)
+    compact_actions: list[dict[str, Any]] = []
     for act in chosen_actions:
         tc = act.get("toolchain") if isinstance(act.get("toolchain"), Mapping) else {}
+        if any(act.get(k) for k in ("declared_inputs", "discovered_inputs", "input_artifact_ids", "output_hashes")):
+            action_details_omitted = True
+        raw_argv = list(act.get("argv") or ())
+        raw_outputs = list(act.get("outputs") or act.get("resolved_outputs") or ())
+        if len(raw_argv) > 32 or len(raw_outputs) > 8:
+            action_details_omitted = True
         entry = {
             "build_action_id": act.get("build_action_id"),
             "classification": act.get("classification"),
             "toolchain": {"executable": tc.get("executable")} if tc.get("executable") else {},
-            "argv": list(act.get("argv") or ())[:32],
-            "outputs": list(act.get("outputs") or act.get("resolved_outputs") or ())[:8],
+            "argv": raw_argv[:32],
+            "outputs": raw_outputs[:8],
         }
         if act.get("compile_unit_id"):
             entry["compile_unit_id"] = act["compile_unit_id"]
         if act.get("linked_artifact_ids"):
-            entry["linked_artifact_ids"] = list(act["linked_artifact_ids"])[:16]
+            linked = list(act["linked_artifact_ids"])
+            if len(linked) > 16:
+                action_details_omitted = True
+            entry["linked_artifact_ids"] = linked[:16]
         compact_actions.append(entry)
-    compacted["actions"] = compact_actions
 
-    checks = [
-        {"check_id": c.get("check_id"), "scope": c.get("scope"),
-         "status": c.get("status"), "evidence": list(c.get("evidence") or ())[:4]}
-        for c in request.get("deterministic_results", ())
-        if c.get("status") != "NOT_APPLICABLE"
-    ]
-    target_bytes = min(budget_bytes, 40_000) if budget_bytes < 12_288 else min(budget_bytes // 3, 40_000)
-    compacted["deterministic_results"] = checks
-    encoded = canonical_json(compacted)
-    if len(encoded) <= target_bytes:
-        return compacted, encoded
-
+    checks: list[dict[str, Any]] = []
+    check_details_omitted = False
+    for c in raw_checks:
+        if c.get("status") == "NOT_APPLICABLE":
+            continue
+        ev = list(c.get("evidence") or ())
+        if len(ev) > 4:
+            check_details_omitted = True
+        checks.append({"check_id": c.get("check_id"), "scope": c.get("scope"),
+                       "status": c.get("status"), "evidence": ev[:4]})
+    applicable_check_count = len(checks)
     priority = {"FAIL": 0, "UNKNOWN": 1, "PASS": 2}
     checks.sort(key=lambda c: (priority.get(str(c.get("status")), 3), str(c.get("check_id")), str(c.get("scope"))))
-    lo, hi = 0, len(checks)
-    best = {**compacted, "deterministic_results": []}
-    best_encoded = canonical_json(best)
+    fail_checks = [c for c in checks if c.get("status") in {"FAIL", "UNKNOWN"}]
+
+    base = dict(request)
+
+    def _assemble(
+        acts: list[dict[str, Any]],
+        arts: list[dict[str, Any]],
+        chks: list[dict[str, Any]],
+        c_gaps: list[Any],
+        *,
+        extra_tables_omitted: bool = False,
+    ) -> tuple[dict[str, Any], bytes]:
+        tables_omitted = bool(artifact_tables_omitted or extra_tables_omitted)
+        was_compacted = bool(
+            tables_omitted
+            or action_details_omitted
+            or check_details_omitted
+            or len(acts) < len(raw_actions)
+            or len(arts) < len(raw_artifacts)
+            or len(chks) < len(raw_checks)
+            or len(c_gaps) < len(raw_gaps)
+        )
+        topology: dict[str, Any] = {
+            "actions": len(acts),
+            "artifacts": len(arts),
+            "compacted": was_compacted,
+            "raw_actions": len(raw_actions),
+            "submitted_actions": len(acts),
+            "raw_artifacts": len(raw_artifacts),
+            "submitted_artifacts": len(arts),
+            "raw_deterministic_results": len(raw_checks),
+            "raw_applicable_deterministic_results": applicable_check_count,
+            "submitted_deterministic_results": len(chks),
+            "raw_coverage_gaps": len(raw_gaps),
+            "submitted_coverage_gaps": len(c_gaps),
+            "artifact_tables_omitted": tables_omitted,
+            "action_details_omitted": bool(action_details_omitted),
+        }
+        doc = {
+            **base,
+            "topology": topology,
+            "actions": acts,
+            "artifacts": arts,
+            "deterministic_results": chks,
+            "coverage_gaps": c_gaps,
+        }
+        return doc, canonical_json(doc)
+
+    def _bsearch_checks(
+        acts: list[dict[str, Any]],
+        arts: list[dict[str, Any]],
+        pool: list[dict[str, Any]],
+        c_gaps: list[Any],
+        *,
+        extra_tables_omitted: bool = False,
+    ) -> tuple[dict[str, Any], bytes, int]:
+        best_doc, best_enc = _assemble(acts, arts, [], c_gaps, extra_tables_omitted=extra_tables_omitted)
+        if len(best_enc) > target_bytes:
+            return best_doc, best_enc, -1
+        lo, hi = 0, len(pool)
+        best_mid = 0
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            cand_doc, cand_enc = _assemble(acts, arts, pool[:mid], c_gaps, extra_tables_omitted=extra_tables_omitted)
+            if len(cand_enc) <= target_bytes:
+                best_doc, best_enc, best_mid = cand_doc, cand_enc, mid
+                lo = mid + 1
+            else:
+                hi = mid - 1
+        return best_doc, best_enc, best_mid
+
+    # Tier 1: full compact actions, full compact artifacts, all applicable checks, bounded gaps.
+    gaps_40 = raw_gaps[:40]
+    tier1_doc, tier1_enc = _assemble(compact_actions, compact_records, checks, gaps_40)
+    if len(tier1_enc) <= target_bytes:
+        return tier1_doc, tier1_enc
+
+    required_fail_count = min(len(fail_checks), 64)
+
+    # Tier 2: binary-search deterministic checks while keeping all classified actions & compact artifacts.
+    tier2_doc, tier2_enc, tier2_mid = _bsearch_checks(compact_actions, compact_records, checks, gaps_40)
+    if tier2_mid >= required_fail_count and len(tier2_enc) <= target_bytes:
+        return tier2_doc, tier2_enc
+
+    # Tier 3: trim actions to [:24] and gaps to [:24], then binary-search deterministic checks.
+    acts_24 = compact_actions[:24]
+    gaps_24 = raw_gaps[:24]
+    tier3_doc, tier3_enc, tier3_mid = _bsearch_checks(acts_24, compact_records, checks, gaps_24)
+    if tier3_mid >= required_fail_count and len(tier3_enc) <= target_bytes:
+        return tier3_doc, tier3_enc
+
+    # Tier 4: slim per-artifact loader lists and prioritize linked/failing binaries over .o objects,
+    # re-verifying encoded bytes after attaching fail_checks[:64].
+    fail_scopes = {str(c.get("scope")) for c in fail_checks[:64] if c.get("scope")}
+    indexed_raw = list(enumerate(raw_artifacts))
+    indexed_raw.sort(key=lambda pair: (
+        0 if (str(pair[1].get("artifact_id")) in fail_scopes or str(pair[1].get("sha256")) in fail_scopes) else 1,
+        0 if pair[1].get("kind") != "object" else 1,
+        pair[0],
+    ))
+    slim_records: list[dict[str, Any]] = []
+    slim_dropped_any = False
+    for _, item in indexed_raw:
+        if any(item.get(k) for k in ("rpath", "runpath", "dependencies", "imports", "exports", "gaps")):
+            slim_dropped_any = True
+        slim_records.append({key: item.get(key) for key in (
+            "artifact_id", "sha256", "format", "kind", "architecture", "bits",
+            "interpreter", "build_id", "debug", "hardening",
+        ) if item.get(key) is not None})
+
+    kept_fails = fail_checks[:64]
+    gaps_16 = raw_gaps[:16]
+    lo, hi = 0, len(slim_records)
+    best_art_doc: dict[str, Any] | None = None
+    best_art_enc: bytes | None = None
     while lo <= hi:
         mid = (lo + hi) // 2
-        candidate = {**compacted, "deterministic_results": checks[:mid]}
-        cand_encoded = canonical_json(candidate)
-        if len(cand_encoded) <= target_bytes:
-            best, best_encoded = candidate, cand_encoded
+        cand_doc, cand_enc = _assemble(
+            acts_24, slim_records[:mid], kept_fails, gaps_16, extra_tables_omitted=slim_dropped_any,
+        )
+        if len(cand_enc) <= target_bytes:
+            best_art_doc, best_art_enc = cand_doc, cand_enc
             lo = mid + 1
         else:
             hi = mid - 1
-    if len(best_encoded) > target_bytes and len(compact_actions) > 24:
-        fail_checks = [c for c in checks if c.get("status") in {"FAIL", "UNKNOWN"}][:64]
-        trimmed = {**best, "actions": compact_actions[:24], "deterministic_results": fail_checks}
-        best, best_encoded = trimmed, canonical_json(trimmed)
-    return best, best_encoded
+    if best_art_doc is not None and best_art_enc is not None:
+        return best_art_doc, best_art_enc
+
+    # Tier 5: extreme budget floor — trim actions/gaps and binary-search fail_checks to guarantee <= target_bytes.
+    for act_cap, gap_cap in ((8, 8), (0, 0)):
+        doc, enc, mid = _bsearch_checks(
+            compact_actions[:act_cap], [], kept_fails, raw_gaps[:gap_cap],
+            extra_tables_omitted=bool(slim_dropped_any or raw_artifacts),
+        )
+        if mid >= 0 and len(enc) <= target_bytes:
+            return doc, enc
+
+    fallback_doc, fallback_enc = _assemble(
+        [], [], [], [], extra_tables_omitted=bool(slim_dropped_any or raw_artifacts),
+    )
+    return fallback_doc, fallback_enc
+
+
+def _compaction_gap_details(
+    compacted: Mapping[str, Any], *, unit_id: str, scope_id: str,
+) -> dict[str, Any] | None:
+    topology = compacted.get("topology")
+    if not isinstance(topology, Mapping) or not topology.get("compacted"):
+        return None
+    parts: list[str] = []
+    if topology.get("submitted_actions") != topology.get("raw_actions"):
+        parts.append(f"actions={topology['submitted_actions']}/{topology['raw_actions']}")
+    if topology.get("submitted_artifacts") != topology.get("raw_artifacts"):
+        parts.append(f"artifacts={topology['submitted_artifacts']}/{topology['raw_artifacts']}")
+    if topology.get("artifact_tables_omitted"):
+        parts.append("artifact_tables=omitted")
+    if topology.get("action_details_omitted"):
+        parts.append("action_details=omitted")
+    if topology.get("submitted_deterministic_results") != topology.get("raw_deterministic_results"):
+        parts.append(
+            f"deterministic_results={topology['submitted_deterministic_results']}/"
+            f"{topology['raw_deterministic_results']}"
+        )
+    if topology.get("submitted_coverage_gaps") != topology.get("raw_coverage_gaps"):
+        parts.append(f"coverage_gaps={topology['submitted_coverage_gaps']}/{topology['raw_coverage_gaps']}")
+    detail = ", ".join(parts) if parts else "fields_omitted"
+    message = f"build-security inference request was compacted to fit input budget ({detail})"
+    return {
+        "message": message,
+        "producer_gap": producer_gap(GapCode.TRUNCATED, message, unit_id=unit_id, scope_id=scope_id),
+        "topology": dict(topology),
+    }
 
 
 def build_job(*, infer: Infer | None = None) -> Job:
@@ -1092,9 +1270,15 @@ def build_job(*, infer: Infer | None = None) -> Job:
             encoded = canonical_json(request)
             budget_bytes = int(settings["max_input_tokens"]) * 4
             safe_json_bytes = budget_bytes if budget_bytes < 12_288 else min(budget_bytes // 3, 40_000)
+            compaction_details: dict[str, Any] | None = None
             if budget_bytes >= 4096 and len(encoded) > safe_json_bytes:
                 request, encoded = _compact_inference_request(request, budget_bytes)
+                compaction_details = _compaction_gap_details(
+                    request, unit_id=unit.unit_id, scope_id=_display(case_id),
+                )
             gaps: list[str] = []
+            if compaction_details is not None:
+                gaps.append(str(compaction_details["message"]))
             if not actions and not records:
                 # Nothing was built for this case (the upstream gaps are already in the request's
                 # coverage_gaps and in the earlier stages): there is no evidence a model could cite.
@@ -1177,7 +1361,9 @@ def build_job(*, infer: Infer | None = None) -> Job:
                 gaps.append(f"{len(result['rejections'])} inference observations were rejected during evidence validation")
             document = {"schema": "appsec-review/build-security-inference/1", "case_id": _display(case_id),
                         "model_identity": model_identity, "request_sha256": hashlib.sha256(encoded).hexdigest(),
-                        "model_calls": calls, **result, "gaps": gaps}
+                        "model_calls": calls,
+                        **({"compaction": compaction_details} if compaction_details is not None else {}),
+                        **result, "gaps": gaps}
             artifact = _artifact(unit.job.run_root, unit.unit_root / "inference-results.json", document)
             unit.job.events.write("BUILD_SECURITY_INFERENCE_COMPLETED", case_id=_display(case_id), model_calls=calls,
                                   observation_count=len(result["observations"]), confirmed_count=result["confirmed_count"],

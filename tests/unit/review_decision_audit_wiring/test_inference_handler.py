@@ -62,7 +62,7 @@ def publication_fixture(tmp_path, monkeypatch, *, enabled=True, triage_enabled=T
     f.findings = [{"original": "finding and ship-block decision"}]
     monkeypatch.setattr(job.stages, "finding_packages", lambda *args, **kwargs: deepcopy(f.findings))
     monkeypatch.setattr(job.stages, "poc_candidates", lambda *args: deepcopy(f.handoff["poc_candidates"]))
-    monkeypatch.setattr(job.chains, "verify_publication", lambda *args: None)
+    monkeypatch.setattr(job.chains, "verify_publication", lambda *args: {"items": []})
     f.handoff_calls = []
 
     def original_handoff(**kwargs):

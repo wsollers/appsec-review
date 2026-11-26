@@ -63,10 +63,12 @@ def trusted_origin(unit: UnitContext, scope: AcceptedScope, handoff: Mapping[str
                 or job.config.job_id != "job_inference_security_review"):
             raise IntegrityError("audit context has a foreign run or attempt")
         claim_path = safe_path(root, attempt + "/claim.json")
+        if not claim_path.is_file() or not safe_path(root, "data/configuration/manifest.json").is_file():
+            raise IntegrityError("audit control anchor is not a regular file")
         from appsec_review.runtime.configuration import configuration_snapshot
         snapshot = configuration_snapshot(root, job.resolved_config_sha256)
         manifest_path = snapshot.directory / "manifest.json"
-        if not claim_path.is_file() or not manifest_path.is_file():
+        if not manifest_path.is_file():
             raise IntegrityError("audit control anchor is not a regular file")
         claim = read_document(claim_path)
         manifest = read_document(manifest_path)

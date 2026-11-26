@@ -588,13 +588,14 @@ with their cost; no source retryability field implies no automatic advisory clas
 
 ## Resume and invalidation
 
-No separate proposal semantic cache is implemented. [Runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability)
-requires exact review/build input, configuration and component identities; proposal provenance
-additionally records settings, source context, guidance and writer receipt hashes. A changed
-confirmed finding, source baseline or writer contract invalidates the plan, not the original
-review state. Existing attempt-owned files are refused rather than overwritten, and artifact
-results are not portable failed-attempt checkpoints.
-
+No separate proposal semantic cache or sub-job unit salvage is implemented. Whole-job
+[runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) requires matching
+accepted review/build inputs, configuration (up to compatible `[operational.*]` tuning), dataset
+contract, and implementation/schema/validation identities; proposal provenance additionally records
+settings, source context, guidance and writer receipt hashes. Any failed or invalidated job
+re-executes all confirmed findings in a fresh `attempts/<attempt_id>/` workspace and refuses to
+overwrite existing attempt-owned files. See [job-local operational tuning](job-tuning.md) and
+[remediation](remediation.md#tuning-and-whole-job-recovery-job_remediation_planning).
 ## Model usage
 
 The selected [remediation_writer](../generated/guidance.md#roles-remediation_writer) produces

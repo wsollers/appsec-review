@@ -108,6 +108,7 @@ def _make_scope_and_unit(
     if settings_override:
         base_settings.update(settings_override)
     job_cfg = SimpleNamespace(
+        job_id=JOB_ID,
         steps=config.job(JOB_ID).steps,
         step=config.job(JOB_ID).step,
         settings=MappingProxyType(base_settings),

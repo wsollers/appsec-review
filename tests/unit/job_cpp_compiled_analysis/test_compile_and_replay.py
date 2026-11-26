@@ -327,7 +327,7 @@ def test_cpp_checkpoint_requires_declared_platform_releases(tmp_path, stage, too
                           custody="application_private_v1")
     events = []
     unit = SimpleNamespace(job=SimpleNamespace(
-        run_root=tmp_path, repository_root=tmp_path, review_policy=policy,
+        run_root=tmp_path, repository_root=tmp_path, attempt_id="attempt_0001", review_policy=policy,
         events=SimpleNamespace(write=lambda event, **details: events.append((event, details)))))
     identity = _checkpoint_identity(unit, "fixture", stage, {}, tool_id=tool)
     _save_checkpoint(unit, "fixture", stage, identity, {"terminal_status": "SUCCEEDED"})

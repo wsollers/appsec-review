@@ -6,6 +6,7 @@ from functools import lru_cache
 import json
 from pathlib import Path, PurePosixPath
 import posixpath
+import re
 import shlex
 from typing import Any
 
@@ -88,48 +89,111 @@ def _targets(argv, defaults):
     return flags, [{key: value.get(key) for key in AXES} for value in axes], malformed
 
 
+_SHELL_LAUNCHERS = frozenset({"sh", "bash", "dash"})
+_SHELL_SHORT_FLAGS = frozenset("abCefhmnuvx")
+_PYTHON_LAUNCHER_RE = re.compile(r"^python(?:3(?:\.\d+)?)?$")
+_PYTHON_SHORT_FLAGS = frozenset("BbdEiIOoPqsSuvV")
+
+
+def _extract_shell_c_script(argv: Sequence[str], *, allow_script_args: bool) -> str | None:
+    idx = 1
+    n = len(argv)
+    while idx < n:
+        arg = argv[idx]
+        if arg in {"-o", "+o"}:
+            idx += 2
+            continue
+        if not arg.startswith("-") or arg == "-" or arg == "--":
+            return None
+        flags = arg[1:]
+        if "c" in flags:
+            others = flags.replace("c", "")
+            if any(ch not in _SHELL_SHORT_FLAGS for ch in others) or idx + 1 >= n:
+                return None
+            if not allow_script_args and idx + 2 != n:
+                return None
+            return argv[idx + 1]
+        if any(ch not in _SHELL_SHORT_FLAGS for ch in flags):
+            return None
+        idx += 1
+    return None
+
+
+def _python_payload_index(argv: Sequence[str]) -> tuple[str, int] | None:
+    idx = 1
+    n = len(argv)
+    while idx < n:
+        arg = argv[idx]
+        if arg in {"-W", "-X"}:
+            idx += 2
+            continue
+        if arg.startswith(("-W", "-X")) and len(arg) > 2:
+            idx += 1
+            continue
+        if arg == "--":
+            return ("script", idx + 1) if idx + 1 < n else None
+        if not arg.startswith("-") or arg == "-":
+            return ("script", idx)
+        flags = arg[1:]
+        if flags.endswith("c") and all(ch in _PYTHON_SHORT_FLAGS for ch in flags[:-1]):
+            return ("c", idx + 1) if idx + 1 < n else None
+        if flags.endswith("m") and all(ch in _PYTHON_SHORT_FLAGS for ch in flags[:-1]):
+            return ("module", idx + 1) if idx + 1 < n else None
+        if all(ch in _PYTHON_SHORT_FLAGS for ch in flags):
+            idx += 1
+            continue
+        return None
+    return None
+
+
 def _capture_wrapper_invocation(executable, argv):
     """Identify instrumentation frames; their arguments are not execution evidence."""
+    from appsec_review.jobs.job_language_build.capture import image_owned
     tool = PurePosixPath(executable).name
     if executable == f"/capture/wrappers/{tool}":
         return tool, argv[1:]
-    if (executable == "/usr/bin/python3" and len(argv) >= 3
-            and argv[1] == "/capture/tool-wrapper.py"):
-        return argv[2], argv[3:]
-    if executable != "/bin/sh" or len(argv) != 3 or argv[1] != "-c":
+    if image_owned(executable) and _PYTHON_LAUNCHER_RE.fullmatch(tool) is not None:
+        py_target = _python_payload_index(argv)
+        if (py_target is not None and py_target[0] == "script"
+                and py_target[1] + 1 < len(argv)
+                and argv[py_target[1]] == "/capture/tool-wrapper.py"):
+            wrapped_idx = py_target[1] + 1
+            return argv[wrapped_idx], argv[wrapped_idx + 1:]
         return None
-    if "$" in argv[2] or "`" in argv[2]:
+    if executable != "/bin/sh":
+        return None
+    script = _extract_shell_c_script(argv, allow_script_args=False)
+    if script is None or "$" in script or "`" in script:
         return None
     try:
-        lexer = shlex.shlex(argv[2], posix=True, punctuation_chars=True)
+        lexer = shlex.shlex(script, posix=True, punctuation_chars=True)
         lexer.whitespace_split = True
         lexer.commenters = ""
         command = list(lexer)
     except ValueError:
         return None
-    # Ninja surrounds a linker command with these no-op guards.
     if command[:2] == [":", "&&"]:
         command = command[2:]
     if command[-2:] == ["&&", ":"]:
         command = command[:-2]
     if not command or any(value in {";", "&&", "||", "|", "&", "<", ">", "(", ")"} for value in command):
         return None
-    tool = PurePosixPath(command[0]).name
-    return (tool, command[1:]) if command[0] == f"/capture/wrappers/{tool}" else None
-
-
-_SHELL_LAUNCHERS = frozenset({"sh", "bash", "dash"})
+    wrapped_tool = PurePosixPath(command[0]).name
+    return (wrapped_tool, command[1:]) if command[0] == f"/capture/wrappers/{wrapped_tool}" else None
 
 
 def _is_image_shell_command(executable: str, argv: Sequence[str]) -> bool:
-    """Identify image-owned POSIX shell ``-c <script>`` launchers; child execs are captured directly."""
+    """Identify image-owned POSIX shell or Python ``-c`` launchers; child execs are captured directly."""
     from appsec_review.jobs.job_language_build.capture import image_owned
-    return (
-        image_owned(executable)
-        and PurePosixPath(executable).name in _SHELL_LAUNCHERS
-        and len(argv) >= 3
-        and argv[1] == "-c"
-    )
+    if not image_owned(executable):
+        return False
+    name = PurePosixPath(executable).name
+    if name in _SHELL_LAUNCHERS:
+        return _extract_shell_c_script(argv, allow_script_args=True) is not None
+    if _PYTHON_LAUNCHER_RE.fullmatch(name) is not None:
+        py_target = _python_payload_index(argv)
+        return py_target is not None and py_target[0] == "c"
+    return False
 
 
 def captured_enforcement(*, captures: Sequence[tuple[int, VerifiedCapture]],

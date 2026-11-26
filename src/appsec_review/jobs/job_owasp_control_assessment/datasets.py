@@ -12,7 +12,7 @@ _A = "data/jobs/job_owasp_control_assessment/attempts/*"
 DATASETS = (
     protected("owasp_model_receipts", "verification", "owasp", "appsec-review/owasp-model-receipt/1",
               "Worker/reviewer proposals, usage and content-bound reuse receipts; not target evidence.",
-              artifacts=("data/indexes/owasp/receipts/*.json",),
+              artifacts=("data/indexes/owasp/receipts/**",),
               reason="model interpretations are not an independent evidence source"),
     indexed("owasp_workbench", "publication", "owasp", "appsec-review/owasp-index-shard/1",
             "Standards, component classifications, applicability, validation work, finding packages and "

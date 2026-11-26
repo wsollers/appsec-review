@@ -402,34 +402,38 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
             configuration_sha256=resolved_configuration_identity(unit.job.run_root),
             guidance_bundle_sha256=guidance_hash, model_identity=unit.job.config.settings["model"],
             parser_versions=unit.job.config.settings["parser_versions"])
+        attempt_id = getattr(unit.job, "attempt_id", None)
         shards = [publish_shard(unit.job.run_root, family="standards", shard_id="selected",
-            records=standards["sources"], fingerprint_inputs=fingerprints["global_inputs"], gaps=standards["gaps"])]
+            records=standards["sources"], fingerprint_inputs=fingerprints["global_inputs"], gaps=standards["gaps"],
+            attempt_id=attempt_id)]
         for component in classifications:
             cid = component["component_id"]
             fp = fingerprints["components"][cid]
             shards.append(publish_shard(unit.job.run_root, family="component-classification", shard_id=cid,
-                records=[component], fingerprint_inputs={"component": fp["classification"]}, gaps=component["gaps"]))
+                records=[component], fingerprint_inputs={"component": fp["classification"]}, gaps=component["gaps"],
+                attempt_id=attempt_id))
             component_rows = [row for row in rows if row["component_id"] == cid]
             shards.append(publish_shard(unit.job.run_root, family="applicability", shard_id=cid,
                 records=component_rows, fingerprint_inputs={"applicability": fp["applicability"]},
-                gaps=[gap for row in component_rows for gap in row["gaps"]]))
+                gaps=[gap for row in component_rows for gap in row["gaps"]], attempt_id=attempt_id))
             component_results = [result for result in joined["results"] if result["component_id"] == cid]
             shards.append(publish_shard(unit.job.run_root, family="control-result", shard_id=cid,
                 records=component_results, fingerprint_inputs={"join": fp["validation_work"],
-                "global": fingerprints["global"]}, gaps=[gap for result in component_results for gap in result["gaps"]]))
+                "global": fingerprints["global"]}, gaps=[gap for result in component_results for gap in result["gaps"]],
+                attempt_id=attempt_id))
         for batch in work["batches"]:
             bid = batch["batch_id"]
             shards.append(publish_shard(unit.job.run_root, family="validation-work", shard_id=bid,
-                records=[batch], fingerprint_inputs={"batch": batch["fingerprint"]}))
+                records=[batch], fingerprint_inputs={"batch": batch["fingerprint"]}, attempt_id=attempt_id))
             shards.append(publish_shard(unit.job.run_root, family="finding-package", shard_id=bid,
                 records=packages_by_batch[bid], fingerprint_inputs={"batch": batch["fingerprint"],
-                "guidance": invocation_guidance.get(bid, {})}))
+                "guidance": invocation_guidance.get(bid, {})}, attempt_id=attempt_id))
         accepted = unit.output("characterization.load_inputs")["retrieval_manifest"]
         manifest = publish_manifest(unit.job.run_root, run_id=unit.job.run_id, shards=shards,
             accepted_upstream_manifest=accepted,
             configuration_sha256=resolved_configuration_identity(unit.job.run_root),
             assessment_bounds={"max_source_lines": parse_settings(unit.job.config.settings).max_source_lines},
-            assessment_mode=parse_settings(unit.job.config.settings).mode.value)
+            assessment_mode=parse_settings(unit.job.config.settings).mode.value, attempt_id=attempt_id)
         return {"manifest": manifest, "fingerprints": fingerprints, "shard_count": len(shards),
                 "invocation_guidance": invocation_guidance}
 

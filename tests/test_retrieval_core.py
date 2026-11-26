@@ -1306,3 +1306,41 @@ def test_safe_common_admits_the_clang_static_execution_receipt_namespace(engine:
                   f"data/other/{engine}/execution.json"):
         with pytest.raises(RetrievalIntegrityError, match="outside its allowed namespace"):
             RetrievalCore._safe_common(common(stray))
+
+def test_domain_tool_declares_shards_candidate_and_cross_instance_indexes_equality(tmp_path: Path) -> None:
+    from appsec_review.retrieval._query_work import _QUERY, _QueryWork
+    from appsec_review.retrieval.core import RetrievalCore
+
+    runs, _ = _fixture(tmp_path)
+    core = RetrievalCore(runs, RUN_ID)
+    core.query_codeql()
+    core.query_cpg_slice(function_name="authenticate")
+    log_path = core.run_root / "data" / "logs" / "pipeline.jsonl"
+    records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+
+    codeql_event = next(
+        e["details"] for e in reversed(records)
+        if e["event_type"] == "RETRIEVAL_QUERY" and e["details"]["mcp_tool"] == "query_codeql"
+    )
+    cpg_event = next(
+        e["details"] for e in reversed(records)
+        if e["event_type"] == "RETRIEVAL_QUERY" and e["details"]["mcp_tool"] == "query_cpg_slice"
+    )
+    assert len(core.indexes["observations"]) == 3
+    assert codeql_event["shards_candidate"] == 3
+    assert len(core.indexes["analysis"]) == 1
+    assert cpg_event["shards_candidate"] == 1
+
+    # Cloned index mapping (equal by value, distinct dict identity) still tracks shard consideration.
+    cloned_indexes = {name: entries for name, entries in core.indexes.items()}
+    assert cloned_indexes == core.indexes and cloned_indexes is not core.indexes
+    work = _QueryWork(tool="find", request_hash="0" * 64, started=0.0, indexes=cloned_indexes)
+    token = _QUERY.set(work)
+    try:
+        entries = core.indexes["observations"]
+        assert len(entries) == 3
+        db = core._database(core.indexes["analysis"][0], core.clock() + 10.0)
+        db.close()
+    finally:
+        _QUERY.reset(token)
+    assert work.shards_candidate == 4

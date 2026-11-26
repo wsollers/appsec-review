@@ -18,7 +18,7 @@ to launch a review, run live validation or execute a target binary.
 
 The useful question is: **can CBMC exhibit a violation of a selected safety property in the
 original accepted translation unit, starting from the function containing a scanner lead,
-under recorded function-entry assumptions and bounds?** This is not arbitrary binary analysis,
+under recorded function-entry assumptions and bounds†** This is not arbitrary binary analysis,
 an unbounded proof, a caller-reachability proof, or a replacement for review adjudication.
 The [Lean-lane decision](../formal-verification/design-review-2026-11-07.md) is unchanged.
 The separate binary/symbol-guided design is not implemented by this source-level job.

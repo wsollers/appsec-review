@@ -208,33 +208,36 @@ def test_execute_tool_isolates_scanner_failure_and_stops_active_guardian(tmp_pat
     assert retry_out["checkpoint_reused"] is False
     assert calls_retry == ["tool-shellcheck"]
 
-    # Second clean call with identical inputs DOES reuse checkpoint without invoking executor
-    calls_cached: list[str] = []
-    with attempt_scope(retry_unit):
-        cached_out = ec_job._execute_tool(
-            retry_unit,
+    # Fresh attempt executes tool unconditionally (no intra-attempt checkpoint salvage)
+    from types import SimpleNamespace
+    from appsec_review.storage import atomic_json
+    a2_attempt_root = retry_unit.job.run_root / "data/jobs/job_evidence_collection/attempts/attempt_0002"
+    a2_unit_root = a2_attempt_root / "steps/source_sast/tasks/shellcheck_scan"
+    a2_unit_root.mkdir(parents=True, exist_ok=True)
+    claim_a1 = json.loads((retry_unit.job.attempt_root / "claim.json").read_text(encoding="utf-8"))
+    atomic_json(
+        a2_attempt_root / "claim.json",
+        {**claim_a1, "attempt_id": "attempt_0002", "attempt_path": a2_attempt_root.relative_to(retry_unit.job.run_root).as_posix()},
+    )
+    retry_unit_a2 = SimpleNamespace(
+        **{
+            **vars(retry_unit),
+            "job": SimpleNamespace(**{**vars(retry_unit.job), "attempt_id": "attempt_0002", "attempt_root": a2_attempt_root}),
+            "unit_root": a2_unit_root,
+        }
+    )
+    calls_a2: list[str] = []
+    with attempt_scope(retry_unit_a2):
+        a2_out = ec_job._execute_tool(
+            retry_unit_a2,
             ADAPTERS["tool-shellcheck"],
             catalog,
-            lambda u: FakeExecutor(ROOT, u.job.run_root, calls_cached),
+            lambda u: FakeExecutor(ROOT, u.job.run_root, calls_a2),
             None,
         )
-    assert cached_out["terminal_status"] == "SUCCEEDED"
-    assert cached_out["checkpoint_reused"] is True
-    assert calls_cached == []
-
-    # Tampered checkpoint evidence hash invalidates reuse and re-runs tool
-    (retry_unit.job.run_root / cached_out["artifact"]["path"]).write_text('{"tampered": true}', encoding="utf-8")
-    calls_tampered: list[str] = []
-    with attempt_scope(retry_unit):
-        tampered_out = ec_job._execute_tool(
-            retry_unit,
-            ADAPTERS["tool-shellcheck"],
-            catalog,
-            lambda u: FakeExecutor(ROOT, u.job.run_root, calls_tampered),
-            None,
-        )
-    assert tampered_out["checkpoint_reused"] is False
-    assert calls_tampered == ["tool-shellcheck"]
+    assert a2_out["terminal_status"] == "SUCCEEDED"
+    assert a2_out["checkpoint_reused"] is False
+    assert calls_a2 == ["tool-shellcheck"]
 
 
 def test_execute_tool_covers_disabled_not_applicable_blocked_grype_and_osv_branches(tmp_path: Path) -> None:
@@ -425,9 +428,9 @@ def test_normalize_index_assemble_manifest_and_publish_handoff_end_to_end_units(
     idx_out = ec_job._build_producer_shard(idx_ctx, "software_inventory.syft_normalize")
     assert idx_out["index_reused"] is False and idx_out["record_count"] == 1
 
-    # Second _build_producer_shard call hits shared shard cache (index_reused=True)
+    # Second _build_producer_shard call rebuilds per-attempt shard (index_reused=False)
     idx_reused = ec_job._build_producer_shard(idx_ctx, "software_inventory.syft_normalize")
-    assert idx_reused["index_reused"] is True
+    assert idx_reused["index_reused"] is False
 
     # Seed accepted catalog + plan so assemble_manifest can synthesize all 20 index units cleanly
     seed_accepted_catalog_and_plan(
@@ -627,11 +630,6 @@ def test_swift_filter_prerequisites_sanitization_and_validator_negative_branches
     ))
     assert "/database" in extra_id and "/rules" not in extra_id
 
-    bad_cp = tmp_path / "bad_cp.json"
-    bad_cp.write_text("{corrupt", encoding="utf-8")
-    assert ec_job._valid_checkpoint(tmp_path, bad_cp) is None
-    bad_cp.write_text(json.dumps({"artifacts": [{"path": "../escape", "sha256": "0" * 64}]}), encoding="utf-8")
-    assert ec_job._valid_checkpoint(tmp_path, bad_cp) is None
 
 
 def test_execution_failure_modes_blint_trivy_swift_staging_and_validator_errors(tmp_path: Path) -> None:
@@ -1098,4 +1096,110 @@ def test_remaining_prerequisites_oversized_reports_and_osv_stderr_branches(
     assert any("PyPI" in g for g in osv_stderr_out["gaps"])
 
 
+def test_whole_job_retry_rebuilds_clean_index_shard_without_salvaging_attempt_1(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+    from appsec_review.storage import atomic_json
 
+    calls_a1: list[str] = []
+    scan_a1, catalog, _ = make_unit_context(
+        tmp_path / "retry_index",
+        unit_id="source_sast.shellcheck_scan",
+        target_files={"run.sh": "#!/bin/sh\necho hi\n"},
+    )
+    with attempt_scope(scan_a1):
+        out_a1 = ec_job._execute_tool(
+            scan_a1,
+            ADAPTERS["tool-shellcheck"],
+            catalog,
+            lambda u: FakeExecutor(ROOT, u.job.run_root, calls_a1),
+            None,
+        )
+    norm_root_a1 = scan_a1.job.attempt_root / "steps/source_sast/tasks/shellcheck_normalize"
+    norm_root_a1.mkdir(parents=True, exist_ok=True)
+    norm_map_a1 = {"source_sast.shellcheck_scan": out_a1}
+    norm_a1 = SimpleNamespace(
+        **{
+            **vars(scan_a1),
+            "unit_id": "source_sast.shellcheck_normalize",
+            "task_id": "shellcheck_normalize",
+            "unit_root": norm_root_a1,
+            "output": norm_map_a1.__getitem__,
+        }
+    )
+    norm_out_a1 = ec_job._normalize_tool(norm_a1, "source_sast.shellcheck_scan")
+
+    idx_root_a1 = scan_a1.job.attempt_root / "steps/source_sast/tasks/shellcheck_index"
+    idx_root_a1.mkdir(parents=True, exist_ok=True)
+    idx_map_a1 = {"source_sast.shellcheck_normalize": norm_out_a1}
+    idx_a1 = SimpleNamespace(
+        **{
+            **vars(scan_a1),
+            "unit_id": "source_sast.shellcheck_index",
+            "task_id": "shellcheck_index",
+            "unit_root": idx_root_a1,
+            "output": idx_map_a1.__getitem__,
+        }
+    )
+    with attempt_scope(idx_a1):
+        idx_out_a1 = ec_job._build_producer_shard(idx_a1, "source_sast.shellcheck_normalize")
+    rel_a1 = idx_out_a1["index_identity"]["relative_path"]
+    assert "attempts/job_evidence_collection/attempt_0001/" in rel_a1
+
+    # Corrupt Attempt 1's unaccepted shard on disk
+    (scan_a1.job.run_root / rel_a1).write_bytes(b"corrupt-attempt-1-shard")
+
+    # Attempt 2 executes from scratch and builds its own isolated shard
+    attempt2_root = scan_a1.job.run_root / "data/jobs/job_evidence_collection/attempts/attempt_0002"
+    scan_root_a2 = attempt2_root / "steps/source_sast/tasks/shellcheck_scan"
+    scan_root_a2.mkdir(parents=True, exist_ok=True)
+    claim_a1 = json.loads((scan_a1.job.attempt_root / "claim.json").read_text(encoding="utf-8"))
+    atomic_json(
+        attempt2_root / "claim.json",
+        {**claim_a1, "attempt_id": "attempt_0002", "attempt_path": attempt2_root.relative_to(scan_a1.job.run_root).as_posix()},
+    )
+    job_a2 = SimpleNamespace(**{**vars(scan_a1.job), "attempt_id": "attempt_0002", "attempt_root": attempt2_root})
+    scan_a2 = SimpleNamespace(**{**vars(scan_a1), "job": job_a2, "unit_root": scan_root_a2})
+    calls_a2: list[str] = []
+    with attempt_scope(scan_a2):
+        out_a2 = ec_job._execute_tool(
+            scan_a2,
+            ADAPTERS["tool-shellcheck"],
+            catalog,
+            lambda u: FakeExecutor(ROOT, u.job.run_root, calls_a2),
+            None,
+        )
+    assert calls_a2 == ["tool-shellcheck"]
+
+    norm_root_a2 = attempt2_root / "steps/source_sast/tasks/shellcheck_normalize"
+    norm_root_a2.mkdir(parents=True, exist_ok=True)
+    norm_map_a2 = {"source_sast.shellcheck_scan": out_a2}
+    norm_a2 = SimpleNamespace(
+        **{
+            **vars(scan_a2),
+            "unit_id": "source_sast.shellcheck_normalize",
+            "task_id": "shellcheck_normalize",
+            "unit_root": norm_root_a2,
+            "output": norm_map_a2.__getitem__,
+        }
+    )
+    norm_out_a2 = ec_job._normalize_tool(norm_a2, "source_sast.shellcheck_scan")
+
+    idx_root_a2 = attempt2_root / "steps/source_sast/tasks/shellcheck_index"
+    idx_root_a2.mkdir(parents=True, exist_ok=True)
+    idx_map_a2 = {"source_sast.shellcheck_normalize": norm_out_a2}
+    idx_a2 = SimpleNamespace(
+        **{
+            **vars(scan_a2),
+            "unit_id": "source_sast.shellcheck_index",
+            "task_id": "shellcheck_index",
+            "unit_root": idx_root_a2,
+            "output": idx_map_a2.__getitem__,
+        }
+    )
+    with attempt_scope(idx_a2):
+        idx_out_a2 = ec_job._build_producer_shard(idx_a2, "source_sast.shellcheck_normalize")
+    assert idx_out_a2["index_reused"] is False
+    rel_a2 = idx_out_a2["index_identity"]["relative_path"]
+    assert "attempts/job_evidence_collection/attempt_0002/" in rel_a2
+    assert rel_a2 != rel_a1
+    assert (scan_a2.job.run_root / rel_a2).read_bytes().startswith(b"SQLite format 3")

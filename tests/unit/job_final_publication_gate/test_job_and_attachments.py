@@ -39,7 +39,11 @@ def test_verify_unit_enforces_review_and_optional_producer_upstream_pins(
     config_ref = put(fx.root, "data/configuration/resolved.json", {
         "jobs": {"job_remediation_planning": {"settings": {"enabled": True}}}
     })
-    put(fx.root, "data/configuration/manifest.json", {"resolved_sha256": config_ref["sha256"]})
+    put(fx.root, "data/configuration/manifest.json", {
+        "schema": "appsec-review/run-configuration/2",
+        "source_sha256": fx.source_ref["sha256"],
+        "resolved_sha256": config_ref["sha256"],
+    })
     fx.document["bindings"] = [
         ref for ref in fx.document["bindings"] if ref["path"] != "data/configuration/resolved.json"
     ]

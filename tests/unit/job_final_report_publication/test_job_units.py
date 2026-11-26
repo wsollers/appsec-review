@@ -135,7 +135,7 @@ def _setup_run(
         verified["review"]["status"] = "DEGRADED"
         verified["accounting"]["outcome"] = "DEGRADED"
 
-    resolved_payload: dict[str, Any] = {"jobs": {}}
+    resolved_payload: dict[str, Any] = {"jobs": {JOB_ID: {"settings": {"render_timeout_seconds": 600}}}}
     if profile is not None:
         resolved_payload["configuration_profile"] = profile
     config_ref = put(root, "data/configuration/resolved.json", resolved_payload)
@@ -650,3 +650,87 @@ def test_tampered_or_unbound_claimed_dossier_fails_closed(
     with pytest.raises(IntegrityError, match="is not bound by the accepted gate"):
         bind_dossiers(fx.root, report, [])
     assert bind_dossiers(fx.root, report, read_bound_json(fx.root, loaded["gate_document"])["bindings"])[0].document == fx.dossier
+
+
+def test_final_report_resolves_attempt_operational_configuration_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dataclasses import replace as dc_replace
+    import hashlib
+    import json
+    from appsec_review.config.operational import operational_changes
+    from appsec_review.runtime import configuration as runtime_config
+    from appsec_review.runtime.configuration import CONFIGURATION_SCHEMA, REVISION_SCHEMA
+
+    expected_profile = {"name": "wsollers1-dev", "sha256": sha256_hex("profile-wsollers1")}
+    fx = _setup_run(
+        tmp_path / "rev",
+        monkeypatch,
+        profile=expected_profile,
+        render_pdf=False,
+    )
+    source_toml = b"# synthetic source toml\n"
+    source_sha = hashlib.sha256(source_toml).hexdigest()
+    base_bytes = (fx.root / "data/configuration/resolved.json").read_bytes()
+    base_doc = json.loads(base_bytes.decode("utf-8"))
+    base_sha = hashlib.sha256(base_bytes).hexdigest()
+    atomic_bytes(fx.root / "data/configuration/appsec-review.toml", source_toml)
+    atomic_json(
+        fx.root / "data/configuration/manifest.json",
+        {
+            "schema": CONFIGURATION_SCHEMA,
+            "source_sha256": source_sha,
+            "resolved_sha256": base_sha,
+            "sources": [],
+            "source_layers": [],
+        },
+    )
+
+    rev_doc = deepcopy(base_doc)
+    rev_doc["jobs"][JOB_ID]["settings"]["render_timeout_seconds"] = 240
+    changes = operational_changes(base_doc, rev_doc)
+    assert changes
+    rev_bytes = canonical_json(rev_doc)
+    rev_sha = hashlib.sha256(rev_bytes).hexdigest()
+    rev_dir = fx.root / "data/configuration/revisions" / rev_sha
+    atomic_bytes(rev_dir / "appsec-review.toml", source_toml)
+    atomic_bytes(rev_dir / "resolved.json", rev_bytes)
+    atomic_json(
+        rev_dir / "manifest.json",
+        {
+            "schema": REVISION_SCHEMA,
+            "base_resolved_sha256": base_sha,
+            "source_sha256": source_sha,
+            "resolved_sha256": rev_sha,
+            "resolved": {"path": "resolved.json", "sha256": rev_sha},
+            "sources": [],
+            "source_layers": [],
+            "operational_changes": changes,
+        },
+    )
+
+    snap_calls: list[tuple[str | None, Path]] = []
+    real_snapshot = runtime_config.configuration_snapshot
+
+    def spy_snapshot(run_root: Path, resolved_sha256: str | None = None):
+        snap = real_snapshot(run_root, resolved_sha256)
+        snap_calls.append((resolved_sha256, snap.directory / 'resolved.json'))
+        return snap
+
+    monkeypatch.setattr(report_job, "configuration_snapshot", spy_snapshot)
+
+    assert report_job._configuration_profile(fx.root, rev_sha) == expected_profile
+    assert snap_calls[-1] == (rev_sha, rev_dir / "resolved.json")
+
+    with pytest.raises(ValueError, match="requested configuration revision is unavailable"):
+        report_job._configuration_profile(fx.root, "0" * 64)
+
+    built = build_job(executor_factory=fake_executor([]))
+    loaded = built.units[0].handler(fx.unit("load.accepted_gate"))
+    unit_ctx = fx.unit("report.assemble", {"load.accepted_gate": loaded})
+    rev_job_ctx = dc_replace(unit_ctx.job, resolved_config_sha256=rev_sha)
+    rev_unit_ctx = dc_replace(unit_ctx, job=rev_job_ctx)
+    assembled = built.units[1].handler(rev_unit_ctx)
+    assert snap_calls[-1] == (rev_sha, rev_dir / "resolved.json")
+    report = read_bound_json(fx.root, assembled["artifact"])
+    assert report["provenance"]["configuration_profile"] == expected_profile

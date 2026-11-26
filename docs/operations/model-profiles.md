@@ -12,8 +12,10 @@ last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 scripts (`-Profile prod` in PowerShell). The default is `dev`; `copilot-dev` retains its existing
 model bindings with increased aggregate AI budgets. `copilot-dev-astra-6.2` and `copilot-dev-gemini`
 are uniform-model Copilot comparison profiles with the same increased budgets. `copilot-prod` uses that transport with
-production settings; `copilot-carbon-prod` selects Gemini 4 Carbon with its own production overrides.
-These seven names are the accepted profiles. Nothing selects a production profile implicitly.
+production settings; `copilot-carbon-prod` selects Gemini 4 Carbon with its own production overrides;
+`wsollers1-dev` inherits the base configuration and sets WSOLLERS1's OWASP control-assessment turn
+and token budgets while keeping `-dev` operational override eligibility.
+These eight names are the accepted profiles. Nothing selects a production profile implicitly.
 The stack's profile is the container default, set when its containers are created. `review-start
 --profile` selects another profile of the same provider family for one run without a restart (see
 [per-run profile and overlay](operator-scripts.md#per-run-profile-and-overlay)); switching between the
@@ -56,6 +58,7 @@ prod stack to dev the same way.
 | `copilot-dev-gemini` | [`profiles/copilot-dev-gemini.toml`](../../profiles/copilot-dev-gemini.toml) merged over `appsec-review.toml` | `copilot-sdk` / `gemini-4-carbon` / `high` for every configured model slot | 4× development aggregate AI budgets; base per-call and host limits |
 | `copilot-prod` | `profiles/copilot-prod.toml` merged over `appsec-review.toml` | Copilot Sonnet 5.5 primary workers and Opus 5.5 `strong` verifier/judge; inherited inference `planner` and `verifier` still use Claude CLI/Sonnet | production review budgets; per-model overrides are not identical to `prod` |
 | `copilot-carbon-prod` | `profiles/copilot-carbon-prod.toml` merged over `appsec-review.toml` | Gemini 4 Carbon through Copilot (`gemini-4-carbon`) at `high` reasoning across all jobs and roles | production budgets, exploration lane and active-claim cap, with output token caps sized within `gemini-4-carbon`'s 64k output limit |
+| `wsollers1-dev` | [`profiles/wsollers1-dev.toml`](../../profiles/wsollers1-dev.toml) merged over `appsec-review.toml` | inherits base `appsec-review.toml` providers, models and reasoning | WSOLLERS1 OWASP assessment overrides (`max_turns = 8`, `64000` input / `8000` output tokens on `model` and `models.reviewer`); `-dev` development-override eligible |
 
 ## Reusable Copilot development comparisons
 
@@ -158,7 +161,7 @@ scripts/review-start.sh --profile copilot-carbon-prod --target appsec-multi-vuln
 
 PowerShell uses `-Profile copilot-carbon-prod` on the corresponding scripts. Rebuild only when the image's
 dependencies, SDK/runtime or verifier need changing; profile TOML is mounted source, not an
-image payload. All five Copilot profiles use the same Copilot image
+image payload. All Copilot-backed profiles use the same Copilot image
 tag and overlay; changing profiles does not change the login or borrow Git credentials.
 
 ## Copilot with a separate GitHub identity
@@ -197,8 +200,12 @@ model merely to pass preflight.
 Workers run in SDK `empty` mode with a temporary working directory, no tools, no MCP servers,
 no skills, no extensions, no repository/user instruction discovery, and no file hooks or host Git
 operations. Only application-supplied bounded prompts reach the model. Session-store persistence
-and infinite-session compaction are disabled; timeout cancellation aborts the request and shuts
-down the owned runtime. The transport records usage and verifies the returned model identity.
+and infinite-session compaction are disabled, and each `create_session` call immediately registers
+and tears down its ephemeral `session-state` directory on exit while preserving any exception raised
+by `session.__aexit__`. `_copilot_worker.py` runs each worker thread's persistent SDK client loop and
+uses an independent bounded grace timeout when cancelling leaked tasks after `stack.aclose()`
+exhausts the call `deadline`, preventing hung teardown from wedging the worker thread. The transport
+records usage and verifies the returned model identity.
 
 For Dagster, run bootstrap after the separate login, then select `copilot-dev-astra-6.2` or
 `copilot-dev-gemini` (or explicitly

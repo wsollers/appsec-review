@@ -440,7 +440,7 @@ def test_dependency_inventory_is_in_verified_inputs_and_input_telemetry(tmp_path
     assert event["input_bytes"] == sum(ref.size_bytes for ref in inventory.values())
 
 
-@pytest.mark.parametrize("bound", ["max_bindings", "max_total_input_bytes"])
+@pytest.mark.parametrize("bound", ["max_bindings", "bytes"])
 def test_dependency_inputs_count_bindings_without_rejecting_aggregate_bytes(tmp_path, monkeypatch, bound):
     baseline = tmp_path / "baseline"
     baseline.mkdir()
@@ -448,12 +448,10 @@ def test_dependency_inputs_count_bindings_without_rejecting_aggregate_bytes(tmp_
     units = ExportUnits(disk)
     loaded = units.execute("load.verify_inputs")
     verified = c.VerifiedInputs.from_mapping(json.loads((disk.root / loaded["artifact"]["path"]).read_bytes()))
-    limit = len(verified.input_inventory) if bound == "max_bindings" else verified.total_input_bytes + 1000
+    baseline_bytes = verified.total_input_bytes
     bounded = tmp_path / "bounded"
     bounded.mkdir()
-    overrides = {bound: limit}
-    if bound == "max_total_input_bytes":
-        overrides["max_artifact_bytes"] = limit
+    overrides = {"max_bindings": len(verified.input_inventory)} if bound == "max_bindings" else {"max_document_bytes": 4096}
     disk = AcceptedInputDisk(bounded, monkeypatch, buckets=(), settings=enabled_settings(**overrides))
     _, accepted = dependency(disk, document=produced_reachability(disk, scenario="empty"))
     units = ExportUnits(disk)
@@ -467,7 +465,7 @@ def test_dependency_inputs_count_bindings_without_rejecting_aggregate_bytes(tmp_
             loaded = units.execute("load.verify_inputs")
             verified = c.VerifiedInputs.from_mapping(
                 json.loads((disk.root / loaded["artifact"]["path"]).read_bytes()))
-            assert verified.total_input_bytes > limit
+            assert verified.total_input_bytes > baseline_bytes
 
 
 def test_complete_dependency_inventory_fits_its_exact_unique_binding_bound(tmp_path, monkeypatch):

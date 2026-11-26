@@ -46,8 +46,14 @@ class ConfigurationSnapshot:
         return result
 
 
+def _regular_file(path: Path) -> Path:
+    if not path.is_file():
+        raise ValueError("configuration control anchor is not a regular file")
+    return path
+
+
 def _document(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_bytes())
+    value = json.loads(_regular_file(path).read_bytes())
     if not isinstance(value, dict):
         raise ValueError("configuration document must be an object")
     return value
@@ -101,15 +107,15 @@ def configuration_snapshot(run_root: Path, expected_sha256: str | None = None) -
     if manifest.get("schema") != required_schema:
         raise ValueError("unsupported configuration snapshot")
     if (manifest.get("resolved_sha256") != expected
-            or file_sha256(resolved_path) != expected
-            or file_sha256(source_path) != manifest.get("source_sha256")):
+            or file_sha256(_regular_file(resolved_path)) != expected
+            or file_sha256(_regular_file(source_path)) != manifest.get("source_sha256")):
         raise ValueError("configuration snapshot hash mismatch")
     document = _document(resolved_path)
     for layer in manifest.get("source_layers", ()):
         filename = layer.get("file")
         if filename not in ("profile.toml", "overlay.toml"):
             raise ValueError("unsupported immutable configuration source layer")
-        if file_sha256(safe_path(run_root, relative + "/" + filename)) != layer.get("sha256"):
+        if file_sha256(_regular_file(safe_path(run_root, relative + "/" + filename))) != layer.get("sha256"):
             raise ValueError("configuration source-layer hash mismatch")
         import tomllib
         key = "configuration_" + filename.removesuffix(".toml")
@@ -118,7 +124,7 @@ def configuration_snapshot(run_root: Path, expected_sha256: str | None = None) -
             raise ValueError("source layer differs from its recorded resolved provenance")
     host_pins = document.get("configuration_host_pins")
     if host_pins is not None and file_sha256(
-            safe_path(run_root, relative + "/host-pins.toml")) != host_pins["sha256"]:
+            _regular_file(safe_path(run_root, relative + "/host-pins.toml"))) != host_pins["sha256"]:
         raise ValueError("configuration host-pins hash mismatch")
     snapshot = ConfigurationSnapshot(directory, manifest, document)
     if expected != base_sha:

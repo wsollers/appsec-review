@@ -344,7 +344,8 @@ def _skipped_scope_index(unit: UnitContext, skipped: Mapping[str, Any]) -> dict[
     """Keep applicability in the manifest without inventing measured analysis coverage."""
     shard = f"clang-static-{skipped['scope_id']}"
     fingerprint = checkpoint_identity({"adapter": ADAPTER, **skipped})
-    path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
+    job_id = getattr(unit.job.config, "job_id", None) or JOB_ID
+    path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / job_id / unit.job.attempt_id / f"{fingerprint}.sqlite"
     builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     index = IndexIdentity("observations", "appsec-review/retrieval-index/2", builder.build(), fingerprint,
@@ -484,12 +485,6 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
             continue
         output_path = scratch / ("tidy.json" if engine == "clang-tidy" else "analyze.json")
         units = _read_units(output_path, max_bytes=settings["max_output_bytes"])
-        if (units and len(units) == len(rows)
-                and len({row["file"] for row in rows}) == len(rows)
-                and all(item["compile_unit_id"] is None for item in units)
-                and all(item["file"] == row["file"] for item, row in zip(units, rows))):
-            units = [{**item, "compile_unit_id": _compile_unit_identity(row)}
-                     for item, row in zip(units, rows)]
         bad = [item for item in units or () if item["exit_code"] is not None and item["exit_code"] != 0]
         from appsec_review.runtime import execution_safety as safety
         safety.failed_result(bool(bad) or execution["exit_code"] != 0,
@@ -572,7 +567,8 @@ def _analyze_scope(unit: UnitContext, scope: IndexScope, executor_factory: Any,
                        **({"seeded": values["seeded"]} if run is not None else {})},
         parser_identity=ADAPTER, normalizer_identity=ADAPTER, mapping_identity="accepted-cpp-source-map/1",
     )
-    path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / f"{fingerprint}-{hashlib.sha256(shard.encode()).hexdigest()[:16]}.sqlite"
+    job_id = getattr(unit.job.config, "job_id", None) or JOB_ID
+    path = unit.job.run_root / "data" / "indices" / "observations" / "attempts" / job_id / unit.job.attempt_id / f"{fingerprint}-{hashlib.sha256(shard.encode()).hexdigest()[:16]}.sqlite"
     builder = IndexBuilder(path, name="observations", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard)
     accepted_count = 0

@@ -16,18 +16,22 @@ commands, workers, Docker builds, or models.
 
 Prefer recovery of the existing application run when its frozen inputs remain compatible.
 Inspect the exact plan before admission: report `REUSE`, `REVALIDATE`, `RUN` and `INVALIDATE`
-job counts, unit-checkpoint decisions and their reasons separately from top-level refusals.
+job counts and their reasons separately from top-level refusals.
 Zero refusals means the plan is safe to admit, not that its recomputation is minimal. If a small
 repair re-identifies unrelated jobs, diagnose the dependency boundary rather than choosing a new
 run or forcing the whole graph. New runs still require the operator's explicit decision.
 
-There are three separate reuse decisions:
+**Job is the atomic recovery boundary.** There are two whole-job reuse decisions:
 
 | Layer | Compatibility required | What is retained |
 | --- | --- | --- |
-| Accepted job | Same computation/validation dependencies, target, configuration, input contract, valid publication and artifacts | The original accepted attempt |
-| Unchanged descendant (`REVALIDATE`) | Its own compatibility checks pass; every pinned upstream is identical or has equal `content_sha256` when dispatched | The original attempt plus a revalidation receipt |
-| Successful unit in a failed or interrupted job | Exact checkpoint inputs, job implementation and deployment, verified result/artifacts, and admitted dependencies | The original computation's result and read provenance in a fresh attempt |
+| Accepted job (`REUSE`) | Same computation/validation dependencies, target, compatible configuration, input/dataset contract, valid publication and artifacts | The original accepted attempt |
+| Unchanged descendant (`REVALIDATE`) | Its own compatibility checks pass; every pinned upstream is identical or has equal `content_sha256` when dispatched | The original accepted attempt plus a revalidation receipt |
+
+Any failed, interrupted, invalidated, or forced job re-executes **as a whole** in a fresh
+`attempts/<attempt_id>/` workspace; individual unit, scanner, scope, or model-cell checkpoints from
+failed or prior attempts are never salvaged across attempts, while prior attempt directories and
+claims remain immutable without rewriting a `RUNNING` receipt to manufacture a failure.
 
 The [handoff header/body partition](../architecture/job-interchange.md#evidence-header-evidence-body-and-the-content-identity)
 already excludes provenance from evidence equivalence. It does not waive computation admission.
@@ -37,33 +41,22 @@ without changing unrelated job identities. Actual imported computation code, val
 material configuration, target or evidence changes still invalidate the affected work. Handlers and
 validators that share a module remain conservatively coupled; this is not function-level reuse.
 
-Unit checkpoints accept structured `{path, sha256, size_bytes}` artifact references and verify
-the retained bytes, size and run-local nonsymlink path before reuse. They do not transplant files
-or rewrite old paths. Unbound paths, workspace/process/budget state, mutable index handles and
-retry-required results remain nonportable. A `RUNNING` application attempt can supply a completed
-checkpoint only when its distinct Dagster dispatch has a verified terminal, stopped-worker
-receipt; the plan/admission also retains the existing live-worker and lease checks. Its original
-claim and status are not rewritten to manufacture a failure.
-
-A reused task's status records `reused_checkpoint`, which points to the original hash-bound
-checkpoint and its status/result receipts. Input observation aggregation follows that chain
-(bounded to 64 attempts), preserving the original computation's reads without pretending that
-the handler executed or that a model cited those inputs in the new attempt.
-
-Only exact eligible decisions reviewed in the admitted repair plan are reused. Missing, changed
-or symlinked artifacts, uncertain workers, changed inputs/implementation, and a dependency that
-must run cause refusal or recomputation, never successful-looking fallback evidence. Old release
-manifests remain immutable: installing a change to the identity/checkpoint machinery itself may
+Only exact eligible whole-job decisions reviewed in the admitted repair plan are reused. Missing,
+changed or symlinked artifacts, uncertain workers, changed inputs/implementation, and a dependency
+that must run cause refusal or whole-job recomputation, never successful-looking fallback evidence.
+Old release manifests remain immutable: installing a change to the identity machinery itself may
 require a conservative baseline rerun; it does not retroactively certify old computations under
 new rules.
 
 ## Operational configuration revisions
 
-`config.operational.OPERATIONAL_SETTINGS` explicitly declares execution-only fields.
-Initially this is only `jobs.job_openvex_export.settings.timeout_seconds` (default and
-maximum 1800 seconds). Names or suffixes such as `timeout`, `workers` or `limit` do not
-grant compatibility: undeclared changes, authority, models, scope and output semantics
-remain material.
+`config.operational.OPERATIONAL_SETTINGS` explicitly declares exact execution, coverage, and
+`-dev`-only development leaves across 45 of the 48 configured jobs (the remaining three jobs have
+no independent mutable job-local setting and are explicitly accounted for in
+[job tuning](job-tuning.md)), while analyzer retries isolate per-attempt working directories as
+documented in [analyzer attempt scopes](analyzer-attempt-scopes.md). Names or suffixes such as
+`timeout`, `workers` or `limit` never grant compatibility by convention: undeclared changes,
+authority, models, scope and output semantics remain material.
 
 Preview compares the full resolved documents without writing configuration state. Admission
 writes a full immutable snapshot under `data/configuration/revisions/<resolved-sha256>/`
@@ -137,9 +130,8 @@ If the deployed source or effective operational configuration changed, the paren
 is included in the preview and rederived under the existing admission locks before submission.
 This retains source verification without repeating whole-run producer validation on the restart
 path. Any scoped admission refusal stops the launch.
-Checkpoint input probes are skipped when no predecessor exists, its computation identity changed,
-or its completed status makes failed-attempt checkpoint reuse impossible; these cases already
-require `RUN`. Eligible checkpoints still receive the full input and artifact checks.
+Each selected job that runs executes every unit from scratch inside a fresh `attempts/<attempt_id>/`
+workspace without cross-attempt unit checkpoint salvage.
 
 The exact selected steps and retained-output hashes are saved under
 `data/recovery/reexecutions/<sha256>.json` and bound into the durable submission identity.
@@ -204,28 +196,35 @@ every other profile reject the table.
 4. Retry the whole job with the existing restart, for example
    `scripts/review-start.sh --run-id RUN --parent-run-id FAILED_DAGSTER_UUID --restart-from-job
    job_build_environment_analysis`. The override is an admitted operational change (category
-   `development`), so the preview prepares scoped repair admission for the selected jobs only.
+   `development`, rejected in `configuration_overlay`, base `appsec-review.toml`, and non-`-dev`
+   profiles), so the preview prepares scoped repair admission for the selected jobs only.
    Successful upstream jobs are retained, and the job starts from its beginning.
-5. Turn it off by deleting the table, after the dispatch ends, then restart as usual. Fresh attempts
-   read the producer's artifact again.
+5. Turn it off by deleting the table after the dispatch ends, then restart from the overridden job
+   (or a clean top-level rerun). Fresh attempts read the producer's artifact again and recompute
+   untainted handoffs, clearing all `development_tainted` flags across the refreshed closure.
 
 When a fresh attempt starts, `Job.resolve_development_inputs` copies each edited file once to
 `<attempt>/inputs/development/NN-<name>`. The claim records `development_input_overrides`, with the
 original `{path, sha256, size_bytes}`, the snapshot's hash and the source path. A differing hash is
-expected and is recorded, not rejected. Every step and task opens files through
-`runtime.inputs.input_file`, and `JobContext.input_file` returns the snapshot, so later edits to the
-working copy do not reach that attempt. An in-flight attempt also keeps its claimed snapshot if only
-development settings change. Read receipts keep the original reference and add
-`development_replacement`. A consumer that reads an overridden artifact through bare
-`observe_output` fails instead of reading the original. So far `job_target_catalog`'s
-`load_accepted_catalog` (used by build-environment analysis and planning) is the consumer wired
-through `input_file`. Another consumer must switch to `input_file` before its inputs can be
-overridden.
+expected and is recorded, not rejected. Active overrides are bound across the entire attempt
+(including `input_validators`, step/task execution, `finalize_result`, and `output_validators`) so
+every `runtime.inputs.input_file` call sees the pinned snapshot rather than falling back to the
+un-overridden file, and mid-attempt edits to the working copy do not reach that attempt. Read
+receipts keep the original reference and add `development_replacement`. A consumer that reads an
+overridden artifact through bare `observe_output` fails instead of reading the original. So far
+`job_target_catalog`'s `load_accepted_catalog` (used by build-environment analysis and planning) is
+the consumer wired through `input_file`. Another consumer must switch to `input_file` before its
+inputs can be overridden.
 
-`job_config_sha256` covers the setting, and `ResumePlanner` refuses reuse when an accepted attempt's
-recorded overrides differ from the current setting or edited-copy hash. A development result is
-never reused as an ordinary one, nor the reverse. Output validation, signing, permissions and
-resource controls are unchanged.
+Any attempt that uses `development.input_overrides` — or consumes an upstream handoff carrying
+`development_tainted: true` — records `development_tainted: true` on its own `handoff.json`. In
+`-dev` profiles this temporary taint propagates across downstream consumers so end-to-end testing
+can proceed, while certification and export gates (`job_final_publication_gate`,
+`job_dossier_publication`, and `job_openvex_export`) fail closed on any `development_tainted`
+upstream handoff. `job_config_sha256` covers the setting, and `ResumePlanner` refuses reuse when an
+accepted attempt's recorded overrides or taint state differ from the current setting or edited-copy
+hash. A development-tainted result is never reused as an ordinary one, nor the reverse. Output
+validation, signing, permissions and resource controls are unchanged.
 
 Example (scratch run, 2026-11-25). The original `catalog.json` lacks
 `build_discovery.catalog_build_targets`:
@@ -262,7 +261,7 @@ stage that carries sources. Job handlers never scan or hash installed platform p
 evidence. They read the bounded generated manifest at the configured location.
 Changing a source/helper/schema/script and remeasuring changes the appropriate identity even
 when operator release labels are unchanged. Labels can invalidate an identity, but cannot
-replace source provenance. Missing manifests disable reuse, including successful-unit reuse.
+replace source provenance. Missing manifests disable whole-job reuse.
 Dynamic imports outside the declared source closure must be added to the manifest before release.
 
 Set `APPSEC_REVIEW_IMAGE_ID=sha256:<64 hex digits>` in the deployed application's environment
@@ -346,8 +345,7 @@ appsec-review resume --run-id RUN --target TARGET
 ```
 
 The plan (`appsec-review/repair-plan/2`) is deterministic and contains compatibility version, old binding identity, exact
-replacement release/deployment identity, attempt snapshots, every job decision, unit checkpoint
-decisions and refusal reasons. Review it before admission. Each job decision is one of `REUSE`
+replacement release/deployment identity, attempt snapshots, every whole-job decision and refusal reasons. Review it before admission. Each job decision is one of `REUSE`
 (every identity, the accepted handoff, its artifacts and every pinned upstream handoff match),
 `RUN` (something of the job's own changed, named in `reasons`), `INVALIDATE` (an ancestor will run
 and this job's own identities, configuration or accepted handoff changed too, or the plan is a
@@ -575,13 +573,10 @@ describes availability, not permission. Independent branches survive,
 live gates always run, and `COMPLETED_WITH_GAPS` survives warm reuse. Dagster also accepts the
 `appsec/force_from` tag for every job in its enabled graph.
 
-Successful portable units from a failed attempt can enter a **fresh** attempt only after
-explicit repair admission, with identical configuration, implementation, deployment, input
-and dependency identities. Checkpoints bind the old claim, successful terminal receipt and
-result. Validators still run. Path-coupled artifacts, process/workspace state, budget state,
-missing/corrupt checkpoints, and units whose dependencies are not admitted rerun rather than
-being transplanted. Old attempt receipts remain untouched. Model budgets are not copied or reset
-by recovery; their old receipts remain in their original attempt.
+Failed or interrupted attempts never transplant partial unit, scanner, scope, or model-cell
+outputs into a fresh attempt: every rerun executes the whole job inside its own
+`attempts/<attempt_id>/` workspace while leaving old attempt directories, claims, receipts, and
+recorded model-budget consumption untouched in their original attempt.
 
 Shared computation receipts have a separate provenance check: an unchanged cache key does not
 authorize reusing a computation from an incompatible implementation, configuration or deployment.

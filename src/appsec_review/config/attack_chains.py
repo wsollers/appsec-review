@@ -17,9 +17,6 @@ class AttackChainSettings:
     max_links: int = 6
     max_expansions: int = 100
     max_candidates_per_composition: int = 8
-    max_challenge_cells: int = 100
-    max_queries: int = 12
-    max_turns: int = 4
     max_evidence_per_obligation: int = 8
     max_result_bytes: int = 65536
     # Only commissioned deterministic producers may supply counted continuity facts.
@@ -30,8 +27,7 @@ class AttackChainSettings:
 
     def __post_init__(self) -> None:
         bounds = {"max_links": (2, 8), "max_expansions": (1, 10000),
-                  "max_candidates_per_composition": (1, 50), "max_challenge_cells": (0, 20000),
-                  "max_queries": (1, 1000), "max_turns": (1, 100),
+                  "max_candidates_per_composition": (1, 50),
                   "max_evidence_per_obligation": (1, 32), "max_result_bytes": (1024, 1048576)}
         for name, (low, high) in bounds.items():
             value = getattr(self, name)

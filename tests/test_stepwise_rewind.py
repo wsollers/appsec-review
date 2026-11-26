@@ -585,3 +585,108 @@ def test_inventory_accounting_requires_resolving_artifact_signatures(inventory_w
         rewind.advertised_inventory_changes(walk.run_root, walk.path.parent, baseline, walk.job_id,
                                            json.loads((attempt / "claim.json").read_bytes()),
                                            expected, actual, walk.masks)
+
+
+
+def test_operational_configuration_revision_accepts_compatible_upstream_and_replay(tmp_path, monkeypatch):
+    from appsec_review.config import load_config
+    from appsec_review.runtime.configuration import configuration_snapshot
+
+    pair_ids = ("job_a", "job_b")
+    pair_deps = {"job_a": [], "job_b": ["job_a"]}
+    pair_topology = {"graph": "wave1_review", "jobs": [
+        {"job_id": name, "name": name, "dependencies": pair_deps[name],
+         "upstream_handoffs": pair_deps[name], "propagate_handoff": True} for name in pair_ids]}
+    config, jobs, _ = fixture(tmp_path, pair_ids)
+    with config.source_path.open("a", encoding="utf-8") as stream:
+        stream.write("\n[orchestration.dagster]\nmax_concurrent = 4\n")
+    config = load_config(config.source_path)
+    jobs = tuple(replace(job, units=(Unit("work.only", lambda context: {
+        "value": 7, "semantic_path": "safe/original"}),)) if job.job_id == "job_b" else job for job in jobs)
+
+    instance = Instance()
+    deployment = tmp_path / "deploy/dagster"
+    deployment.mkdir(parents=True)
+    (deployment / ".env").write_text(f"APPSEC_UID={os.getuid()}\nAPPSEC_GID={os.getgid()}\n")
+    for key, value in {
+        "ROOT": tmp_path, "STATE_ROOT": tmp_path / "runs/metadata/stepwise", "DEPLOYMENT": deployment,
+        "ACCEPTANCE_ROOT": tmp_path / "test/acceptance", "SEED_STORE": tmp_path / "data/acceptance-seeds",
+    }.items():
+        monkeypatch.setattr(stepwise, key, value)
+    monkeypatch.setattr(stepwise, "git", lambda *args, **kwargs: "" if args[0] == "status" else "testcommit")
+    monkeypatch.setattr(stepwise, "get_run", lambda url, dispatch: {
+        "status": "SUCCESS" if instance.runs[dispatch].is_finished else "STARTED"})
+
+    runner = JobRunner(config)
+    run_id = None
+    for index, job in enumerate(jobs):
+        dispatch = str(UUID(int=index + 1))
+        upstream = ({
+            name: json.loads((run_root / f"data/jobs/{name}/latest.json").read_bytes())["handoff_sha256"]
+            for name in pair_deps[job.job_id]
+        } if run_id is not None else {})
+        result = runner.run(job, run_id=run_id, upstream_handoffs=upstream,
+                            orchestration={"system": "dagster", "run_id": dispatch})
+        if run_id is None:
+            run_id = result["status"]["run_id"]
+            run_root = config.runtime.runs_dir / run_id
+            state_path = stepwise.STATE_ROOT / run_id / "state.json"
+            state = StepwiseState.create(run_id, target="/opt/app/targets/fixture", topology=pair_topology)
+        else:
+            state = StepwiseState.load(state_path)
+        instance.runs[dispatch] = SimpleNamespace(
+            run_id=dispatch, is_finished=True, tags={"appsec/application_run_id": run_id})
+        verify_dispatch_stop(config, run_root, dispatch, instance=instance)
+        state.record_launch(job.job_id, dispatch)
+        state.save(state_path)
+        args = SimpleNamespace(app_run=run_id, job=job.job_id, tag="fixture-v1", url="offline", show=3)
+        assert stepwise.command_accept(args) == 0
+
+    (tmp_path / "release-src/job_b/job.py").write_text("VERSION = 2\n", encoding="utf-8")
+    write_release(tmp_path, pair_ids)
+    config.source_path.write_text(
+        config.source_path.read_text(encoding="utf-8").replace("max_concurrent = 4", "max_concurrent = 2", 1),
+        encoding="utf-8",
+    )
+    tuned_config = load_config(config.source_path)
+    assert tuned_config.resolved_sha256 != config.resolved_sha256
+
+    plan = plan_repair(tuned_config, run_root, jobs, "none", dependencies=pair_deps)
+    assert plan["admissible"], plan["refusals"]
+    assert [entry["action"] for entry in plan["decisions"]] == ["REUSE", "RUN"]
+    assert plan["resolved_config_sha256"] == tuned_config.resolved_sha256
+    assert plan["resolved_config_sha256"] != configuration_snapshot(run_root).sha256
+    admit_repair(tuned_config, run_root, jobs, plan, dependencies=pair_deps)
+    plan_path = tmp_path / "repair-plan.json"
+    atomic_json(plan_path, plan)
+
+    monkeypatch.setattr(
+        stepwise, "compose",
+        lambda *args: json.dumps(rewind.inspect_runtime(
+            tuned_config, run_root, pair_topology, json.loads(args[7]), instance,
+            verify_stops=args[8:] == ("verify-stops",))),
+    )
+    rewind_args = SimpleNamespace(
+        app_run=run_id, job="job_b", tag="fixture-v1", url="offline", show=3, plan=str(plan_path))
+    assert stepwise.command_rewind(rewind_args) == 0
+
+    replay_dispatch = str(UUID(int=99))
+    job_a_handoff = json.loads((run_root / "data/jobs/job_a/latest.json").read_bytes())["handoff_sha256"]
+    replayed = JobRunner(tuned_config).run(
+        jobs[1], run_id=run_id, upstream_handoffs={"job_a": job_a_handoff},
+        orchestration={"system": "dagster", "run_id": replay_dispatch},
+    )
+    instance.runs[replay_dispatch] = SimpleNamespace(
+        run_id=replay_dispatch, is_finished=True, tags={"appsec/application_run_id": run_id})
+    verify_dispatch_stop(tuned_config, run_root, replay_dispatch, instance=instance)
+    state = StepwiseState.load(state_path)
+    state.record_launch("job_b", replay_dispatch)
+    state.save(state_path)
+
+    assert stepwise.command_check(rewind_args) == 0
+    checked = StepwiseState.load(state_path).job("job_b")
+    assert checked["check"]["replay_comparison"]["passed"]
+    assert "configuration" in {
+        change["field"] for change in checked["check"]["replay_comparison"]["admitted_control_changes"]}
+    assert stepwise.command_accept(rewind_args) == 0
+    assert StepwiseState.load(state_path).job("job_b")["handoff_sha256"] == replayed["handoff_sha256"]

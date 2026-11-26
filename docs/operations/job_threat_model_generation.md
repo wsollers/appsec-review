@@ -335,9 +335,11 @@ accepted as complete coverage even though the final publishing unit itself retur
 
 ## Resume and invalidation
 
-[Runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) binds resolved
-configuration, contract, target snapshot, releases and admitted upstream digests. A repaired
-producer changes its pin and invalidates this consumer without rerunning unrelated producers.
-Reference hashes are checked repeatedly within the attempt. Working artifacts are path/hash-bound
-to that attempt, so failed-attempt unit portability does not permit copying them into another
-attempt. Reference, schema or render changes require fresh validation and view comparison.
+Whole-job [runtime reuse](../architecture/jobs-and-runtime.md#wave-1-resumability) binds resolved
+configuration (up to compatible `[operational.*]` tuning), dataset contract, target snapshot,
+component releases and admitted upstream digests; a repaired upstream producer changes its pin and
+invalidates this consumer without rerunning unrelated producers, while any failed or invalidated
+threat-model run re-executes in full inside a fresh `attempts/<attempt_id>/` workspace without
+copying path/hash-bound working artifacts across attempts. Reference hashes are checked repeatedly
+within the attempt, and reference, schema or render changes require fresh validation. See
+[job-local operational tuning](job-tuning.md) and [threat-model-generation](threat-model-generation.md#tuning-and-whole-job-recovery-job_threat_model_generation).

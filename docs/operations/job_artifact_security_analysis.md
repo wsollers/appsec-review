@@ -67,20 +67,20 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L835) |
-| `analyze` | `analyze.blint` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `analyze` | `analyze.cve_bin_tool` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `analyze` | `analyze.grype` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `analyze` | `analyze.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `analyze` | `analyze.jvm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `analyze` | `analyze.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `analyze` | `analyze.osv` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `analyze` | `analyze.packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `analyze` | `analyze.spotbugs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `analyze` | `analyze.syft` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `analyze` | `analyze.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L618) |
-| `index` | `index.observations` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L737) |
-| `load` | `load.accepted_artifacts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L611) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L813) |
+| `analyze` | `analyze.blint` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `analyze` | `analyze.cve_bin_tool` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `analyze` | `analyze.grype` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `analyze` | `analyze.inventory` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `analyze` | `analyze.jvm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `analyze` | `analyze.native` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `analyze` | `analyze.osv` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `analyze` | `analyze.packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `analyze` | `analyze.spotbugs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `analyze` | `analyze.syft` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `analyze` | `analyze.wasm` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L596) |
+| `index` | `index.observations` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L715) |
+| `load` | `load.accepted_artifacts` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py#L589) |
 
 ### Accepted input declarations
 
@@ -359,14 +359,17 @@ list. Broader produced-artifact Grype optimization and acceptance obligations ar
 
 ## Resume and invalidation
 
-Per-artifact/capability checkpoints bind artifact bytes and canonical identity, producer/build
-handoff, upstream artifact manifest, classification/delivery scope, scanner/resolved tool identity,
-required component releases, parser/normalizer and settings; installer presentation also binds
-record-scanning inputs. Changed artifact or capability inputs rebuild the affected scan; a
-record-splitting-only change rebuilds the observation shard without inherently rerunning scanners.
-Gap-bearing scan results may be checkpointed; eligibility requires declared releases and verified
-raw/native artifacts, not simply a prior success flag. Disabled Grype bypasses reuse.
+Job is the atomic recovery boundary: an accepted job is reused as a whole when upstream handoffs,
+configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities match, whereas any failed, invalidated, or forced job
+re-executes every artifact and capability scan in a fresh `attempts/<attempt_id>/` workspace
+without salvaging per-artifact or scanner checkpoints from prior attempts. Attempt-local scan
+records bind artifact bytes and canonical identity, producer/build handoff, upstream artifact
+manifest, classification/delivery scope, scanner/resolved tool identity, declared component
+releases, parser/normalizer and settings; content-addressed observation shards verify custody and
+raw/native artifacts rather than overwriting prior attempt bytes.
 
-Shared runtime reuse, [image pins](image-pin-verification.md), [signing](signing.md) and
-[manifest composition](../architecture/python-and-retrieval.md#accepted-index-sets) remain separate
-boundaries. Language/applicability metadata incompleteness remains [T-157](../TODO.md).
+Shared whole-job admission, [image pins](image-pin-verification.md), [signing](signing.md),
+[manifest composition](../architecture/python-and-retrieval.md#accepted-index-sets),
+[job-local operational tuning](job-tuning.md) and [artifact-security-analysis](artifact-security-analysis.md#tuning-and-whole-job-recovery-job_artifact_security_analysis) remain separate boundaries.
+Language/applicability metadata incompleteness remains [T-157](../TODO.md).

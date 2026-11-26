@@ -37,22 +37,22 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `adjudicate` | `adjudicate.apply_policy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L618) |
-| `attack_chains` | `attack_chains.compose_candidates` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L675) |
-| `attack_chains` | `attack_chains.refute_edges` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L714) |
-| `attack_chains` | `attack_chains.verify_weakest_links` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L714) |
-| `completeness` | `completeness.audit` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L754) |
-| `hunt_review` | `hunt_review.teams` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L505) |
-| `lead_review` | `lead_review.teams` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L505) |
-| `merge` | `merge.claims` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L589) |
-| `packages` | `packages.assemble_hunt_packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L405) |
-| `packages` | `packages.assemble_lead_packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L405) |
-| `packages` | `packages.plan_hunt_campaign` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L359) |
-| `publication` | `publication.publish_claim_ledger` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L789) |
-| `publication` | `publication.publish_handoff` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L812) |
+| `adjudicate` | `adjudicate.apply_policy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L622) |
+| `attack_chains` | `attack_chains.compose_candidates` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L680) |
+| `attack_chains` | `attack_chains.refute_edges` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L699) |
+| `attack_chains` | `attack_chains.verify_weakest_links` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L699) |
+| `completeness` | `completeness.audit` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L739) |
+| `hunt_review` | `hunt_review.teams` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L508) |
+| `lead_review` | `lead_review.teams` | 1 | `inference_teams` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L508) |
+| `merge` | `merge.claims` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L592) |
+| `packages` | `packages.assemble_hunt_packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L407) |
+| `packages` | `packages.assemble_lead_packages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L407) |
+| `packages` | `packages.plan_hunt_campaign` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L360) |
+| `publication` | `publication.publish_claim_ledger` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L774) |
+| `publication` | `publication.publish_handoff` | 1 | `lifecycle` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L797) |
 | `scope` | `scope.accept_manifest` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L287) |
 | `scope` | `scope.assemble_scope` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L300) |
-| `scoring` | `scoring.score_claims` | 1 | `inference_score` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L639) |
+| `scoring` | `scoring.score_claims` | 1 | `inference_score` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L643) |
 | `triage` | `triage.lead_severity` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_inference_security_review/job.py#L313) |
 
 ### Accepted input declarations
@@ -1710,7 +1710,8 @@ flowchart LR
   hunt --> merge
   merge --> policy["adjudicate.apply_policy"]
   policy --> score["scoring.score_claims"]
-  score --> chains["attack_chains"]
+  score --> fpaths["attack_chains: deterministic finding_paths static path verification"]
+  fpaths --> chains["attack_chains: model-free chain manifest publication"]
   chains --> complete["completeness.audit"]
   complete --> ledger["publication.publish_claim_ledger"]
   ledger --> publish["publication.publish_handoff"]
@@ -1722,6 +1723,8 @@ flowchart LR
   audit -. "integrity failure" .-> reject
   lead -. "cell / evidence / budget gaps" .-> gaps["ledger gaps"]
   hunt -. "coverage / routing gaps" .-> gaps
+  fpaths -. "unresolved / sink-mismatch path limitations" .-> gaps
+  chains -. "historical ledger replay only; no active LLM chain cells" .-> complete
   gaps --> complete
   publish -. "integrity / accounting failure" .-> reject["reject publication"]
 ```
@@ -1787,27 +1790,24 @@ remain separate operation/evidence/coverage and stage-loss work.
 
 ## Resume and invalidation
 
-Package reuse basis binds semantic package content, only its dependency shards, assembly rules
-and evidence/admissibility/predicate policies. The [cell fingerprint](../../src/appsec_review/review/cells.py)
-adds lane, claim, role/persona/stack/strategy, task input, round/delta, readable evidence,
-guidance, model, capabilities, budgets, output schema and validator versions. Retry/concurrency
-settings are deliberately not cell identity inputs.
+Job is the atomic recovery boundary: an accepted review is reused only as a whole when accepted
+upstream handoffs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities match, whereas any failed, invalidated, or forced
+review re-executes all triage, hunting, package adjudication, deterministic `finding_paths`,
+`attack_chains`, and audit publication steps in a fresh `attempts/<attempt_id>/` workspace without
+salvaging individual failed or prior-attempt model cells. Within an attempt, cell provenance binds
+semantic package content, dependency shards, lane, claim, role/persona/stack/strategy, task input,
+round/delta, readable evidence, guidance, model, capabilities, budgets, output schema and validator
+versions; bounded within-attempt blue-cell memoization never shares prior answers with blind
+verifiers or judges, and `attack_chains` runs deterministically without model cells (replaying
+historical chain cells only when auditing legacy ledgers).
 
-Cell reuse revalidates evidence and receipts; changed package evidence or guidance invalidates
-dependent cells rather than unrelated packages. Blue-cell memoization is a separate bounded
-facility, not permission to share prior answers with blind verifiers or judges. Triage has its
-own accepted-source/reference/guidance-bound reuse. Chains, accounting and publication are
-reverified against sealed shards. [Runtime resume](../architecture/jobs-and-runtime.md#wave-1-resumability)
-still binds upstream/configuration/component identities; path-coupled ledger/artifact outputs are
-not portable failed-attempt checkpoints.
-
-Audit settings have their own frozen policy identity and are excluded from model-cell/lane/round
-semantic settings. They still belong to the full resolved configuration; this is not permission
-to change an existing run's bounds. The sidecar binds the original inner handoff and original
-source references, while the common accepted publication pins the sidecar and its source closure.
-The [audit contract](../architecture/triage-verifier-enhancement.md#t-150-implementation-decisions-2026-11-13)
-owns the detailed origin, budget and compatibility rules.
-
+Audit settings retain their own frozen policy identity within the resolved configuration; the
+sidecar binds the original inner handoff and source references while the accepted publication pins
+the sidecar and its source closure
+([audit contract](../architecture/triage-verifier-enhancement.md#t-150-implementation-decisions-2026-11-13)).
+See [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [inference-security-review](../architecture/inference-security-review.md#tuning-and-whole-job-recovery-job_inference_security_review).
 ## Model usage
 
 [lead_triager](../generated/guidance.md#roles-lead_triager) uses
@@ -1822,10 +1822,11 @@ and reachability. [independent_verifier](../generated/guidance.md#roles-independ
 uses a fresh blind context; model distinctness is measured separately.
 [adjudication_judge](../generated/guidance.md#roles-adjudication_judge) uses the generalist
 viewpoint to assess anonymized positions, without state authority.
-[attack_chain_analyst](../generated/guidance.md#roles-attack_chain_analyst) proposes bounded
-compositions, with refuter/verifier challenges; all three chain roles select generalist/generic
-context. Adjudication, scoring and completeness are
-deterministic despite similarly named registry roles.
+Active `attack_chains` execution runs model-free deterministic `finding_paths` static path
+verification on the `application` pool without `max_challenge_cells`, `max_queries`, or `max_turns`
+settings; [attack_chain_analyst](../generated/guidance.md#roles-attack_chain_analyst) and the chain
+refuter/verifier tasks remain registered only for historical ledger/receipt verification, alongside
+deterministic adjudication, scoring and completeness.
 
 Exact personas and strategies are recorded in routing/cell receipts and selected through
 [guidance procedures](../architecture/guidance-procedures.md#selection-and-provenance).

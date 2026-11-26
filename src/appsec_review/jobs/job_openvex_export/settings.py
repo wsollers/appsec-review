@@ -7,14 +7,15 @@ import re
 from typing import Any
 
 from .contracts import (
-    AuthorKind, MAX_ACTION_BYTES, MAX_ARTIFACT_BYTES, MAX_BINDINGS, MAX_DOCUMENT_BYTES,
-    MAX_IDENTIFIER_BYTES, MAX_MANIFEST_BYTES, MAX_PACKAGES, MAX_TIMEOUT_SECONDS,
-    MAX_TOTAL_INPUT_BYTES, domain_sha256, validate_repository_iri, validate_text,
+    AuthorKind, DEFAULT_ACTION_BYTES, DEFAULT_BINDINGS, DEFAULT_DOCUMENT_BYTES,
+    DEFAULT_IDENTIFIER_BYTES, DEFAULT_MANIFEST_BYTES, DEFAULT_PACKAGES, DEFAULT_TIMEOUT_SECONDS,
+    MAX_ACTION_BYTES, MAX_BINDINGS, MAX_DOCUMENT_BYTES, MAX_IDENTIFIER_BYTES,
+    MAX_MANIFEST_BYTES, MAX_PACKAGES, MAX_TIMEOUT_SECONDS,
+    domain_sha256, validate_repository_iri, validate_text,
 )
 
 _BOUNDS = {
     "max_packages": MAX_PACKAGES, "max_bindings": MAX_BINDINGS,
-    "max_artifact_bytes": MAX_ARTIFACT_BYTES, "max_total_input_bytes": MAX_TOTAL_INPUT_BYTES,
     "max_document_bytes": MAX_DOCUMENT_BYTES, "max_manifest_bytes": MAX_MANIFEST_BYTES,
     "max_action_bytes": MAX_ACTION_BYTES, "max_identifier_bytes": MAX_IDENTIFIER_BYTES,
     "timeout_seconds": MAX_TIMEOUT_SECONDS,
@@ -37,15 +38,13 @@ class OpenVexExportSettings:
         "validate any fix before relying on it."
     )
     repository_iri: str = ""
-    max_packages: int = MAX_PACKAGES
-    max_bindings: int = MAX_BINDINGS
-    max_artifact_bytes: int = MAX_ARTIFACT_BYTES
-    max_total_input_bytes: int = MAX_TOTAL_INPUT_BYTES
-    max_document_bytes: int = MAX_DOCUMENT_BYTES
-    max_manifest_bytes: int = MAX_MANIFEST_BYTES
-    max_action_bytes: int = MAX_ACTION_BYTES
-    max_identifier_bytes: int = MAX_IDENTIFIER_BYTES
-    timeout_seconds: int = MAX_TIMEOUT_SECONDS
+    max_packages: int = DEFAULT_PACKAGES
+    max_bindings: int = DEFAULT_BINDINGS
+    max_document_bytes: int = DEFAULT_DOCUMENT_BYTES
+    max_manifest_bytes: int = DEFAULT_MANIFEST_BYTES
+    max_action_bytes: int = DEFAULT_ACTION_BYTES
+    max_identifier_bytes: int = DEFAULT_IDENTIFIER_BYTES
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
 
     def __post_init__(self) -> None:
         if type(self.enabled) is not bool:
@@ -55,8 +54,6 @@ class OpenVexExportSettings:
             value = getattr(self, name)
             if type(value) is not int or not 1 <= value <= high:
                 raise ValueError(f"jobs.job_openvex_export.settings.{name} must be an integer in [1, {high}]")
-        if self.max_artifact_bytes > self.max_total_input_bytes:
-            raise ValueError("max_artifact_bytes must not exceed max_total_input_bytes")
         for name in ("author", "role", "action_statement", "repository_iri"):
             value = getattr(self, name)
             validate_text(value, max_bytes=self.max_action_bytes if name == "action_statement"

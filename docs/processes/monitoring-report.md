@@ -1,22 +1,23 @@
 ---
 title: "Review monitoring and job-output reports"
-kind: "operations"
+kind: "process"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: []
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Review monitoring and job-output reports
 
 Use this Markdown format for a five-minute monitoring chat and its separate job-output
 verification chat. This document defines reporting and a reusable kickoff prompt, not a new
 runtime protocol or standing permission to launch, repair, or bypass checks. Root
-[`AGENTS.md`](../AGENTS.md) governs. The kickoff's user authorization, not telemetry or a model's
+[`AGENTS.md`](../../AGENTS.md) governs. The kickoff's user authorization, not telemetry or a model's
 output, commissions operations.
 
 ## Evidence and scope
 
-Read the [monitor procedure](operations/run-monitor.md), [metrics reference](operations/metrics.md),
-and [recovery runbook](operations/recovery-repair.md). Use current job contracts and the deployed,
+Read the [monitor procedure](../operations/run-monitor.md), [metrics reference](../operations/metrics.md),
+and [recovery runbook](../operations/recovery-repair.md). Use current job contracts and the deployed,
 run-owned graph: jobs may have changed since an earlier run or audit.
 
 | Report content | Evidence source |
@@ -171,8 +172,8 @@ not in the target or another job's publication. The verifier is read-only apart 
 reports/cursor. It never changes acceptance, restarts Dagster, or edits runtime data.
 It sends new causal defects to the monitor immediately. For each distinct failing or defective
 job within its user-authorized scope, the monitor stripes the repair onto a dedicated sibling
-`FIX - <XXXX>` chat working in a stacked Linux worktree rather than editing the live run's
-checkout inline; unresolved expected-gap, target-scope, or policy choices go to the user.
+`FIX - <XXXX>` chat working in an isolated Linux worktree branched directly off `main` rather than editing the live
+run's checkout inline; unresolved expected-gap, target-scope, or policy choices go to the user.
 It must not quietly mark an unexpected gap as expected.
 
 The background verifier does not gate Dagster scheduling. If the user instead wants no downstream
@@ -187,7 +188,7 @@ Append the following to a fault/recovery report:
 #### Recovery
 Fault <app/dispatch/job/attempt/step>; failure time <UTC>; detected <UTC>.
 Cause <source/artifact-supported diagnosis>; evidence <references>; uncertainty <named gaps>.
-Fix <FIX chat ID(s), stacked worktree branch(es), merged main revision, changed files>;
+Fix <FIX chat ID(s), isolated worktree branch(es) off main, merged main revision, changed files>;
 validation <focused unit tests in worktree and post-merge on main, or not run>.
 Boundary <whole failed job(s) and genuinely affected descendants>;
 retained successful jobs <N and evidence>; no cell/pool salvage.
@@ -206,7 +207,7 @@ evidence. Follow current `AGENTS.md`: do not invent source locks or run automati
 suites. Do not broaden fixes into audit-wide cleanup or a new recovery framework. Changes to
 budgets, bypasses, scope, or costly extra runs need user direction.
 
-Stripe each job's repair onto a fresh `FIX - <XXXX>` chat and stacked Linux worktree so the active
+Stripe each job's repair onto a fresh `FIX - <XXXX>` chat and isolated Linux worktree off `main` so the active
 run and its five-minute monitoring keep progressing without touching the bind-mounted main checkout:
 
 - **Keep the active run progressing untouched:** `/home/wsollers/projects/appsec-review` is
@@ -217,24 +218,17 @@ run and its five-minute monitoring keep progressing without touching the bind-mo
 - **Launch one `FIX - <XXXX>` sibling chat per affected job:** When the monitor confirms a runtime
   fault or receives a source-supported causal defect from the verifier for a job not already owned
   by an active fix chat, send the bounded fault/defect package to the parent kickoff/coordinator
-  chat so the parent calls `create_session(session_kind="chat", name="FIX - <XXXX>", ...)` with
-  `mode="autopilot"` (`<XXXX>` = short job slug or defect ID, at most 40 characters total; pass
+  chat so the parent calls
+  `create_session(session_kind="chat", name="FIX - <XXXX>", kickoff={"mode": "autopilot", "prompt": "..."})`
+  (`<XXXX>` = short job slug or defect ID, at most 40 characters total; pass
   `detached=true` only when no parent coordinator chat exists). This keeps every `FIX - <XXXX>`
   chat as a flat sibling alongside `Verify ...` and `Monitor ... (epoch N)` and isolates each job's
   diagnosis, edits, and unit tests in its own clean context window.
-- **Chain worktrees sequentially across detected issues:** The coordinator maintains an ordered
-  per-epoch fix chain (`seq = 01, 02, ...`):
-  - Issue `01` creates a Linux git worktree in WSL from `/home/wsollers/projects/appsec-review`'s
-    frozen commit (`BASE_SHA`):
-    `git -C /home/wsollers/projects/appsec-review worktree add /home/wsollers/projects/appsec-review-fix-<run-id>-01-<slug> -b fix/<run-id>-01-<slug> <BASE_SHA>`
-  - Issue `02` (and each subsequent issue `NN` for another job) creates its Linux git worktree
-    **from the previous fix worktree's branch** (`<prev_branch>`):
-    `git -C /home/wsollers/projects/appsec-review worktree add /home/wsollers/projects/appsec-review-fix-<run-id>-<seq>-<slug> -b fix/<run-id>-<seq>-<slug> <prev_branch>`
-    If the previous `FIX` chat has not committed yet when issue `<seq>` starts, `<seq>` branches
-    from the previous worktree's current `HEAD` immediately to diagnose and edit its own job's
-    files, and merges `<prev_branch>` as soon as the predecessor commits (relayed by the
-    coordinator/monitor) before running its final unit check and committing, keeping a linear
-    cumulative stack (`main -> fix-01 -> fix-02 -> ... -> fix-NN`).
+- **Spawn each `FIX` worktree independently off `main`:** The coordinator assigns each issue a
+  distinct sequence label (`seq = 01, 02, ...`) and branches **every** `FIX` worktree directly off
+  `/home/wsollers/projects/appsec-review`'s frozen `main` commit (`BASE_SHA`), never chaining
+  `FIX-02` onto an unmerged `FIX-01` branch:
+  `git -C /home/wsollers/projects/appsec-review worktree add /home/wsollers/projects/appsec-review-fix-<run-id>-<seq>-<slug> -b fix/<run-id>-<seq>-<slug> <BASE_SHA>`
   - Each `FIX - <XXXX>` chat runs Python/pytest inside its own worktree with
     `PYTHONPATH="$PWD/src"` using `/home/wsollers/projects/appsec-review/.venv/bin/python`
     (verifying `appsec_review.__file__` resolves inside its worktree; never reinstall into the
@@ -246,17 +240,22 @@ run and its five-minute monitoring keep progressing without touching the bind-mo
 - **Merge back when the run is over, reload, and restart affected whole jobs:** Wait until the
   active Dagster dispatch reaches a confirmed terminal state (reconciled with `verify-repair-stop`
   and with the verifier's completion backlog for that dispatch drained) **and** all dispatched
-  `FIX - <XXXX>` chats in the chain have reported ready commits. Then the serialized integration
-  owner (coordinator or retiring monitor, never two sessions concurrently) merges the stacked
-  worktree chain back into `/home/wsollers/projects/appsec-review` (`main`) in sequence (`fix-01`
-  through `fix-NN`, resolving any cross-job conflict explicitly), runs the combined affected
-  focused unit tests and `git diff --check` on `main`, removes the merged temporary worktrees
-  (`git worktree remove ...`) and `fix/<run-id>-*` branches, reloads signed sources, and restarts
-  the entire failed/defective job(s), retaining compatible successful jobs and invalidating
-  affected downstream outputs. Inspect the actual parent-linked selection; an application
-  `--run-id` alone is not a targeted restart. If admission cannot provide that boundary, report the
-  blocker instead of silently launching a fresh full graph. For several independent failed jobs,
-  use repeated `--restart-from-job` selections, not their successful common ancestor.
+  `FIX - <XXXX>` chats for the epoch have reported ready commits. Then, at this explicit terminal
+  run/epoch boundary when no Dagster run is `STARTED`, the serialized integration owner
+  (coordinator or retiring monitor, never two sessions concurrently) merges the ready
+  `fix/<run-id>-<seq>-<slug>` branches into `/home/wsollers/projects/appsec-review` (`main`) one at
+  a time (`fix-01` through `fix-NN`, resolving any cross-branch conflict explicitly), runs the
+  combined affected focused `<10s` unit tests and `git diff --check` on `main`, removes the merged
+  temporary worktrees (`git worktree remove ...`) and `fix/<run-id>-*` branches, reloads signed
+  sources (`lifecycle.py reload` / `scripts/stack-restart.sh --code-location-only`), and restarts
+  the entire failed/defective job(s) with mandatory parent linkage
+  (`scripts/review-start.sh --run-id <APP_RUN_ID> --parent-run-id <DAGSTER_RUN_UUID> --restart-from-job <JOB_ID>`),
+  retaining compatible successful jobs and invalidating affected downstream outputs. Inspect the
+  actual parent-linked selection (`ops.py` rejects `--restart-from-job` without `--parent-run-id`);
+  an application `--run-id` alone is not a targeted restart. If admission cannot provide that
+  boundary, report the blocker instead of silently launching a fresh full graph. For several
+  independent failed jobs, pass `--parent-run-id <DAGSTER_RUN_UUID>` with repeated
+  `--restart-from-job <JOB_ID>` flags, not their successful common ancestor.
 
 After a restarted job's dispatch is admitted and has real start/claim progress:
 
@@ -298,11 +297,11 @@ parallel output audit, not the stricter serialized walk.
 
 ```text
 Start an entirely NEW C++ smoke review, restart/reload Dagster first, and establish the two
-monitoring chats described in docs/monitoring_report.md. This authorizes this initial fresh run
+monitoring chats described in docs/processes/monitoring-report.md. This authorizes this initial fresh run
 and focused fault-diagnosis/repair/whole-job-restart cycles within it, not additional fresh
 whole-graph reruns. Do not reuse a historical run ID.
 
-Read current AGENTS.md, docs/monitoring_report.md, docs/operations/run-monitor.md,
+Read current AGENTS.md, docs/processes/monitoring-report.md, docs/operations/run-monitor.md,
 docs/operations/recovery-repair.md, and the relevant development skills. Current AGENTS.md wins
 over older process examples. Do not automatically run regression suites, introduce agent source
 freezes, disable checks, modify the target, or use answer keys.
@@ -338,8 +337,8 @@ An ambiguous launch response is a reconciliation task, not permission to submit 
 From this kickoff/coordinator chat, create ONE separate job-completion verification chat and ONE
 dedicated epoch-1 monitoring chat as direct sibling children (do not have the monitor spawn the
 verifier underneath itself). Pass each chat the other's exact session ID, this coordinator's
-session ID, this full assignment, the exact run identity, and docs/monitoring_report.md.
-Use create_session with session_kind="chat" and a complete kickoff (mode="autopilot") for each
+session ID, this full assignment, the exact run identity, and docs/processes/monitoring-report.md.
+Use create_session with session_kind="chat" and kickoff={"mode": "autopilot", "prompt": "..."} for each
 chat, not a new worktree, workflow fleet, or fictional chat name. Each uses get_session_automation first and
 a five-minute save_session_automation schedule in that same chat; never use an app-wide schedule,
 a shell loop or a permanent daemon. Schedules contain complete standalone instructions and exact
@@ -353,7 +352,7 @@ Also read that exact native run via deploy/dagster/bin/ops.py:
   import ops
   r = ops.get_run(ops.default_url(), EXACT_DISPATCH_UUID)
 Bound printed metadata to active/failed/recent step statuses and times. Use the Markdown report
-format in docs/monitoring_report.md. Preserve unknowns, lower bounds, graph/epoch scope,
+format in docs/processes/monitoring-report.md. Preserve unknowns, lower bounds, graph/epoch scope,
 retained-versus-recomputed work, telemetry lag, receipt limitations and observed timestamps.
 
 The verifier follows every completed job, checking actual admitted inputs, published files,
@@ -388,21 +387,15 @@ active Dagster dispatch while other jobs can still make progress. Instead, strip
 job onto its own fresh sibling chat named "FIX - <XXXX>" (<XXXX> = short job slug or defect ID,
 <=40 chars) and keep monitoring/verifying the active run:
   1. Ask this parent kickoff/coordinator chat to spawn "FIX - <XXXX>" via
-     create_session(session_kind="chat", name="FIX - <XXXX>", kickoff={"mode": "autopilot", ...})
+     create_session(session_kind="chat", name="FIX - <XXXX>", kickoff={"mode": "autopilot", "prompt": "..."})
      so it sits as a flat sibling alongside Verify and Monitor chats (pass detached=true only when
      no parent coordinator chat exists). Raise unresolved scope/expected-gap/policy decisions to
      the user rather than silently accepting bad output; no unrelated tests, broad redesigns, or
      new budget/bypass decisions.
-  2. Maintain a sequential Linux worktree chain in WSL for the epoch (seq = 01, 02, ...):
-     - Issue 01 creates /home/wsollers/projects/appsec-review-fix-<run-id>-01-<slug> on branch
-       fix/<run-id>-01-<slug> from /home/wsollers/projects/appsec-review's frozen HEAD (BASE_SHA).
-     - Each subsequent issue (02, 03, ...) for another job creates its Linux worktree
-       /home/wsollers/projects/appsec-review-fix-<run-id>-<seq>-<slug> on branch
-       fix/<run-id>-<seq>-<slug> FROM THE PREVIOUS FIX WORKTREE'S BRANCH (<prev_branch>). If the
-       previous FIX chat has not committed yet when <seq> starts, branch from the previous
-       worktree's current HEAD immediately to diagnose/edit this job's files, then merge
-       <prev_branch> once the predecessor commits before final unit tests and commit so the stack
-       stays cumulative (main -> fix-01 -> fix-02 -> ... -> fix-NN).
+  2. Spawn each Linux FIX worktree independently off main in WSL (seq = 01, 02, ...):
+     - Every issue creates /home/wsollers/projects/appsec-review-fix-<run-id>-<seq>-<slug> on
+       branch fix/<run-id>-<seq>-<slug> directly off /home/wsollers/projects/appsec-review's
+       frozen main HEAD (BASE_SHA). Never chain FIX-02 onto an unmerged FIX-01 branch.
   3. Inside its worktree, each FIX - <XXXX> chat runs focused unit tests with
      PYTHONPATH="$PWD/src" /home/wsollers/projects/appsec-review/.venv/bin/pytest
      --basetemp=test/tmp/<slug> (verifying appsec_review.__file__ resolves inside that worktree;
@@ -411,15 +404,16 @@ job onto its own fresh sibling chat named "FIX - <XXXX>" (<XXXX> = short job slu
      fix/<run-id>-<seq>-<slug>, reports the exact commit SHA, touched files, whole-job restart
      boundary and unit results to the coordinator and monitor, and finishes without a schedule.
   4. When the active Dagster run is OVER (confirmed terminal, verify-repair-stop passed, and the
-     verifier's completion backlog for that dispatch is drained) AND all FIX - <XXXX> chats in the
-     chain have committed, merge the stacked worktree branches back into
-     /home/wsollers/projects/appsec-review (main) in chain order (fix-01 .. fix-NN), run combined
-     affected focused unit tests and git diff --check on main, remove the merged temporary
+     verifier's completion backlog for that dispatch is drained) AND all FIX - <XXXX> chats for the
+     epoch have committed, merge the ready fix/<run-id>-<seq>-<slug> branches into
+     /home/wsollers/projects/appsec-review (main) one at a time (fix-01 .. fix-NN), run combined
+     affected focused <10s unit tests and git diff --check on main, remove the merged temporary
      worktrees (git worktree remove ...) and fix/<run-id>-* branches, reload through supported
-     signed-source deployment (stack-restart.sh --code-location-only ... --no-probe), and restart
-     only the affected whole-job boundaries (--restart-from-job, repeated for independent failed
-     jobs; preserve successful upstream jobs; no cell/pool salvage, fake pointers or whole-graph
-     fallback).
+     signed-source deployment (lifecycle.py reload / stack-restart.sh --code-location-only ... --no-probe),
+     and restart only the affected whole-job boundaries with mandatory --parent-run-id <DAGSTER_UUID>
+     (scripts/review-start.sh --run-id <APP_ID> --parent-run-id <DAGSTER_UUID> --restart-from-job <JOB_ID>,
+     repeating --restart-from-job <JOB_ID> for independent failed jobs; preserve successful upstream
+     jobs; no cell/pool salvage, fake pointers or whole-graph fallback).
 
 Once the corrected job has genuinely restarted, rotate to a NEW sibling monitoring chat with the
 exact successor identity, repair and timing evidence - never nested under the retiring monitor.

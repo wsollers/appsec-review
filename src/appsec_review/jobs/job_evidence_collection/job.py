@@ -37,7 +37,7 @@ from appsec_review.retrieval import (
 from appsec_review.retrieval.core import resolve_context_manifest
 from appsec_review.retrieval.index import load_verified_manifest
 from appsec_review.runtime import Job, Unit, UnitContext, UnitExecutor
-from appsec_review.storage import FileLock, atomic_json, canonical_json, file_sha256, tool_input_json
+from appsec_review.storage import atomic_json, canonical_json, file_sha256, tool_input_json
 from appsec_review.jobs.job_third_party_data_sync.steps.osv_sync import feed as osv_feed
 from appsec_review.jobs.job_third_party_data_sync.steps.grype_db_sync import feed as grype_feed
 from appsec_review.rulepacks.sei_cert.pack import PackError, PackIdentity, verify_pack
@@ -446,20 +446,6 @@ def _checkpoint_identity(unit: UnitContext, adapter: ToolAdapter, catalog: ScanC
         "task_settings": dict(unit.job.config.step(unit.step_id).task(unit.task_id).settings),
     }
     return hashlib.sha256(canonical_json(value)).hexdigest()
-
-
-def _valid_checkpoint(run_root: Path, path: Path) -> dict[str, Any] | None:
-    if not path.is_file():
-        return None
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-        for item in value.get("artifacts", []):
-            artifact = (run_root / item["path"]).resolve()
-            if run_root.resolve() not in artifact.parents or file_sha256(artifact) != item["sha256"]:
-                return None
-        return value
-    except (OSError, KeyError, ValueError, json.JSONDecodeError):
-        return None
 
 
 def _separate_parser_diagnostics(
@@ -989,127 +975,92 @@ def _execute_tool(unit: UnitContext, adapter: ToolAdapter, catalog: ScanCatalog,
     identity = _checkpoint_identity(unit, adapter, catalog, selection, image_id, mounts)
     checkpoint_root = unit.job.run_root / "data" / "task-checkpoints" / "job_evidence_collection" / "attempts" / unit.job.attempt_id / adapter.tool_id / identity[:24]
     checkpoint_path = checkpoint_root / "checkpoint.json"
-    retry_marker = checkpoint_root.parent / "retry-required.json"
-    with FileLock(checkpoint_root.parent / (identity[:24] + ".lock")):
-        retry_required = False
-        if retry_marker.is_file():
-            marker = json.loads(retry_marker.read_text(encoding="utf-8"))
-            retry_required = bool(marker.get("retry_required")) and marker.get("checkpoint_identity") == identity
-        from appsec_review.config.assurance import ReviewPolicy
-        policy = getattr(unit.job, "review_policy", ReviewPolicy())
-        reusable, reason = policy.releases.require(
-            "platform", "validation", adapter.tool_id, f"rules_{adapter.tool_id}")
-        if not reusable:
-            unit.job.events.write("CHECKPOINT_MISSED", unit_id=unit.unit_id,
-                                  tool_id=adapter.tool_id, reason=reason)
-        checkpoint = None if retry_required or not reusable else _valid_checkpoint(unit.job.run_root, checkpoint_path)
-        if checkpoint is not None:
-            prior = checkpoint["output"]
-            consume_native_references(unit.job.run_root, prior.get("native_outputs", ()))
-            unit.job.events.write(
-                "TOOL_CHECKPOINT_REUSED", unit_id=unit.unit_id, tool_id=adapter.tool_id,
-                tool_identity={"name": tool.name, "version": tool.version, "image_id": image_id},
-                checkpoint_identity=identity, disposition=prior.get("terminal_status"),
-                result_count=prior.get("record_count", 0), gap_count=len(prior.get("gaps", ())),
-                gaps=list(prior.get("gaps", ()))[:50], retry_count=prior.get("retry_count", 0),
-                checkpoint_reused=True, truncated=False, duration_ms=0,
-            )
-            return {**checkpoint["output"], "checkpoint_reused": True,
-                    "checkpoint": _artifact(unit.job.run_root, checkpoint_path)}
-        settings = _settings(unit)
-        configured_retries = settings.tool_retries
-        invocations = _plan_invocations(adapter, catalog, selection, mounts,
-                                        settings.osv_max_lockfiles_per_invocation)
-        input_identities = _extra_identity(mounts)
-        memory = settings.osv_memory if adapter.tool_id == "tool-osv-scanner" else None
-        outcomes = [
-            _run_invocation(unit, adapter, catalog, invocation, index, executor=executor, tool=tool,
-                            image_id=image_id, fail_tool=fail_tool, retries=configured_retries,
-                            swift_present=swift_present, environment=environment, memory=memory,
-                            input_identities={target: value for target, value in input_identities.items()
-                                              if target in {mount.target for mount in invocation.mounts}})
-            for index, invocation in enumerate(invocations)]
-        raw_paths = tuple(path for outcome in outcomes for path in outcome.raw_paths)
-        observations = [record for outcome in outcomes for record in outcome.observations]
-        gaps = [gap for outcome in outcomes for gap in outcome.gaps]
-        reported_not_applicable = [item for outcome in outcomes for item in outcome.not_applicable]
-        failed = [outcome for outcome in outcomes if outcome.error_class is not None]
-        # One failed project is a named gap beside the others' evidence; FAILED only when none ran.
-        error_class = failed[-1].error_class if len(failed) == len(outcomes) else None
-        terminal = "FAILED" if error_class is not None else (
-            "PARTIAL" if failed or gaps or (
-                adapter.tool_id == "tool-cppcheck" and selection.families.get("compile_database") and selection.gaps)
-            else "SUCCEEDED")
-        results = [outcome.result for outcome in outcomes if outcome.result is not None]
-        result = results[-1] if results else None
-        outputs = [outcome.output for outcome in outcomes if outcome.output is not None]
-        partitioned = any(invocation.project_root is not None for invocation in invocations)
-        if partitioned and outputs:
-            output = _merge_osv_outputs(unit, invocations, outcomes)
-        else:
-            output = outputs[-1] if outputs else None
-        tool_identity: dict[str, Any] = {
-            "id": adapter.tool_id, "name": tool.name, "version": tool.version,
-            "image_tag": tool.tag, "image_id": image_id,
-            "attempt_count": sum(outcome.attempt + 1 for outcome in outcomes),
-            "error_class": error_class}
-        if partitioned:
-            tool_identity.update({"invocation_count": len(outcomes), "failed_invocation_count": len(failed),
-                                  "memory": memory})
-        envelope, evidence_path = _write_evidence(
-            unit, adapter, catalog, selection, tool_identity=tool_identity,
-            raw_artifacts=raw_paths, observations=observations, terminal_status=terminal, gaps=tuple(gaps),
-            not_applicable=(*not_applicable, *reported_not_applicable),
-            source_inventory=output if adapter.tool_id == "tool-syft" else None,
-            native_observation_sources=tuple(
-                outcome.observation_source for outcome in outcomes if outcome.observation_source is not None),
-        )
-        output_value = {
-            "tool_id": adapter.tool_id, "capability": adapter.capability,
-            "terminal_status": terminal, "checkpoint_reused": False,
-            "artifact": _artifact(unit.job.run_root, evidence_path),
-            "scanner_output": _rel(unit.job.run_root, output) if output is not None else None,
-            "execution": (_artifact(unit.job.run_root, unit.job.run_root / result.receipt_path)
-                          if result is not None else None),
-            "record_count": envelope["record_count"], "gaps": envelope["exclusions_and_gaps"],
-            "not_applicable_inputs": envelope["not_applicable_inputs"],
-            "checkpoint_identity": identity,
-            "retry_count": max(outcome.attempt for outcome in outcomes),
-            "native_outputs": [ref for outcome in outcomes for ref in outcome.native_outputs],
-            "raw_artifacts": envelope["raw_artifacts"],
-            "provenance_receipt": envelope.get("provenance_receipt"),
-        }
-        if partitioned:
-            output_value["invocations"] = [
-                {"project_root": invocation.project_root, "lockfile_count": len(invocation.selection.files),
-                 "terminal_status": "FAILED" if outcome.error_class else "SUCCEEDED",
-                 "retry_count": outcome.attempt,
-                 "scanner_output": (_rel(unit.job.run_root, outcome.output)
-                                    if outcome.output is not None else None),
-                 "execution": (_artifact(unit.job.run_root, unit.job.run_root / outcome.result.receipt_path)
-                               if outcome.result is not None else None)}
-                for invocation, outcome in zip(invocations, outcomes)]
-        if terminal in {"SUCCEEDED", "PARTIAL"}:
-            checkpoint_root.mkdir(parents=True, exist_ok=True)
-            checkpoint_artifacts = [output_value["artifact"]]
-            for item in results:
-                checkpoint_artifacts.append(_artifact(unit.job.run_root, unit.job.run_root / item.receipt_path))
-            for path in (*outputs, *((output,) if output is not None and output not in outputs else ())):
-                checkpoint_artifacts.append(_artifact(unit.job.run_root, path))
-            atomic_json(checkpoint_path, {
-                "schema": "appsec-review/tool-task-checkpoint/1", "identity": identity,
-                "output": output_value, "artifacts": checkpoint_artifacts,
-            })
-            if retry_required:
-                atomic_json(retry_marker, {"schema": "appsec-review/injected-tool-failure/1",
-                                          "tool_id": adapter.tool_id, "checkpoint_identity": identity,
-                                          "retry_required": False, "failed_attempt": marker.get("failed_attempt"),
-                                          "resolved_attempt": unit.job.attempt_id})
-            return {**output_value, "checkpoint": _artifact(unit.job.run_root, checkpoint_path)}
-        atomic_json(retry_marker, {"schema": "appsec-review/tool-retry-required/1",
-                                  "tool_id": adapter.tool_id, "checkpoint_identity": identity,
-                                  "retry_required": True, "failed_attempt": unit.job.attempt_id})
-        return output_value
+    settings = _settings(unit)
+    configured_retries = settings.tool_retries
+    invocations = _plan_invocations(adapter, catalog, selection, mounts,
+                                    settings.osv_max_lockfiles_per_invocation)
+    input_identities = _extra_identity(mounts)
+    memory = settings.osv_memory if adapter.tool_id == "tool-osv-scanner" else None
+    outcomes = [
+        _run_invocation(unit, adapter, catalog, invocation, index, executor=executor, tool=tool,
+                        image_id=image_id, fail_tool=fail_tool, retries=configured_retries,
+                        swift_present=swift_present, environment=environment, memory=memory,
+                        input_identities={target: value for target, value in input_identities.items()
+                                          if target in {mount.target for mount in invocation.mounts}})
+        for index, invocation in enumerate(invocations)]
+    raw_paths = tuple(path for outcome in outcomes for path in outcome.raw_paths)
+    observations = [record for outcome in outcomes for record in outcome.observations]
+    gaps = [gap for outcome in outcomes for gap in outcome.gaps]
+    reported_not_applicable = [item for outcome in outcomes for item in outcome.not_applicable]
+    failed = [outcome for outcome in outcomes if outcome.error_class is not None]
+    # One failed project is a named gap beside the others' evidence; FAILED only when none ran.
+    error_class = failed[-1].error_class if len(failed) == len(outcomes) else None
+    terminal = "FAILED" if error_class is not None else (
+        "PARTIAL" if failed or gaps or (
+            adapter.tool_id == "tool-cppcheck" and selection.families.get("compile_database") and selection.gaps)
+        else "SUCCEEDED")
+    results = [outcome.result for outcome in outcomes if outcome.result is not None]
+    result = results[-1] if results else None
+    outputs = [outcome.output for outcome in outcomes if outcome.output is not None]
+    partitioned = any(invocation.project_root is not None for invocation in invocations)
+    if partitioned and outputs:
+        output = _merge_osv_outputs(unit, invocations, outcomes)
+    else:
+        output = outputs[-1] if outputs else None
+    tool_identity: dict[str, Any] = {
+        "id": adapter.tool_id, "name": tool.name, "version": tool.version,
+        "image_tag": tool.tag, "image_id": image_id,
+        "attempt_count": sum(outcome.attempt + 1 for outcome in outcomes),
+        "error_class": error_class}
+    if partitioned:
+        tool_identity.update({"invocation_count": len(outcomes), "failed_invocation_count": len(failed),
+                              "memory": memory})
+    envelope, evidence_path = _write_evidence(
+        unit, adapter, catalog, selection, tool_identity=tool_identity,
+        raw_artifacts=raw_paths, observations=observations, terminal_status=terminal, gaps=tuple(gaps),
+        not_applicable=(*not_applicable, *reported_not_applicable),
+        source_inventory=output if adapter.tool_id == "tool-syft" else None,
+        native_observation_sources=tuple(
+            outcome.observation_source for outcome in outcomes if outcome.observation_source is not None),
+    )
+    output_value = {
+        "tool_id": adapter.tool_id, "capability": adapter.capability,
+        "terminal_status": terminal, "checkpoint_reused": False,
+        "artifact": _artifact(unit.job.run_root, evidence_path),
+        "scanner_output": _rel(unit.job.run_root, output) if output is not None else None,
+        "execution": (_artifact(unit.job.run_root, unit.job.run_root / result.receipt_path)
+                      if result is not None else None),
+        "record_count": envelope["record_count"], "gaps": envelope["exclusions_and_gaps"],
+        "not_applicable_inputs": envelope["not_applicable_inputs"],
+        "checkpoint_identity": identity,
+        "retry_count": max(outcome.attempt for outcome in outcomes),
+        "native_outputs": [ref for outcome in outcomes for ref in outcome.native_outputs],
+        "raw_artifacts": envelope["raw_artifacts"],
+        "provenance_receipt": envelope.get("provenance_receipt"),
+    }
+    if partitioned:
+        output_value["invocations"] = [
+            {"project_root": invocation.project_root, "lockfile_count": len(invocation.selection.files),
+             "terminal_status": "FAILED" if outcome.error_class else "SUCCEEDED",
+             "retry_count": outcome.attempt,
+             "scanner_output": (_rel(unit.job.run_root, outcome.output)
+                                if outcome.output is not None else None),
+             "execution": (_artifact(unit.job.run_root, unit.job.run_root / outcome.result.receipt_path)
+                           if outcome.result is not None else None)}
+            for invocation, outcome in zip(invocations, outcomes)]
+    if terminal in {"SUCCEEDED", "PARTIAL"}:
+        checkpoint_root.mkdir(parents=True, exist_ok=True)
+        checkpoint_artifacts = [output_value["artifact"]]
+        for item in results:
+            checkpoint_artifacts.append(_artifact(unit.job.run_root, unit.job.run_root / item.receipt_path))
+        for path in (*outputs, *((output,) if output is not None and output not in outputs else ())):
+            checkpoint_artifacts.append(_artifact(unit.job.run_root, path))
+        atomic_json(checkpoint_path, {
+            "schema": "appsec-review/tool-task-checkpoint/1", "identity": identity,
+            "output": output_value, "artifacts": checkpoint_artifacts,
+        })
+        return {**output_value, "checkpoint": _artifact(unit.job.run_root, checkpoint_path)}
+    return output_value
 
 
 def _normalize_tool(unit: UnitContext, scan_unit: str) -> Mapping[str, Any]:
@@ -1157,28 +1108,6 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
     )
     index_path = (unit.job.run_root / "data" / "indices" / "observations" / "attempts" / unit.job.config.job_id / unit.job.attempt_id / shard_id /
                   f"{fingerprint}.sqlite")
-    checkpoint = (unit.job.run_root / "data" / "task-checkpoints" / "job_evidence_collection" /
-                  "index" / shard_id / f"{fingerprint}.json")
-    if checkpoint.is_file():
-        value = json.loads(checkpoint.read_text(encoding="utf-8"))
-        identity = IndexIdentity(**{**value["index_identity"],
-                                    "gaps": tuple(value["index_identity"].get("gaps", ()))})
-        candidate = unit.job.run_root / identity.relative_path
-        if candidate.is_file() and file_sha256(candidate) == identity.sha256:
-            IndexBuilder(candidate, name=identity.name, fingerprint=identity.fingerprint,
-                         target_snapshot=unit.job.source_fingerprint,
-                         shard_id=identity.shard_id).attest_existing(identity.sha256)
-            reused = {**value, "checkpoint_reused": output.get("checkpoint_reused", False),
-                      "index_reused": True,
-                      "not_applicable_inputs": output.get("not_applicable_inputs") or not_applicable_summary(())}
-            unit.job.events.write(
-                "PRODUCER_SHARD_COMPLETED", unit_id=unit.unit_id, producer=producer,
-                shard_identity=reused["index_identity"], disposition=reused["terminal_status"],
-                result_count=reused.get("record_count", 0), gap_count=len(reused.get("gaps", ())),
-                gaps=list(reused.get("gaps", ()))[:50],
-                checkpoint_reused=bool(reused.get("checkpoint_reused")), index_reused=True,
-            )
-            return reused
     builder = IndexBuilder(index_path, name="observations", fingerprint=fingerprint,
                            target_snapshot=unit.job.source_fingerprint, shard_id=shard_id)
     indexed_artifact = output["normalized_artifact"]
@@ -1236,8 +1165,6 @@ def _build_producer_shard(unit: UnitContext, normalize_unit: str) -> Mapping[str
              "collapsed_identical_records": builder.collapsed_identical_records,
              "gaps": output.get("gaps", []),
              "not_applicable_inputs": output.get("not_applicable_inputs") or not_applicable_summary(())}
-    checkpoint.parent.mkdir(parents=True, exist_ok=True)
-    atomic_json(checkpoint, value)
     unit.job.events.write(
         "PRODUCER_SHARD_COMPLETED", unit_id=unit.unit_id, producer=producer,
         shard_identity=value["index_identity"], disposition=value["terminal_status"],

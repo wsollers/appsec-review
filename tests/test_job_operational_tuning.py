@@ -324,7 +324,7 @@ def test_environment_coverage_is_retained_until_explicit_whole_job_and_downstrea
         write_manifest(manifest, run_id=unit.job.run_id, target_snapshot=source,
                        target_root=target, indexes=indexes)
         return {
-            "catalog": reference(unit.job.run_root, document),
+            "artifact": reference(unit.job.run_root, document),
             "index_manifest": reference(unit.job.run_root, manifest),
             "indexes": [asdict(index) for index in indexes],
             "terminal_status": "COMPLETED_WITH_GAPS",
@@ -333,7 +333,7 @@ def test_environment_coverage_is_retained_until_explicit_whole_job_and_downstrea
 
     def accepted(root):
         upstream = accepted_upstream(root, "job_target_catalog")
-        identity = upstream.handoff["outputs"]["work.only"]["catalog"]
+        identity = upstream.handoff["outputs"]["work.only"]["artifact"]
         observe_output(root, "job_target_catalog", "catalog_documents", identity)
         return {**json.loads(verify_reference(root, identity).read_bytes()),
                 "catalog_handoff_sha256": upstream.sha256}
@@ -711,3 +711,65 @@ def test_failed_job_unit_selection_never_imports_prior_cells(tmp_path):
     decisions = select_units(tmp_path, job, {"attempt_id": "attempt_0002"})
     assert set(decisions) == {unit.unit_id for unit in units}
     assert all(value["action"] == "RUN" and "checkpoint" not in value for value in decisions.values())
+
+
+def test_shipped_resolved_config_supports_operational_settings_including_seeded_runtime_and_openvex(shipped):
+    from appsec_review.config.operational import OPERATIONAL_SETTINGS
+
+    before = json.loads(shipped.resolved_json)
+    assert "operation_progress_interval_seconds" in before["runtime"]
+    assert "operation_sample_interval_seconds" in before["runtime"]
+    assert "seeded" in before["jobs"]["job_cpp_compiled_analysis"]["settings"]
+    assert "seeded" in before["jobs"]["job_clang_static_analysis"]["settings"]
+    assert "seeded" in before["jobs"]["job_cpg_analysis"]["settings"]
+
+    after = deepcopy(before)
+    expected_count = 0
+    for setting in OPERATIONAL_SETTINGS:
+        node = after
+        for key in setting.resolved_path[:-1]:
+            if not isinstance(node, dict) or key not in node:
+                node = None
+                break
+            node = node[key]
+        if not isinstance(node, dict):
+            continue
+        leaf = setting.resolved_path[-1]
+        if leaf not in node:
+            continue
+        current = node[leaf]
+        if setting.value_type == "memory":
+            node[leaf] = "128g" if current != "128g" else "256g"
+        elif setting.value_type == "boolean":
+            node[leaf] = not current
+        elif setting.value_type == "backoff":
+            node[leaf] = [min(3600, item + 1) for item in current] if current else [1]
+        elif setting.value_type.endswith("integer"):
+            node[leaf] = int(current) + 1
+        else:
+            node[leaf] = float(current) + 0.5
+        expected_count += 1
+
+    changes = operational_changes(before, after)
+    assert len(changes) == expected_count and expected_count >= 100
+    by_target = {(row["job_id"], tuple(row["path"])): row for row in changes}
+    assert ("job_cpp_compiled_analysis", ("settings", "seeded_bounds", "unit_limit")) in by_target
+    assert ("job_clang_static_analysis", ("settings", "seeded_bounds", "include_scan_files")) in by_target
+    assert ("job_cpg_analysis", ("settings", "seeded_bounds", "unit_limit")) in by_target
+    assert ("job_cpp_compiled_analysis", ("settings", "seeded_bounds", "function_limit")) in by_target
+    assert (None, ("runtime", "operation_progress_interval_seconds")) in by_target
+    assert (None, ("runtime", "operation_sample_interval_seconds")) in by_target
+    assert ("job_openvex_export", ("settings", "max_action_bytes")) in by_target
+    assert ("job_openvex_export", ("settings", "max_bindings")) in by_target
+    assert ("job_openvex_export", ("settings", "max_document_bytes")) in by_target
+    assert ("job_openvex_export", ("settings", "max_identifier_bytes")) in by_target
+    assert ("job_openvex_export", ("settings", "max_manifest_bytes")) in by_target
+    assert ("job_openvex_export", ("settings", "max_packages")) in by_target
+    assert ("job_openvex_export", ("settings", "timeout_seconds")) in by_target
+    declared = {(s.job_id, s.path) for s in OPERATIONAL_SETTINGS}
+    assert ("job_remediation_planning", ("settings", "max_workspace_bytes")) not in declared
+    assert ("job_remediation_planning", ("settings", "max_workspace_files")) not in declared
+    assert ("job_remediation_validation", ("settings", "max_edits")) not in declared
+    assert ("job_remediation_validation", ("settings", "max_packages")) not in declared
+    assert ("job_remediation_validation", ("settings", "max_patch_bytes")) not in declared
+    assert ("job_remediation_validation", ("settings", "max_patch_files")) not in declared

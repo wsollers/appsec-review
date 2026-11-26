@@ -29,20 +29,20 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `build_discovery` | `build_discovery.catalog_build_targets` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L390) |
-| `build_discovery` | `build_discovery.discover_build_systems` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L314) |
-| `build_discovery` | `build_discovery.discover_compile_commands` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L378) |
-| `component_discovery` | `component_discovery.catalog_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L423) |
-| `component_discovery` | `component_discovery.catalog_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L435) |
-| `publish_catalog` | `publish_catalog.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L832) |
-| `publish_catalog` | `publish_catalog.validate_catalog` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L818) |
-| `repository_discovery` | `repository_discovery.census_languages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L273) |
-| `repository_discovery` | `repository_discovery.discover_projects` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L280) |
-| `repository_discovery` | `repository_discovery.partition_repository` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L225) |
-| `retrieval_indexes` | `retrieval_indexes.build_component_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L670) |
-| `retrieval_indexes` | `retrieval_indexes.build_path_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L507) |
-| `retrieval_indexes` | `retrieval_indexes.build_symbol_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L554) |
-| `retrieval_indexes` | `retrieval_indexes.build_target_documents` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L691) |
+| `build_discovery` | `build_discovery.catalog_build_targets` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L393) |
+| `build_discovery` | `build_discovery.discover_build_systems` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L317) |
+| `build_discovery` | `build_discovery.discover_compile_commands` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L381) |
+| `component_discovery` | `component_discovery.catalog_components` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L426) |
+| `component_discovery` | `component_discovery.catalog_dependencies` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L438) |
+| `publish_catalog` | `publish_catalog.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L845) |
+| `publish_catalog` | `publish_catalog.validate_catalog` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L831) |
+| `repository_discovery` | `repository_discovery.census_languages` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L276) |
+| `repository_discovery` | `repository_discovery.discover_projects` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L283) |
+| `repository_discovery` | `repository_discovery.partition_repository` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L228) |
+| `retrieval_indexes` | `retrieval_indexes.build_component_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L683) |
+| `retrieval_indexes` | `retrieval_indexes.build_path_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L510) |
+| `retrieval_indexes` | `retrieval_indexes.build_symbol_index` | 1 | `index` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L557) |
+| `retrieval_indexes` | `retrieval_indexes.build_target_documents` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_target_catalog/job.py#L704) |
 
 ### Accepted input declarations
 
@@ -78,7 +78,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_target_catalog/test_catalog_graph.py`<br>`tests/integration/job_target_catalog/test_catalog_path_graph.py`<br>`tests/integration/job_target_catalog/test_catalog_documents_graph.py` |
 | live | None declared |
-| unit | `tests/test_target_documents.py`<br>`tests/unit/job_build_environment_analysis/test_catalog_inputs.py`<br>`tests/unit/job_target_catalog/test_cataloging_languages.py`<br>`tests/unit/job_target_catalog/test_contract.py`<br>`tests/unit/job_target_catalog/test_descriptor_discovery.py`<br>`tests/unit/job_target_catalog/test_discovery.py`<br>`tests/unit/job_target_catalog/test_documents.py`<br>`tests/unit/job_target_catalog/test_graph.py`<br>`tests/unit/job_target_catalog/test_helpers.py`<br>`tests/unit/job_target_catalog/test_indexes.py`<br>`tests/unit/runtime/test_wave5_contracts.py` |
+| unit | `tests/test_target_documents.py`<br>`tests/unit/job_build_environment_analysis/test_catalog_inputs.py`<br>`tests/unit/job_target_catalog/test_cataloging_languages.py`<br>`tests/unit/job_target_catalog/test_contract.py`<br>`tests/unit/job_target_catalog/test_descriptor_discovery.py`<br>`tests/unit/job_target_catalog/test_discovery.py`<br>`tests/unit/job_target_catalog/test_documents.py`<br>`tests/unit/job_target_catalog/test_graph.py`<br>`tests/unit/job_target_catalog/test_helpers.py`<br>`tests/unit/job_target_catalog/test_indexes.py`<br>`tests/unit/runtime/test_wave5_contracts.py`<br>`tests/unit/job_target_catalog/test_c_symbols.py`<br>`tests/test_build_discovery.py` |
 
 ### Dagster placement
 
@@ -191,9 +191,10 @@ The [retrieval architecture](../architecture/python-and-retrieval.md) defines re
 
 1. Build `source` only for source-in-scope files, retaining path/hash/byte locations and bounded
    decodable text. Preserve decode failures and upstream inventory gaps.
-2. Build `analysis` from the bounded declaration regex, not a compiler or AST. Stop at the
-   symbol-count ceiling; name oversize or undecodable symbol sources. Derive exact byte spans
-   from hash-verified raw UTF-8, preserving CRLF. Upstream inventory omissions keep declaration
+2. Build `analysis` from the bounded declaration scanner and dedicated C/C++ entity extractor
+   (`c_symbols.py`, `catalog-parser` version `3`), not a compiler or full AST. Stop at the
+   configured symbol-count ceiling (default `50,000` symbols); name oversize or undecodable symbol
+   sources. Derive exact byte spans from hash-verified raw UTF-8, preserving CRLF. Upstream inventory omissions keep declaration
    coverage partial even when every retained file parsed successfully.
 3. Build `components` from catalog component identities.
 4. Select target documents from the accepted inventory; enforce configured file, byte, record,
@@ -282,12 +283,14 @@ exceptions, not successful partial coverage. See [interchange](../architecture/j
 
 ## Resume and invalidation
 
-The job binds the target snapshot, intake admission, configured exclusions/bounds and normal
-implementation/schema/validator identities. Source/symbol/component/build index fingerprints
-bind their producer artifact hashes and catalog parser, retrieval normalizer, delivery policy
-and mapping identities. The document fingerprint additionally binds extraction limits and the
-target-document release/parser identity. The corrected raw-symbol/coverage catalog uses
-`catalog-parser/2`; JSON-aware interface parsing uses `target-documents/5`. A changed input therefore selects different shards;
-an existing path is not a license to accept altered bytes. Whole-job reuse and selective
-downstream invalidation follow [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability);
-artifact-bearing units are not generic portable failed-attempt checkpoints.
+Whole-job reuse binds the target snapshot, intake admission, configured exclusions/bounds (up to
+compatible `[operational.*]` tuning), dataset contract, and implementation/schema/validation
+identities under [Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability);
+any failed, invalidated, or forced catalog run re-executes all discovery and indexing units in a
+fresh `attempts/<attempt_id>/` workspace without failed-attempt unit salvage. Content-addressed
+source/symbol/component/build index fingerprints bind their producer artifact hashes and catalog
+parser, retrieval normalizer, delivery policy and mapping identities, while the document
+fingerprint binds extraction limits and target-document release/parser identity (`catalog-parser`
+version `3` raw-symbol/C-entity/`50,000`-symbol boundary rules and `target-documents/5` JSON-aware
+interface parsing), verifying hashes rather than trusting existing paths. See
+[job-local operational tuning](job-tuning.md) and [target-analysis-planning](target-analysis-planning.md#tuning-and-whole-job-recovery-job_target_catalog).

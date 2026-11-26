@@ -55,7 +55,13 @@ def fixture(tmp_path, *, declaration="present", emitted=True, terminal="SUCCEEDE
     config_path = root / "data/configuration/resolved.json"
     atomic_json(config_path, {"build_capture": settings, "jobs": {PRODUCER: {
         "name": "synthetic producer", "settings": {}, "steps": {}}}})
-    atomic_json(root / "data/configuration/manifest.json", {"resolved_sha256": file_sha256(config_path)})
+    source_path = root / "data/configuration/appsec-review.toml"
+    source_path.write_bytes(b"# synthetic\n")
+    atomic_json(root / "data/configuration/manifest.json", {
+        "schema": "appsec-review/run-configuration/2",
+        "source_sha256": file_sha256(source_path),
+        "resolved_sha256": file_sha256(config_path),
+    })
     dataset = protected(KIND, "publish", "inference_review", SCHEMA, "Synthetic protected metadata.",
                         artifacts=(PAYLOAD,), reason="unit fixture", authority=EvidenceAuthority.OPERATIONAL)
     if declaration == "unrelated":

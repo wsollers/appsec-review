@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound_json
-from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.jobs.engineering_contracts import (
     FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA, FINAL_PUBLICATION_GATE_SCHEMA,
 )

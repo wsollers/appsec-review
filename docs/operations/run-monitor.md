@@ -4,6 +4,7 @@ kind: "operations"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: []
+last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 ---
 # Five-minute review monitoring
 
@@ -12,7 +13,7 @@ The one-shot monitor derives a small text report from the existing authoritative
 The repository-agent [monitor skill](../../.claude/skills/monitor-review-run/SKILL.md) contains the
 standalone kickoff prompt and session scheduling/terminal cleanup procedure.
 Do not schedule against a guessed run or after a preflight that never submitted a run.
-The shared [Markdown report format and fresh-run kickoff](../monitoring_report.md) also describe
+The shared [Markdown report format and fresh-run kickoff](../processes/monitoring-report.md) also describe
 a separate job-output verification chat and monitor rotation after an explicitly authorized
 repair/restart. Those roles do not turn this read-only polling command into a repair command.
 

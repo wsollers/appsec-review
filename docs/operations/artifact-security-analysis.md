@@ -471,13 +471,13 @@ Only the exact declared leaves are mutable; unknown and mixed material changes a
 
 | Exact path relative to this job (unless global) | Base default | Category | Bounds |
 | --- | --- | --- | --- |
-| `settings.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds? |
+| `settings.diagnostic_tail_bytes` | `32768` | coverage | positive integer; exact parser/cross-field bounds† |
 | `settings.osv_memory` | `"3g"` | execution | 512m..64g; positive integer m/g |
-| `settings.parser_input_limit_bytes` | `67108864` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.stream_limit_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds? |
-| `settings.timeout_seconds` | `600` | execution | positive integer; exact parser/cross-field bounds? |
+| `settings.parser_input_limit_bytes` | `67108864` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.stream_limit_bytes` | `8388608` | coverage | positive integer; exact parser/cross-field bounds† |
+| `settings.timeout_seconds` | `600` | execution | positive integer; exact parser/cross-field bounds† |
 
-? The [executing job/parser](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
+† The [executing job/parser](../../src/appsec_review/jobs/job_artifact_security_analysis/job.py) remains the bounds authority, including hard maxima, numeric types and cross-field checks; compatibility never widens it. A type-only range in this table is not permission to bypass stricter parser limits.
 
 Execution changes affect only new attempts. Coverage changes preserve accepted results with their original limits and gaps; expanded coverage requires an explicit whole-job rerun and reconsideration of affected downstream jobs. New/failed attempts execute every unit, without salvaging earlier cells. Retained accepted jobs are validated with their original configuration. Global scheduler/resource tuning does not alter tool/sandbox authority or resize active leases. See [general tuning](../architecture/runtime-interchange.md#operational-configuration-compatibility-and-attempt-ownership).
 

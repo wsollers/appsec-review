@@ -102,7 +102,7 @@ def test_published_guidance_is_actual_blinded_per_role_call_guidance(tmp_path):
     assert actual["fingerprints"]["global_inputs"]["guidance_bundle_sha256"] == hashlib.sha256(
         "\n".join(identities).encode()).hexdigest()
     receipt_guidance = {attempt["guidance"]
-        for path in (fixture.run_root / "data/indexes/owasp/receipts").glob("*.json")
+        for path in (fixture.run_root / "data/indexes/owasp/receipts").rglob("*.json")
         for attempt in json.loads(path.read_text())["attempts"]}
     assert receipt_guidance == set(identities)
     manifest = json.loads((fixture.run_root / actual["manifest"]["path"]).read_text())
@@ -175,3 +175,54 @@ def test_unassessed_coverage_is_not_projected_or_attached_to_unrelated_sources(t
             assert not entries
             excluded.append(package.package_id)
     assert seen and excluded
+
+def test_whole_job_retry_isolates_receipts_and_shards_by_attempt(tmp_path, monkeypatch):
+    import appsec_review.jobs.job_owasp_control_assessment.job as owasp_job
+    from appsec_review.runtime.runner import publication_scope
+    from tests.test_owasp_assessment_job import _publish_accepted_handoff, atomic_json, context_for
+
+    fixture = accepted_fixture(tmp_path)
+    orig_artifact = owasp_job._artifact
+    fail_handoff = [True]
+
+    def whole_job_context(attempt: int):
+        ctx = context_for(fixture, attempt=attempt, max_batch_size=32)
+        claim_path = ctx.attempt_root / "claim.json"
+        claim = json.loads(claim_path.read_text(encoding="utf-8"))
+        claim["recovery_boundary"] = "whole_job"
+        atomic_json(claim_path, claim)
+        return ctx
+
+    def crash_handoff_artifact(unit, name, value):
+        if fail_handoff[0] and name == "owasp-workbench-result.json":
+            raise RuntimeError("injected post-index handoff failure")
+        return orig_artifact(unit, name, value)
+
+    monkeypatch.setattr(owasp_job, "_artifact", crash_handoff_artifact)
+
+    # Attempt 1 writes receipts, index shards, and manifest before failing handoff publication.
+    ctx1 = whole_job_context(1)
+    with publication_scope(ctx1):
+        res1 = build_job(infer=ScriptedAssessment(outcome="satisfied")).execute(ctx1)
+    assert "publication.publish_handoff" in res1["failed_units"]
+    assert list((fixture.run_root / "data/indexes/owasp/receipts/attempt_0001").glob("*.json"))
+    assert list((fixture.run_root / "data/indexes/owasp/control-result/attempt_0001").rglob("*.json"))
+    assert list((fixture.run_root / "data/indexes/owasp/manifests/attempt_0001").glob("*.json"))
+
+    # Attempt 2 reruns the whole job under whole_job boundary with a different outcome without collision.
+    fail_handoff[0] = False
+    ctx2 = whole_job_context(2)
+    with publication_scope(ctx2):
+        res2 = build_job(infer=ScriptedAssessment(outcome="not_satisfied")).execute(ctx2)
+    assert not res2["failed_units"]
+    outputs2 = res2["outputs"]
+    _publish_accepted_handoff(fixture, ctx2, outputs2)
+    assert list((fixture.run_root / "data/indexes/owasp/receipts/attempt_0002").glob("*.json"))
+    manifest_rel = outputs2["publication.publish_indexes"]["manifest"]["path"]
+    assert manifest_rel.startswith("data/indexes/owasp/manifests/attempt_0002/")
+
+    queried = WorkbenchIndex(fixture.runs_dir, fixture.run_id).query(
+        family="control-result", component="component:0001", control="ASVS:5.0.0:V1.2.4"
+    )["results"]
+    assert len(queried) == 1
+    assert queried[0]["record"]["control_status"] == "not_satisfied"

@@ -354,10 +354,37 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
                   "request": {"rule": REQUEST_RULE, "trimmed": part.view.get("trimmed")},
                   "guidance": guidance["bundle_sha256"], "model_policy": dict(profile),
                   "rules": RESULT_RULE, "limits": asdict(settings)})
-    receipt = safe_path(run_root, f"data/indexes/owasp/receipts/{key}.json")
-    if receipt.is_file():
-        consume_named(run_root, receipt, namespace="owasp-shard")
-        cached = json.loads(receipt.read_text(encoding="utf-8"))
+    from appsec_review.storage.shared import current as _current_shared
+    _active = _current_shared()
+    _attempt = correlation.get("attempt_id")
+    if not isinstance(_attempt, str) or not _attempt or _attempt == "-":
+        _attempt = _active.attempt_id if _active is not None else None
+    _whole_job = False
+    if _active is not None:
+        try:
+            _whole_job = _active._claim().get("recovery_boundary") == "whole_job"
+        except (ValueError, KeyError, OSError):
+            _whole_job = False
+    _receipt_rel = (
+        f"data/indexes/owasp/receipts/{_attempt}/{key}.json"
+        if _attempt else f"data/indexes/owasp/receipts/{key}.json"
+    )
+    receipt = safe_path(run_root, _receipt_rel)
+    _receipt_candidates: list[Path] = [receipt]
+    if not _whole_job:
+        _receipts_root = safe_path(run_root, "data/indexes/owasp/receipts")
+        if _receipts_root.is_dir():
+            for _candidate in sorted(_receipts_root.glob(f"*/{key}.json"), reverse=True):
+                if _candidate not in _receipt_candidates:
+                    _receipt_candidates.append(_candidate)
+        _legacy_receipt = safe_path(run_root, f"data/indexes/owasp/receipts/{key}.json")
+        if _legacy_receipt not in _receipt_candidates:
+            _receipt_candidates.append(_legacy_receipt)
+    for _candidate in _receipt_candidates:
+        if not _candidate.is_file():
+            continue
+        consume_named(run_root, _candidate, namespace="owasp-shard")
+        cached = json.loads(_candidate.read_text(encoding="utf-8"))
         if cached.get("key") != key or cached.get("mode") != "assessment":
             raise ValueError("OWASP reuse receipt has incompatible mode or identity")
         try:
@@ -369,13 +396,14 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
             resolver.metrics["denials"] += 1
             log.write("OWASP_REUSE_DENIED", **correlation, details={
                 "batch_id": batch["batch_id"], "role": role, "error_class": type(exc).__name__})
+            break
         else:
             log.write("OWASP_MODEL_REUSED", **correlation, details={
-                "batch_id": batch["batch_id"], "role": role, "receipt_sha256": file_sha256(receipt),
-                "receipt_path": receipt.relative_to(run_root).as_posix(),
+                "batch_id": batch["batch_id"], "role": role, "receipt_sha256": file_sha256(_candidate),
+                "receipt_path": _candidate.relative_to(run_root).as_posix(),
                 "guidance_bundle_sha256": guidance["bundle_sha256"], "new_model_calls": 0})
             return {"status": "reused", "proposal": proposal, "attempts": [],
-                    "receipt": receipt.relative_to(run_root).as_posix(),
+                    "receipt": _candidate.relative_to(run_root).as_posix(),
                     "retrieval_requests": 0, "reuse_basis": cached["attempts"]}
     transcript: list[Mapping[str, Any]] = []
     attempts: list[dict[str, Any]] = []
@@ -419,6 +447,26 @@ def _investigate_part(part: Part, *, number: int, parts: int, run_root: Path, ba
                     estimate = trimmed_after
             if estimate > max_tokens:
                 terminal = "input_budget"
+                attempt = {
+                    "role": role, "guidance": guidance["bundle_sha256"],
+                    "row_ids": list(part.row_ids), "part": number, "dispatched": False,
+                    "requested_provider": profile["provider"], "requested_model": profile["model"],
+                    "served_provider": None, "served_model": None,
+                    "input_tokens_reported": None, "output_tokens_reported": None,
+                    "cache_tokens_reported": None,
+                    "input_tokens_estimated": estimate, "output_tokens_estimated": None,
+                    "turn": turn, "retry": retry, "request_sha256": digest(asdict(request)),
+                    "outcome": "input_budget", "error_class": "input_budget",
+                    "error": f"turn {turn} request estimate {estimate} tokens exceeds max_input_tokens {max_tokens} after trimming",
+                    "estimated_input_tokens": estimate, "input_tokens": None,
+                    "output_tokens": None, "cache_tokens": None, "input_estimate_delta": None,
+                    "duration_ms": 0,
+                }
+                attempts.append(attempt)
+                log.write("OWASP_MODEL_ATTEMPT", **correlation, details={
+                    **{key: value for key, value in attempt.items() if key != "error"},
+                    "max_input_tokens": max_tokens,
+                    "batch_id": batch["batch_id"], "cell_id": request.cell_id})
                 break
             attempt = {"role": role, "guidance": guidance["bundle_sha256"],
                        "row_ids": list(part.row_ids), "part": number, "dispatched": False,

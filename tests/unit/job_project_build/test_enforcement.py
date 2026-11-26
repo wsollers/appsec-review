@@ -389,3 +389,17 @@ def test_captured_enforcement_ignores_image_shell_archive_chains_but_rejects_unt
     )
     assert spoofed_proof["status"] == "unknown"
     assert "unknown_compiler_in_capture" in spoofed_proof["unresolved_inputs"]
+
+
+def test_enforcement_accepts_combined_shell_c_flags_and_python_dash_c_wrappers() -> None:
+    from appsec_review.jobs.job_project_build.enforcement import _is_image_shell_command
+
+    assert _is_image_shell_command("/bin/sh", ["sh", "-ec", "clang -c a.c"]) is True
+    assert _is_image_shell_command("/bin/bash", ["bash", "-ce", "clang++ -c a.cpp"]) is True
+    assert _is_image_shell_command("/bin/sh", ["sh", "-e", "-c", "clang -c a.c"]) is True
+    assert _is_image_shell_command("/usr/bin/python3", ["python3", "-c", "print(1)"]) is True
+    assert _is_image_shell_command("/usr/bin/python3.12", ["python3.12", "-B", "-c", "pass"]) is True
+
+    assert _is_image_shell_command("/bin/sh", ["sh", "-e", "script.sh"]) is False
+    assert _is_image_shell_command("/usr/bin/python3", ["python3", "setup.py"]) is False
+    assert _is_image_shell_command("/workspace/python3", ["python3", "-c", "print(1)"]) is False

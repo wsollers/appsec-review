@@ -29,9 +29,9 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L724) |
-| `analyze` | `analyze.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L698) |
-| `load` | `load.accepted_cpp` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L690) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L720) |
+| `analyze` | `analyze.scopes` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L694) |
+| `load` | `load.accepted_cpp` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_clang_static_analysis/job.py#L686) |
 
 ### Accepted input declarations
 
@@ -81,7 +81,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | None declared |
 | live | `tests/live/test_seeded_clang_live.py` |
-| unit | `tests/unit/job_clang_static_analysis/test_diagnostic_fidelity.py`<br>`tests/unit/job_clang_static_analysis/test_outcomes_and_reuse.py`<br>`tests/unit/job_clang_static_analysis/test_plist_fidelity.py`<br>`tests/unit/job_clang_static_analysis/test_source_admission.py`<br>`tests/unit/job_clang_static_analysis/test_clang_static_analysis.py`<br>`tests/unit/job_clang_static_analysis/test_clang_static_tool.py`<br>`tests/unit/job_clang_static_analysis/test_contract.py`<br>`tests/unit/job_clang_static_analysis/test_seeded_clang_static.py`<br>`tests/unit/job_code_graph_index/test_producers.py::test_diagnostic_rows_empty_filtering_sorting_and_truncation` |
+| unit | `tests/unit/job_clang_static_analysis/test_diagnostic_fidelity.py`<br>`tests/unit/job_clang_static_analysis/test_outcomes_and_reuse.py`<br>`tests/unit/job_clang_static_analysis/test_plist_fidelity.py`<br>`tests/unit/job_clang_static_analysis/test_source_admission.py`<br>`tests/unit/job_clang_static_analysis/test_clang_static_analysis.py`<br>`tests/unit/job_clang_static_analysis/test_clang_static_tool.py`<br>`tests/unit/job_clang_static_analysis/test_contract.py`<br>`tests/unit/job_clang_static_analysis/test_seeded_clang_static.py`<br>`tests/unit/job_code_graph_index/test_producers.py::test_diagnostic_rows_empty_filtering_sorting_and_truncation`<br>`tests/test_analyzer_attempt_scopes.py` |
 
 ### Dagster placement
 
@@ -376,14 +376,16 @@ coverage. None of these reasons is automatically expected in a walk.
 
 ## Resume and invalidation
 
-Scope checkpoints include accepted source/compile identities, adapter version, central settings,
-tool identity and seeded identities. Changing engine settings, tool pin, source, compile rows,
-seeds or neighborhood invalidates the affected scope. Matching checkpoints verify referenced
-evidence; seeded failed engines are deliberately retried rather than reused. Full-mode partial
-results may be reused only when per-file outcome records are complete. Checkpoints bind raw wrapper
-documents and streams, and verify detached native objects, execution references and retention
-receipts with the public provenance verifier. Missing/changed native evidence is an integrity
-failure, never a successful reuse. Runtime unit-level reuse is separate
-([resumability](../architecture/jobs-and-runtime.md#wave-1-resumability)).
-Generated task/tool bindings remain [T-147](../TODO.md);
-this is deterministic tool execution, not model inference.
+Job is the atomic recovery boundary: accepted upstream handoffs allow reusing the entire accepted
+job when inputs, configuration (up to compatible `[operational.*]` tuning), dataset contract, and
+implementation/schema/validation identities match, whereas any failed, invalidated, or forced job
+re-executes all selected scopes inside attempt-local directories
+(`data/clang-static/<scope-id>/attempts/<attempt-id>/`) without reading another attempt's or a
+run-wide scope checkpoint ([analyzer attempt scopes](analyzer-attempt-scopes.md)). Within-attempt
+scope verification still binds accepted source/compile identities, adapter version, central
+settings, tool identity, seeded identities, raw wrapper documents/streams, and detached native
+provenance; missing or changed native evidence fails closed without overwriting prior attempt
+bytes. Generated task/tool bindings remain [T-147](../TODO.md); this is deterministic tool
+execution, not model inference. See
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability),
+[job-local operational tuning](job-tuning.md) and [clang-static-analysis](clang-static-analysis.md#tuning-and-whole-job-recovery-job_clang_static_analysis).

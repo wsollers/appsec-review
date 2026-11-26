@@ -34,7 +34,7 @@ Declarations describe possible work, not successful execution or consumed eviden
 | `analyze` | `analyze.unit_signals` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `attribute` | `attribute.fix_on_fix` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `attribute` | `attribute.line_attribution` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
-| `load` | `load.accepted_history` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_change_context_analysis/job.py#L166) |
+| `load` | `load.accepted_history` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_change_context_analysis/job.py#L184) |
 | `load` | `load.external_sources` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `publish` | `publish.index_change_context` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
 | `publish` | `publish.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/source_lanes.py#L57) |
@@ -86,7 +86,7 @@ No job-level model declaration; absence of a task binding remains [T-147](../TOD
 | acceptance | None declared |
 | integration | `tests/integration/job_change_context_analysis/test_change_context_graph.py` |
 | live | None declared |
-| unit | `tests/unit/job_change_context_analysis/test_regressions.py`<br>`tests/unit/job_change_context_analysis/test_attribution.py`<br>`tests/unit/job_change_context_analysis/test_contract.py`<br>`tests/unit/job_change_context_analysis/test_handlers.py`<br>`tests/unit/job_change_context_analysis/test_metrics.py`<br>`tests/unit/job_change_context_analysis/test_settings_and_sources.py`<br>`tests/unit/runtime/test_wave2_consumers.py`<br>`tests/unit/runtime/test_wave3_contracts.py` |
+| unit | `tests/unit/job_change_context_analysis/test_regressions.py`<br>`tests/unit/job_change_context_analysis/test_attribution.py`<br>`tests/unit/job_change_context_analysis/test_contract.py`<br>`tests/unit/job_change_context_analysis/test_handlers.py`<br>`tests/unit/job_change_context_analysis/test_metrics.py`<br>`tests/unit/job_change_context_analysis/test_settings_and_sources.py`<br>`tests/unit/runtime/test_wave2_consumers.py`<br>`tests/unit/runtime/test_wave3_contracts.py`<br>`tests/test_analyzer_attempt_scopes.py` |
 
 ### Dagster placement
 
@@ -345,13 +345,15 @@ limitations, not automatically authorized expected gaps in a walk.
 
 ## Resume and invalidation
 
-Whole-job reuse binds source, configuration (including export pins), accepted upstream identities
-and implementation/validation. Unlike source history, this job installs no additional
-`input_identity` probe for live Git metadata or export-file freshness; do not promise automatic
-refresh merely because a file at a configured path changed. An executing loader still checks
-the pin. The shard fingerprint binds history handoff, ranked/change/external artifacts, complete
-job settings, metric/priority/attribution rules and test-association/mapping identities.
-Changed semantic inputs invalidate downstream consumers under
-[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability), while unrelated
-shards remain available. Configured export-pin changes require a newly frozen configuration,
-not rewriting an accepted run.
+Whole-job reuse binds source, configuration (including export pins, up to compatible
+`[operational.*]` tuning), accepted upstream identities, dataset contract, and
+implementation/schema/validation; any failed or invalidated job re-executes as a whole inside a
+fresh `attempts/<attempt_id>/` workspace without salvaging partial unit checkpoints. Unlike source
+history, this job installs no additional `input_identity` probe for live Git metadata or
+export-file freshness; an executing loader still checks the pin. The content-addressed shard
+fingerprint binds history handoff, ranked/change/external artifacts, complete job settings,
+metric/priority/attribution rules and test-association/mapping identities. Changed semantic inputs
+invalidate downstream consumers under
+[Wave 1 resumability](../architecture/jobs-and-runtime.md#wave-1-resumability). Configured
+export-pin changes require a newly frozen configuration, not rewriting an accepted run. See
+[job-local operational tuning](job-tuning.md) and [change-context-analysis](change-context-analysis.md#tuning-and-whole-job-recovery-job_change_context_analysis).
