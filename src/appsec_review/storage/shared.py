@@ -227,8 +227,13 @@ def verify_reference(root: Path, ref: Mapping[str, Any]) -> Path:
 def immutable_bytes(root: Path, relative: str, payload: bytes) -> dict[str, Any]:
     """Publish complete, fsynced bytes with an atomic no-replace link."""
     path = safe_path(root, relative)
-    path.parent.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha256(payload).hexdigest()
+    if path.exists() or path.is_symlink():
+        if not path.is_file() or path.is_symlink() or path.read_bytes() != payload:
+            raise ValueError(f"immutable shared artifact conflicts: {relative}")
+        remember_digest(root, path, digest)
+        return reference(root, path, expected_sha256=digest)
+    path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=".publish-", dir=path.parent)
     try:
         with os.fdopen(descriptor, "wb") as stream:
