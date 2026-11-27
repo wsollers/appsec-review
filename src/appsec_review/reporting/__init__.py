@@ -9,6 +9,13 @@ the same run gives byte-identical output, with no clock, locale, network or rand
 itself is produced by the ``tool-report-latex`` image (``scripts/render-report.sh`` and
 ``scripts/render-report.ps1``).
 """
+from .detailed_finding_report import (
+    build_detailed_finding_report,
+    render_detailed_html,
+    render_detailed_latex,
+    render_detailed_markdown,
+    write_defect_diagram_files,
+)
 from .executive_candidates import (
     CANDIDATE_IDS,
     CANDIDATE_LABELS,
@@ -39,13 +46,18 @@ __all__ = [
     "RenderedExecutiveCandidate",
     "ReportDocument",
     "Selection",
+    "build_detailed_finding_report",
     "build_executive_candidate_document",
     "load_document",
     "normalize_candidate_id",
     "render_executive_candidate_html",
     "render_executive_candidate_latex",
     "render_executive_candidate_markdown",
+    "render_detailed_html",
+    "render_detailed_latex",
+    "render_detailed_markdown",
     "render_executive_candidates",
     "render_html",
     "render_latex",
+    "write_defect_diagram_files",
 ]

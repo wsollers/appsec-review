@@ -69,7 +69,7 @@ CONTRACT = JobContract(
             missing=MissingPolicy.GAP,
         ),
     ),
-    schedule_after=("job_final_report_publication",),
+    schedule_after=("job_final_publication_gate",),
     dispatch=DispatchClass.REVIEW_GRAPH,
     target_access=TargetAccess.ACCEPTED_EVIDENCE,
     always_execute=False,

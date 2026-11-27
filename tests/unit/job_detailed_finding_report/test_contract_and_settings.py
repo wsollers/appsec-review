@@ -159,7 +159,7 @@ def test_contract_datasets_registry_operational_and_topology_parity() -> None:
     assert job.contract == CONTRACT
     assert job.datasets == DATASETS
     assert job.consumes == CONSUMES == ("job_code_graph_index", "job_final_publication_gate")
-    assert CONTRACT.schedule_after == ("job_final_report_publication",)
+    assert CONTRACT.schedule_after == ("job_final_publication_gate",)
     assert CONTRACT.dispatch == DispatchClass.REVIEW_GRAPH
     assert CONTRACT.target_access == TargetAccess.ACCEPTED_EVIDENCE
     assert CONTRACT.always_execute is False
@@ -227,7 +227,8 @@ def test_contract_datasets_registry_operational_and_topology_parity() -> None:
     assert order.index("job_final_report_publication") < order.index(JOB_ID)
     described = describe_wave1(config, registry)
     by_id = {item["job_id"]: item for item in described["jobs"]}
-    assert "job_final_report_publication" in by_id[JOB_ID]["dependencies"]
+    assert by_id[JOB_ID]["dependencies"] == ["job_final_publication_gate"]
+    assert JOB_ID not in {dep for item in by_id.values() for dep in item["dependencies"]}
     assert "job_final_publication_gate" in by_id[JOB_ID]["upstream_handoffs"]
 
 

@@ -55,7 +55,9 @@ def test_direct_completion_order_agrees_with_publication_dependencies() -> None:
     assert POST_INDEX_JOB_IDS.index("job_poc_generation") < POST_INDEX_JOB_IDS.index("job_remediation_planning")
     assert POST_INDEX_JOB_IDS.index("job_remediation_validation") < POST_INDEX_JOB_IDS.index("job_dossier_publication")
     assert POST_INDEX_JOB_IDS.index("job_dossier_publication") < POST_INDEX_JOB_IDS.index(GATE)
-    assert POST_INDEX_JOB_IDS[-1] == REPORT
+    assert POST_INDEX_JOB_IDS.index(GATE) < POST_INDEX_JOB_IDS.index(REPORT)
+    assert POST_INDEX_JOB_IDS.index(REPORT) < POST_INDEX_JOB_IDS.index("job_detailed_finding_report")
+    assert POST_INDEX_JOB_IDS[-1] == "job_detailed_finding_report"
 
 
 def test_indexing_excludes_every_downstream_consumer_but_retains_file_ownership() -> None:
@@ -94,7 +96,7 @@ def test_completion_inventory_matches_combined_job_and_retrieval_declarations() 
         assert f"| `{index}` |" in inventory
 
 
-@pytest.mark.parametrize("job_id", OPTIONAL[1:])
+@pytest.mark.parametrize("job_id", (*OPTIONAL[1:], "job_detailed_finding_report"))
 def test_new_completion_jobs_never_receive_the_live_target(job_id) -> None:
     assert job_id in TARGET_INDEPENDENT_JOBS
     assert job_id not in TARGET_JOBS
