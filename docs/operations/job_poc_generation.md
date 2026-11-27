@@ -43,13 +43,13 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `compile` | `compile.build_check` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L309) |
+| `compile` | `compile.build_check` | 1 | `cpp_build` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L311) |
 | `load` | `load.verify_inputs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L154) |
-| `package` | `package.files` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L333) |
+| `package` | `package.files` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L335) |
 | `plan` | `plan.briefs` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L206) |
-| `publish` | `publish.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L351) |
-| `validate` | `validate.policy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L278) |
-| `write` | `write.poc_writer` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L235) |
+| `publish` | `publish.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L353) |
+| `validate` | `validate.policy` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L280) |
+| `write` | `write.poc_writer` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_poc_generation/job.py#L237) |
 
 ### Accepted input declarations
 
