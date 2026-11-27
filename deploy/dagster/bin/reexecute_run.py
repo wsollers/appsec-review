@@ -121,7 +121,7 @@ def retained_handoff_pins(instance, outputs: list[dict], run_root: Path) -> dict
     return dict(sorted(pins.items()))
 
 
-def scoped_source_repair(config, root, selected, release, binding):
+def scoped_source_repair(config, root, selected, release, binding, retained_handoffs=None):
     from appsec_review.jobs.cataloging import source_fingerprint
     from appsec_review.orchestration.topology import wave1_dependencies
     from appsec_review.runtime.dependencies import graph_dependencies
@@ -147,7 +147,8 @@ def scoped_source_repair(config, root, selected, release, binding):
     if target is None:
         raise ValueError("parent re-execution requires the original target")
     plan = plan_repair(config, root, jobs, source_fingerprint(target),
-                       target_root=target, dependencies=dependencies)
+                       target_root=target, dependencies=dependencies,
+                       initial_upstream=retained_handoffs)
     if not plan["admissible"] or plan["refusals"]:
         raise ValueError("selected-job source repair refused: " + "; ".join(plan["refusals"]))
     return plan, jobs, dependencies, target
@@ -243,7 +244,8 @@ def execute_request(request: dict) -> dict:
         subset = location.get_execution_plan(
             remote_job, parent.run_config, step_keys_to_execute=selected, known_state=known, instance=instance)
         pins = retained_handoff_pins(instance, outputs, root)
-        source_repair, jobs, source_dependencies, target = scoped_source_repair(config, root, selected, release, binding)
+        source_repair, jobs, source_dependencies, target = scoped_source_repair(
+            config, root, selected, release, binding, retained_handoffs=pins)
         plan = {
             "schema": SCHEMA, "application_run_id": root.name, "parent_run_id": parent.run_id,
             "root_run_id": parent.root_run_id or parent.run_id, "from_job": request["from_job"],

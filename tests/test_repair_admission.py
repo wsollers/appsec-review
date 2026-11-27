@@ -256,6 +256,49 @@ def test_repair_preserves_verified_planning_launch_context(tmp_path, planning_up
 
 
 @pytest.mark.usefixtures("planning_unit_io")
+def test_scoped_source_repair_threads_retained_environment_pin_to_planning_boundary(
+        tmp_path, planning_upstream_seed, monkeypatch):
+    import sys
+    bin_dir = str(Path(__file__).resolve().parents[1] / "deploy" / "dagster" / "bin")
+    if bin_dir not in sys.path:
+        sys.path.insert(0, bin_dir)
+    from reexecute_run import scoped_source_repair
+
+    config, root, target, source, jobs, output, ids = _published_planning_context(
+        tmp_path, planning_upstream_seed, {"workflow": "wave1_review"})
+    pins = dict(output["handoff"]["upstream_handoff_sha256"])
+    binding = current_binding(root)
+    (tmp_path / "release-src/job_target_analysis_plan/job.py").write_text("VERSION = 2\n")
+    write_release(tmp_path, ids)
+
+    by_id = {job.job_id: job for job in jobs}
+    dependencies = {
+        "job_review_intake": (),
+        "job_target_catalog": (),
+        "job_build_environment_analysis": ("job_target_catalog",),
+        "job_target_analysis_plan": ("job_review_intake", "job_target_catalog", "job_build_environment_analysis"),
+    }
+    monkeypatch.setattr("appsec_review.runtime.registry.builtin_registry", lambda: SimpleNamespace(
+        job_ids=lambda: tuple(by_id), build=by_id.__getitem__))
+    monkeypatch.setattr("appsec_review.orchestration.topology.wave1_dependencies", lambda _ids: dependencies)
+    monkeypatch.setattr("appsec_review.runtime.launch.configured_target", lambda *_args: target)
+    monkeypatch.setattr("appsec_review.jobs.cataloging.source_fingerprint", lambda _target: source)
+
+    with pytest.raises(ValueError, match="environment reference is not the accepted producer"):
+        scoped_source_repair(config, root, ["target_analysis_plan__begin"], load_release(tmp_path), binding)
+
+    plan, selected, selected_deps, resolved_target = scoped_source_repair(
+        config, root, ["target_analysis_plan__begin"], load_release(tmp_path), binding,
+        retained_handoffs=pins)
+    assert plan["admissible"] is True, plan["refusals"]
+    assert plan["initial_upstream"] == dict(sorted(pins.items()))
+    assert [job.job_id for job in selected] == ["job_target_analysis_plan"]
+    assert [row["action"] for row in plan["decisions"]] == ["RUN"]
+    committed = admit_repair(config, root, selected, plan, target_root=resolved_target, dependencies=selected_deps)
+    assert committed["repair"]["path"] == f"data/recovery/repairs/{plan['plan_sha256']}.json"
+
+
+@pytest.mark.usefixtures("planning_unit_io")
 @pytest.mark.parametrize("damage", ["claim", "environment"])
 def test_repair_context_does_not_authorize_changed_claim_or_environment(tmp_path, planning_upstream_seed, damage):
     config, root, target, source, jobs, output, _ = _published_planning_context(

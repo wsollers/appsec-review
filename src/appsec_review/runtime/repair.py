@@ -627,20 +627,23 @@ def compatible_dataset_change(previous: Mapping[str, Any], current: Mapping[str,
 def plan_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_fingerprint: str, *,
                 target_root: Path | None = None, force_from: str | None = None,
                 historical_rerun: bool = False, dependencies: Mapping[str, Sequence[str]] | None = None,
-                successor: bool = False) -> dict[str, Any]:
+                successor: bool = False,
+                initial_upstream: Mapping[str, str] | None = None) -> dict[str, Any]:
     from appsec_review.storage.validation import validation_scope
     with validation_scope(run_root):
         return _plan_repair_in_scope(
             config, run_root, jobs, source_fingerprint, target_root=target_root,
             force_from=force_from, historical_rerun=historical_rerun,
-            dependencies=dependencies, successor=successor)
+            dependencies=dependencies, successor=successor,
+            initial_upstream=initial_upstream)
 
 
 def _plan_repair_in_scope(config: AppConfig, run_root: Path, jobs: Sequence[Job], source_fingerprint: str, *,
                           target_root: Path | None = None, force_from: str | None = None,
                           historical_rerun: bool = False,
                           dependencies: Mapping[str, Sequence[str]] | None = None,
-                          successor: bool = False) -> dict[str, Any]:
+                          successor: bool = False,
+                          initial_upstream: Mapping[str, str] | None = None) -> dict[str, Any]:
     from appsec_review.runtime.resume import ResumePlanner
     from appsec_review.runtime.dependencies import graph_dependencies
     release = load_release(config.runtime.repository_root)
@@ -668,9 +671,13 @@ def _plan_repair_in_scope(config: AppConfig, run_root: Path, jobs: Sequence[Job]
         reasons.append("historical implementation is unverified; explicit historical-rerun is required")
     dependencies = graph_dependencies(jobs, dependencies)
     orchestration = (None if historical or successor else _planning_repair_context(config, run_root, jobs))
+    retained_upstream = (dict(sorted(initial_upstream.items()))
+                         if initial_upstream and not (historical or successor) else None)
     decisions = ResumePlanner(config, run_root, jobs, source_fingerprint, target_root=target_root,
                               orchestration=orchestration, dependencies=dependencies).plan(
-                                  force_from=force_from, emit_event=False, invalidated=historical or successor)
+                                  force_from=force_from, emit_event=False,
+                                  initial_upstream=retained_upstream,
+                                  invalidated=historical or successor)
     snapshots, unit_decisions = {}, {}
     for job in jobs:
         if release is not None and job.job_id not in release["jobs"]:
@@ -717,6 +724,8 @@ def _plan_repair_in_scope(config: AppConfig, run_root: Path, jobs: Sequence[Job]
         "decisions": [item.as_dict() for item in decisions], "refusals": sorted(set(reasons)),
         "admissible": not reasons,
     }
+    if retained_upstream is not None:
+        value["initial_upstream"] = retained_upstream
     if changes:
         value["operational_configuration_changes"] = changes
     return {**value, "plan_sha256": digest(value)}
@@ -729,7 +738,8 @@ def admit_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], plan: M
     with FileLock(run_root / "data/resume.lock"), FileLock(run_root / "data/recovery/admission.lock"), validation_scope(run_root):
         fresh = plan_repair(config, run_root, jobs, plan["source_fingerprint"], target_root=target_root,
                             force_from=plan.get("force_from"), historical_rerun=plan.get("historical_rerun", False),
-                            dependencies=dependencies, successor=plan.get("successor", False))
+                            dependencies=dependencies, successor=plan.get("successor", False),
+                            initial_upstream=plan.get("initial_upstream"))
         if canonical_json(fresh) != canonical_json(plan):
             raise ValueError("repair plan changed; inspect a fresh plan before admission")
         if not fresh["admissible"]:
