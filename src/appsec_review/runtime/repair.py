@@ -46,6 +46,10 @@ class ComputationAdmission:
         tuple[str, str],
         tuple[frozenset[tuple[Any, Any, Any]], tuple[Mapping[str, Any], ...]],
     ] = field(default_factory=dict, repr=False, compare=False)
+    _shared_inputs_by_object: dict[
+        tuple[str, str],
+        dict[tuple[Any, Any], tuple[Mapping[str, Any], ...]],
+    ] = field(default_factory=dict, repr=False, compare=False)
 
     @classmethod
     def for_repair(cls, root: Path, claim: Mapping[str, Any]) -> ComputationAdmission | None:
@@ -163,9 +167,21 @@ class ComputationAdmission:
             artifact_set, shared_input_items = self._input_handoff_index[key]
             if origin_triple in artifact_set:
                 return True
-            for item in shared_input_items:
+            by_object = self._shared_inputs_by_object.get(key)
+            if by_object is None:
+                grouped: dict[tuple[Any, Any], list[Mapping[str, Any]]] = {}
+                for item in shared_input_items:
+                    metadata = read_document(verify_reference(root, item))
+                    obj = metadata.get("object")
+                    if isinstance(obj, Mapping):
+                        grouped.setdefault((obj.get("path"), obj.get("sha256")), []).append(item)
+                by_object = {obj_key: tuple(items) for obj_key, items in grouped.items()}
+                self._shared_inputs_by_object[key] = by_object
+            target_obj = receipt.get("object")
+            obj_key = (target_obj.get("path"), target_obj.get("sha256")) if isinstance(target_obj, Mapping) else (None, None)
+            for item in by_object.get(obj_key, ()):
                 metadata = read_document(verify_reference(root, item))
-                if metadata.get("object") != receipt["object"]:
+                if metadata.get("object") != target_obj:
                     continue
                 candidate = item
                 value = verify_receipt(root, candidate)
@@ -709,7 +725,8 @@ def _plan_repair_in_scope(config: AppConfig, run_root: Path, jobs: Sequence[Job]
 def admit_repair(config: AppConfig, run_root: Path, jobs: Sequence[Job], plan: Mapping[str, Any], *,
                  target_root: Path | None = None,
                  dependencies: Mapping[str, Sequence[str]] | None = None) -> dict[str, Any]:
-    with FileLock(run_root / "data/resume.lock"), FileLock(run_root / "data/recovery/admission.lock"):
+    from appsec_review.storage.validation import validation_scope
+    with FileLock(run_root / "data/resume.lock"), FileLock(run_root / "data/recovery/admission.lock"), validation_scope(run_root):
         fresh = plan_repair(config, run_root, jobs, plan["source_fingerprint"], target_root=target_root,
                             force_from=plan.get("force_from"), historical_rerun=plan.get("historical_rerun", False),
                             dependencies=dependencies, successor=plan.get("successor", False))

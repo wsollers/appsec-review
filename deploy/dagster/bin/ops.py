@@ -892,7 +892,7 @@ def _review_start(args: argparse.Namespace) -> int:
         }
         if len(restart_jobs) > 1:
             request["additional_jobs"] = restart_jobs[1:]
-        preview = docker(*reexecute_run.container_command(code.id, request), timeout=180)
+        preview = docker(*reexecute_run.container_command(code.id, request), timeout=600)
         if preview.returncode != 0:
             raise OpsError("parent re-execution refused: " + redact(preview.stderr or preview.stdout, 1400), REFUSED)
         reexecution = json.loads(preview.stdout)
@@ -980,7 +980,7 @@ def _review_start(args: argparse.Namespace) -> int:
     record = review_run.begin_submission(ROOT, identity, dagster_run_id)
     say(f"submission intent:  {review_run.submission_directory(ROOT) / 'active.json'}")
     try:
-        launched = docker(*command, timeout=180)
+        launched = docker(*command, timeout=180 if reexecution is None else 600)
     except OpsError as error:
         raise OpsError(f"{error}; submission {dagster_run_id} is UNCERTAIN; do not resubmit") from error
     if launched.returncode != 0:

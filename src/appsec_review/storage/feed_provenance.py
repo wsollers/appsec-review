@@ -204,6 +204,75 @@ def record_snapshot(root: Path, feed: str, snapshot_id: str, *, computed: bool,
         legacy="unknown-original-producer" if producer is None else None)[1]
 
 
+def _snapshot_stamps(root: Path, manifest_path: Path, document: Mapping[str, Any], feed: str
+                     ) -> tuple[tuple[str, int, int, int, int], ...] | None:
+    files = document.get("files")
+    if not isinstance(files, Mapping):
+        return None
+    stamps: list[tuple[str, int, int, int, int]] = []
+    for logical, entry in sorted(files.items()):
+        path = safe_path(manifest_path.parent, logical)
+        if not path.is_file() or path.is_symlink():
+            return None
+        st = path.stat()
+        if st.st_size != entry.get("size_bytes"):
+            return None
+        stamps.append((logical, st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns))
+    if feed == "nvd":
+        cur: Mapping[str, Any] = document
+        seen: set[str] = set()
+        while True:
+            snap_id = cur.get("snapshot_id")
+            if not isinstance(snap_id, str) or snap_id in seen:
+                return None
+            seen.add(snap_id)
+            for layer in cur.get("layers", ()):
+                for record in layer.get("pages", [layer]):
+                    for field_name in ("raw_blob", "metadata_blob"):
+                        if field_name in record:
+                            blob = record[field_name]
+                            bpath = safe_path(root, blob["path"])
+                            if not bpath.is_file() or bpath.is_symlink():
+                                return None
+                            bst = bpath.stat()
+                            if bst.st_size != blob.get("size_bytes"):
+                                return None
+                            stamps.append((f"nvd:{blob['path']}", bst.st_dev, bst.st_ino, bst.st_size, bst.st_mtime_ns))
+            parent = cur.get("parent_snapshot_id")
+            if parent is None:
+                break
+            pm = safe_path(root, f"snapshots/{parent}/manifest.json")
+            if not pm.is_file() or pm.is_symlink():
+                return None
+            pst = pm.stat()
+            stamps.append((f"nvd-parent:{parent}", pst.st_dev, pst.st_ino, pst.st_size, pst.st_mtime_ns))
+            cur = json.loads(pm.read_bytes())
+    return tuple(stamps)
+
+
+def _verified_feed_snapshot(run_root: Path, root: Path, manifest: Mapping[str, Any], feed: str) -> dict[str, Any]:
+    from copy import deepcopy
+    from .validation import current_validation
+    context = current_validation(run_root)
+    if context is None:
+        return _verify_snapshot(root, manifest, feed)
+    manifest_path = verify_reference(root, manifest)
+    key = ("feed-snapshot", f"{root.resolve()}:{feed}:{manifest['path']}", str(manifest["sha256"]))
+    with context.lock:
+        cached = context.records.get(key)
+    if cached is not None:
+        cached_stamps, cached_doc = cached
+        current_stamps = _snapshot_stamps(root, manifest_path, cached_doc, feed)
+        if current_stamps is not None and current_stamps == cached_stamps:
+            return deepcopy(cached_doc)
+    document = _verify_snapshot(root, manifest, feed)
+    stamps = _snapshot_stamps(root, manifest_path, document, feed)
+    if stamps is not None:
+        with context.lock:
+            context.records[key] = (stamps, deepcopy(document))
+    return document
+
+
 def verify_feed_receipt(run_root: Path, receipt: Mapping[str, Any], claim: Mapping[str, Any]) -> None:
     if receipt["object"]["path"] != f"data/shared/objects/{receipt['object']['sha256']}":
         raise ValueError("public-feed proof is not a run-local content-addressed object")
@@ -214,7 +283,7 @@ def verify_feed_receipt(run_root: Path, receipt: Mapping[str, Any], claim: Mappi
     root, config = _configured_root(run_root, claim, proof["feed_id"])
     if proof["configuration"] != config or receipt["dependencies"] or receipt["producer_receipt"] is not None:
         raise ValueError("public-feed proof configuration or references changed")
-    document = _verify_snapshot(root, proof["manifest"], proof["feed_id"])
+    document = _verified_feed_snapshot(run_root, root, proof["manifest"], proof["feed_id"])
     expected = {"feed_id": proof["feed_id"], "snapshot_id": document["snapshot_id"],
                 "manifest_sha256": proof["manifest"]["sha256"], "configuration_sha256": config["sha256"]}
     if (receipt["computation"] != expected or receipt["fingerprint"] != _digest({
