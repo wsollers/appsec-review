@@ -15,9 +15,11 @@ from appsec_review.jobs.completion_contracts import (
 )
 from appsec_review.retrieval.graph import ALT_PATH_SHARD
 from appsec_review.review.models import IntegrityError
-from appsec_review.review.decision_audit.contracts import DecisionRecord, VerificationRecord
+from appsec_review.review.decision_audit.contracts import (
+    MAX_EXPLANATION, DecisionRecord, Stage, VerificationRecord,
+)
 from appsec_review.review.decision_audit.reader import AcceptedAudit
-from appsec_review.review.secret_redaction import redact_source_line
+from appsec_review.review.secret_redaction import assignments_safe_prose_token, redact_prose_secrets
 from appsec_review.storage import canonical_json
 from .digest import bullets, code, field, table
 from .dimensions import DIMENSIONS, dimension_of_package, owasp_of_cwe_or_domain
@@ -83,8 +85,7 @@ class _Projection:
 
     def text(self, value: Any, name: str, *, identity: bool = False) -> str:
         raw = clean(value, keep_newlines=True)
-        redacted = raw if identity else "\n".join(redact_source_line(line, assignments=False)
-                                                  for line in raw.split("\n"))
+        redacted = raw if identity else redact_prose_secrets(raw, secret_context=self.secret_context)
         text, cut = bound(redacted, self.limits.text_chars)
         if cut:
             self.cuts.append({"field": name, **asdict(cut)})
@@ -119,10 +120,10 @@ class _Projection:
         return out
 
 
-def _safe_str(value: Any, max_chars: int = 600, *, identity: bool = False) -> str:
+def _safe_str(value: Any, max_chars: int = 600, *, identity: bool = False, secret_context: bool = False) -> str:
     raw = clean(value, keep_newlines=True)
     if not identity:
-        raw = "\n".join(redact_source_line(line, assignments=False) for line in raw.split("\n"))
+        raw = redact_prose_secrets(raw, secret_context=secret_context)
     kept, _ = bound(raw, max_chars)
     return kept
 
@@ -169,12 +170,16 @@ def _build_adjudication_summary(
     preconditions: Sequence[str],
     evidence: Sequence[Mapping[str, Any]],
     sources: Sequence[Mapping[str, Any]],
+    secret_context: bool = False,
 ) -> dict[str, Any]:
     counted = [ev["relation_id"] for ev in evidence if ev["strength"] == "counted_direct"]
     analyst = [ev["relation_id"] for ev in evidence if ev["strength"] != "counted_direct"]
     basis_text = statement or "Accepted finding statement not recorded."
     if preconditions:
-        basis_text = _safe_str(f"{basis_text} Preconditions: {'; '.join(preconditions[:4])}.", 900)
+        basis_text = _safe_str(
+            f"{basis_text} Preconditions: {'; '.join(preconditions[:4])}.", 900,
+            secret_context=secret_context,
+        )
     guard_note = "Guard analysis is not recorded in the accepted projection; citations are not a guard narrative."
     src_by_entity = {src["entity_id"]: src for src in sources if src.get("entity_id")}
     resolving: list[dict[str, str]] = []
@@ -196,7 +201,7 @@ def _build_adjudication_summary(
     posture = ("independence_passed" if independent is True else
                "independence_failed" if independent is False else "not_recorded")
     return {
-        "exploitability_basis": _safe_str(basis_text, 900) or "Not recorded.",
+        "exploitability_basis": _safe_str(basis_text, 900, secret_context=secret_context) or "Not recorded.",
         "guard_bypass_summary": guard_note,
         "verifier_posture": posture,
         "counted_direct_citations": counted,
@@ -205,7 +210,7 @@ def _build_adjudication_summary(
     }
 
 
-def _build_poc_harness_summary(poc_view: Mapping[str, Any] | None) -> dict[str, Any]:
+def _build_poc_harness_summary(poc_view: Mapping[str, Any] | None, *, secret_context: bool = False) -> dict[str, Any]:
     if poc_view is None:
         return {
             "available": False,
@@ -229,6 +234,7 @@ def _build_poc_harness_summary(poc_view: Mapping[str, Any] | None) -> dict[str, 
             f"Status: {poc_view['status']} ({'compile-only verified' if compile_ok else 'not compile-verified'}). "
             f"{reason} Execution: not_performed_by_policy.",
             600,
+            secret_context=secret_context,
         ),
     }
 
@@ -289,8 +295,91 @@ def audit_relation_ids(audit: AcceptedAudit, finding: Mapping[str, Any]) -> froz
     return frozenset(row.relation_id for row in audit.relations(basis))
 
 
+def _recover_decision_explanation(
+    row: DecisionRecord,
+    *,
+    audit: AcceptedAudit,
+    finding: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+    judge_verdicts: Sequence[Mapping[str, Any]],
+    adjudications: Sequence[Mapping[str, Any]],
+    secret_context: bool,
+) -> str | None:
+    stored = row.context.explanation.text
+    if stored is None or secret_context or "<redacted:" not in stored or audit.manifest is None:
+        return stored
+    if row.stage == Stage.ADJUDICATION:
+        adj_id = row.context.subject.adjudication_id.value or finding.get("adjudication_id")
+        matched_adj = next(
+            (
+                item for item in adjudications
+                if isinstance(item, Mapping)
+                and item.get("adjudication_id") == adj_id
+                and item.get("claim_id") == finding.get("claim_id")
+            ),
+            None,
+        )
+        policy_hash = matched_adj.get("policy_sha256") if isinstance(matched_adj, Mapping) else None
+        deciding = row.deciding_row.value if row.deciding_row is not None else ""
+        redacted_row_prefix = f"Existing deciding row <redacted:{len(deciding)} chars>; "
+        candidate = (
+            f"Existing deciding row {deciding}; " + stored[len(redacted_row_prefix):]
+            if deciding and stored.startswith(redacted_row_prefix)
+            else stored
+        )
+        if isinstance(policy_hash, str) and len(policy_hash) == 64 and all(c in "0123456789abcdef" for c in policy_hash):
+            needle_with_dot = f"policy=<redacted:{len(policy_hash) + 1} chars>"
+            needle_no_dot = f"policy=<redacted:{len(policy_hash)} chars>."
+            prefix = f"Existing deciding row {deciding}; "
+            if candidate.startswith(prefix) and needle_with_dot in candidate:
+                return candidate.replace(needle_with_dot, f"policy={policy_hash}.", 1)
+            if candidate.startswith(prefix) and needle_no_dot in candidate:
+                return candidate.replace(needle_no_dot, f"policy={policy_hash}.", 1)
+        return stored
+    if row.stage == Stage.SCORING:
+        score_ids = {src.record_id.value for src in row.context.sources if src.record_id.value}
+        finding_scores = [s for s in (finding.get("scores") or ()) if isinstance(s, Mapping)]
+        matched_score = next((s for s in finding_scores if s.get("score_id") in score_ids), None)
+        if matched_score is None and len(finding_scores) == 1 and not score_ids:
+            matched_score = finding_scores[0]
+        if matched_score is not None:
+            provider = matched_score.get("provider") or {}
+            for candidate in (provider.get("implementation"), provider.get("id")):
+                if isinstance(candidate, str) and assignments_safe_prose_token(candidate):
+                    needle = f"provider <redacted:{len(candidate)} chars>"
+                    if needle in stored:
+                        return stored.replace(needle, f"provider {candidate}", 1)
+        return stored
+    if row.stage == Stage.JUDGE_REVIEW:
+        proj_sha = (provenance.get("projection") or {}).get("sha256")
+        if not proj_sha or proj_sha != audit.manifest.origin.projection_sha256:
+            return stored
+        verdict_ids = {
+            src.record_id.value for src in row.context.sources
+            if src.sha256 == proj_sha and src.record_id.value
+        }
+        if not verdict_ids:
+            return stored
+        matched_verdict = next(
+            (
+                v for v in judge_verdicts
+                if isinstance(v, Mapping)
+                and v.get("verdict_id") in verdict_ids
+                and (v.get("claim_id") is None or v.get("claim_id") == finding.get("claim_id"))
+                and (v.get("verdict") is None or v.get("verdict") == row.outcome)
+            ),
+            None,
+        )
+        reason = matched_verdict.get("reason") if isinstance(matched_verdict, Mapping) else None
+        if isinstance(reason, str) and reason:
+            return reason.replace("\n", " ")[:MAX_EXPLANATION]
+    return stored
+
+
 def _decision_basis(audit: AcceptedAudit, finding: Mapping[str, Any], relations: Mapping[str, Mapping[str, Any]],
-                    provenance: Mapping[str, Any], project: _Projection) -> dict[str, Any]:
+                    provenance: Mapping[str, Any], project: _Projection, *,
+                    judge_verdicts: Sequence[Mapping[str, Any]] = (),
+                    adjudications: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
     identities = audit_relation_ids(audit, finding)
     if not identities <= set(relations):
         raise IntegrityError("dossier audit relations are absent from the accepted projection")
@@ -317,7 +406,14 @@ def _decision_basis(audit: AcceptedAudit, finding: Mapping[str, Any], relations:
     linked = {ref.record_id for ref in basis.decisions}
     decisions = [{"record_id": row.record_id, "stage": row.stage.value, "outcome": row.outcome,
                   "reason_code": row.reason_code.value, "basis_status": row.basis_status.value,
-                  "explanation": project.text(row.context.explanation.text, "decision_basis.explanation"),
+                  "explanation": project.text(
+                      _recover_decision_explanation(
+                          row, audit=audit, finding=finding, provenance=provenance,
+                          judge_verdicts=judge_verdicts, adjudications=adjudications,
+                          secret_context=project.secret_context,
+                      ),
+                      "decision_basis.explanation",
+                  ),
                   "explanation_absence_reason": row.context.explanation.absence_reason}
                  for row in audit.records if isinstance(row, DecisionRecord) and row.record_id in linked]
     verification = None
@@ -349,7 +445,9 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
                   chains: Sequence[Mapping[str, Any]] = (), finding_paths: Sequence[Mapping[str, Any]] = (),
                   provenance: Mapping[str, Any],
                   gaps: Sequence[str] = (), limits: DossierLimits = DossierLimits(),
-                  decision_audit: AcceptedAudit | None = None) -> dict[str, Any]:
+                  decision_audit: AcceptedAudit | None = None,
+                  judge_verdicts: Sequence[Mapping[str, Any]] = (),
+                  adjudications: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
     """Build a closed, deterministic model from already verified accepted records."""
     kind = DossierKind(kind)
     binding = FindingBinding.from_mapping({key: finding[key] for key in (
@@ -398,7 +496,16 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
         for key in RISK_DIMENSIONS:
             dimension = score.get(key)
             dimensions[key] = None if dimension is None else {
-                name: project.text(dimension.get(name), "risk." + key + "." + name)
+                name: project.text(
+                    dimension.get(name),
+                    "risk." + key + "." + name,
+                    identity=(
+                        name == "scale"
+                        and not project.secret_context
+                        and isinstance(dimension.get(name), str)
+                        and assignments_safe_prose_token(dimension.get(name))
+                    ),
+                )
                 for name in ("scale", "rating", "value")}
         scores.append({"score_id": score["score_id"], "sha256": score["sha256"],
                        "provider": project.text((score.get("provider") or {}).get("id"), "score.provider", identity=True),
@@ -514,14 +621,16 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
         preconditions=precond_proj,
         evidence=evidence,
         sources=sources,
+        secret_context=project.secret_context,
     )
-    poc_harness_summary = _build_poc_harness_summary(poc_view)
+    poc_harness_summary = _build_poc_harness_summary(poc_view, secret_context=project.secret_context)
     remediation_guide = _build_remediation_guide(
         remedies=remedies, outcomes={row["stage"]: project.text(row.get("status"), "remediation.status")
                                      for row in remediation})
 
     audit_view = None if decision_audit is None else _decision_basis(
-        decision_audit, finding, by_id, provenance, project)
+        decision_audit, finding, by_id, provenance, project,
+        judge_verdicts=judge_verdicts, adjudications=adjudications)
     return {
         "schema": DOSSIER_SCHEMA,
         "dossier_id": "dossier-" + hashlib.sha256(canonical_json(identity)).hexdigest(),

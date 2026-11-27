@@ -13,7 +13,7 @@ import json
 from typing import Any
 
 from appsec_review.review.models import IntegrityError, Predicate, Role
-from appsec_review.review.secret_redaction import redact_source_line
+from appsec_review.review.secret_redaction import redact_prose_secrets
 from appsec_review.storage import canonical_json
 
 from . import contracts as c
@@ -67,10 +67,10 @@ def _redact(value: Any) -> Any:
     if isinstance(value, dict):
         # Identity strings and original citations remain resolving. Only the closed
         # explanation field contains prose; never redact hashes into unusable citations.
-        result = {key: "\n".join(redact_source_line(line) for line in item.split("\n"))
+        result = {key: redact_prose_secrets(item)
                   if key == "text" and isinstance(item, str) else _redact(item) for key, item in value.items()}
         if isinstance(result.get("original_outcome"), dict) and result["original_outcome"]["value"] is not None:
-            result["original_outcome"]["value"] = redact_source_line(result["original_outcome"]["value"])
+            result["original_outcome"]["value"] = redact_prose_secrets(result["original_outcome"]["value"])
         return result
     if isinstance(value, list):
         return [_redact(item) for item in value]

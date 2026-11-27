@@ -43,7 +43,7 @@ def check(value: bool | None, absence: c.AbsenceReason = c.AbsenceReason.LEGACY_
 def explanation(text: str | None) -> c.Explanation:
     if not text:
         return c.Explanation(None, c.AbsenceReason.NOT_PRODUCED, link())
-    safe = redact_message(redact(text)[0], bound=c.MAX_EXPLANATION) or ""
+    safe = redact_message(text, bound=c.MAX_EXPLANATION) or ""
     return c.Explanation(safe, None, link("redacted_or_bounded" if safe != text else None))
 
 

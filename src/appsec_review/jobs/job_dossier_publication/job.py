@@ -166,6 +166,26 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
                     or audit.unavailable_reason != document.get("decision_audit_unavailable_reason")):
                 raise IntegrityError("dossier decision audit changed after input verification")
         verified = document["verified_review"]
+        verified_judge_verdicts: Mapping[str, Any] = {}
+        adjudications_by_id: dict[str, Mapping[str, Any]] = {}
+        if audit is not None and audit.available and audit.manifest is not None:
+            if verified["inputs"]["projection"]["sha256"] == audit.manifest.origin.projection_sha256:
+                verified_judge_verdicts = document["projection"].get("judge_verdicts") or {}
+            verified_reads = {(receipt.path, receipt.sha256) for receipt in audit.reads}
+            from appsec_review.review.decision_audit.contracts import DecisionRecord, Stage
+            adj_refs = {
+                (src.path, src.sha256)
+                for rec in audit.records
+                if isinstance(rec, DecisionRecord) and rec.stage == Stage.ADJUDICATION
+                for src in rec.context.sources
+                if src.record_id.value == rec.context.subject.adjudication_id.value
+                and (src.path, src.sha256) in verified_reads
+            }
+            for adj_path, adj_sha in sorted(adj_refs):
+                adj_doc = bound_json(root, {"path": adj_path, "sha256": adj_sha}, settings.max_artifact_bytes)
+                for adj_row in adj_doc.get("adjudications") or ():
+                    if isinstance(adj_row, Mapping) and isinstance(adj_row.get("adjudication_id"), str):
+                        adjudications_by_id[adj_row["adjudication_id"]] = adj_row
         findings = {row["finding_package_id"]: row for row in verified["packages"]}
         claims = {row["claim_id"]: row for row in document["projection"]["claims"]}
         pocs = _poc(document)
@@ -207,6 +227,11 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
                 finding_paths=[path for path in (document.get("chains") or {}).get("finding_paths", ())
                                if path["claim_id"] == finding["claim_id"]],
                 chains=_chains(root, document, finding, settings), gaps=source_gaps, limits=limits, decision_audit=audit,
+                judge_verdicts=verified_judge_verdicts.get(finding["claim_id"], ()),
+                adjudications=(
+                    (adjudications_by_id[finding["adjudication_id"]],)
+                    if finding.get("adjudication_id") in adjudications_by_id else ()
+                ),
                 provenance={**document["upstream"], "finding_artifact": {"path": finding["path"], "sha256": finding["sha256"]},
                             "projection": verified["inputs"]["projection"],
                             "ledger_head_sha256": verified["review"]["ledger_head_sha256"],
