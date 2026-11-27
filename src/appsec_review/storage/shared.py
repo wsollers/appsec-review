@@ -70,8 +70,17 @@ def receipt_read_scope(root: Path, policy: ReceiptReadPolicy | None):
     if policy is None:
         yield
         return
-    from .validation import isolated_validation_scope
-    with isolated_validation_scope(root, policy_identity="receipt-read:" + policy.identity):
+    from .validation import current_validation, isolated_validation_scope
+    policy_id = "receipt-read:" + policy.identity
+    existing = current_validation(root)
+    if existing is not None and existing.policy_identity == policy_id:
+        token = _READ_POLICY.set((Path(root).resolve(), policy))
+        try:
+            yield
+        finally:
+            _READ_POLICY.reset(token)
+        return
+    with isolated_validation_scope(root, policy_identity=policy_id):
         token = _READ_POLICY.set((Path(root).resolve(), policy))
         try:
             yield
@@ -196,7 +205,7 @@ def reference(root: Path, path: Path, *, expected_sha256: str | None = None) -> 
             raise ValueError("shared object path differs from expected identity")
         expected_sha256 = identity
     if _read_policy(root) is not None:
-        digest = file_sha256(path)
+        digest = observed_digest(root, path)
         if expected_sha256 is not None and digest != _hash(expected_sha256):
             raise ValueError("shared artifact integrity mismatch")
     else:
@@ -208,7 +217,7 @@ def reference(root: Path, path: Path, *, expected_sha256: str | None = None) -> 
 def verify_reference(root: Path, ref: Mapping[str, Any]) -> Path:
     path = safe_path(root, ref["path"])
     expected = _hash(ref["sha256"])
-    if (not path.is_file() or (file_sha256(path) if _read_policy(root) is not None
+    if (not path.is_file() or (observed_digest(root, path) if _read_policy(root) is not None
                               else verified_digest(root, path, expected)) != expected
             or path.stat().st_size != ref["size_bytes"]):
         raise ValueError(f"shared artifact integrity mismatch: {ref['path']}")

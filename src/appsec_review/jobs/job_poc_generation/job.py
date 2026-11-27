@@ -219,11 +219,13 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
                 held.append(_core(services, run_root, document))
             return held[0]
 
+        from appsec_review.storage.validation import validation_scope
         entries: dict[str, Any] = {}
-        for item in document["planned"]:
-            candidate = parse_candidates([item["candidate"]])[0]
-            entries[candidate.claim_id] = _plan_candidate(unit, settings, item, candidate, builds, limits, services,
-                                                          core, build_view)
+        with validation_scope(Path(run_root).resolve()):
+            for item in document["planned"]:
+                candidate = parse_candidates([item["candidate"]])[0]
+                entries[candidate.claim_id] = _plan_candidate(unit, settings, item, candidate, builds, limits, services,
+                                                              core, build_view)
         return {"artifact": _write_json(unit, "plan.json", {"schema": "appsec-review/poc-generation-plan/1",
                                                             "entries": entries}),
                 "attempts": sum(1 for entry in entries.values() if entry["terminal"] is None),
@@ -447,7 +449,8 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
         # A hunt body references its unit context once (review-package/7); the view reads the merged document.
         package = merge_unit_context(package, load_unit_context(
             Path(run_root) / Path(record["path"]).parent.parent, package["unit_context"]))
-    sink = services.sink_resolver(package)
+    sink = (review_inputs.sink_of(package, core=core_getter())
+            if services.sink_resolver is review_inputs.sink_of else services.sink_resolver(package))
     if sink is None:
         entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "the review package names no function that holds the sink")
         return entry
@@ -461,7 +464,7 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
     headers = Headers(located.unit)
     try:
         brief = build_brief(candidate, finding=item["finding"], package=package, view=view, sink=sink,
-                            unit=located.unit, headers=headers, settings=settings)
+                            unit=located.unit, headers=headers, settings=settings, core=core_getter())
     except BriefTooLarge as exc:
         entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, str(exc))
         entry["brief_gaps"] = [str(exc)]
@@ -475,6 +478,7 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
     entry["brief"] = document_ref
     entry["brief_facts"] = brief.document["build_facts"]
     entry["expectation"] = {"sink_names": list(brief.sink_names), **dict(brief.expectation_inputs)}
+    entry["synthesized_header"] = brief.synthesized_header
     entry["package_sha256"] = record["sha256"]
     return entry
 
@@ -517,7 +521,7 @@ def _validate_candidate(unit: UnitContext, settings: PocGenerationSettings, serv
     scratch = None
     try:
         scratch = buildcheck.prepare(builds, build, scratch_root, name=candidate.claim_id, poc_text=text,
-                                     settings=settings)
+                                     settings=settings, synthesized_header=plan_entry.get("synthesized_header"))
         executor = services.executor(unit, settings, build, executors)
         step = buildcheck.ast_step(executor, build, scratch, settings)
         reduced, why = buildcheck.reduced_ast(step)
@@ -569,7 +573,7 @@ def _compile_candidate(unit: UnitContext, settings: PocGenerationSettings, servi
     scratch = None
     try:
         scratch = buildcheck.prepare(builds, build, unit.unit_root / "scratch", name=claim, poc_text=source["text"],
-                                     settings=settings)
+                                     settings=settings, synthesized_header=plan_entry.get("synthesized_header"))
         executor = services.executor(unit, settings, build, executors)
         outcome = buildcheck.check_build(executor, builds, build, scratch, settings, claim_id=claim)
     except (RuntimeError, TimeoutError, OSError, ValueError) as exc:

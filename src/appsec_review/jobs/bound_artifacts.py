@@ -74,6 +74,7 @@ def source_context_datasets() -> dict[str, tuple[DatasetDeclaration, ...]]:
     from appsec_review.jobs.job_ci_configuration_analysis import datasets as _job_ci_configuration_analysis
     from appsec_review.jobs.job_artifact_security_analysis import datasets as _job_artifact_security_analysis
     from appsec_review.jobs.job_binary_evidence_indexing import datasets as _job_binary_evidence_indexing
+    from appsec_review.jobs.job_debug_symbol_indexing import datasets as _job_debug_symbol_indexing
     from appsec_review.jobs.job_dependency_intelligence import datasets as _job_dependency_intelligence
     from appsec_review.jobs.job_review_prioritization import datasets as _job_review_prioritization
     from appsec_review.jobs.job_security_tagging import datasets as _job_security_tagging
@@ -92,6 +93,7 @@ def source_context_datasets() -> dict[str, tuple[DatasetDeclaration, ...]]:
         "job_ci_configuration_analysis": _job_ci_configuration_analysis.DATASETS,
         "job_artifact_security_analysis": _job_artifact_security_analysis.DATASETS,
         "job_binary_evidence_indexing": _job_binary_evidence_indexing.DATASETS,
+        "job_debug_symbol_indexing": _job_debug_symbol_indexing.DATASETS,
         "job_dependency_intelligence": _job_dependency_intelligence.DATASETS,
         "job_review_prioritization": _job_review_prioritization.DATASETS,
         "job_security_tagging": _job_security_tagging.DATASETS,
@@ -104,7 +106,8 @@ def source_context_datasets() -> dict[str, tuple[DatasetDeclaration, ...]]:
                                        "cpp_blocked_branches")),
         ("job_cpp_symbol_index", ("clangd_symbols", "clangd_coverage")),
         ("job_svf_alias_analysis", ("svf_alias_sets", "svf_alias_scope_coverage")),
-        ("job_code_graph_index", ("code_graph_facts",)),
+        ("job_code_graph_index", ("code_graph_facts", "alternate_cpg_index")),
+        ("job_debug_symbol_indexing", ("normalized_symbols",)),
         ("job_codeql_analysis", ("codeql_observations",)),
         ("job_evidence_collection", ("static_tool_observations",)),
         ("job_clang_static_analysis", ("clang_static_observations", "clang_static_scope_coverage")),
@@ -133,10 +136,16 @@ def source_context_inputs() -> tuple[InputRequirement, ...]:
                  for requirement in accepted_inputs(producer, declarations))
 
 
-def source_context_core(run_root: Path, manifest: Mapping[str, Any]) -> RetrievalCore:
+SOURCE_CONTEXT_TIMEOUT_MS = 30_000
+
+
+def source_context_core(run_root: Path, manifest: Mapping[str, Any], *,
+                        limits: Any = None, log: Any = None) -> RetrievalCore:
     """Keep the accepted manifest identity while querying only the explicitly declared source view."""
-    from appsec_review.retrieval.core import RetrievalCore
+    from appsec_review.retrieval.core import RetrievalCore, RetrievalLimits
     from appsec_review.runtime.inputs import input_shard_owner
+    from appsec_review.storage.validation import validation_scope
+    resolved_root = Path(run_root).resolve()
     datasets = source_context_datasets()
     indexes = {index for declarations in datasets.values() for item in declarations for index in item.indexes}
 
@@ -148,8 +157,12 @@ def source_context_core(run_root: Path, manifest: Mapping[str, Any]) -> Retrieva
             return shard["name"] in indexes
         if producer not in datasets:
             return False
-        owner = input_shard_owner(run_root, shard)
+        owner = input_shard_owner(resolved_root, shard)
         return any(item.output_kind == owner.output_kind for item in datasets[producer])
 
-    return RetrievalCore(run_root.parent, run_root.name, manifest_path=run_root / manifest["path"],
-                         manifest_sha256=manifest["sha256"], shard_filter=selected)
+    effective_limits = limits if limits is not None else RetrievalLimits(timeout_ms=SOURCE_CONTEXT_TIMEOUT_MS)
+    with validation_scope(resolved_root):
+        return RetrievalCore(resolved_root.parent, resolved_root.name,
+                             manifest_path=resolved_root / manifest["path"],
+                             manifest_sha256=manifest["sha256"], shard_filter=selected,
+                             limits=effective_limits, log=log)

@@ -1,8 +1,9 @@
 """Bounded custody checks around the authoritative accepted-review and gate projection."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import os
 from pathlib import Path, PurePosixPath
@@ -10,6 +11,17 @@ import re
 import stat
 import time
 from typing import Any, Iterator
+
+_ACTIVE_REMAINING: ContextVar[float | None] = ContextVar("openvex_active_remaining", default=None)
+
+
+@contextmanager
+def deadline_scope(remaining_seconds: float) -> Iterator[None]:
+    token = _ACTIVE_REMAINING.set(remaining_seconds)
+    try:
+        yield
+    finally:
+        _ACTIVE_REMAINING.reset(token)
 
 from appsec_review.applicability import resolved_configuration_identity
 from appsec_review.runtime.configuration import configuration_snapshot, configurations_compatible
@@ -101,13 +113,31 @@ class BoundedInputReader:
     """
 
     def __init__(self, run_root: Path, settings: OpenVexExportSettings, *,
-                 deadline: float | None = None, phase: ExportPhase = ExportPhase.LOAD) -> None:
+                 deadline: float | None = None, phase: ExportPhase = ExportPhase.LOAD,
+                 seed_inventory: Sequence[SizedArtifactRef] = ()) -> None:
         self.root = Path(run_root).absolute()
         self.settings = settings
         self.phase = ExportPhase(phase)
-        self.deadline = time.monotonic() + settings.timeout_seconds if deadline is None else deadline
+        default_deadline = time.monotonic() + settings.timeout_seconds
+        active_remaining = _ACTIVE_REMAINING.get()
+        if deadline is not None:
+            self.deadline = deadline
+        elif active_remaining is not None:
+            self.deadline = min(default_deadline, time.monotonic() + active_remaining)
+        else:
+            self.deadline = default_deadline
         self._inventory: dict[str, SizedArtifactRef] = {}
+        self._seeded_paths: set[str] = set()
         self._accepted_refs: dict[str, ArtifactRef] = {}
+        self._verified_manifests: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+        for item in seed_inventory:
+            _require(item.path in self._inventory or len(self._inventory) < self.settings.max_bindings,
+                     "unique input binding bound exceeded", Reason.BOUND_EXCEEDED, phase=self.phase)
+            old = self._inventory.get(item.path)
+            _require(old is None or old == item, "one input path has conflicting identities",
+                     Reason.IDENTITY_CONFLICT, phase=self.phase)
+            self._inventory[item.path] = item
+            self._seeded_paths.add(item.path)
 
     def check_deadline(self) -> None:
         _require(time.monotonic() < self.deadline, "OpenVEX input verification timed out",
@@ -214,8 +244,10 @@ class BoundedInputReader:
     def inventory(self) -> tuple[SizedArtifactRef, ...]:
         return tuple(self._inventory[key] for key in sorted(self._inventory))
 
-    def reprove(self) -> None:
+    def reprove(self, *, skip_seeded: bool = False) -> None:
         for reference in self.inventory:
+            if skip_seeded and reference.path in self._seeded_paths:
+                continue
             self.verify(reference)
         for job, reference in self._accepted_refs.items():
             with _errors(self.phase, Reason.INPUT_TAMPERED):
@@ -523,6 +555,11 @@ def _preflight_review(reader: BoundedInputReader, handoff: Mapping[str, Any]
 
 def _manifest(reader: BoundedInputReader, reference: ArtifactRef, run_id: str, snapshot: str
               ) -> dict[str, Any]:
+    cache_key = (reference.path, reference.sha256, run_id, snapshot)
+    cached = reader._verified_manifests.get(cache_key)
+    if cached is not None:
+        reader.check_deadline()
+        return cached
     pending = [reference]
     seen: set[ArtifactRef] = set()
     root_document: dict[str, Any] | None = None
@@ -546,6 +583,7 @@ def _manifest(reader: BoundedInputReader, reference: ArtifactRef, run_id: str, s
     _require(digest == reference.sha256 and canonical_bytes(verified) == canonical_bytes(root_document),
              "accepted manifest changed during verification", Reason.INPUT_TAMPERED)
     assert root_document is not None
+    reader._verified_manifests[cache_key] = root_document
     return root_document
 
 
@@ -800,4 +838,4 @@ def reprove_inputs(
                  "OpenVEX accepted inputs changed after load", Reason.INPUT_STALE, phase=ExportPhase.ACCEPT)
 
 
-__all__ = ["BoundedInputReader", "reprove_inputs", "verify_inputs"]
+__all__ = ["BoundedInputReader", "deadline_scope", "reprove_inputs", "verify_inputs"]

@@ -53,9 +53,32 @@ class DossierLimits:
                 raise ValueError(f"dossier limit {key} must be positive")
 
 
+_SECRET_CWES = frozenset({"CWE-798", "CWE-259", "CWE-321", "CWE-320", "CWE-522"})
+
+
+def _is_secret_finding(finding: Mapping[str, Any], claim: Mapping[str, Any] | None) -> bool:
+    for doc in (finding, claim or {}):
+        cwe = str(doc.get("cwe") or doc.get("weakness_cwe") or doc.get("cwe_id") or "").upper()
+        if cwe in _SECRET_CWES:
+            return True
+        for tag in (doc.get("cwes") or ()):
+            if str(tag).upper() in _SECRET_CWES:
+                return True
+        family = str(doc.get("family") or doc.get("category") or doc.get("rule_family")
+                     or doc.get("lane") or "").lower()
+        if "secret" in family or "credential" in family or "hardcoded_key" in family:
+            return True
+        title = str(doc.get("title") or doc.get("label") or "").lower()
+        if any(word in title for word in ("hardcoded secret", "hardcoded credential", "embedded secret",
+                                          "api key", "private key")):
+            return True
+    return False
+
+
 class _Projection:
-    def __init__(self, limits: DossierLimits):
+    def __init__(self, limits: DossierLimits, *, secret_context: bool = False):
         self.limits = limits
+        self.secret_context = secret_context
         self.cuts: list[dict[str, Any]] = []
 
     def text(self, value: Any, name: str, *, identity: bool = False) -> str:
@@ -76,13 +99,24 @@ class _Projection:
                               "sha256": hashlib.sha256(canonical_json(ordered)).hexdigest()})
         return ordered[:maximum]
 
-    def source(self, text: str, name: str) -> str:
-        redacted = "\n".join(redact_source_line(line) for line in clean(
+    def source(self, text: str, name: str, *, exact_newlines: bool = False) -> str:
+        from appsec_review.review.secret_redaction import redact_code_secrets
+        norm = text.replace("\r\n", "\n").replace("\r", "\n") if isinstance(text, str) else ""
+        if exact_newlines and norm and not norm.strip("\n"):
+            return norm[:self.limits.code_chars]
+        lead_nl = "\n" * (len(norm) - len(norm.lstrip("\n"))) if exact_newlines and norm else ""
+        trail_nl = "\n" * (len(norm) - len(norm.rstrip("\n"))) if exact_newlines and norm.strip("\n") else ""
+        redacted = "\n".join(redact_code_secrets(line, secret_context=self.secret_context) for line in clean(
             text, keep_newlines=True, code=True).split("\n"))
-        text, cut = bound_lines(redacted, self.limits.code_lines, self.limits.code_chars)
+        out, cut = bound_lines(redacted, self.limits.code_lines, self.limits.code_chars)
         if cut:
             self.cuts.append({"field": name, **asdict(cut)})
-        return text
+            return out
+        if exact_newlines:
+            candidate = f"{lead_nl}{out}{trail_nl}"
+            if len(candidate) <= self.limits.code_chars and len(candidate.split("\n")) <= self.limits.code_lines + 1:
+                return candidate
+        return out
 
 
 def _safe_str(value: Any, max_chars: int = 600, *, identity: bool = False) -> str:
@@ -326,7 +360,7 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
         raise IntegrityError("a confirmed-finding dossier requires a confirmed finding")
     if kind == DossierKind.POC and poc is None:
         raise IntegrityError("a PoC dossier requires an accepted candidate outcome")
-    project = _Projection(limits)
+    project = _Projection(limits, secret_context=_is_secret_finding(finding, claim))
     evidence = []
     cited = set(finding.get("direct_evidence", ())) | set(finding.get("analyst_assessed_evidence", ()))
     by_id = {row["relation_id"]: row for row in relations}
@@ -404,8 +438,8 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
             for file in project.rows(patch["files"], "remediation.patch.files"):
                 name = "remediation.patch." + file["path"]
                 edits = [{"start": edit["start"], "end": edit["end"],
-                          "old": project.source(edit["old"], name + f".edits[{index}].old"),
-                          "new": project.source(edit["new"], name + f".edits[{index}].new")}
+                          "old": project.source(edit["old"], name + f".edits[{index}].old", exact_newlines=True),
+                          "new": project.source(edit["new"], name + f".edits[{index}].new", exact_newlines=True)}
                          for index, edit in enumerate(project.rows(
                              file["edits"], name + ".edits", preserve_order=True))]
                 files.append({"path": file["path"], "before_sha256": file["before_sha256"],
@@ -437,7 +471,8 @@ def build_dossier(*, run_id: str, kind: DossierKind | str, finding: Mapping[str,
     pred_proj = project.text(claim.get("security_predicate"), "security_predicate")
     precond_proj = [project.text(item, "precondition")
                     for item in project.rows(claim.get("preconditions", ()), "preconditions")]
-    ship_proj = {key: project.text((finding.get("ship_block") or {}).get(key), "shipment." + key)
+    ship_proj = {key: project.text((finding.get("ship_block") or {}).get(key), "shipment." + key,
+                                   identity=key == "policy")
                  for key in ("policy", "status", "technical_severity")}
     missing_preds = sorted(finding.get("missing_predicates", ()))
     gaps_proj = [project.text(item, "gap") for item in sorted(gap_list)]

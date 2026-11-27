@@ -597,6 +597,10 @@ def load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | No
     ancestor payloads are availability, not this view's reads. Default verification is unchanged.
     """
     if selection is None:
+        from appsec_review.storage.validation import current_validation, validation_scope
+        if current_validation(Path(run_root)) is None:
+            with validation_scope(Path(run_root)):
+                return _load_verified_manifest(run_root, path, expected_sha256, _seen, verified)
         return _load_verified_manifest(run_root, path, expected_sha256, _seen, verified)
     if not isinstance(selection, IndexSelection):
         raise ValueError("manifest selection must be a trusted IndexSelection")
@@ -690,52 +694,63 @@ def _load_verified_manifest(run_root: Path, path: Path, expected_sha256: str | N
     seen: set[tuple[str, str]] = set()
     entity_ids: set[str] = set()
     relations: list[tuple[str, str, str, str]] = []
-    for raw in document.get("indexes", []):
-        count_work("shard_references")
-        if selection is not None and (not isinstance(raw, Mapping)
-                                      or not isinstance(raw.get("producer"), Mapping)):
-            raise ValueError("selected manifest shard descriptor is invalid")
-        identity = IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))})
-        shard_key = (identity.name, identity.shard_id)
-        if shard_key in seen:
-            raise ValueError("duplicate index shard identity")
-        seen.add(shard_key)
-        from appsec_review.storage.shared import safe_path
-        candidate = safe_path(run_root, identity.relative_path)
-        if selection is not None:
-            if not isinstance(identity.producer.get("job"), str):
-                raise ValueError("selected manifest descriptor has no producer identity")
-            if not _payloads or not selection.includes(raw):
+    from contextlib import nullcontext
+    from appsec_review.storage.validation import isolated_validation_scope
+    shared_policy_ctx = (
+        isolated_validation_scope(
+            run_root,
+            policy_identity="receipt-read:" + _SelectedReceiptPolicy(selection, document, {}).identity,
+        )
+        if selection is not None and _payloads
+        else nullcontext()
+    )
+    with shared_policy_ctx:
+        for raw in document.get("indexes", []):
+            count_work("shard_references")
+            if selection is not None and (not isinstance(raw, Mapping)
+                                          or not isinstance(raw.get("producer"), Mapping)):
+                raise ValueError("selected manifest shard descriptor is invalid")
+            identity = IndexIdentity(**{**raw, "gaps": tuple(raw.get("gaps", ()))})
+            shard_key = (identity.name, identity.shard_id)
+            if shard_key in seen:
+                raise ValueError("duplicate index shard identity")
+            seen.add(shard_key)
+            from appsec_review.storage.shared import safe_path
+            candidate = safe_path(run_root, identity.relative_path)
+            if selection is not None:
+                if not isinstance(identity.producer.get("job"), str):
+                    raise ValueError("selected manifest descriptor has no producer identity")
+                if not _payloads or not selection.includes(raw):
+                    continue
+                from appsec_review.storage.shared import receipt_read_scope
+                policy = _SelectedReceiptPolicy(selection, document, raw)
+                with receipt_read_scope(run_root, policy):
+                    database, shard_entities, shard_relations = _selected_payload(run_root, raw, policy)
+                    database.close()
+                for shard_entities, shard_relations in policy._summaries.get().values():
+                    entity_ids.update(shard_entities)
+                    relations.extend(shard_relations)
                 continue
-            from appsec_review.storage.shared import receipt_read_scope
-            policy = _SelectedReceiptPolicy(selection, document, raw)
-            with receipt_read_scope(run_root, policy):
-                database, shard_entities, shard_relations = _selected_payload(run_root, raw, policy)
-                database.close()
-            for shard_entities, shard_relations in policy._summaries.get().values():
+            candidate = _verify_payload_publication(run_root, identity)
+            summary_key = ("shard", canonical_json({
+                "identity": raw, "target_snapshot": document.get("target_snapshot"),
+                "swift_enabled": swift_enabled,
+                **({"selection_sha256": selection.sha256} if selection is not None else {}),
+            }).decode("utf-8"), identity.sha256)
+            if validation is not None and summary_key in validation.records:
+                cached_entities, cached_relations = validation.records[summary_key]
+                entity_ids.update(cached_entities)
+                relations.extend(cached_relations)
+                continue
+            count_work("shard_validations")
+            uri = f"file:{candidate.as_posix()}?mode=ro&immutable=1"
+            with closing(connect_shard(uri)) as database:
+                shard_entities, shard_relations = _validate_payload_database(
+                    run_root, database, identity, document, swift_enabled=swift_enabled)
                 entity_ids.update(shard_entities)
                 relations.extend(shard_relations)
-            continue
-        candidate = _verify_payload_publication(run_root, identity)
-        summary_key = ("shard", canonical_json({
-            "identity": raw, "target_snapshot": document.get("target_snapshot"),
-            "swift_enabled": swift_enabled,
-            **({"selection_sha256": selection.sha256} if selection is not None else {}),
-        }).decode("utf-8"), identity.sha256)
-        if validation is not None and summary_key in validation.records:
-            cached_entities, cached_relations = validation.records[summary_key]
-            entity_ids.update(cached_entities)
-            relations.extend(cached_relations)
-            continue
-        count_work("shard_validations")
-        uri = f"file:{candidate.as_posix()}?mode=ro&immutable=1"
-        with closing(connect_shard(uri)) as database:
-            shard_entities, shard_relations = _validate_payload_database(
-                run_root, database, identity, document, swift_enabled=swift_enabled)
-            entity_ids.update(shard_entities)
-            relations.extend(shard_relations)
-            if validation is not None:
-                validation.records[summary_key] = (shard_entities, shard_relations)
+                if validation is not None:
+                    validation.records[summary_key] = (shard_entities, shard_relations)
     for relation_id, source_id, target_id, shard_id in relations:
         if source_id not in entity_ids or target_id not in entity_ids:
             label = "selected relation endpoint unavailable or unadmitted" if selection is not None else "relation closure mismatch"

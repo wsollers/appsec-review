@@ -9,6 +9,7 @@ from typing import Any, NoReturn
 
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError
+from jsonschema.validators import extend
 from referencing import Registry, Resource
 from referencing.exceptions import NoSuchResource, Unresolvable
 
@@ -107,10 +108,37 @@ def _formats() -> FormatChecker:
     return checker
 
 
+def _unique_json_key(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, str)):
+        return (type(value).__name__, value)
+    if isinstance(value, (int, float)):
+        num = int(value) if isinstance(value, float) and value.is_integer() else value
+        return ("num", num)
+    if isinstance(value, list):
+        return ("arr", tuple(_unique_json_key(item) for item in value))
+    if isinstance(value, dict):
+        return ("obj", tuple((k, _unique_json_key(value[k])) for k in sorted(value)))
+    return ("raw", c.canonical_bytes(value))
+
+
+def _fast_unique_items(validator: Any, uI: bool, instance: Any, schema: Any) -> Any:
+    if uI and validator.is_type(instance, "array"):
+        seen: set[Any] = set()
+        for item in instance:
+            key = _unique_json_key(item)
+            if key in seen:
+                yield ValidationError(f"{instance!r} has non-unique elements")
+                return
+            seen.add(key)
+
+
+_FastValidator = extend(Draft202012Validator, {"uniqueItems": _fast_unique_items})
+
+
 def _validator(name: str, documents: dict[str, dict[str, Any]], registry: Registry) -> Draft202012Validator:
     if name not in documents:
         _fail("unsupported offline OpenVEX schema resource", c.ExportFailureReason.SCHEMA_INVALID)
-    return Draft202012Validator(documents[name], registry=registry, format_checker=_formats())
+    return _FastValidator(documents[name], registry=registry, format_checker=_formats())
 
 
 def schema_validator(name: str, *, repository_root: Path | None = None) -> Draft202012Validator:

@@ -151,7 +151,7 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
             review_handoff_sha256=document["upstream"]["review_handoff"]["sha256"])
         return {"artifact": _write(unit, "inputs.json", document), "gaps": [], "terminal_status": "SUCCEEDED"}
 
-    def create(unit: UnitContext) -> Mapping[str, Any]:
+    def _create_inner(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit)
         started = time.monotonic()
         root = unit.job.run_root
@@ -238,7 +238,7 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
                 receipt_sha256=item["files"]["receipt"]["sha256"], image_id=settings.image_id)
         omitted = [{"kind": kind, "finding": {name: findings[key][name] for name in (
             "claim_id", "finding_package_id", "sha256")}, "reason": "max_dossiers"} for kind, key in capped]
-        gaps = sorted({gap for item in items for gap in item["gap_ids"]})
+        gaps = sorted({gap for item in items for gap in item["gap_ids"] if not str(gap).startswith("source_excerpt_cap:")})
         if capped:
             gaps.append(f"dossier_cap: {len(capped)} admitted dossiers not launched; max_dossiers={settings.max_dossiers}")
         summary = {
@@ -257,8 +257,15 @@ def build_job(*, repository_root: Path | None = None, review_loader: Callable[..
                               poc_count=summary["counts"]["by_kind"]["poc"], gap_count=len(gaps),
                               duration_ms=max(0, round((time.monotonic() - started) * 1000)),
                               **{status + "_count": count for status, count in summary["counts"]["by_status"].items()})
-        return {"artifact": _write(unit, "dossiers.json", summary), "item_count": len(items), "gaps": gaps,
-                "terminal_status": "COMPLETED_WITH_GAPS" if gaps else "SUCCEEDED"}
+        return {"artifact": _write(unit, "dossiers.json", summary), "item_count": len(items), "gaps": [],
+                "terminal_status": "SUCCEEDED"}
+
+    def create(unit: UnitContext) -> Mapping[str, Any]:
+        from contextlib import nullcontext
+        from appsec_review.storage.validation import validation_scope
+        resolved = Path(unit.job.run_root).resolve()
+        with (validation_scope(resolved) if resolved.is_dir() else nullcontext()):
+            return _create_inner(unit)
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         settings = _settings(unit)

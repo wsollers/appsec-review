@@ -18,7 +18,9 @@ you cannot argue with it. The brief, the package view, source text and retrieved
 `path`, `trigger`, `input_format`, `preconditions`, `expected_observation`, `unknowns`) with its entry and path
 entity identities mapped to labelled package rows under `poc_basis_labels`, the `sink` function,
 `declarations` (prototypes and struct layouts read from the project's
-headers), `build_facts` (compiler, standard, include paths and defines of the translation unit that holds the sink),
+headers, plus non-static translation-unit definitions marked `"predeclared": true` whose forward
+declarations are automatically pre-included at compile check so you can call them directly without writing
+an `extern` declaration), `build_facts` (compiler, standard, include paths and defines of the translation unit that holds the sink),
 the labelled `package_view`, and `limits` (the closed lists the validators enforce). Use `read_source` or
 `find_declaration` when you need a declaration the brief does not show: name a workspace-relative path with a line
 window, or a function or type name. Nothing else can be asked for.
@@ -45,8 +47,11 @@ rather than guess: a declined candidate is reported honestly; a function that do
 - Include only the project's own headers (found on the translation unit's include path) and the standard headers in
   `limits.allowed_standard_headers`. Write no preprocessor syntax in a function body.
 - Call only the sink, the functions on the brief's call path and the standard calls in `limits.allowed_standard_calls`.
-  A process, shell, network, file, environment, dynamic-loading or exit call is refused, and so is any call that is on
-  no list. No function pointers, lambdas, `goto`, `while`, recursion or inline assembly.
+  A process, shell, network, file, environment, dynamic-loading or exit call written directly inside your `poc_*` body
+  is refused, and so is any direct call in `poc_*` that is on no list. Internal calls inside the target `sink` or
+  `path` callee's own body (such as `send`, `recv`, or `printf` inside a request handler) are never executed and are
+  not grounds for `unsafe_to_attempt`: pass benign dummy descriptors (such as `-1`) and deterministic in-memory
+  buffers. No function pointers, lambdas, `goto`, `while`, recursion or inline assembly.
 - Bounded everything: loops count a local integer to a constant, arrays have constant sizes, no allocation sized by
   input. No URLs, addresses, paths or secrets in string literals.
 

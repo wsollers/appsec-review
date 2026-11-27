@@ -484,4 +484,143 @@ def declarations(unit: BuildUnit, headers: Headers, names: Sequence[str], *, sou
     return rows[:24]
 
 
-__all__ = ["AcceptedBuilds", "BuildUnit", "CompileCommand", "Headers", "Located", "declarations", "language_of"]
+_TU_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]+)[>"]')
+_TU_FUNC_START_RE = re.compile(
+    r'^(?:(?P<qual>(?:extern\s+(?!"C")|static\s+|inline\s+|constexpr\s+|virtual\s+)+))?'
+    r"(?P<ret>[A-Za-z_~][\w:\s\*&<>]*?)\s+"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_:]*)\s*\("
+)
+_TU_SKIP_NAMES = frozenset({
+    "if", "for", "while", "switch", "catch", "return", "sizeof", "alignof", "decltype", "static_assert",
+    "main", "wmain", "WinMain", "wWinMain", "DllMain", "_start", "_main", "DllEntryPoint",
+    "LLVMFuzzerTestOneInput",
+})
+_STDDEF_TOKENS_RE = re.compile(r"\b(?:size_t|ptrdiff_t|nullptr_t)\b")
+_STDINT_TOKENS_RE = re.compile(r"\b(?:u?int(?:8|16|32|64|ptr|max)_t|ssize_t)\b")
+
+
+def tu_declarations(
+    unit: BuildUnit,
+    existing_rows: Sequence[Mapping[str, Any]],
+    names: Sequence[str],
+    *,
+    headers: Headers | None = None,
+    allowed_std_headers: Sequence[str] = (),
+    source_bytes: int = 65536,
+    max_lines: int = 12,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Extract non-static top-level C/C++ function prototypes from the sink TU when absent from headers."""
+    if unit.command.language not in ("c", "cpp", "cxx"):
+        return [], None
+    wanted = {name.rsplit("::", 1)[-1].strip() for name in names if name and name.strip()} - _TU_SKIP_NAMES
+    if not wanted:
+        return [], None
+    already_declared: set[str] = set()
+    for row in existing_rows:
+        joined = "\n".join(str(line).split("|", 1)[-1] for line in row.get("text", ()))
+        for candidate in wanted:
+            if re.search(rf"(?<![A-Za-z0-9_]){re.escape(candidate)}\s*\(", joined):
+                already_declared.add(candidate)
+    missing = wanted - already_declared
+    if not missing:
+        return [], None
+    raw = workspace_bytes(unit.workspace, unit.workspace_manifest, unit.command.source, byte_limit=source_bytes)
+    if raw is None:
+        return [], None
+    lines = raw.decode("utf-8", errors="replace").splitlines()
+
+    allowed_std = set(allowed_std_headers)
+    safe_includes: list[str] = []
+    for line in lines[:120]:
+        inc_match = _TU_INCLUDE_RE.match(line)
+        if not inc_match:
+            continue
+        delim, hdr = inc_match.group(1), inc_match.group(2).strip()
+        if hdr in allowed_std:
+            directive = f"#include <{hdr}>" if delim == "<" else f'#include "{hdr}"'
+            if directive not in safe_includes:
+                safe_includes.append(directive)
+        elif headers is not None and headers.resolve(hdr) is not None:
+            directive = f'#include "{hdr}"' if delim == '"' else f"#include <{hdr}>"
+            if directive not in safe_includes:
+                safe_includes.append(directive)
+
+    rows: list[dict[str, Any]] = []
+    protos: list[str] = []
+    seen_protos: set[str] = set()
+    idx = 0
+    while idx < len(lines):
+        stripped = lines[idx].strip()
+        if not stripped or stripped.startswith(("//", "/*", "*", "#")):
+            idx += 1
+            continue
+        if lines[idx][:1] in (" ", "\t", "{", "}"):
+            idx += 1
+            continue
+        match = _TU_FUNC_START_RE.match(lines[idx])
+        if not match:
+            idx += 1
+            continue
+        qual = (match.group("qual") or "").split()
+        if "static" in qual or "inline" in qual:
+            idx += 1
+            continue
+        fn_name = match.group("name").rsplit("::", 1)[-1]
+        if fn_name in _TU_SKIP_NAMES or fn_name not in missing:
+            idx += 1
+            continue
+        sig_lines = [lines[idx]]
+        end = idx
+        while end + 1 < len(lines) and len(sig_lines) < max_lines:
+            joined_sig = " ".join(part.strip() for part in sig_lines)
+            if "{" in joined_sig or ";" in joined_sig:
+                break
+            end += 1
+            sig_lines.append(lines[end])
+        joined_sig = " ".join(part.strip() for part in sig_lines)
+        if "{" not in joined_sig:
+            idx += 1
+            continue
+        proto = joined_sig.split("{", 1)[0].strip()
+        if not proto or not proto.endswith(")"):
+            idx += 1
+            continue
+        if proto not in seen_protos:
+            seen_protos.add(proto)
+            protos.append(f"{proto};")
+            snippet = [f"{line_no + 1}| {lines[line_no].rstrip()[:200]}"
+                       for line_no in range(idx, min(end + 1, idx + max_lines))]
+            rows.append({
+                "path": unit.command.source,
+                "lines": f"{idx + 1}-{min(end + 1, idx + max_lines)}",
+                "text": snippet,
+                "predeclared": True,
+            })
+        idx = end + 1
+
+    if not protos:
+        return [], None
+    joined_protos = "\n".join(protos)
+    auto_std: list[str] = []
+    if _STDDEF_TOKENS_RE.search(joined_protos):
+        if unit.command.language in ("cpp", "cxx"):
+            auto_std.extend(("#include <cstddef>", "#include <stddef.h>"))
+        else:
+            auto_std.append("#include <stddef.h>")
+    if _STDINT_TOKENS_RE.search(joined_protos):
+        if unit.command.language in ("cpp", "cxx"):
+            auto_std.extend(("#include <cstdint>", "#include <stdint.h>"))
+        else:
+            auto_std.append("#include <stdint.h>")
+    if "ssize_t" in joined_protos and "#include <sys/types.h>" not in safe_includes:
+        auto_std.append("#include <sys/types.h>")
+    header_lines = ["#pragma once"]
+    for directive in (*auto_std, *safe_includes):
+        if directive not in header_lines:
+            header_lines.append(directive)
+    header_lines.extend(protos)
+    return rows, "\n".join(header_lines) + "\n"
+
+
+__all__ = ["AcceptedBuilds", "BuildUnit", "CompileCommand", "Headers", "Located", "declarations", "language_of",
+           "tu_declarations"]

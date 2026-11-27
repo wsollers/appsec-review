@@ -92,13 +92,71 @@ def retrieval_core(run_root: Path, inputs: VerifiedInputs) -> Any:
     return source_context_core(Path(run_root), {"path": inputs.manifest_path, "sha256": inputs.manifest_sha256})
 
 
-def sink_of(package: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    """The function that holds the sink, from the package neighborhood; ``None`` when the package names none."""
-    function = (package.get("neighborhood") or {}).get("function")
-    if not isinstance(function, Mapping) or not function.get("name") or not function.get("path"):
+def sink_of(package: Mapping[str, Any], *, core: Any = None) -> Mapping[str, Any] | None:
+    """The function that holds the sink, from the package neighborhood or Hunt enclosing symbol via core."""
+    neighborhood = package.get("neighborhood") or {}
+    function = neighborhood.get("function")
+    if isinstance(function, Mapping) and function.get("name") and function.get("path"):
+        return {"name": str(function["name"]), "path": str(function["path"]),
+                "line": int(function.get("start_line") or 0), "symbol": function.get("symbol")}
+    if core is None or not hasattr(core, "find"):
         return None
-    return {"name": str(function["name"]), "path": str(function["path"]),
-            "line": int(function.get("start_line") or 0), "symbol": function.get("symbol")}
+    operation = (package.get("scope") or {}).get("operation") or {}
+    sinks = [row for row in (neighborhood.get("sinks") or ()) if isinstance(row, Mapping)]
+    anchor_ids: list[str] = []
+    for row in sinks:
+        ref = row.get("ref")
+        if isinstance(ref, str) and ref and ref not in anchor_ids:
+            anchor_ids.append(ref)
+    for ref in (operation.get("anchor_ids") or ()):
+        if isinstance(ref, str) and ref and ref not in anchor_ids:
+            anchor_ids.append(ref)
+    op_path = str(operation.get("path") or (sinks[0].get("path") if sinks else "") or "")
+    op_line = int(operation.get("line") or (sinks[0].get("line") if sinks else 0) or 0)
+    for anchor_id in anchor_ids:
+        found = core.find(identity=anchor_id, limit=1).get("results", ())
+        if not found:
+            continue
+        item = found[0]
+        loc = item.get("location") or {}
+        item_path = str(loc.get("path") or op_path)
+        item_line = int(loc.get("start_line") or loc.get("line") or op_line or 0)
+        if item.get("kind") == "symbol" and item.get("name") and item_path:
+            return {"name": str(item["name"]), "path": item_path, "line": item_line,
+                    "symbol": item.get("identity")}
+        payload = item.get("payload") or {}
+        inner = payload.get("result") if isinstance(payload.get("result"), Mapping) else payload
+        enclosing = inner.get("enclosing_function") if isinstance(inner, Mapping) else None
+        if isinstance(enclosing, str) and enclosing and item_path:
+            return {"name": enclosing, "path": item_path, "line": item_line, "symbol": None}
+        if isinstance(enclosing, Mapping) and enclosing.get("name") and item_path:
+            return {"name": str(enclosing["name"]), "path": item_path,
+                    "line": int(enclosing.get("start_line") or item_line),
+                    "symbol": enclosing.get("identity") or enclosing.get("symbol")}
+        if item_path and not op_path:
+            op_path = item_path
+        if item_line and not op_line:
+            op_line = item_line
+    if op_path and op_line > 0:
+        best: tuple[int, int, Mapping[str, Any]] | None = None
+        for sym in core.find(path=op_path, kind="symbol", limit=100).get("results", ()):
+            name = sym.get("name")
+            loc = sym.get("location") or {}
+            start = int(loc.get("start_line") or loc.get("line") or 0)
+            end = int(loc.get("end_line") or start)
+            if not isinstance(name, str) or not name or start <= 0 or end < start:
+                continue
+            if start <= op_line <= end:
+                span = end - start
+                rank = (span, -start)
+                if best is None or rank < (best[0], best[1]):
+                    best = (span, -start, sym)
+        if best is not None:
+            sym = best[2]
+            loc = sym.get("location") or {}
+            return {"name": str(sym["name"]), "path": str(loc.get("path") or op_path),
+                    "line": int(loc.get("start_line") or op_line), "symbol": sym.get("identity")}
+    return None
 
 
 def evidence_summary(candidate: PocCandidate, limit: int = 32) -> Sequence[str]:

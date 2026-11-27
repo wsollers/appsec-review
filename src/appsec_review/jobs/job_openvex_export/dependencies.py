@@ -56,11 +56,14 @@ def read_dependency_inputs(
 
 def dependency_projection(
     run_root: Path, verified: VerifiedInputs, settings: OpenVexExportSettings,
-    repository_root: Path, release: str,
+    repository_root: Path, release: str, *, already_reproved: bool = False,
 ) -> tuple[dict[str, Any] | None, bytes | None]:
-    reader = BoundedInputReader(run_root, settings)
-    for reference in verified.input_inventory:
-        reader.verify(reference)
+    if already_reproved:
+        reader = BoundedInputReader(run_root, settings, seed_inventory=verified.input_inventory)
+    else:
+        reader = BoundedInputReader(run_root, settings)
+        for reference in verified.input_inventory:
+            reader.verify(reference)
     loaded = read_dependency_inputs(
         reader, repository_root, resolved_config_sha256=verified.provenance.resolved_config_sha256,
         target_snapshot=verified.source.target_snapshot,
@@ -119,7 +122,7 @@ def dependency_projection(
         run_has_coverage_gaps=any(row["kind"] == "gap" for row in verified.gate["limitations"])
         or bool(document.get("gaps")) or bool(output.get("gaps")),
     )
-    reader.reprove()
+    reader.reprove(skip_seeded=already_reproved)
     _require(bundle.document_bytes is None or len(bundle.document_bytes) <= settings.max_document_bytes,
              "dependency OpenVEX document exceeds its byte bound", Reason.BOUND_EXCEEDED)
     unique_gaps = {canonical_bytes(gap): gap for gap in (*gaps, *bundle.gaps)}

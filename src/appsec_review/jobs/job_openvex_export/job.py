@@ -20,7 +20,7 @@ from .contracts import (
 )
 from .datasets import CONTRACT, DATASETS
 from . import dependencies
-from .inputs import BoundedInputReader, reprove_inputs, verify_inputs
+from .inputs import BoundedInputReader, deadline_scope, reprove_inputs, verify_inputs
 from .projection import assemble_export
 from .reporting import read_output, upstream_inputs
 from .settings import OpenVexExportSettings
@@ -103,10 +103,11 @@ def build_job(*, repository_root: Path | None = None) -> Job:
             else:
                 read_output(unit.job.run_root, reference, settings, max_bytes=len(payload))
             references.append(reference)
-        measured = BoundedInputReader(unit.job.run_root, settings, phase=ExportPhase.ACCEPT)
-        for reference in (*verified.input_inventory, *references):
+        measured = BoundedInputReader(unit.job.run_root, settings, phase=ExportPhase.ACCEPT,
+                                      seed_inventory=verified.input_inventory)
+        for reference in references:
             measured.verify(reference)
-        measured.reprove()
+        measured.reprove(skip_seeded=True)
         return replace(verified, input_inventory=measured.inventory)
 
     def loaded(unit: UnitContext) -> VerifiedInputs:
@@ -137,7 +138,8 @@ def build_job(*, repository_root: Path | None = None) -> Job:
         )
         reference = _write(unit, unit.unit_root / VERIFIED_INPUTS_NAME, canonical_bytes(verified.to_json()))
         dependency_result, _ = dependencies.dependency_projection(
-            unit.job.run_root, verified, _settings(unit), repo(unit), _release(unit))
+            unit.job.run_root, verified, _settings(unit), repo(unit), _release(unit),
+            already_reproved=True)
         unit.job.events.write("OPENVEX_INPUTS_VERIFIED", invocation_id=unit.job.attempt_id,
                               package_count=len(verified.findings), binding_count=len(verified.input_inventory),
                               input_bytes=verified.total_input_bytes,
@@ -199,7 +201,6 @@ def build_job(*, repository_root: Path | None = None) -> Job:
             if absent.exists() or absent.is_symlink():
                 raise ExportError("empty export has an unexpected document", reason=Reason.IDENTITY_CONFLICT,
                                   phase=ExportPhase.ACCEPT)
-        reprove(unit, verified)
         result = expected.result
         return {"schema": OPENVEX_EXPORT_HANDOFF_SCHEMA, "artifact": expected.result_ref.reference.to_json(),
                 "dependencies": dependency,
@@ -211,7 +212,8 @@ def build_job(*, repository_root: Path | None = None) -> Job:
     def dependency_files(unit: UnitContext, verified: VerifiedInputs, *, create: bool) -> dict[str, Any] | None:
         settings = _settings(unit)
         result, payload = dependencies.dependency_projection(
-            unit.job.run_root, verified, settings, repo(unit), _release(unit))
+            unit.job.run_root, verified, settings, repo(unit), _release(unit),
+            already_reproved=True)
         source = None if result is None else result["source"]
         if source != unit.output("load.verify_inputs").get("dependency_source"):
             raise ExportError("admitted dependency input changed", reason=Reason.INPUT_STALE, phase=ExportPhase.ACCEPT)
@@ -252,8 +254,9 @@ def build_job(*, repository_root: Path | None = None) -> Job:
                 elapsed = (datetime.now(timezone.utc) - started).total_seconds()
                 if elapsed < 0 or elapsed >= settings.timeout_seconds:
                     raise ExportError("OpenVEX attempt deadline exceeded", reason=Reason.TIMED_OUT, phase=phase)
-                deadline = time.monotonic() + settings.timeout_seconds - elapsed
-                with operation_span(unit.job.events, operation, unit_id=unit.unit_id):
+                remaining = settings.timeout_seconds - elapsed
+                deadline = time.monotonic() + remaining
+                with deadline_scope(remaining), operation_span(unit.job.events, operation, unit_id=unit.unit_id):
                     result = handler(unit)
                     document = None
                     if phase == ExportPhase.ACCEPT:

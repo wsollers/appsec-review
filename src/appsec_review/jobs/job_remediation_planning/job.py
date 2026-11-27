@@ -47,6 +47,15 @@ def _validate(context: Any, _result: Any) -> None:
     RemediationPlanningSettings.from_mapping(context.config.settings)
 
 
+from contextlib import nullcontext
+
+
+def _remediation_validation_scope(root: Path):
+    from appsec_review.storage.validation import validation_scope
+    resolved = Path(root).resolve()
+    return validation_scope(resolved) if resolved.is_dir() else nullcontext()
+
+
 def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], AcceptedBuilds] | None = None,
               core_factory: CoreFactory | None = None, repository_root: Path | None = None) -> Job:
     def repo(unit: UnitContext) -> Path:
@@ -71,7 +80,7 @@ def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], Ac
         return {"artifact": write_json(unit, "inputs.json", {"review": review, "candidates": candidates, "priority_ranking": priority_ref}),
                 "item_count": len(candidates), "gaps": [], "terminal_status": "SUCCEEDED"}
 
-    def assess(unit: UnitContext) -> Mapping[str, Any]:
+    def _assess_inner(unit: UnitContext) -> Mapping[str, Any]:
         configured, root = settings(unit), unit.job.run_root
         document = loaded(unit)
         review = document["review"]
@@ -151,6 +160,10 @@ def build_job(*, infer: Infer | None = None, builds_factory: Callable[[Path], Ac
                                                    if path.is_file()))
         return {"artifact": write_json(unit, "outcomes.json", {"items": rows}), "gaps": [],
                 "terminal_status": "SUCCEEDED"}
+
+    def assess(unit: UnitContext) -> Mapping[str, Any]:
+        with _remediation_validation_scope(unit.job.run_root):
+            return _assess_inner(unit)
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         configured = settings(unit)

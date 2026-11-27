@@ -15,7 +15,7 @@ from typing import Any
 
 from appsec_review.storage import canonical_json
 
-from .buildctx import BuildUnit, Headers, declarations
+from .buildctx import BuildUnit, Headers, declarations, tu_declarations
 from .candidates import PocCandidate
 from .policy import Expectation, Requirement, numeric_requirement
 from .settings import PocGenerationSettings
@@ -38,12 +38,65 @@ def check_brief_size(document: Mapping[str, Any], byte_limit: int) -> None:
                             f"brief.max_brief_bytes is {byte_limit}; no evidence was dropped")
 
 
+_SKIP_CALL_NAMES = frozenset({
+    "main", "wmain", "WinMain", "wWinMain", "DllMain", "_start", "_main", "DllEntryPoint",
+    "LLVMFuzzerTestOneInput",
+})
+
+
+def _core_row_and_calls(identity: str, item: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    loc = item.get("location") or {}
+    path = str(loc.get("path") or "")
+    start = int(loc.get("start_line") or loc.get("line") or 0)
+    end = int(loc.get("end_line") or start)
+    lines = f"{start}-{end}" if start and end and end != start else (str(start) if start else "")
+    summary = str(item.get("summary") or item.get("name") or item.get("kind") or identity)[:240]
+    row = {"label": "CORE", "ref": identity, "role": str(item.get("kind") or "retrieved"),
+           "path": path, "lines": lines, "summary": summary}
+    calls: list[str] = []
+
+    def add_name(raw: Any) -> None:
+        if not isinstance(raw, str):
+            return
+        for candidate in _function_names(raw):
+            bare = candidate.rsplit("::", 1)[-1]
+            if bare in _SKIP_CALL_NAMES or candidate in _SKIP_CALL_NAMES:
+                continue
+            if candidate not in calls:
+                calls.append(candidate)
+
+    add_name(item.get("name"))
+    add_name(summary)
+    payload = item.get("payload")
+    stack: list[Any] = [payload] if isinstance(payload, (Mapping, list, tuple)) else []
+    visited = 0
+    while stack and visited < 64:
+        cur = stack.pop()
+        visited += 1
+        if isinstance(cur, Mapping):
+            for key in ("callee", "caller", "function", "enclosing_function", "symbol", "target_name", "sink_name"):
+                val = cur.get(key)
+                if isinstance(val, str):
+                    add_name(val)
+                elif isinstance(val, Mapping):
+                    add_name(val.get("name"))
+            for val in cur.values():
+                if isinstance(val, (Mapping, list, tuple)):
+                    stack.append(val)
+        elif isinstance(cur, (list, tuple)):
+            for elem in cur[:32]:
+                if isinstance(elem, (Mapping, list, tuple)):
+                    stack.append(elem)
+    return row, calls
+
+
 @dataclass(frozen=True, slots=True)
 class Brief:
     document: Mapping[str, Any]
     expectation_inputs: Mapping[str, Any]
     sink_names: tuple[str, ...]
     gaps: tuple[str, ...]
+    synthesized_header: str | None = None
 
     def expectation(self, functions: tuple[str, ...]) -> Expectation:
         triggers: list[Requirement] = []
@@ -85,32 +138,53 @@ def _function_names(summary: str) -> list[str]:
 
 def build_brief(candidate: PocCandidate, *, finding: Mapping[str, Any], package: Mapping[str, Any],
                 view: Any, sink: Mapping[str, Any] | None, unit: BuildUnit | None, headers: Headers | None,
-                settings: PocGenerationSettings, answer_example: Mapping[str, Any] | None = None) -> Brief:
+                settings: PocGenerationSettings, answer_example: Mapping[str, Any] | None = None,
+                core: Any = None) -> Brief:
     """Assemble the brief; ``gaps`` names everything the writer was not given."""
     gaps: list[str] = []
     labels = rows_by_label(view.document) if view is not None else {}
     identities = {row["ref"]: row for row in labels.values() if isinstance(row.get("ref"), str)}
     basis = candidate.poc_basis
     resolved: dict[str, Any] = {}
+    core_path_calls: dict[str, list[str]] = {}
     for identity in (*basis.entry, *basis.path):
         row = identities.get(identity)
+        if row is None and core is not None and hasattr(core, "find"):
+            found = core.find(identity=identity, limit=1).get("results", ())
+            if found:
+                core_row, extra_calls = _core_row_and_calls(identity, found[0])
+                resolved[identity] = core_row
+                core_path_calls[identity] = extra_calls
+                continue
         if row is None:
             gaps.append(f"poc_basis identity {identity} does not resolve in the package view")
             continue
         resolved[identity] = {key: value for key, value in row.items()
-                           if key in {"label", "ref", "summary", "text", "path", "lines", "role", "tag"}}
+                              if key in {"label", "ref", "summary", "text", "path", "lines", "role", "tag"}}
     path_calls: set[str] = set()
     for identity in basis.path:
         row = resolved.get(identity)
         if row is not None:
-            path_calls.update(_function_names(str(row.get("summary", ""))))
+            if identity in core_path_calls:
+                path_calls.update(core_path_calls[identity])
+            else:
+                path_calls.update(_function_names(str(row.get("summary", ""))))
     sink_names = (str(sink["name"]),) if sink else ()
     if sink is None:
         gaps.append("the review package names no function that holds the sink")
     rows: list[Mapping[str, Any]] = []
+    synth_hdr: str | None = None
     if unit is not None and headers is not None:
-        rows = declarations(unit, headers, [*sink_names, *sorted(path_calls)], source_bytes=65536,
+        call_targets = [*sink_names, *sorted(path_calls)]
+        rows = declarations(unit, headers, call_targets, source_bytes=65536,
                             max_files=settings.brief.max_source_files, max_lines=settings.brief.declaration_lines)
+        tu_rows, synth_hdr = tu_declarations(
+            unit, rows, call_targets, headers=headers,
+            allowed_std_headers=tuple(settings.policy.allowed_std_headers),
+            source_bytes=65536, max_lines=settings.brief.declaration_lines,
+        )
+        if tu_rows:
+            rows = [*rows, *tu_rows]
         # The struct and class layouts the prototypes name (the sizes the trigger must exceed or fit).
         words = {word for row in rows for line in row["text"] for word in _WORD.findall(line.split("|", 1)[-1])
                  if word not in _NOT_TYPES and len(word) > 2}
@@ -140,7 +214,7 @@ def build_brief(candidate: PocCandidate, *, finding: Mapping[str, Any], package:
         document["answer_shape"] = dict(answer_example)
     check_brief_size(document, settings.brief.max_brief_bytes)
     return Brief(document, {"triggers": [dict(row) for row in basis.trigger], "path_calls": sorted(path_calls)},
-                 sink_names, tuple(gaps))
+                 sink_names, tuple(gaps), synthesized_header=synth_hdr)
 
 
 def limits(settings: PocGenerationSettings) -> dict[str, Any]:

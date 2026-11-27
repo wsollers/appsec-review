@@ -18,8 +18,29 @@ import re
 REDACTION_RULE = "appsec-review/secret-redaction/1"
 _MARK = "<redacted:"
 _QUOTED = re.compile(r"""(?P<open>["'`])(?P<body>(?:\\.|(?!(?P=open)).)+)(?P=open)""")
-_ASSIGNED = re.compile(r"""(?P<head>[=:]\s*)(?P<value>[^\s,;"'`<>()\[\]{}]{6,})""")
+_QUOTED_NO_BACKTICK = re.compile(r"""(?P<open>["'])(?P<body>(?:\\.|(?!(?P=open)).)+)(?P=open)""")
+_ASSIGNED = re.compile(r"""(?P<head>(?<!:)[=:](?!:)\s*)(?P<value>[^\s,;"'`<>()\[\]{}]{6,})""")
+_SECRET_NAME_ASSIGNED = re.compile(
+    r"""(?i)(?P<head>\b[A-Za-z0-9_.-]*(?:secret|password|passwd|pwd|token|api[_-]?key|private[_-]?key|access[_-]?key|client[_-]?secret|credential|auth)[A-Za-z0-9_.-]*\s*(?:=|:|=>|:=)\s*)(?:(?P<q>["'])(?P<qval>(?:\\.|(?!(?P=q)).)+)(?P=q)|(?P<uval>[^\s,;"'`<>()\[\]{}]{4,}))"""
+)
+_BEARER = re.compile(r"(?i)\b(?P<head>(?:bearer|basic|token)\s+)(?P<value>[A-Za-z0-9._~+/=-]{4,512})")
+_KNOWN_SECRET_TOKEN = re.compile(
+    r"\b(?:gh[pousr]_[A-Za-z0-9]{8,}|github_pat_[A-Za-z0-9_]{12,}|sk-[A-Za-z0-9_-]{8,}|"
+    r"AKIA[0-9A-Z]{8,}|AIza[0-9A-Za-z_-]{12,}|xox[baprs]-[A-Za-z0-9-]{10,}|"
+    r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]{8,})?)\b"
+)
+_STRING_SECRET_INNER = re.compile(
+    r"(?i)(?:secret|password|passwd|api[_-]?key|private[_-]?key|access[_-]?key|credential|"
+    r"authorization\s*:|bearer\s+|BEGIN [A-Z ]*PRIVATE KEY)"
+)
 _TOKEN = re.compile(r"[A-Za-z0-9+/_\-=.]{20,}")
+_CANONICAL_ID_TOKEN = re.compile(
+    r"^(?:(?:gap|claim|finding|finding_package|finding_lead|hunt|dossier|score|evrel|adjudication|decision|"
+    r"verdict|chain|cell|pkg|unit|basis|verification)-[0-9a-f]{16,64}|[0-9a-f]{40,64})$"
+)
+_CANONICAL_FULL_REF = re.compile(
+    r"^(?:asr:[a-z0-9_]+:[0-9a-f]{16,64}|(?:sha256:)?[0-9a-f]{40,64}|(?:appsec-review/)?[a-z0-9_.-]+/[0-9]+)$"
+)
 
 
 def placeholder(length: int) -> str:
@@ -30,8 +51,39 @@ def _already(value: str) -> bool:
     return value.startswith(_MARK)
 
 
-def redact_source_line(text: str, *, whole_line: bool = False, assignments: bool = True) -> str:
-    """``text`` with credential literals replaced by ``<redacted:n chars>``; indentation is kept."""
+def _preserve_non_secret_token(full_text: str, start: int, end: int, value: str) -> bool:
+    core = value.rstrip(".")
+    if not core:
+        return True
+    if not assignments_safe_prose_token(core):
+        pass
+    if _CANONICAL_ID_TOKEN.fullmatch(core):
+        if re.fullmatch(r"[0-9a-f]{40,64}", core):
+            prefix = full_text[max(0, start - 32):start]
+            if prefix.endswith(":") and (
+                "asr:" in prefix or prefix.lower().endswith("sha256:")
+            ):
+                return True
+            if start == 0 or full_text[start - 1] not in ("=", ":"):
+                return True
+            return False
+        return True
+    return False
+
+
+def assignments_safe_prose_token(core: str) -> bool:
+    return bool(_CANONICAL_FULL_REF.fullmatch(core))
+
+
+def redact_source_line(
+    text: str, *, whole_line: bool = False, assignments: bool = True, backticks: bool | None = None
+) -> str:
+    """``text`` with credential literals replaced by ``<redacted:n chars>``; indentation is kept.
+
+    When ``assignments=False`` (narrative prose, gap strings, schema/policy labels), Markdown inline-code
+    backticks are preserved unless ``backticks=True`` is explicitly requested; tokens inside backticks are
+    still checked by ``_TOKEN``.
+    """
     stripped = text.lstrip()
     indent = text[:len(text) - len(stripped)]
     body = stripped.rstrip()
@@ -39,25 +91,117 @@ def redact_source_line(text: str, *, whole_line: bool = False, assignments: bool
         return text
     if whole_line:
         return indent + placeholder(len(body))
+    redact_backticks = assignments if backticks is None else backticks
 
     def quoted(match: re.Match[str]) -> str:
         inner = match.group("body")
-        return match.group(0) if _already(inner) else f"{match.group('open')}{placeholder(len(inner))}{match.group('open')}"
+        if _already(inner):
+            return match.group(0)
+        if not assignments and _CANONICAL_FULL_REF.fullmatch(inner):
+            return match.group(0)
+        return f"{match.group('open')}{placeholder(len(inner))}{match.group('open')}"
 
     def assigned(match: re.Match[str]) -> str:
         value = match.group("value")
         return match.group(0) if _already(value) else f"{match.group('head')}{placeholder(len(value))}"
 
-    def token(match: re.Match[str]) -> str:
-        value = match.group(0)
-        mixed = any(char.isdigit() for char in value) and not value.isdigit()
-        return placeholder(len(value)) if mixed and not _already(value) else value
-
-    redacted = _QUOTED.sub(quoted, body)
+    quote_re = _QUOTED if redact_backticks else _QUOTED_NO_BACKTICK
+    redacted = quote_re.sub(quoted, body)
     if assignments:
         redacted = _ASSIGNED.sub(assigned, redacted)
+
+    def token(match: re.Match[str]) -> str:
+        value = match.group(0)
+        if _already(value):
+            return value
+        if not assignments and _preserve_non_secret_token(redacted, match.start(), match.end(), value):
+            return value
+        core = value.rstrip(".")
+        trailing = value[len(core):]
+        mixed = any(char.isdigit() for char in core) and not core.isdigit()
+        if not mixed:
+            return value
+        if assignments and re.fullmatch(r"[0-9a-f]{64}", core) and redacted[max(0, match.start() - 32):match.start()].endswith(":") and "asr:" in redacted[max(0, match.start() - 32):match.start()]:
+            return value
+        return placeholder(len(core)) + trailing
+
     redacted = _TOKEN.sub(token, redacted)
     return indent + redacted
+
+
+_ALPHABET_SEQUENCES = (
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "abcdefghijklmnopqrstuvwxyz",
+    "0123456789abcdef",
+    "0123456789ABCDEF",
+)
+
+
+def _is_charset_table(value: str) -> bool:
+    return any(seq in value for seq in _ALPHABET_SEQUENCES)
+
+
+def redact_code_secrets(text: str, *, secret_context: bool = False) -> str:
+    """Redact credential literals in non-secret code/patches without corrupting C/C++ syntax."""
+    if "\n" in text:
+        return "\n".join(redact_code_secrets(part, secret_context=secret_context) for part in text.split("\n"))
+    if secret_context:
+        return redact_source_line(text, assignments=True, backticks=True)
+    stripped = text.lstrip()
+    indent = text[:len(text) - len(stripped)]
+    body = stripped.rstrip()
+    if not body:
+        return text
+    if "PRIVATE KEY" in body.upper():
+        return indent + placeholder(len(body))
+
+    out = _BEARER.sub(lambda m: m.group("head") + placeholder(len(m.group("value"))), body)
+
+    def secret_assign(match: re.Match[str]) -> str:
+        head = match.group("head")
+        if match.group("q") is not None:
+            q = match.group("q")
+            qval = match.group("qval")
+            return match.group(0) if _already(qval) else f"{head}{q}{placeholder(len(qval))}{q}"
+        uval = match.group("uval")
+        if _already(uval) or uval in {"true", "false", "null", "nullptr", "None", "True", "False"} or uval.isdigit():
+            return match.group(0)
+        return f"{head}{placeholder(len(uval))}"
+
+    out = _SECRET_NAME_ASSIGNED.sub(secret_assign, out)
+    out = _KNOWN_SECRET_TOKEN.sub(lambda m: m.group(0) if _already(m.group(0)) else placeholder(len(m.group(0))), out)
+
+    def secret_quoted(match: re.Match[str]) -> str:
+        inner = match.group("body")
+        if _already(inner):
+            return match.group(0)
+        if _STRING_SECRET_INNER.search(inner) or _KNOWN_SECRET_TOKEN.search(inner):
+            return f"{match.group('open')}{placeholder(len(inner))}{match.group('open')}"
+        if len(inner) >= 24 and re.fullmatch(r"[A-Za-z0-9+/=_-]{24,}", inner):
+            has_digit = any(c.isdigit() for c in inner)
+            has_alpha = any(c.isalpha() for c in inner)
+            if has_digit and has_alpha and not _CANONICAL_ID_TOKEN.fullmatch(inner) and not _is_charset_table(inner):
+                return f"{match.group('open')}{placeholder(len(inner))}{match.group('open')}"
+        return match.group(0)
+
+    out = _QUOTED_NO_BACKTICK.sub(secret_quoted, out)
+
+    def bare_token(match: re.Match[str]) -> str:
+        value = match.group(0)
+        if _already(value):
+            return value
+        core = value.rstrip(".")
+        trailing = value[len(core):]
+        if not (any(c.isdigit() for c in core) and any(c.isalpha() for c in core)):
+            return value
+        if _is_charset_table(core) or _preserve_non_secret_token(out, match.start(), match.end(), value):
+            return value
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", core) and "_" in core:
+            return value
+        return placeholder(len(core)) + trailing
+
+    out = _TOKEN.sub(bare_token, out)
+    return indent + out
 
 
 def redact_message(text: str | None, *, bound: int = 240) -> str | None:
@@ -67,4 +211,4 @@ def redact_message(text: str | None, *, bound: int = 240) -> str | None:
     return redact_source_line(text.replace("\n", " "))[:bound]
 
 
-__all__ = ["REDACTION_RULE", "placeholder", "redact_message", "redact_source_line"]
+__all__ = ["REDACTION_RULE", "placeholder", "redact_code_secrets", "redact_message", "redact_source_line"]

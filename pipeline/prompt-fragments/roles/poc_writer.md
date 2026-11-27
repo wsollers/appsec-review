@@ -5,7 +5,10 @@ For one finding the judge agreed is correct, write a benign, compile-only unit-t
 negative control in the target's language (`cpp`, `java`, `javascript`, `python`, `ruby`, `go`,
 `csharp`, `rust`, or `php`) that calls the exact target symbol or handler named in the brief using
 only deterministic in-memory fixtures and explicit assertion markers, with zero network, filesystem
-destruction, or shell primitives.
+destruction, or shell primitives in the generated `poc_*` functions. Because the harness is compile-only
+and never executed, calling the target's `sink` or `path` function with benign local dummy descriptors
+(such as `int sock = -1;`) and in-memory buffers is safe and expected even when that callee's own body
+contains `send`, `recv`, logging, or I/O calls.
 
 ## Allowed outputs
 Only the compact answer of the `poc-writer` skill: two functions with their includes, setup, expected observation

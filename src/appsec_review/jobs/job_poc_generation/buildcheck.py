@@ -60,6 +60,7 @@ class Names:
     reducer: str = "ast_reduce.py"
     object_file: str = "poc.o"
     sanitized_object: str = "poc_san.o"
+    synthesized_header: str | None = None
 
     def container(self, name: str) -> str:
         return f"{CONTAINER_ROOT}/{self.directory}/{name}"
@@ -106,6 +107,8 @@ def derive(argv: Sequence[str], source: str, mode: str, names: Names, settings: 
         out.append(item)
         index += 1
     poc = names.container(names.source)
+    if names.synthesized_header:
+        out += ["-include", names.container(names.synthesized_header)]
     if mode == "syntax":
         out += ["-fsyntax-only", poc]
     elif mode == "object":
@@ -139,9 +142,10 @@ def derive_ast(argv: Sequence[str], language: str, names: Names, settings: PocGe
         if AST_ATTACHED.match(item):
             kept.append(item)
         index += 1
+    extra_inc = ("-include", names.container(names.synthesized_header)) if names.synthesized_header else ()
     return ["python3", names.container(names.reducer), "--source", names.container(names.source),
-            "--project-root", CONTAINER_ROOT, "--", compiler, *kept, "-fsyntax-only", "-Xclang", "-ast-dump=json",
-            names.container(names.source)]
+            "--project-root", CONTAINER_ROOT, "--", compiler, *kept, *extra_inc, "-fsyntax-only",
+            "-Xclang", "-ast-dump=json", names.container(names.source)]
 
 
 def render(argv: Sequence[str], visible: Sequence[str] = ()) -> list[str]:
@@ -189,7 +193,7 @@ class Step:
 
     def visible(self, names: Names) -> set[str]:
         """Arguments the job chose itself: tool names, its scratch paths, the reducer's compiler, system libraries."""
-        chosen = {self.argv[0], "python3", "nm", "-ast-dump=json"}
+        chosen = {self.argv[0], "python3", "nm", "-ast-dump=json", "-include"}
         chosen |= {item for item in self.argv if item.startswith(f"{CONTAINER_ROOT}/{names.directory}/")}
         if self.argv[0] == "python3" and "--" in self.argv:
             chosen.add(self.argv[self.argv.index("--") + 1])
@@ -260,7 +264,7 @@ class Scratch:
 
 
 def prepare(builds: AcceptedBuilds, unit: BuildUnit, parent: Path, *, name: str, poc_text: str,
-            settings: PocGenerationSettings) -> Scratch:
+            settings: PocGenerationSettings, synthesized_header: str | None = None) -> Scratch:
     """Copy the verified accepted workspace into ``parent/<name>`` and put the PoC file beside the reducer."""
     root = Path(parent) / name
     if root.exists():
@@ -269,13 +273,16 @@ def prepare(builds: AcceptedBuilds, unit: BuildUnit, parent: Path, *, name: str,
                        file_limit=settings.build.workspace_file_limit)
     directory = settings.build.scratch_directory
     suffix = ".c" if unit.command.language == "c" else ".cpp"
-    names = Names(directory, f"poc{suffix}")
+    synth_name = "synthesized_decls.h" if synthesized_header else None
+    names = Names(directory, f"poc{suffix}", synthesized_header=synth_name)
     folder = root / directory
     if folder.exists():
         raise ValueError("the accepted workspace already holds the PoC scratch directory")
     folder.mkdir()
     (folder / names.source).write_text(poc_text, encoding="utf-8")
     (folder / names.reducer).write_bytes(REDUCER.read_bytes())
+    if synthesized_header and synth_name:
+        (folder / synth_name).write_text(synthesized_header, encoding="utf-8")
     return Scratch(root, names)
 
 
