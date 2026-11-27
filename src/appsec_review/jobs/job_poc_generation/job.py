@@ -205,23 +205,25 @@ def build_job(*, infer: Callable[..., Any] | None = None, executor_factory: Exec
     # -- plan -------------------------------------------------------------------------------------
     def plan(unit: UnitContext) -> Mapping[str, Any]:
         from appsec_review.review.package_view import ViewLimits, build_view
+        from contextlib import nullcontext
+        from appsec_review.storage.validation import validation_scope
 
         settings = _settings(unit)
         run_root = unit.job.run_root
-        document = inputs_document(unit)
-        builds = services.builds_factory(run_root)
+        resolved_root = Path(run_root).resolve()
         limits = ViewLimits(settings.brief.view_bytes, settings.brief.view_source_lines,
                             settings.brief.view_type_declarations)
-        held: list[Any] = []
-
-        def core() -> Any:
-            if not held:
-                held.append(_core(services, run_root, document))
-            return held[0]
-
-        from appsec_review.storage.validation import validation_scope
         entries: dict[str, Any] = {}
-        with validation_scope(Path(run_root).resolve()):
+        with (validation_scope(resolved_root) if resolved_root.is_dir() else nullcontext()):
+            document = inputs_document(unit)
+            builds = services.builds_factory(run_root)
+            held: list[Any] = []
+
+            def core() -> Any:
+                if not held:
+                    held.append(_core(services, run_root, document))
+                return held[0]
+
             for item in document["planned"]:
                 candidate = parse_candidates([item["candidate"]])[0]
                 entries[candidate.claim_id] = _plan_candidate(unit, settings, item, candidate, builds, limits, services,
@@ -449,10 +451,15 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
         # A hunt body references its unit context once (review-package/7); the view reads the merged document.
         package = merge_unit_context(package, load_unit_context(
             Path(run_root) / Path(record["path"]).parent.parent, package["unit_context"]))
-    sink = (review_inputs.sink_of(package, core=core_getter())
+    sink_diagnostics: list[str] = []
+    sink = (review_inputs.sink_of(package, core=core_getter(), diagnostics=sink_diagnostics)
             if services.sink_resolver is review_inputs.sink_of else services.sink_resolver(package))
     if sink is None:
-        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "the review package names no function that holds the sink")
+        reason = (sink_diagnostics[0] if sink_diagnostics
+                  else "the review package names no function that holds the sink")
+        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, reason)
+        if sink_diagnostics:
+            entry["brief_gaps"] = list(sink_diagnostics)
         return entry
     entry["sink"] = sink
     located = builds.locate(sink["path"])
@@ -472,7 +479,10 @@ def _plan_candidate(unit: UnitContext, settings: PocGenerationSettings,
     entry["brief_gaps"] = list(brief.gaps)
     unresolved = [gap for gap in brief.gaps if gap.startswith("poc_basis identity")]
     if unresolved and len(unresolved) >= len(candidate.poc_basis.entry) + len(candidate.poc_basis.path):
-        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, "no poc_basis identity resolves in the package view")
+        timed_out_gaps = [gap for gap in unresolved if "timed out" in gap]
+        reason = (timed_out_gaps[0] if timed_out_gaps
+                  else "no poc_basis identity resolves in the package view")
+        entry["terminal"] = _terminal(INSUFFICIENT_EVIDENCE, reason)
         return entry
     document_ref = _write_json(unit, f"briefs/{candidate.claim_id}.json", brief.document)
     entry["brief"] = document_ref

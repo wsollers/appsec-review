@@ -31,7 +31,7 @@ from appsec_review.storage import atomic_bytes, canonical_json
 from .brief import ANSWER_SCHEMA, Brief, BriefTooLarge, check_brief_size
 from .buildctx import workspace_bytes
 from .settings import ModelProfile, PocGenerationSettings
-from .source import answer_errors
+from .source import answer_errors, ungrounded_unsafe_decline_error
 
 ROLE = "poc_writer"
 SKILL = "poc-writer"
@@ -202,11 +202,21 @@ def _bounded(response: dict[str, Any]) -> dict[str, Any]:
 
 def _attempt(number: int, brief: Brief, guidance: Guidance, profile: ModelProfile, infer: Callable[..., Any],
              reader: Reader, schemas: Any, repair: tuple[str, ...], claim_id: str,
-             engine: Execution, retry_reason: str | None) -> Attempt:
+             engine: Execution, retry_reason: str | None, *,
+             can_repair_decline: bool = False,
+             call_denylist: frozenset[str] = frozenset()) -> Attempt:
     attempt = Attempt(number)
     transcript: list[dict[str, Any]] = []
     task_input = {
         "protocol": PROTOCOL, "task": "write_poc_function", "input": brief.document, "output_schema": ANSWER_SCHEMA,
+        "fixture_contract": (
+            "Emit two authorized static AST-and-typecheck unit-test fixtures (void poc_<case>(void) and "
+            "void poc_<control>(void)) calling the declared function with deterministic local inputs. "
+            "When poc_basis.trigger has no numeric integer bound constraint, pass ordinary benign plain-ASCII "
+            "inputs (no %n/%x format specifiers, shellcode, or undefined-behavior payloads). Reserve "
+            "decline.status=unsafe_to_attempt strictly for signatures impossible to call without invoking a "
+            "call-denylisted external primitive directly in the poc_* body."
+        ),
         "turn_protocol": {"schema": TURN_SCHEMA, "actions": ["retrieve", "final"],
                           "max_requests_per_turn": MAX_REQUESTS_PER_TURN,
                           "retrieve_shape": {"action": "retrieve", "requests": [
@@ -265,6 +275,16 @@ def _attempt(number: int, brief: Brief, guidance: Guidance, profile: ModelProfil
                 attempt.status, attempt.reason = "invalid", "final_result_rejected"
                 attempt.repair_errors = tuple(str(item)[:240] for item in errors[:20])
                 return attempt
+            if can_repair_decline:
+                decline_error = ungrounded_unsafe_decline_error(
+                    result,
+                    declarations=brief.document.get("declarations"),
+                    call_denylist=call_denylist,
+                )
+                if decline_error is not None:
+                    attempt.status, attempt.reason = "invalid", "ungrounded_unsafe_decline"
+                    attempt.repair_errors = (decline_error,)
+                    return attempt
             attempt.result = result
             attempt.status = "declined" if isinstance(result.get("decline"), Mapping) else "answered"
             return attempt
@@ -326,7 +346,9 @@ def run_writer(brief: Brief, *, guidance: Guidance, settings: PocGenerationSetti
     retry_reason = None
     for number in range(1, policy.attempts + 1):
         attempt = _attempt(number, brief, guidance, profile, infer, reader, schemas, repair, claim_id,
-                           engine, retry_reason)
+                           engine, retry_reason,
+                           can_repair_decline=(number < policy.attempts and settings.retry_on_invalid_output),
+                           call_denylist=settings.policy.call_denylist)
         attempts.append(attempt)
         if attempt.status in {"answered", "declined"}:
             return WriterOutcome("answered" if attempt.status == "answered" else "declined", attempt.result, "",

@@ -160,3 +160,76 @@ def answer_errors(result: Any) -> list[str]:
             return [f"decline.status must be one of {list(DECLINES)}"]
     return []
 
+
+UNGROUNDED_UNSAFE_DECLINE_GUIDANCE = (
+    "Do not decline with unsafe_to_attempt for static AST/typecheck fixtures; emit the two "
+    "void poc_*(void) functions using ordinary benign plain-text/numeric local inputs (no "
+    "exploit payloads or format specifiers) calling the declared function."
+)
+
+_AMBIGUOUS_DENYLIST_WORDS = frozenset({
+    "abort", "accept", "access", "bind", "clone", "close", "connect", "exit", "free",
+    "kill", "link", "listen", "open", "poll", "raise", "read", "recv", "remove", "select",
+    "send", "signal", "sleep", "stat", "system", "wait", "write",
+})
+
+_UNGROUNDED_UNSAFE_RE = re.compile(
+    r"\b(?:"
+    r"verified\s+by\s+inspection|by\s+inspection|inspection\s+is\s+sufficient|"
+    r"sufficient\s+without|target[-\s]specific\s+reproducer|provide\s+a\s+reproducer|"
+    r"compile[-\s]only\s+harness|undefined\s+behavior|provok\w*\s+undefined|"
+    r"format[-\s](?:string|argument|specifier)|dual[-\s]use|exploit\s+payload|weaponiz\w*"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _flatten_denylist(call_denylist: Any) -> tuple[str, ...]:
+    if isinstance(call_denylist, Mapping):
+        items: list[str] = []
+        for group in call_denylist.values():
+            if isinstance(group, (list, tuple, set, frozenset)):
+                items.extend(str(entry) for entry in group if entry)
+            elif isinstance(group, str) and group:
+                items.append(group)
+        return tuple(items)
+    if isinstance(call_denylist, (list, tuple, set, frozenset)):
+        return tuple(str(entry) for entry in call_denylist if entry)
+    return ()
+
+
+def _mentions_denylisted_primitive(why: str, call_denylist: Any) -> bool:
+    for item in _flatten_denylist(call_denylist):
+        if not item:
+            continue
+        escaped = re.escape(item)
+        if "::" in item or item not in _AMBIGUOUS_DENYLIST_WORDS:
+            if re.search(rf"(?<![A-Za-z0-9_]){escaped}(?![A-Za-z0-9_])", why):
+                return True
+        else:
+            if re.search(rf"(?:`{escaped}`|\b{escaped}\s*\()", why):
+                return True
+    return False
+
+
+def ungrounded_unsafe_decline_error(
+    result: Any,
+    *,
+    declarations: Any,
+    call_denylist: Any = (),
+) -> str | None:
+    """Return repair guidance when ``unsafe_to_attempt`` is ungrounded against compilable declarations."""
+    if not isinstance(result, Mapping):
+        return None
+    decline = result.get("decline")
+    if not isinstance(decline, Mapping) or decline.get("status") != "unsafe_to_attempt":
+        return None
+    if not isinstance(declarations, (list, tuple)) or len(declarations) == 0:
+        return None
+    why = str(decline.get("why") or "")
+    has_denylisted = _mentions_denylisted_primitive(why, call_denylist)
+    if _UNGROUNDED_UNSAFE_RE.search(why) and not has_denylisted:
+        return UNGROUNDED_UNSAFE_DECLINE_GUIDANCE
+    if not has_denylisted:
+        return UNGROUNDED_UNSAFE_DECLINE_GUIDANCE
+    return None

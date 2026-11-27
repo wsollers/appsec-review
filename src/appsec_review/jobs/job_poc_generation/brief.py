@@ -17,6 +17,7 @@ from appsec_review.storage import canonical_json
 
 from .buildctx import BuildUnit, Headers, declarations, tu_declarations
 from .candidates import PocCandidate
+from .inputs import find_identity
 from .policy import Expectation, Requirement, numeric_requirement
 from .settings import PocGenerationSettings
 
@@ -24,6 +25,8 @@ BRIEF_SCHEMA = "appsec-review/poc-writer-brief/1"
 ANSWER_SCHEMA = "appsec-review/poc-writer-answer/1"
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_~][A-Za-z0-9_]*)*")
 _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_ASR_ID_RE = re.compile(r"\basr:[A-Za-z0-9_]+:[0-9a-fA-F]+\b")
+_CALL_ANNOT_RE = re.compile(r"\((?:direct|indirect|virtual|dispatch|callback|inline|tail|L\d+|line\s*\d+)\)", re.I)
 _NOT_TYPES = frozenset({"std", "const", "struct", "class", "union", "enum", "void", "int", "char", "bool", "unsigned"})
 
 
@@ -44,7 +47,8 @@ _SKIP_CALL_NAMES = frozenset({
 })
 
 
-def _core_row_and_calls(identity: str, item: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def _core_row_and_calls(identity: str, item: Mapping[str, Any], *, core: Any = None,
+                        symbol_cache: dict[str, str | None] | None = None) -> tuple[dict[str, Any], list[str]]:
     loc = item.get("location") or {}
     path = str(loc.get("path") or "")
     start = int(loc.get("start_line") or loc.get("line") or 0)
@@ -54,9 +58,10 @@ def _core_row_and_calls(identity: str, item: Mapping[str, Any]) -> tuple[dict[st
     row = {"label": "CORE", "ref": identity, "role": str(item.get("kind") or "retrieved"),
            "path": path, "lines": lines, "summary": summary}
     calls: list[str] = []
+    symbol_ids: list[str] = []
 
     def add_name(raw: Any) -> None:
-        if not isinstance(raw, str):
+        if not isinstance(raw, str) or raw.startswith("asr:"):
             return
         for candidate in _function_names(raw):
             bare = candidate.rsplit("::", 1)[-1]
@@ -65,30 +70,75 @@ def _core_row_and_calls(identity: str, item: Mapping[str, Any]) -> tuple[dict[st
             if candidate not in calls:
                 calls.append(candidate)
 
-    add_name(item.get("name"))
-    add_name(summary)
+    def add_symbol_ref(raw_sym: Any) -> None:
+        if isinstance(raw_sym, str) and raw_sym.startswith("asr:symbol:") and raw_sym not in symbol_ids:
+            symbol_ids.append(raw_sym)
+
+    is_endpoint = identity.startswith(("asr:sink_site:", "asr:entry_point:"))
+    if not is_endpoint and not identity.startswith("asr:dataflow_path:"):
+        add_name(item.get("name"))
+    call_keys = ("function", "enclosing_function") if is_endpoint else (
+        "callee", "caller", "function", "enclosing_function", "target_name", "sink_name"
+    )
     payload = item.get("payload")
     stack: list[Any] = [payload] if isinstance(payload, (Mapping, list, tuple)) else []
     visited = 0
-    while stack and visited < 64:
+    while stack and visited < 128:
         cur = stack.pop()
         visited += 1
         if isinstance(cur, Mapping):
-            for key in ("callee", "caller", "function", "enclosing_function", "symbol", "target_name", "sink_name"):
+            for key in call_keys:
                 val = cur.get(key)
                 if isinstance(val, str):
-                    add_name(val)
+                    if val.startswith("asr:symbol:"):
+                        add_symbol_ref(val)
+                    elif not val.startswith("asr:"):
+                        add_name(val)
                 elif isinstance(val, Mapping):
-                    add_name(val.get("name"))
+                    add_name(val.get("name") or val.get("display"))
+                    add_symbol_ref(val.get("symbol") or val.get("identity"))
+            sym_val = cur.get("symbol")
+            if isinstance(sym_val, str):
+                if sym_val.startswith("asr:symbol:"):
+                    add_symbol_ref(sym_val)
+                elif not sym_val.startswith("asr:"):
+                    add_name(sym_val)
+            elif isinstance(sym_val, Mapping):
+                add_name(sym_val.get("name") or sym_val.get("display"))
+                add_symbol_ref(sym_val.get("symbol") or sym_val.get("identity"))
             for val in cur.values():
                 if isinstance(val, (Mapping, list, tuple)):
                     stack.append(val)
         elif isinstance(cur, (list, tuple)):
-            for elem in cur[:32]:
+            for elem in reversed(cur[:64]):
                 if isinstance(elem, (Mapping, list, tuple)):
                     stack.append(elem)
-    return row, calls
 
+    if symbol_ids and core is not None and hasattr(core, "find"):
+        cache = symbol_cache if symbol_cache is not None else {}
+        for sym_id in symbol_ids:
+            if sym_id not in cache:
+                sym_item, _ = find_identity(core, sym_id)
+                resolved_name: str | None = None
+                if sym_item is not None:
+                    sym_payload = sym_item.get("payload") if isinstance(sym_item.get("payload"), Mapping) else {}
+                    sym_inner = (sym_payload.get("result")
+                                 if isinstance(sym_payload.get("result"), Mapping) else sym_payload)
+                    candidate_name = (
+                        sym_item.get("name")
+                        or (sym_inner.get("qualified_name") if isinstance(sym_inner, Mapping) else None)
+                        or (sym_inner.get("name") if isinstance(sym_inner, Mapping) else None)
+                        or (sym_inner.get("display") if isinstance(sym_inner, Mapping) else None)
+                    )
+                    if isinstance(candidate_name, str) and candidate_name and not candidate_name.startswith("asr:"):
+                        resolved_name = candidate_name
+                cache[sym_id] = resolved_name
+            if cache[sym_id]:
+                add_name(cache[sym_id])
+
+    if not calls and not is_endpoint and isinstance(item.get("summary"), str):
+        add_name(item["summary"])
+    return row, calls
 
 @dataclass(frozen=True, slots=True)
 class Brief:
@@ -133,7 +183,8 @@ def rows_by_label(document: Any) -> dict[str, Mapping[str, Any]]:
 
 def _function_names(summary: str) -> list[str]:
     """Function-looking qualified names in a call-site summary such as ``relay -> relay::parse_header (L7)``."""
-    return [name for name in _NAME.findall(summary) if not re.fullmatch(r"L\d+|line", name)]
+    cleaned = _CALL_ANNOT_RE.sub(" ", _ASR_ID_RE.sub(" ", summary))
+    return [name for name in _NAME.findall(cleaned) if not re.fullmatch(r"L\d+|line", name)]
 
 
 def build_brief(candidate: PocCandidate, *, finding: Mapping[str, Any], package: Mapping[str, Any],
@@ -147,20 +198,40 @@ def build_brief(candidate: PocCandidate, *, finding: Mapping[str, Any], package:
     basis = candidate.poc_basis
     resolved: dict[str, Any] = {}
     core_path_calls: dict[str, list[str]] = {}
+    symbol_cache: dict[str, str | None] = {}
     for identity in (*basis.entry, *basis.path):
         row = identities.get(identity)
+        timed_out = False
         if row is None and core is not None and hasattr(core, "find"):
-            found = core.find(identity=identity, limit=1).get("results", ())
-            if found:
-                core_row, extra_calls = _core_row_and_calls(identity, found[0])
+            found_item, timed_out = find_identity(core, identity)
+            if found_item is not None:
+                core_row, extra_calls = _core_row_and_calls(
+                    identity, found_item, core=core, symbol_cache=symbol_cache
+                )
                 resolved[identity] = core_row
                 core_path_calls[identity] = extra_calls
                 continue
         if row is None:
-            gaps.append(f"poc_basis identity {identity} does not resolve in the package view")
+            if timed_out:
+                gaps.append(f"poc_basis identity {identity} timed out during bounded retrieval")
+            else:
+                gaps.append(f"poc_basis identity {identity} does not resolve in the package view")
             continue
         resolved[identity] = {key: value for key, value in row.items()
                               if key in {"label", "ref", "summary", "text", "path", "lines", "role", "tag"}}
+        ref = str(row.get("ref") or identity)
+        if identity in basis.path and ref.startswith(
+            ("asr:dataflow_path:", "asr:sink_site:", "asr:entry_point:", "asr:call_site:", "asr:symbol:")
+        ):
+            if core is not None and hasattr(core, "find"):
+                found_item, _ = find_identity(core, ref)
+                if found_item is not None:
+                    _, extra_calls = _core_row_and_calls(
+                        ref, found_item, core=core, symbol_cache=symbol_cache
+                    )
+                    core_path_calls[identity] = extra_calls
+            if identity not in core_path_calls and ref.startswith(("asr:sink_site:", "asr:entry_point:")):
+                core_path_calls[identity] = []
     path_calls: set[str] = set()
     for identity in basis.path:
         row = resolved.get(identity)
