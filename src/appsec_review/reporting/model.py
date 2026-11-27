@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Union
+from typing import Literal, Union
 
 from .tokens import BoxKind
 
@@ -249,7 +249,76 @@ class RadarChart:
         object.__setattr__(self, "clamped", clamped)
 
 
-Block = Union[Heading, Box, Stats, Note, Legend, PageBreak, BarChart, Timeline, RadarChart]
+FlowNodeRole = Literal["entry", "source", "hop", "guard", "sink", "callee"]
+FlowEdgeStyle = Literal["solid", "dashed"]
+FlowOrientation = Literal["LR", "TD"]
+FLOW_NODE_ROLES: tuple[FlowNodeRole, ...] = ("entry", "source", "hop", "guard", "sink", "callee")
+FLOW_EDGE_STYLES: tuple[FlowEdgeStyle, ...] = ("solid", "dashed")
+FLOW_ORIENTATIONS: tuple[FlowOrientation, ...] = ("LR", "TD")
+
+
+@dataclass(frozen=True, slots=True)
+class FlowNode:
+    node_id: str
+    label: str
+    role: FlowNodeRole = "hop"
+    location: str = ""
+    detail: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.node_id, str) or not self.node_id.strip():
+            raise ValueError("flow node_id must be a non-empty string")
+        if self.role not in FLOW_NODE_ROLES:
+            raise ValueError(f"flow node role must be one of {FLOW_NODE_ROLES}, got {self.role!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class FlowEdge:
+    source: str
+    target: str
+    label: str = ""
+    style: FlowEdgeStyle = "solid"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.source, str) or not self.source.strip():
+            raise ValueError("flow edge source must be a non-empty string")
+        if not isinstance(self.target, str) or not self.target.strip():
+            raise ValueError("flow edge target must be a non-empty string")
+        if self.style not in FLOW_EDGE_STYLES:
+            raise ValueError(f"flow edge style must be one of {FLOW_EDGE_STYLES}, got {self.style!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class FlowDiagram:
+    """Deterministic code-flow or call/CFG diagram block."""
+
+    nodes: tuple[FlowNode, ...]
+    edges: tuple[FlowEdge, ...] = ()
+    caption: str | None = None
+    lane_badge: str | None = None
+    orientation: FlowOrientation = "LR"
+
+    def __post_init__(self) -> None:
+        nodes = tuple(self.nodes)
+        edges = tuple(self.edges)
+        if not nodes:
+            raise ValueError("flow diagram requires at least one node")
+        node_ids = [node.node_id for node in nodes]
+        if len(set(node_ids)) != len(node_ids):
+            raise ValueError("flow diagram node_ids must be distinct")
+        known = set(node_ids)
+        for edge in edges:
+            if edge.source not in known:
+                raise ValueError(f"flow edge source {edge.source!r} does not reference a node_id")
+            if edge.target not in known:
+                raise ValueError(f"flow edge target {edge.target!r} does not reference a node_id")
+        if self.orientation not in FLOW_ORIENTATIONS:
+            raise ValueError(f"flow diagram orientation must be 'LR' or 'TD', got {self.orientation!r}")
+        object.__setattr__(self, "nodes", nodes)
+        object.__setattr__(self, "edges", edges)
+
+
+Block = Union[Heading, Box, Stats, Note, Legend, PageBreak, BarChart, Timeline, RadarChart, FlowDiagram]
 
 
 @dataclass(frozen=True, slots=True)

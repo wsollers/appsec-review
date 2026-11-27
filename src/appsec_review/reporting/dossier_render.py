@@ -20,7 +20,8 @@ from .dossiers import dossier_document
 from .dossier_receipts import RECEIPT_SCHEMA, verify_additional_formats
 from .html import render_html
 from .latex import render_latex
-from .model import Box, Bullets, Code, Fields, Heading, Para, Stats, Table, Truncation
+from .code_flow import role_title, to_mermaid
+from .model import Block, Box, Bullets, Code, Fields, FlowDiagram, Heading, Para, Stats, Table, Truncation
 
 if TYPE_CHECKING:
     from appsec_review.jobs.job_dossier_publication.settings import DossierPublicationSettings
@@ -53,6 +54,70 @@ def render_dossier_html(dossier: Mapping[str, Any]) -> str:
     return render_html(dossier_document(dossier))
 
 
+def _render_block(block: Block) -> list[str]:
+    lines: list[str] = []
+    if isinstance(block, Heading):
+        lines.extend(["#" * (block.level + 1) + " " + _md_text(block.text), ""])
+        if block.subtitle:
+            lines.extend([_md_text(block.subtitle), ""])
+    elif isinstance(block, Stats):
+        lines.extend(f"- **{_md_text(stat.label)}**: {_md_code(stat.value)}" for stat in block.items)
+    elif isinstance(block, FlowDiagram):
+        if block.lane_badge:
+            lines.extend([f"**Verification lane**: {_md_code(block.lane_badge)}", ""])
+        mermaid_body = to_mermaid(block)
+        fence = "```"
+        while fence in mermaid_body:
+            fence += "`"
+        lines.extend([f"{fence}mermaid", mermaid_body, fence, ""])
+        if block.caption:
+            lines.extend([f"*{_md_text(block.caption)}*", ""])
+        lines.append("| Step | Role | Location | Operation |")
+        lines.append("| --- | --- | --- | --- |")
+        for idx, node in enumerate(block.nodes, start=1):
+            loc_cell = _md_code(node.location) if node.location else "-"
+            op_parts = [_md_text(node.label)]
+            if node.detail:
+                op_parts.append(_md_code(node.detail))
+            lines.append(
+                f"| {idx} | {_md_text(role_title(node.role))} | {loc_cell} | {' - '.join(op_parts)} |"
+            )
+    elif isinstance(block, Box):
+        lines.extend([f"### {_md_text(block.title)}", ""])
+        for label in (block.meta, block.chip, *block.badges):
+            if label:
+                lines.extend([_md_text(label), ""])
+        for item in block.items:
+            if isinstance(item, Para):
+                lines.extend([_md_text(item.text), *_md_truncation(item.truncation)])
+            elif isinstance(item, Fields):
+                for row in item.rows:
+                    value = _md_code(row.value) if row.mono else _md_text(row.value)
+                    lines.extend([f"- **{_md_text(row.label)}**: {value}",
+                                  *_md_truncation(row.truncation)])
+            elif isinstance(item, Code):
+                fence = "```"
+                while fence in item.text:
+                    fence += "`"
+                lines.extend([_md_text(item.caption), "", fence + "text", item.text, fence,
+                              *_md_truncation(item.truncation)])
+            elif isinstance(item, Bullets):
+                lines.extend("- " + _md_text(value) for value in item.items)
+                lines.extend(_md_truncation(item.omitted))
+            elif isinstance(item, Table):
+                lines.append("| " + " | ".join(_md_text(value) for value in item.headers) + " |")
+                lines.append("| " + " | ".join("---" for _ in item.headers) + " |")
+                for row in item.rows:
+                    lines.append("| " + " | ".join(_md_text(cell.text) for cell in row) + " |")
+                lines.extend(_md_truncation(item.omitted))
+            else:
+                raise TypeError(f"unsupported dossier Markdown item: {type(item).__name__}")
+            lines.append("")
+    else:
+        raise TypeError(f"unsupported dossier Markdown block: {type(block).__name__}")
+    return lines
+
+
 def render_dossier_markdown(dossier: Mapping[str, Any]) -> str:
     """Render the same bounded document as HTML/LaTeX, without a second content projection."""
     document = dossier_document(dossier)
@@ -66,45 +131,7 @@ def render_dossier_markdown(dossier: Mapping[str, Any]) -> str:
         "",
     ]
     for block in document.blocks:
-        if isinstance(block, Heading):
-            lines.extend(["#" * (block.level + 1) + " " + _md_text(block.text), ""])
-            if block.subtitle:
-                lines.extend([_md_text(block.subtitle), ""])
-        elif isinstance(block, Stats):
-            lines.extend(f"- **{_md_text(stat.label)}**: {_md_code(stat.value)}" for stat in block.items)
-        elif isinstance(block, Box):
-            lines.extend([f"### {_md_text(block.title)}", ""])
-            for label in (block.meta, block.chip, *block.badges):
-                if label:
-                    lines.extend([_md_text(label), ""])
-            for item in block.items:
-                if isinstance(item, Para):
-                    lines.extend([_md_text(item.text), *_md_truncation(item.truncation)])
-                elif isinstance(item, Fields):
-                    for row in item.rows:
-                        value = _md_code(row.value) if row.mono else _md_text(row.value)
-                        lines.extend([f"- **{_md_text(row.label)}**: {value}",
-                                      *_md_truncation(row.truncation)])
-                elif isinstance(item, Code):
-                    fence = "```"
-                    while fence in item.text:
-                        fence += "`"
-                    lines.extend([_md_text(item.caption), "", fence + "text", item.text, fence,
-                                  *_md_truncation(item.truncation)])
-                elif isinstance(item, Bullets):
-                    lines.extend("- " + _md_text(value) for value in item.items)
-                    lines.extend(_md_truncation(item.omitted))
-                elif isinstance(item, Table):
-                    lines.append("| " + " | ".join(_md_text(value) for value in item.headers) + " |")
-                    lines.append("| " + " | ".join("---" for _ in item.headers) + " |")
-                    for row in item.rows:
-                        lines.append("| " + " | ".join(_md_text(cell.text) for cell in row) + " |")
-                    lines.extend(_md_truncation(item.omitted))
-                else:
-                    raise TypeError(f"unsupported dossier Markdown item: {type(item).__name__}")
-                lines.append("")
-        else:
-            raise TypeError(f"unsupported dossier Markdown block: {type(block).__name__}")
+        lines.extend(_render_block(block))
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 

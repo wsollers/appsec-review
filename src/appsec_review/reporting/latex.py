@@ -13,7 +13,8 @@ from pathlib import Path
 import re
 from typing import Iterable, Sequence
 
-from .model import (Bar, BarChart, Block, Box, Bullets, Code, Document, Fields, Field, Heading, IdList, Item, Lane, Legend,
+from .code_flow import role_box_kind, role_title
+from .model import (Bar, BarChart, Block, Box, Bullets, Code, Document, Fields, Field, FlowDiagram, Heading, IdList, Item, Lane, Legend,
                     Note, PageBreak, Para, RadarChart, Segment, Stats, Table, Timeline, Truncation)
 from .text import clean, tex, tex_code_line, tex_mono, token
 
@@ -449,6 +450,98 @@ def _legend() -> list[str]:
     return lines
 
 
+
+FLOW_BOX_W = 142.0
+FLOW_BOX_H = 13.5
+FLOW_GAP_Y = 6.5
+FLOW_LABEL_CHARS = 36
+FLOW_LOC_CHARS = 40
+FLOW_DETAIL_CHARS = 68
+FLOW_EDGE_CHARS = 34
+
+
+def _flow_diagram(block: FlowDiagram) -> list[str]:
+    unit = block.lane_badge or ""
+    lines = _chart_open("Code-flow diagram", unit)
+    nodes = block.nodes
+    count = len(nodes)
+    total_h = count * FLOW_BOX_H + max(0, count - 1) * FLOW_GAP_Y
+    index_by_id = {node.node_id: idx for idx, node in enumerate(nodes)}
+    has_back_edge = any(
+        index_by_id[e.target] != index_by_id[e.source] + 1 for e in block.edges
+    )
+    bound_w = FLOW_BOX_W + (10.0 if has_back_edge else 2.0)
+    lines += [
+        r"\noindent\makebox[\linewidth]{\begin{tikzpicture}[x=1mm,y=1mm]",
+        rf"\useasboundingbox {_pt(0, 1.0)} rectangle {_pt(bound_w, -total_h - 1.0)};",
+    ]
+
+    for idx, node in enumerate(nodes):
+        top = -idx * (FLOW_BOX_H + FLOW_GAP_Y)
+        bot = top - FLOW_BOX_H
+        kind_val = role_box_kind(node.role).value
+        dash_opt = ",dashed" if node.role == "guard" else ""
+        lines.append(
+            rf"\filldraw[fill={kind_val}-fill,draw={kind_val}-accent,line width=0.6pt,rounded corners=2pt{dash_opt}] "
+            rf"{_pt(0, top)} rectangle {_pt(FLOW_BOX_W, bot)};"
+        )
+        lines.append(
+            rf"\fill[{kind_val}-accent,rounded corners=1.2pt] "
+            rf"{_pt(2.4, top - 1.6)} rectangle {_pt(21.4, top - 5.2)};"
+        )
+        chip = tex(role_title(node.role))
+        lines.append(
+            rf"\node[anchor=center,text=white,font=\sffamily\bfseries\fontsize{{6}}{{7}}\selectfont] "
+            rf"at {_pt(11.9, top - 3.4)} {{{chip}}};"
+        )
+        lbl = tex(_fit(node.label, FLOW_LABEL_CHARS))
+        lines.append(
+            rf"\node[anchor=west,text=ink,font=\sffamily\bfseries\fontsize{{7.5}}{{9}}\selectfont] "
+            rf"at {_pt(23.5, top - 3.4)} {{{lbl}}};"
+        )
+        if node.location:
+            loc = tex_mono(_fit(node.location, FLOW_LOC_CHARS))
+            lines.append(
+                rf"\node[anchor=east,text=muted,font=\ttfamily\fontsize{{6.6}}{{8}}\selectfont] "
+                rf"at {_pt(FLOW_BOX_W - 2.5, top - 3.4)} {{{loc}}};"
+            )
+        if node.detail:
+            det = tex_mono(_fit(node.detail, FLOW_DETAIL_CHARS))
+            lines.append(
+                rf"\node[anchor=west,text=ink,font=\ttfamily\fontsize{{6.8}}{{8}}\selectfont] "
+                rf"at {_pt(3.0, top - 9.4)} {{{det}}};"
+            )
+
+    mid_x = FLOW_BOX_W / 2.0
+    for edge in block.edges:
+        s_idx = index_by_id[edge.source]
+        t_idx = index_by_id[edge.target]
+        dash_opt = ",dashed" if edge.style == "dashed" else ""
+        if t_idx == s_idx + 1:
+            y1 = -s_idx * (FLOW_BOX_H + FLOW_GAP_Y) - FLOW_BOX_H
+            y2 = -t_idx * (FLOW_BOX_H + FLOW_GAP_Y)
+            lines.append(
+                rf"\draw[-stealth,line width=0.65pt,draw=muted{dash_opt}] {_pt(mid_x, y1)} -- {_pt(mid_x, y2)};"
+            )
+            if edge.label:
+                elbl = tex(_fit(edge.label, FLOW_EDGE_CHARS))
+                lines.append(
+                    rf"\node[anchor=west,text=muted,font=\sffamily\fontsize{{6.4}}{{8}}\selectfont] "
+                    rf"at {_pt(mid_x + 2.0, (y1 + y2) / 2.0)} {{{elbl}}};"
+                )
+        else:
+            sy = -s_idx * (FLOW_BOX_H + FLOW_GAP_Y) - FLOW_BOX_H / 2.0
+            ty = -t_idx * (FLOW_BOX_H + FLOW_GAP_Y) - FLOW_BOX_H / 2.0
+            rx = FLOW_BOX_W + 5.5
+            lines.append(
+                rf"\draw[-stealth,line width=0.6pt,draw=muted{dash_opt}] "
+                rf"{_pt(FLOW_BOX_W, sy)} -- {_pt(rx, sy)} -- {_pt(rx, ty)} -- {_pt(FLOW_BOX_W, ty)};"
+            )
+
+    lines.append(r"\end{tikzpicture}}\par")
+    return lines + _chart_close(block.caption or "", None)
+
+
 def _block(block: Block) -> list[str]:
     if isinstance(block, Heading):
         command = {1: r"\rsection", 2: r"\rsubsection", 3: r"\rsubsubsection", 4: r"\rminor"}.get(block.level, r"\rminor")
@@ -471,6 +564,8 @@ def _block(block: Block) -> list[str]:
         return _timeline(block)
     if isinstance(block, RadarChart):
         return _radar_chart(block)
+    if isinstance(block, FlowDiagram):
+        return _flow_diagram(block)
     raise TypeError(f"unknown block {type(block).__name__}")
 
 
