@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import math
 
+from .code_flow import role_box_kind, role_title
 from .model import (
-    BarChart, Block, Box, Bullets, Code, Document, Field, Fields, Heading, IdList, Item, Legend,
-    Note, PageBreak, Para, RadarChart, Stats, Table, Timeline, Truncation,
+    BarChart, Block, Box, Bullets, Code, Document, Field, Fields, FlowDiagram, Heading, IdList,
+    Item, Legend, Note, PageBreak, Para, RadarChart, Stats, Table, Timeline, Truncation,
 )
 from .text import clean, esc, esc_line, token
 from .tokens import (
@@ -127,6 +128,9 @@ details.inner>summary{cursor:pointer;font-size:.78rem;color:var(--muted)}
 .bar-row{display:grid;grid-template-columns:10rem 1fr 6rem;gap:.5rem;align-items:center;margin:.28rem 0;font-size:.82rem}
 .bar-track{background:#fff;border:1px solid var(--rule);border-radius:3px;height:.7rem;overflow:hidden}
 .bar-fill{height:100%;border-radius:2px}
+.flow-card{margin:1rem 0}
+.flow-svg{display:block;width:100%;height:auto;overflow:visible}
+.flow-cap{margin:.5rem 0 0;font-size:.82rem;color:var(--muted)}
 @media (max-width:34rem){
   body{font-size:14px}.page{padding:1rem .75rem 3rem}.cover h1{font-size:1.7rem}
   .kv{grid-template-columns:1fr;gap:0}.kv dt{padding-top:.3rem}
@@ -390,6 +394,202 @@ def _tone_attr(tone: str) -> str:
     return f' style="border-left-color:#{VERDICT_COLOR[safe]}"' if safe in VERDICT_COLOR else ""
 
 
+
+def _clip_svg_text(value: str, limit: int) -> str:
+    cleaned = clean(value)
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: max(1, limit - 3)].rstrip() + "..."
+
+
+def render_flow_svg(block: FlowDiagram, *, standalone: bool = False) -> str:
+    """Render a FlowDiagram as a deterministic inline or standalone SVG."""
+    neutrals = dict(NEUTRALS)
+    ink = f"#{neutrals['ink']}"
+    muted = f"#{neutrals['muted']}"
+    rule = f"#{neutrals['rule']}"
+    panel = f"#{neutrals['panel']}"
+
+    nodes = block.nodes
+    count = len(nodes)
+    is_lr = block.orientation == "LR"
+    cols = min(4, count) if is_lr else 1
+    rows = math.ceil(count / cols)
+
+    card_w = 228 if is_lr else 468
+    card_h = 92 if is_lr else 82
+    gap_x = 48 if is_lr else 0
+    gap_y = 48 if is_lr else 36
+    pad_x = 14
+    pad_y = 14
+
+    svg_w = pad_x * 2 + cols * card_w + max(0, cols - 1) * gap_x
+    svg_h = pad_y * 2 + rows * card_h + max(0, rows - 1) * gap_y
+
+    coords: dict[str, tuple[int, int, float, float]] = {}
+    for idx, node in enumerate(nodes):
+        r = idx // cols
+        c = idx % cols
+        x = pad_x + c * (card_w + gap_x)
+        y = pad_y + r * (card_h + gap_y)
+        coords[node.node_id] = (r, c, float(x), float(y))
+
+    marker_prefix = f"flow-{abs(hash((tuple(n.node_id for n in nodes), block.orientation))) % 100000}"
+    aria = _clip_svg_text(block.caption or "Source-to-sink code flow diagram", 120)
+    xmlns = ' xmlns="http://www.w3.org/2000/svg"'
+    font_sans = "Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif"
+    font_mono = "'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
+
+    parts: list[str] = []
+    if standalone:
+        parts.append('<?xml version="1.0" encoding="UTF-8"?>')
+    parts.append(
+        f'<svg{xmlns} role="img" aria-label="{esc_line(aria)}" '
+        f'viewBox="0 0 {svg_w} {svg_h}" width="{svg_w}" height="{svg_h}" class="flow-svg">'
+    )
+    parts.append(f"<title>{esc_line(aria)}</title>")
+    parts.append(
+        "<defs>"
+        f'<marker id="{marker_prefix}-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" '
+        'markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">'
+        f'<path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="{muted}"/>'
+        "</marker>"
+        "</defs>"
+    )
+    if standalone:
+        parts.append(f'<rect x="0" y="0" width="{svg_w}" height="{svg_h}" rx="8" fill="{panel}"/>')
+
+    parts.append('<g class="flow-edges">')
+    for edge in block.edges:
+        src_r, src_c, sx, sy = coords[edge.source]
+        dst_r, dst_c, dx, dy = coords[edge.target]
+        dash_attr = ' stroke-dasharray="5,3"' if edge.style == "dashed" else ""
+        if is_lr and src_r == dst_r and dst_c == src_c + 1:
+            x1 = sx + card_w
+            y1 = sy + card_h / 2
+            x2 = dx - 2
+            y2 = dy + card_h / 2
+            d = f"M {x1:.1f} {y1:.1f} L {x2:.1f} {y2:.1f}"
+            lx = (x1 + x2) / 2
+            ly = y1 - 8
+        elif not is_lr and dst_r == src_r + 1 and src_c == dst_c:
+            x1 = sx + card_w / 2
+            y1 = sy + card_h
+            x2 = dx + card_w / 2
+            y2 = dy - 2
+            d = f"M {x1:.1f} {y1:.1f} L {x2:.1f} {y2:.1f}"
+            lx = x1 + 8
+            ly = (y1 + y2) / 2 + 3
+        elif is_lr and dst_r == src_r + 1:
+            x1 = sx + card_w / 2
+            y1 = sy + card_h
+            mid_y = sy + card_h + gap_y / 2
+            x2 = dx + card_w / 2
+            y2 = dy - 2
+            d = f"M {x1:.1f} {y1:.1f} L {x1:.1f} {mid_y:.1f} L {x2:.1f} {mid_y:.1f} L {x2:.1f} {y2:.1f}"
+            lx = (x1 + x2) / 2
+            ly = mid_y - 5
+        else:
+            x1 = sx + (card_w if dx >= sx else 0)
+            y1 = sy + card_h / 2
+            x2 = dx + (0 if dx >= sx else card_w)
+            y2 = dy + card_h / 2
+            cx = (x1 + x2) / 2
+            d = f"M {x1:.1f} {y1:.1f} C {cx:.1f} {y1:.1f}, {cx:.1f} {y2:.1f}, {x2:.1f} {y2:.1f}"
+            lx = cx
+            ly = (y1 + y2) / 2 - 6
+
+        parts.append(
+            f'<path d="{d}" fill="none" stroke="{muted}" stroke-width="1.6"{dash_attr} '
+            f'marker-end="url(#{marker_prefix}-arrow)"/>'
+        )
+        if edge.label:
+            lbl = _clip_svg_text(edge.label, 24 if is_lr else 38)
+            anchor = "start" if (not is_lr and dst_r == src_r + 1) else "middle"
+            parts.append(
+                f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}" '
+                f'font-family="{font_sans}" font-size="9.5" fill="{muted}">{esc_line(lbl)}</text>'
+            )
+    parts.append("</g>")
+
+    label_limit = 22 if is_lr else 52
+    loc_limit = 30 if is_lr else 62
+    detail_limit = 31 if is_lr else 66
+
+    parts.append('<g class="flow-nodes">')
+    for node in nodes:
+        _, _, x, y = coords[node.node_id]
+        style = STYLE_BY_KIND[role_box_kind(node.role)]
+        accent = f"#{style.accent}"
+        fill = f"#{style.fill}"
+        border_dash = ' stroke-dasharray="5,3"' if node.role == "guard" else ""
+        chip_txt = role_title(node.role)
+        chip_w = max(40, len(chip_txt) * 6 + 12)
+
+        parts.append(f'<g class="flow-node" data-role="{esc_line(node.role)}">')
+        parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{card_w}" height="{card_h}" rx="6" '
+            f'fill="{fill}" stroke="{accent}" stroke-width="1.6"{border_dash}/>'
+        )
+        parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="4" height="{card_h}" rx="2" fill="{accent}"/>'
+        )
+        parts.append(
+            f'<rect x="{x + 10:.1f}" y="{y + 8:.1f}" width="{chip_w}" height="15" rx="3" fill="{accent}"/>'
+        )
+        parts.append(
+            f'<text x="{x + 10 + chip_w / 2:.1f}" y="{y + 18.8:.1f}" text-anchor="middle" '
+            f'font-family="{font_sans}" font-size="8.5" font-weight="700" letter-spacing="0.6" fill="white">'
+            f"{esc_line(chip_txt)}</text>"
+        )
+        title_txt = _clip_svg_text(node.label, label_limit)
+        parts.append(
+            f'<text x="{x + 16 + chip_w:.1f}" y="{y + 19.2:.1f}" '
+            f'font-family="{font_sans}" font-size="11" font-weight="700" fill="{ink}">'
+            f"{esc_line(title_txt)}</text>"
+        )
+        if node.location:
+            loc_txt = _clip_svg_text(node.location, loc_limit)
+            parts.append(
+                f'<rect x="{x + 10:.1f}" y="{y + 29:.1f}" width="{card_w - 20}" height="18" rx="3" '
+                f'fill="white" stroke="{rule}" stroke-width="1"/>'
+            )
+            parts.append(
+                f'<text x="{x + 15:.1f}" y="{y + 41.5:.1f}" '
+                f'font-family="{font_mono}" font-size="9.5" fill="{muted}">{esc_line(loc_txt)}</text>'
+            )
+        if node.detail:
+            det_txt = _clip_svg_text(node.detail, detail_limit)
+            det_y = y + (66.0 if node.location else 48.0)
+            parts.append(
+                f'<text x="{x + 11:.1f}" y="{det_y:.1f}" '
+                f'font-family="{font_mono}" font-size="9.5" fill="{ink}">{esc_line(det_txt)}</text>'
+            )
+        parts.append("</g>")
+    parts.append("</g>")
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+def _flow_diagram(block: FlowDiagram) -> str:
+    badge_html = (
+        f'<span class="badge" data-state="confirmed">{esc_line(block.lane_badge)}</span>'
+        if block.lane_badge
+        else ""
+    )
+    cap_html = (
+        f'<figcaption class="flow-cap">{esc_line(block.caption)}</figcaption>'
+        if block.caption
+        else ""
+    )
+    svg = render_flow_svg(block, standalone=False)
+    return (
+        '<figure class="chart-card flow-card">'
+        f'<div class="chart-head"><h4>Code-Flow Diagram</h4>{badge_html}</div>'
+        f"{svg}{cap_html}</figure>"
+    )
+
+
 def _block(block: Block) -> str:
     if isinstance(block, Heading):
         level = min(max(block.level, 1), 4)
@@ -413,6 +613,8 @@ def _block(block: Block) -> str:
         return _bar_chart(block)
     if isinstance(block, Timeline):
         return _timeline(block)
+    if isinstance(block, FlowDiagram):
+        return _flow_diagram(block)
     if isinstance(block, PageBreak):
         return ""
     raise TypeError(f"unknown block {type(block).__name__}")

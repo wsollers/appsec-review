@@ -23,6 +23,7 @@ from appsec_review.review.secret_redaction import assignments_safe_prose_token, 
 from appsec_review.storage import canonical_json
 from .digest import bullets, code, field, table
 from .dimensions import DIMENSIONS, dimension_of_package, owasp_of_cwe_or_domain
+from .code_flow import build_dossier_flow_diagram
 from .model import Box, Document, Fields, Heading, Para, Stat, Stats
 from .technical_evidence import attack_path, citations, cited_path_rows
 from .text import bound, bound_lines, clean
@@ -702,6 +703,8 @@ def dossier_document(dossier: Mapping[str, Any], *, source_date_epoch: int = 0) 
                 Para("Preconditions"), bullets(dossier["preconditions"] or ["None recorded."], limits))),
         Heading(1, "Source-to-Sink Call & Taint Path Timeline", "taint-timeline"),
     ]
+    if (flow_diagram := build_dossier_flow_diagram(dossier)) is not None:
+        blocks.append(flow_diagram)
     rows = attack_path(dossier, citations(dossier))
     blocks.append(Box(BoxKind.EVIDENCE if dossier.get("finding_path_rows") else BoxKind.GAP,
                       "Cited static path" if dossier.get("finding_path_rows") else "No source-to-sink path recorded",
