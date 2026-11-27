@@ -3916,6 +3916,19 @@ timeout_seconds = 600
 max_tex_bytes = 8388608
 max_pdf_bytes = 16777216
 
+# End-of-review target archival, run-over-run efficacy report and smoke effectiveness scoring,
+# written under runs/<id>/data/efficacy/ and runs/<id>/data/verification/ via tool-report-latex.
+# Advisory post-completion finalizer: failures record receipt gaps and never fail the run.
+[reporting.efficacy_report]
+enabled = true
+render_pdf = true
+auto_smoke_score = true
+history_dir = "runs/metadata/finding-history"
+smoke_guide_dir = "../appsec-review-smoke-guide"
+timeout_seconds = 600
+max_tex_bytes = 8388608
+max_pdf_bytes = 16777216
+
 # ---------------------------------------------------------------------------------------------------------
 # Banned and unsafe C/C++ functions. A call to a listed name in C or C++ source is reported by Semgrep and
 # Opengrep as a review lead: `high` at ERROR (reported as high severity), `warning` at WARNING. A match is

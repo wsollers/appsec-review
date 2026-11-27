@@ -27,6 +27,7 @@ from appsec_review.runtime.runner import JobRunner
 from appsec_review.runtime import Job, job_is_enabled, plan_jobs
 from appsec_review.runtime.launch import begin as launch_begin, configured_target, launch_inputs
 from appsec_review.observability import PipelineLog, write_run_metrics
+from appsec_review.reporting.efficacy_finalize import finalize_efficacy_report
 from appsec_review.reporting.telemetry_finalize import finalize_telemetry_report
 from appsec_review.storage import atomic_json
 from appsec_review.orchestration.topology import (
@@ -406,6 +407,7 @@ def _build_dagster_graph(name: str, jobs: tuple[Job, ...], config: AppConfig | R
         })
         write_run_metrics(run_root)
         finalize_telemetry_report(run_root, config.telemetry_report, repository_root=config.runtime.repository_root)
+        finalize_efficacy_report(run_root, config.efficacy_report, runs_dir=config.runtime.runs_dir, repository_root=config.runtime.repository_root)
         return {"run_id": run_id, "trigger": trigger, **merged, "completion_status": completion,
                 "graph_started_at": started.isoformat(), "resume_decisions": ordered_decisions}
 

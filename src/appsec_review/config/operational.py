@@ -548,6 +548,12 @@ OPERATIONAL_SETTINGS = (
     OperationalSetting('job_tree_sitter_ast', ('settings', 'max_nodes_per_file'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_tree_sitter_ast', ('settings', 'max_nodes_per_scope'), category='coverage', value_type='positive_integer'),
     OperationalSetting('job_tree_sitter_ast', ('settings', 'max_source_bytes_per_scope'), category='coverage', value_type='positive_integer'),
+    OperationalSetting(None, ('reporting', 'efficacy_report', 'auto_smoke_score'), category='execution', value_type='boolean'),
+    OperationalSetting(None, ('reporting', 'efficacy_report', 'enabled'), category='execution', value_type='boolean'),
+    OperationalSetting(None, ('reporting', 'efficacy_report', 'max_pdf_bytes'), category='coverage', value_type='positive_integer'),
+    OperationalSetting(None, ('reporting', 'efficacy_report', 'max_tex_bytes'), category='coverage', value_type='positive_integer'),
+    OperationalSetting(None, ('reporting', 'efficacy_report', 'render_pdf'), category='execution', value_type='boolean'),
+    OperationalSetting(None, ('reporting', 'efficacy_report', 'timeout_seconds'), category='execution', value_type='positive_integer'),
     OperationalSetting(None, ('reporting', 'telemetry_report', 'max_pdf_bytes'), category='coverage', value_type='positive_integer'),
     OperationalSetting(None, ('reporting', 'telemetry_report', 'max_tex_bytes'), category='coverage', value_type='positive_integer'),
     OperationalSetting(None, ('reporting', 'telemetry_report', 'timeout_seconds'), category='execution', value_type='positive_integer'),
@@ -587,6 +593,11 @@ _IMPLICIT_OPERATIONAL_DEFAULTS: dict[tuple[str, ...], float] = {
     ('runtime', 'operation_progress_interval_seconds'): 60.0,
     ('runtime', 'operation_sample_interval_seconds'): 1.0,
 }
+
+
+def _implicit_section_defaults() -> dict[tuple[str, ...], Mapping[str, Any]]:
+    from .efficacy_report import EfficacyReportSettings
+    return {("reporting", "efficacy_report"): EfficacyReportSettings().view()}
 
 
 def _valid_operational_value(setting: OperationalSetting, value: Any) -> bool:
@@ -744,6 +755,9 @@ def operational_changes(before: Mapping[str, Any], after: Mapping[str, Any]) -> 
                     elif child_path in _IMPLICIT_OPERATIONAL_DEFAULTS and child_path in declarations:
                         default = _IMPLICIT_OPERATIONAL_DEFAULTS[child_path]
                         compare(left.get(key, default), right.get(key, default), child_path)
+                    elif child_path in _implicit_section_defaults():
+                        section_default = dict(_implicit_section_defaults()[child_path])
+                        compare(left.get(key, section_default), right.get(key, section_default), child_path)
                     elif child_path in retired_declarations:
                         retired_setting = retired_declarations[child_path]
                         for present in ([left[key]] if key in left else []) + ([right[key]] if key in right else []):

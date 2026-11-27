@@ -109,6 +109,7 @@ class GraphRunner:
     def _finish(self, run_root: Path) -> None:
         """After a terminal graph event and outside the resume lock: final metrics, then the report."""
         # Imported here: telemetry_render's own imports load this module, so a top-level import cycles.
+        from appsec_review.reporting.efficacy_finalize import finalize_efficacy_report
         from appsec_review.reporting.telemetry_finalize import finalize_telemetry_report
         from appsec_review.jobs.build_iterations import finish_build_workspaces
 
@@ -121,6 +122,9 @@ class GraphRunner:
                 LOGGER.warning("run metrics for %s were not written: %s", run_root.name, type(exc).__name__)
             finalize_telemetry_report(run_root, self.config.telemetry_report,
                                       repository_root=self.config.runtime.repository_root)
+            finalize_efficacy_report(run_root, self.config.efficacy_report,
+                                     runs_dir=self.config.runtime.runs_dir,
+                                     repository_root=self.config.runtime.repository_root)
 
     def _run(
         self,

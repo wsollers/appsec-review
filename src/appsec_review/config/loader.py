@@ -18,6 +18,7 @@ from urllib.parse import unquote, urlparse
 from .binary_decompilation import BinaryDecompilationSettings, parse_binary_decompilation
 from .target_acquisition import TargetAcquisitionSettings, parse_target_acquisition
 from .banned_functions import BannedFunctions, parse_banned_functions
+from .efficacy_report import EfficacyReportSettings, parse_efficacy_report
 from .telemetry_report import TelemetryReportSettings, parse_telemetry_report
 from .exclusions import (
     INVENTORY_FILE_BYTES_DEFAULT, PathExclusions, asset_class_rules, global_exclusions,
@@ -715,6 +716,7 @@ class AppConfig:
     selection_source: str = "environment"
     compiler_target: CompilerTarget = CompilerTarget.CLANG
     telemetry_report: TelemetryReportSettings = TelemetryReportSettings()
+    efficacy_report: EfficacyReportSettings = EfficacyReportSettings()
     signing: SigningConfig = SigningConfig()
     build_workspaces: BuildWorkspacePolicy = BuildWorkspacePolicy()
     host_pins: HostPins | None = None
@@ -1167,12 +1169,15 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
     reporting_value = document.get("reporting", {})
     if not isinstance(reporting_value, dict):
         raise ValueError("[reporting] must be a table")
-    if set(reporting_value) - {"telemetry_report"}:
+    allowed_reporting = {"telemetry_report", "efficacy_report"}
+    if set(reporting_value) - allowed_reporting:
         raise ValueError("[reporting] has unknown sections: "
-                         + ", ".join(sorted(set(reporting_value) - {"telemetry_report"})))
+                         + ", ".join(sorted(set(reporting_value) - allowed_reporting)))
     telemetry_report = parse_telemetry_report(reporting_value.get("telemetry_report"))
+    efficacy_report = parse_efficacy_report(reporting_value.get("efficacy_report"))
     if "reporting" in document:
         resolved_document["reporting"]["telemetry_report"] = telemetry_report.view()
+        resolved_document["reporting"]["efficacy_report"] = efficacy_report.view()
     signing = parse_signing(document.get("signing"), repository_root)
     resolved_document["signing"] = signing.view()
     resolved_document["build_capture"]["mode"] = build_capture.mode.value
@@ -1653,6 +1658,7 @@ def load_config(path: str | Path = "appsec-review.toml", *, overlay: str | Path 
         review_policy=review_policy,
         compiler_target=selected_compiler,
         telemetry_report=telemetry_report,
+        efficacy_report=efficacy_report,
         signing=signing,
         host_pins=pins,
     )

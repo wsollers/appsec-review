@@ -325,9 +325,10 @@ def _no_telemetry_report_container(request: pytest.FixtureRequest, monkeypatch: 
         return
     if relative.parts and relative.parts[0] in {"integration", "live"} or relative.name.startswith("test_live_"):
         return
-    from appsec_review.reporting import telemetry_finalize
+    from appsec_review.reporting import efficacy_finalize, telemetry_finalize
 
     monkeypatch.setattr(telemetry_finalize, "render_telemetry_report", lambda *args, **kwargs: None)
+    monkeypatch.setattr(efficacy_finalize, "run_efficacy_finalization", lambda *args, **kwargs: None)
 
 
 @pytest.fixture

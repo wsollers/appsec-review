@@ -1,4 +1,4 @@
-"""Command line: ``python -m appsec_review.reporting render|telemetry|palette``.
+"""Command line: ``python -m appsec_review.reporting render|telemetry|efficacy|palette``.
 
 ``render`` writes ``report.html`` (format ``html``) or ``report.tex`` plus ``source-date-epoch``
 (format ``tex``, the input of the ``tool-report-latex`` image) into ``--out``. It never writes into
@@ -19,7 +19,9 @@ import shutil
 import sys
 from typing import Sequence
 
+from appsec_review.config.efficacy_report import EfficacyReportSettings, parse_efficacy_report
 from appsec_review.config.telemetry_report import TelemetryReportSettings, parse_telemetry_report
+from .efficacy_finalize import run_efficacy_finalization
 from .html import render_html
 from .latex import PALETTE, default_template_dir, render_latex
 from .loader import Selection, load_document
@@ -55,6 +57,19 @@ def _parser() -> argparse.ArgumentParser:
                            help="tex or pdf (default: tex with --out, otherwise pdf)")
     telemetry.add_argument("--out", default=None, help="output directory (created); required for tex")
     telemetry.add_argument("--config", default=None, help="appsec-review.toml to take settings from")
+    efficacy = commands.add_parser(
+        "efficacy",
+        help="archive target findings and render Run-over-Run + smoke effectiveness reports",
+        description="Archives the completed run under the target's finding-history store and renders "
+                    "run-over-run-report.{json,md,tex,pdf} (and smoke-effectiveness outputs when "
+                    "enabled) into <run>/data/efficacy/ and, with --out, copies produced files there.",
+    )
+    efficacy.add_argument("--run", required=True, help="run id (under --runs-dir) or a run directory")
+    efficacy.add_argument("--runs-dir", default="runs", help="directory holding run directories (default: runs)")
+    efficacy.add_argument("--format", choices=("md", "tex", "pdf"), default=None,
+                          help="md, tex, or pdf (default: md with --out, otherwise pdf)")
+    efficacy.add_argument("--out", default=None, help="optional directory to copy produced artifacts into")
+    efficacy.add_argument("--config", default=None, help="appsec-review.toml to take settings from")
     palette = commands.add_parser("palette", help="print or write the generated LaTeX palette")
     palette.add_argument("--write", action="store_true", help="write it into the template directory")
     palette.add_argument("--template-dir", default=None)
@@ -128,10 +143,79 @@ def _telemetry(args: argparse.Namespace, renderer=None) -> int:
     return 0 if receipt.status in {"rendered", "tex_only"} else 1
 
 
-def main(argv: Sequence[str] | None = None, *, telemetry_renderer=None) -> int:
+def _efficacy_settings(
+    run_dir: Path,
+    runs_dir_arg: str,
+    config: str | None,
+) -> tuple[EfficacyReportSettings, Path, Path | None]:
+    if config is not None:
+        from appsec_review.config import load_config
+
+        loaded = load_config(config)
+        return loaded.efficacy_report, loaded.runtime.runs_dir, loaded.runtime.repository_root
+    resolved = run_dir / "data" / "configuration" / "resolved.json"
+    if resolved.is_file():
+        document = json.loads(resolved.read_bytes())
+        reporting = document.get("reporting") if isinstance(document, dict) else None
+        return parse_efficacy_report((reporting or {}).get("efficacy_report")), Path(runs_dir_arg), None
+    return EfficacyReportSettings(), Path(runs_dir_arg), None
+
+
+def _efficacy(args: argparse.Namespace, renderer=None) -> int:
+    run_dir = _resolve_run(args.run, args.runs_dir)
+    if not (run_dir / "data").is_dir():
+        print(f"error: {run_dir} is not a run directory (no data/ subdirectory)", file=sys.stderr)
+        return 2
+    output_format = args.format or ("md" if args.out else "pdf")
+    out = Path(args.out) if args.out else None
+    try:
+        settings, runs_dir, repository_root = _efficacy_settings(run_dir, args.runs_dir, args.config)
+        effective = replace(settings, enabled=True, render_pdf=(output_format == "pdf"))
+        result = (renderer or run_efficacy_finalization)(
+            run_dir,
+            effective,
+            runs_dir=runs_dir,
+            repository_root=repository_root,
+            out_dir=out,
+            render_pdf_override=(output_format == "pdf"),
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+
+    status = str(result.get("status") or "failed")
+    if status == "skipped_incomplete_run":
+        print(json.dumps({"format": output_format, "run_id": run_dir.name, "status": status, "files": []}, sort_keys=True))
+        return 1
+
+    scan_dirs = [out] if out is not None else [run_dir / "data" / "efficacy", run_dir / "data" / "verification"]
+    files: list[str] = []
+    for directory in scan_dirs:
+        for candidate in sorted(directory.iterdir()) if directory.is_dir() else ():
+            if candidate.is_file():
+                files.append(str(candidate))
+    print(
+        json.dumps(
+            {
+                "format": output_format,
+                "run_id": run_dir.name,
+                "target_id": result.get("target_id"),
+                "cohort_size": result.get("cohort_size"),
+                "status": status,
+                "files": files,
+            },
+            sort_keys=True,
+        )
+    )
+    ok_statuses = {"rendered"} if output_format == "pdf" else {"rendered", "latex_only", "tex_only"}
+    return 0 if status in ok_statuses else 1
+
+def main(argv: Sequence[str] | None = None, *, telemetry_renderer=None, efficacy_renderer=None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "telemetry":
         return _telemetry(args, telemetry_renderer)
+    if args.command == "efficacy":
+        return _efficacy(args, efficacy_renderer)
     if args.command == "palette":
         directory = Path(args.template_dir) if args.template_dir else default_template_dir()
         if args.write:
