@@ -1,4 +1,10 @@
-"""Dataset publication declarations for ``job_final_report_publication``."""
+"""Dataset publication declarations for ``job_final_report_publication``.
+
+``final_report_publications`` claims ``steps/report/tasks/render/**`` and
+``steps/report/tasks/render_pdf/**``, covering both ``final-report.{md,html,tex,pdf}``
+and the streamlined ``executive-report-candidate-{a,b,c}.{md,html,tex,pdf}`` artifacts
+plus their hash-pinned receipts.
+"""
 
 from __future__ import annotations
 

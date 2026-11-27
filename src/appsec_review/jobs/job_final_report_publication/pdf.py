@@ -23,8 +23,12 @@ from appsec_review.container_runtime.catalog import load_catalog
 from appsec_review.container_runtime.executor import ContainerExecutor, ExecutionRequest, Mount
 from appsec_review.jobs.bound_artifacts import artifact_ref, read_bound_json
 from appsec_review.jobs.completion_contracts import DOSSIER_SCHEMA
-from appsec_review.reporting.dossier_render import TOOL_ID
+from appsec_review.reporting.dossier_render import TOOL_ID, template_identity as dossier_template_identity
 from appsec_review.reporting.dossier_receipts import verify_additional_formats
+from appsec_review.reporting.executive_candidates import (
+    build_executive_candidate_document,
+    render_executive_candidate_latex,
+)
 from appsec_review.reporting.executive_report import RENDERER, BoundDossier, executive_document
 from appsec_review.reporting.executive_latex import render_latex, template_identity
 from appsec_review.review.models import IntegrityError
@@ -95,11 +99,33 @@ def render_executive_latex(report: Mapping[str, Any], dossiers: Sequence[BoundDo
     return text.encode("utf-8")
 
 
+def render_executive_candidate_latex_bytes(
+    candidate_id: str,
+    report: Mapping[str, Any],
+    dossiers: Sequence[BoundDossier],
+    template: Path,
+) -> bytes:
+    """``executive-report-candidate-{a,b,c}.tex``: pure deterministic LaTeX from report + bound dossiers."""
+    doc_one = build_executive_candidate_document(
+        candidate_id, report, dossiers=dossiers, source_date_epoch=SOURCE_DATE_EPOCH,
+    )
+    doc_two = build_executive_candidate_document(
+        candidate_id, report, dossiers=dossiers, source_date_epoch=SOURCE_DATE_EPOCH,
+    )
+    text = render_executive_candidate_latex(doc_one, template_dir=template)
+    again = render_executive_candidate_latex(doc_two, template_dir=template)
+    if text != again:
+        raise IntegrityError(f"executive candidate {candidate_id} LaTeX rendering is not deterministic")
+    return text.encode("utf-8")
+
+
 def valid_pdf(data: bytes, limit: int) -> bool:
     return 32 < len(data) <= limit and data.startswith(b"%PDF-") and data.rstrip().endswith(b"%%EOF")
 
 
-def _retain_execution(root: Path, output: Path, result: Any, limit: int) -> dict[str, str] | None:
+def _retain_execution(
+    root: Path, output: Path, result: Any, limit: int, *, prefix: str = "",
+) -> dict[str, str] | None:
     execution_path = root / result.receipt_path
     if not execution_path.is_file():
         return None
@@ -107,43 +133,58 @@ def _retain_execution(root: Path, output: Path, result: Any, limit: int) -> dict
     for key in ("stdout_path", "stderr_path"):
         stream = root / execution[key]
         if stream.is_file() and not stream.is_symlink() and stream.stat().st_size <= limit:
-            destination = output / ("container-" + key.removesuffix("_path") + ".bin")
+            destination = output / (prefix + "container-" + key.removesuffix("_path") + ".bin")
             atomic_bytes(destination, stream.read_bytes())
             execution[key] = destination.relative_to(root).as_posix()
-    retained = output / "container-execution.json"
+    retained = output / (prefix + "container-execution.json")
     atomic_json(retained, execution)
     return artifact_ref(root, retained)
 
 
-def render_executive_pdf(run_root: Path, output_dir: Path, report: Mapping[str, Any],
-                         dossiers: Sequence[BoundDossier], *, report_ref: Mapping[str, str],
-                         settings: FinalReportSettings, repository_root: Path,
-                         executor_factory: ExecutorFactory = ContainerExecutor) -> dict[str, Any]:
-    """Write ``final-report.tex``, the PDF when the container produced a valid one, and the receipt."""
+def render_executive_pdf(
+    run_root: Path,
+    output_dir: Path,
+    report: Mapping[str, Any],
+    dossiers: Sequence[BoundDossier],
+    *,
+    report_ref: Mapping[str, str],
+    settings: FinalReportSettings,
+    repository_root: Path,
+    executor_factory: ExecutorFactory = ContainerExecutor,
+    stem: str = "final-report",
+    receipt_name: str = RECEIPT_NAME,
+    artifact_prefix: str = "",
+    latex_bytes: bytes | None = None,
+    template_identity_fn: Callable[[Path], dict[str, Any]] = template_identity,
+    gap_prefix: str = "final_report_pdf",
+) -> dict[str, Any]:
+    """Write ``<stem>.tex``, the PDF when the container produced a valid one, and ``<receipt_name>``."""
     root = Path(run_root).resolve()
     output = Path(output_dir).resolve()
     if root not in output.parents:
         raise IntegrityError("executive report output must be run-owned")
     output.mkdir(parents=True, exist_ok=True)
-    if any((output / name).exists() for name in (TEX_NAME, PDF_NAME, RECEIPT_NAME)):
+    tex_name = TEX_NAME if stem == "final-report" else f"{stem}.tex"
+    pdf_name = PDF_NAME if stem == "final-report" else f"{stem}.pdf"
+    if any((output / name).exists() for name in (tex_name, pdf_name, receipt_name)):
         raise IntegrityError("executive report output directory is not fresh")
     template = template_dir(repository_root)
-    identity = template_identity(template)
-    tex = render_executive_latex(report, dossiers, template)
+    identity = template_identity_fn(template)
+    tex = render_executive_latex(report, dossiers, template) if latex_bytes is None else latex_bytes
     if len(tex) > settings.max_pdf_bytes:
         raise IntegrityError("executive report LaTeX exceeds max_pdf_bytes")
-    atomic_bytes(output / TEX_NAME, tex)
-    files: dict[str, Any] = {"latex": artifact_ref(root, output / TEX_NAME), "pdf": None}
+    atomic_bytes(output / tex_name, tex)
+    files: dict[str, Any] = {"latex": artifact_ref(root, output / tex_name), "pdf": None}
     gaps = [row.gap for row in dossiers if row.gap]
     tool_identity: dict[str, Any] = {"id": TOOL_ID, "tag": settings.image_tag, "image_id": settings.image_id}
     execution_ref = None
     pdf_sha256 = None
     if not settings.render_pdf:
         status = "not_rendered"
-        gaps.append("final_report_pdf_disabled_by_policy")
+        gaps.append(f"{gap_prefix}_disabled_by_policy")
     else:
         status = "render_failed"
-        inputs, scratch = output / "input", output / "scratch"
+        inputs, scratch = output / f"{artifact_prefix}input", output / f"{artifact_prefix}scratch"
         inputs.mkdir()
         scratch.mkdir()
         atomic_bytes(inputs / "report.tex", tex)
@@ -160,11 +201,11 @@ def render_executive_pdf(run_root: Path, output_dir: Path, report: Mapping[str, 
                 extra_mounts=(Mount(template, "/template"), Mount(inputs, "/input")),
                 environment={"SOURCE_DATE_EPOCH": str(SOURCE_DATE_EPOCH)},
                 working_directory="/scratch", file_size_limit_bytes=settings.max_pdf_bytes))
-            execution_ref = _retain_execution(root, output, result, settings.max_pdf_bytes)
+            execution_ref = _retain_execution(root, output, result, settings.max_pdf_bytes, prefix=artifact_prefix)
             for name in RETAINED_LOGS:
                 source = scratch / name
                 if source.is_file() and not source.is_symlink() and source.stat().st_size <= settings.max_pdf_bytes:
-                    atomic_bytes(output / name, source.read_bytes())
+                    atomic_bytes(output / f"{artifact_prefix}{name}", source.read_bytes())
             pdf = scratch / "report.pdf"
             data = b""
             if (result.exit_code == 0 and not result.timed_out and not result.oom_killed
@@ -172,23 +213,23 @@ def render_executive_pdf(run_root: Path, output_dir: Path, report: Mapping[str, 
                     and pdf.stat().st_size <= settings.max_pdf_bytes):
                 data = pdf.read_bytes()
             if valid_pdf(data, settings.max_pdf_bytes):
-                atomic_bytes(output / PDF_NAME, data)
-                files["pdf"] = artifact_ref(root, output / PDF_NAME)
+                atomic_bytes(output / pdf_name, data)
+                files["pdf"] = artifact_ref(root, output / pdf_name)
                 pdf_sha256 = files["pdf"]["sha256"]
                 status = "rendered"
             else:
-                gaps.append(f"final_report_pdf_render_failed: {result.terminal_status}, exit={result.exit_code}")
+                gaps.append(f"{gap_prefix}_render_failed: {result.terminal_status}, exit={result.exit_code}")
         except ValueError as exc:
             # A changed immutable tool pin or configuration is an integrity failure, not a rendering gap.
             raise IntegrityError(f"executive report renderer configuration or image integrity failure: {exc}") from exc
         except (OSError, RuntimeError) as exc:
-            gaps.append("final_report_pdf_renderer_unavailable: " + type(exc).__name__ + ": "
+            gaps.append(f"{gap_prefix}_renderer_unavailable: " + type(exc).__name__ + ": "
                         + (redact_message(str(exc), bound=240) or "No diagnostic supplied."))
         finally:
             # Only these two freshly created, run-owned staging directories are disposable.
-            shutil.rmtree(inputs)
-            shutil.rmtree(scratch)
-    if template_identity(template) != identity:
+            shutil.rmtree(inputs, ignore_errors=True)
+            shutil.rmtree(scratch, ignore_errors=True)
+    if template_identity_fn(template) != identity:
         raise IntegrityError("report template changed during rendering")
     receipt = {
         "schema": RECEIPT_SCHEMA, "run_id": report["run_id"], "status": status, "reason": REASONS[status],
@@ -202,10 +243,11 @@ def render_executive_pdf(run_root: Path, output_dir: Path, report: Mapping[str, 
         "policy": {"network": "none", "shell_escape": False, "input_read_only": True, "template_read_only": True,
                    "source_excerpts": "not_included", "generated_code_execution": "not_performed_by_policy"},
     }
-    atomic_bytes(output / RECEIPT_NAME, canonical_json(receipt))
-    return {"status": status, "reason": REASONS[status], "files": {**files, "receipt": artifact_ref(root, output / RECEIPT_NAME)},
+    atomic_bytes(output / receipt_name, canonical_json(receipt))
+    return {"status": status, "reason": REASONS[status], "files": {**files, "receipt": artifact_ref(root, output / receipt_name)},
             "tex_sha256": receipt["tex_sha256"], "pdf_sha256": pdf_sha256, "gaps": receipt["named_gaps"]}
 
 
-__all__ = ["RECEIPT_SCHEMA", "TEX_NAME", "PDF_NAME", "RECEIPT_NAME", "bind_dossiers", "render_executive_latex",
+__all__ = ["RECEIPT_SCHEMA", "SOURCE_DATE_EPOCH", "TEX_NAME", "PDF_NAME", "RECEIPT_NAME", "bind_dossiers",
+           "dossier_template_identity", "render_executive_candidate_latex_bytes", "render_executive_latex",
            "render_executive_pdf", "template_dir", "valid_pdf"]

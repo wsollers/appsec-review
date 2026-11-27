@@ -649,3 +649,321 @@ def test_unverified_link_trust_boundary_renders_domain_transition_and_preserves_
     v4_card_def = v4_schema["$defs"]["attack_chain_card"]
     assert v4_card_def["properties"]["trust_boundary_crossed"] == {"const": "[unverified link]"}
     assert "component" in v4_card_def["properties"]["steps"]["items"]["properties"]["role"]["enum"]
+
+
+def _candidate_job_fixture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    render_pdf: bool = True,
+) -> tuple[Any, dict[str, Any]]:
+    from types import SimpleNamespace
+    from appsec_review.config import JobConfig
+    from appsec_review.indexing.store import AcceptedHandoff
+    from appsec_review.jobs.bound_artifacts import artifact_ref
+    from appsec_review.jobs.completion_contracts import DOSSIER_PUBLICATION_SCHEMA
+    from appsec_review.jobs.engineering_contracts import FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA
+    from appsec_review.jobs.job_final_publication_gate import verify as gate_verify
+    from appsec_review.jobs.job_final_publication_gate.attachments import _dossiers
+    from appsec_review.jobs.job_final_report_publication import JOB_ID
+    from appsec_review.reporting.dossier_render import render_dossier
+    from appsec_review.reporting.dossiers import build_dossier
+    from appsec_review.runtime import JobContext, UnitContext
+    from appsec_review.storage import atomic_json
+    from tests.dossier_fixture import settings as dossier_settings
+    from tests.unit.review_decision_audit_wiring.helpers import events, put
+
+    gate_job = "job_final_publication_gate"
+    attempt = f"data/jobs/{JOB_ID}/attempts/attempt_0001"
+    image_tag = "appsec-review/tool-report-latex:1.0.0"
+    image_id = "sha256:" + "ab" * 32
+    raw_excerpt = "SECRET_SOURCE_EXCERPT_strcpy(stack_buf, user_hdr);"
+
+    root = tmp_path / "run-exec-candidates"
+    verified = verified_document()
+    verified["run_id"] = root.name
+    for name in verified["inputs"]:
+        verified["inputs"][name] = put(root, f"data/{name}.json", {"input": name})
+    verified["bindings"] = list(verified["inputs"].values())
+
+    finding = verified["packages"][0]
+    dossier_doc = build_dossier(
+        run_id=root.name,
+        kind="confirmed_finding",
+        finding=finding,
+        claim={
+            "claim_id": finding["claim_id"],
+            "state": finding["state"],
+            "statement": "Untrusted frame header length reaches fixed buffer copy without validation.",
+            "weakness_cwe": "CWE-120",
+            "security_predicate": "memory_corruption",
+            "preconditions": [],
+        },
+        relations=[
+            {
+                "relation_id": key,
+                "claim_id": finding["claim_id"],
+                "kind": "supports",
+                "admissibility": "direct",
+                "complete": True,
+            }
+            for key in finding["direct_evidence"] + finding["analyst_assessed_evidence"]
+        ],
+        excerpts=[
+            {
+                "identity": "asr:source_file:" + "f" * 64,
+                "location": {
+                    "path": "src/parser.c",
+                    "source_id": "s",
+                    "file_sha256": "f" * 64,
+                    "target_snapshot": "synthetic-snapshot",
+                    "mapping_method": "exact",
+                    "ambiguous": False,
+                },
+                "excerpt_start_line": 40,
+                "excerpt_end_line": 52,
+                "excerpt": raw_excerpt,
+            }
+        ],
+        provenance={},
+    )
+    dossier_base = "data/jobs/job_dossier_publication/attempts/attempt_0001/steps/dossiers/tasks/create/d1"
+    item = render_dossier(
+        root,
+        root / dossier_base,
+        dossier_doc,
+        settings=dossier_settings(render_pdf=False),
+        repository_root=ROOT,
+        executor_factory=lambda *_: pytest.fail("dossier PDF disabled"),
+    )
+    publication = {
+        "schema": DOSSIER_PUBLICATION_SCHEMA,
+        "run_id": root.name,
+        "items": [item],
+        "omitted": [],
+        "counts": {
+            "admitted": 1,
+            "items": 1,
+            "omitted": 0,
+            "by_kind": {"confirmed_finding": 1, "poc": 0},
+            "by_status": {"rendered": 0, "render_failed": 0, "latex_only": 1},
+        },
+        "caps": {"max_dossiers": 1},
+    }
+    verified["attachments"]["dossiers"] = _dossiers(
+        root,
+        publication,
+        {row["finding_package_id"]: row for row in verified["packages"]},
+        [],
+        verified["bindings"],
+    )
+    d_handoff = put(root, "data/jobs/job_dossier_publication/attempts/attempt_0001/handoff.json", {"job": "dossiers"})
+    d_summary = put(root, "data/jobs/job_dossier_publication/attempts/attempt_0001/summary.json", publication)
+    verified["capabilities"]["dossiers"] = capability(True, handoff=d_handoff, summary=d_summary, count=1)
+    verified["bindings"] += [d_handoff, d_summary]
+    verified["bindings"] = [
+        {"path": p, "sha256": d}
+        for p, d in sorted({(row["path"], row["sha256"]) for row in verified["bindings"]})
+    ]
+
+    config_ref = put(root, "data/configuration/resolved.json", {"jobs": {JOB_ID: {"settings": {"render_timeout_seconds": 600}}}})
+    put(root, "data/configuration/manifest.json", {"resolved_sha256": config_ref["sha256"]})
+    verified["bindings"].append(config_ref)
+
+    classification = gate_classify.classify(verified)
+    gate = gate_classify.gate_document(FINAL_PUBLICATION_GATE_SCHEMA, verified, classification)
+    gate_path = root / "data/jobs/job_final_publication_gate/attempts/attempt_0001/steps/acceptance/tasks/publish_handoff/final-publication-gate.json"
+    atomic_json(gate_path, gate)
+    gate_ref = artifact_ref(root, gate_path)
+    handoff_payload = {
+        "job_id": gate_job,
+        "outputs": {
+            "acceptance.publish_handoff": {
+                "schema": FINAL_PUBLICATION_GATE_HANDOFF_SCHEMA,
+                "artifact": gate_ref,
+                "item_count": gate["package_counts"]["total"],
+            }
+        },
+    }
+    handoff_ref = put(root, "data/jobs/job_final_publication_gate/attempts/attempt_0001/handoff.json", handoff_payload)
+    accepted = AcceptedHandoff(gate_job, handoff_payload, handoff_ref["sha256"], handoff_ref["path"])
+    monkeypatch.setattr(
+        gate_verify,
+        "accepted_handoff",
+        lambda _run_root, jid: accepted if jid == gate_job else None,
+    )
+    settings = {
+        "enabled": True,
+        "markdown_evidence_ids": 8,
+        "markdown_gap_ids": 16,
+        "render_pdf": render_pdf,
+        "image_tag": image_tag,
+        "image_id": image_id,
+        "render_timeout_seconds": 600,
+        "max_pdf_bytes": 16777216,
+    }
+    cfg = JobConfig(JOB_ID, "final_report_publication", 1, None, settings, {})
+    job_ctx = JobContext(
+        root.name,
+        "attempt_0001",
+        "unit-fixture",
+        ROOT,
+        root,
+        root / attempt,
+        root / "metadata",
+        {},
+        cfg,
+        events(),
+        upstream_handoffs={gate_job: accepted.sha256},
+    )
+
+    def mk_unit(unit_id: str, outputs: dict[str, Any] | None = None) -> UnitContext:
+        step, task = unit_id.split(".")
+        return UnitContext(
+            job_ctx,
+            unit_id,
+            step,
+            task,
+            root / attempt / "steps" / step / "tasks" / task,
+            outputs or {},
+        )
+
+    fx = SimpleNamespace(
+        root=root,
+        attempt=attempt,
+        image_id=image_id,
+        raw_excerpt=raw_excerpt,
+        unit=mk_unit,
+    )
+    return fx, dossier_doc
+
+
+def _candidate_executor(*, fail_on_run_index: int | None = None):
+    from appsec_review.container_runtime.executor import CommandOutcome, ContainerExecutor
+
+    image_id = "sha256:" + "ab" * 32
+    pdf_bytes = b"%PDF-1.5\n" + b"streamlined candidate pdf " * 4 + b"\n%%EOF\n"
+    run_counter = {"count": 0}
+
+    class FixtureExecutor(ContainerExecutor):
+        def _docker_bind_source(self, path):
+            return path
+
+    def factory(catalog, root):
+        def runner(argv, timeout):
+            if argv[1:3] == ("image", "inspect"):
+                return CommandOutcome(0, image_id.encode(), b"")
+            if "run" in argv:
+                idx = run_counter["count"]
+                run_counter["count"] += 1
+                mounts = [argv[i + 1] for i, val in enumerate(argv) if val == "--mount"]
+                spec = next(item for item in mounts if "dst=/scratch" in item)
+                scratch = Path(spec.split("src=", 1)[1].split(",dst=")[0])
+                (scratch / "report.log").write_bytes(b"xelatex log\n")
+                (scratch / "report.pdfinfo.txt").write_bytes(b"Pages: 5\n")
+                if fail_on_run_index is not None and idx == fail_on_run_index:
+                    return CommandOutcome(1, b"candidate xelatex failure", b"error")
+                (scratch / "report.pdf").write_bytes(pdf_bytes)
+                return CommandOutcome(0, b"ok", b"")
+            return CommandOutcome(0, b"", b"")
+
+        return FixtureExecutor(catalog, root, runner=runner)
+
+    return factory
+
+
+def test_final_report_job_publishes_executive_candidates_and_claims_all_datasets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from appsec_review.indexing.inventory import Claim, FileClaims, runtime_claims, scan_run_tree
+    from appsec_review.jobs.bound_artifacts import read_bound, read_bound_json
+    from appsec_review.jobs.job_final_report_publication import JOB_ID, build_job
+    from appsec_review.jobs.job_final_report_publication.datasets import DATASETS
+    from appsec_review.reporting.executive_candidates import CANDIDATE_IDS, CANDIDATE_LABELS, CANDIDATE_TITLES
+
+    fx, _dossier = _candidate_job_fixture(tmp_path, monkeypatch, render_pdf=True)
+    built = build_job(executor_factory=_candidate_executor())
+    outputs: dict[str, Any] = {}
+    for unit in built.units:
+        outputs[unit.unit_id] = unit.handler(fx.unit(unit.unit_id, outputs))
+
+    rendered = outputs["report.render"]
+    pdf_out = outputs["report.render_pdf"]
+    published = outputs["acceptance.publish_handoff"]
+    assert published["terminal_status"] == "SUCCEEDED"
+    assert set(rendered["executive_candidates"]) == set(CANDIDATE_IDS)
+    assert set(pdf_out["executive_candidates"]) == set(CANDIDATE_IDS)
+    assert set(published["executive_candidates"]) == set(CANDIDATE_IDS)
+
+    render_dir = fx.root / fx.attempt / "steps/report/tasks/render"
+    pdf_dir = fx.root / fx.attempt / "steps/report/tasks/render_pdf"
+    assert (render_dir / "final-report.md").is_file()
+    assert (render_dir / "final-report.html").is_file()
+    assert (pdf_dir / "final-report.tex").is_file()
+    assert (pdf_dir / "final-report.pdf").is_file()
+    assert (pdf_dir / "receipt.json").is_file()
+
+    for cid in CANDIDATE_IDS:
+        entry = published["executive_candidates"][cid]
+        assert entry["label"] == CANDIDATE_LABELS[cid]
+        assert entry["title"] == CANDIDATE_TITLES[cid]
+        assert entry["markdown"]["path"].endswith(f"steps/report/tasks/render/executive-report-candidate-{cid}.md")
+        assert entry["html"]["path"].endswith(f"steps/report/tasks/render/executive-report-candidate-{cid}.html")
+        assert entry["pdf"]["state"] == "rendered"
+        assert entry["pdf"]["latex"]["path"].endswith(f"steps/report/tasks/render_pdf/executive-report-candidate-{cid}.tex")
+        assert entry["pdf"]["file"]["path"].endswith(f"steps/report/tasks/render_pdf/executive-report-candidate-{cid}.pdf")
+        assert entry["pdf"]["receipt"]["path"].endswith(f"steps/report/tasks/render_pdf/receipt-candidate-{cid}.json")
+        receipt = read_bound_json(fx.root, entry["pdf"]["receipt"])
+        _validator("final-report-pdf-receipt").validate(receipt)
+        for ref in (entry["markdown"], entry["html"], entry["pdf"]["latex"]):
+            body = read_bound(fx.root, ref).decode("utf-8")
+            assert fx.raw_excerpt not in body
+            assert "SECRET_SOURCE_EXCERPT" not in body
+            assert "<redacted:" not in body.lower()
+
+    claims = runtime_claims({JOB_ID: ("load", "report", "acceptance")}) + [
+        Claim(JOB_ID, item.step, item.output_kind, item) for item in DATASETS
+    ]
+    tree = scan_run_tree(fx.root, FileClaims(claims), max_files=10_000)
+    unaccounted = [p for p in tree.unaccounted if p.startswith(f"data/jobs/{JOB_ID}")]
+    assert unaccounted == []
+
+
+def test_final_report_executive_candidate_pdf_failure_and_tamper_custody(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from appsec_review.jobs.bound_artifacts import artifact_ref
+    from appsec_review.jobs.job_final_report_publication import build_job
+    from appsec_review.review.models import IntegrityError
+    from appsec_review.storage import atomic_bytes
+
+    # Run index 0 = final-report.pdf (succeeds); run index 2 = Candidate B PDF (fails)
+    fx, _dossier = _candidate_job_fixture(tmp_path, monkeypatch, render_pdf=True)
+    built = build_job(executor_factory=_candidate_executor(fail_on_run_index=2))
+    outputs: dict[str, Any] = {}
+    for unit in built.units:
+        outputs[unit.unit_id] = unit.handler(fx.unit(unit.unit_id, outputs))
+
+    pdf_out = outputs["report.render_pdf"]
+    published = outputs["acceptance.publish_handoff"]
+    assert pdf_out["status"] == "rendered"
+    assert pdf_out["executive_candidates"]["a"]["status"] == "rendered"
+    assert pdf_out["executive_candidates"]["b"]["status"] == "render_failed"
+    assert pdf_out["executive_candidates"]["b"]["files"]["pdf"] is None
+    assert (fx.root / pdf_out["executive_candidates"]["b"]["files"]["latex"]["path"]).is_file()
+    assert pdf_out["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert published["terminal_status"] == "COMPLETED_WITH_GAPS"
+    assert any(gap["scope_id"] == "executive_candidate_b_pdf" for gap in pdf_out["gaps"])
+    assert any(gap["scope_id"] == "executive_candidate_b_pdf" for gap in published["gaps"])
+
+    # Tampering with Candidate A Markdown after render fails closed in publish_handoff:
+    cand_a_md = fx.root / outputs["report.render"]["executive_candidates"]["a"]["markdown"]["path"]
+    original_bytes = cand_a_md.read_bytes()
+    atomic_bytes(cand_a_md, b"# tampered candidate markdown\n")
+    forged_render = deepcopy(outputs["report.render"])
+    forged_render["executive_candidates"]["a"]["markdown"] = artifact_ref(fx.root, cand_a_md)
+    with pytest.raises(IntegrityError, match="executive-report-candidate-a.md"):
+        built.units[-1].handler(
+            fx.unit("acceptance.publish_handoff", {**outputs, "report.render": forged_render})
+        )
+    atomic_bytes(cand_a_md, original_bytes)

@@ -30,6 +30,14 @@ from appsec_review.jobs.job_final_publication_gate.verify import (
 )
 from appsec_review.jobs.job_inference_security_review.schemas import SchemaSet
 from appsec_review.reporting.dimensions import radar_telemetry
+from appsec_review.reporting.executive_candidates import (
+    CANDIDATE_IDS,
+    CANDIDATE_LABELS,
+    CANDIDATE_TITLES,
+    build_executive_candidate_document,
+    render_executive_candidate_html,
+    render_executive_candidate_markdown,
+)
 from appsec_review.reporting.executive_report import render_executive_html
 from appsec_review.reporting.sarif_contracts import SARIF_DOCUMENT_NAME, SARIF_RESULT_NAME
 from appsec_review.review.models import IntegrityError
@@ -40,7 +48,15 @@ from appsec_review.storage import atomic_bytes, atomic_json
 from .contracts import FINAL_REPORT_SCHEMA_SHA256
 from .datasets import CONTRACT, DATASETS
 from .pdf import (
-    ExecutorFactory, bind_dossiers, render_executive_latex, render_executive_pdf, template_dir, valid_pdf,
+    SOURCE_DATE_EPOCH,
+    ExecutorFactory,
+    bind_dossiers,
+    dossier_template_identity,
+    render_executive_candidate_latex_bytes,
+    render_executive_latex,
+    render_executive_pdf,
+    template_dir,
+    valid_pdf,
 )
 from .render import render_markdown
 from .report import build_report, report_schema_name
@@ -202,9 +218,32 @@ def build_job(*, repository_root: Path | None = None,
         html_path = unit.unit_root / REPORT_HTML
         atomic_bytes(path, text.encode("utf-8"))
         atomic_bytes(html_path, html_text.encode("utf-8"))
+        candidate_refs: dict[str, dict[str, dict[str, str]]] = {}
+        for cid in CANDIDATE_IDS:
+            doc_one = build_executive_candidate_document(
+                cid, report, dossiers=dossiers, source_date_epoch=SOURCE_DATE_EPOCH,
+            )
+            doc_two = build_executive_candidate_document(
+                cid, report, dossiers=dossiers, source_date_epoch=SOURCE_DATE_EPOCH,
+            )
+            cand_md = render_executive_candidate_markdown(doc_one)
+            if cand_md != render_executive_candidate_markdown(doc_two):
+                raise IntegrityError(f"executive candidate {cid} Markdown rendering is not deterministic")
+            cand_html = render_executive_candidate_html(doc_one)
+            if cand_html != render_executive_candidate_html(doc_two):
+                raise IntegrityError(f"executive candidate {cid} HTML rendering is not deterministic")
+            cand_md_path = unit.unit_root / f"executive-report-candidate-{cid}.md"
+            cand_html_path = unit.unit_root / f"executive-report-candidate-{cid}.html"
+            atomic_bytes(cand_md_path, cand_md.encode("utf-8"))
+            atomic_bytes(cand_html_path, cand_html.encode("utf-8"))
+            candidate_refs[cid] = {
+                "markdown": artifact_ref(root, cand_md_path),
+                "html": artifact_ref(root, cand_html_path),
+            }
         return {
             "artifact": artifact_ref(unit.job.run_root, path),
             "html": artifact_ref(unit.job.run_root, html_path),
+            "executive_candidates": candidate_refs,
             "settings": settings.identity(),
             "gaps": [],
             "terminal_status": "SUCCEEDED",
@@ -214,33 +253,71 @@ def build_job(*, repository_root: Path | None = None,
         started = time.monotonic()
         settings = _settings(unit)
         run_root = unit.job.run_root
+        repo_root = _root(unit)
+        schemas = _schemas(unit)
+        tpl_dir = template_dir(repo_root)
         loaded, assembled = unit.output("load.accepted_gate"), unit.output("report.assemble")
         gate = read_bound_json(run_root, loaded["gate_document"])
         report = read_bound_json(run_root, assembled["artifact"])
         dossiers = bind_dossiers(run_root, report, gate["bindings"])
         result = render_executive_pdf(run_root, unit.unit_root, report, dossiers, report_ref=assembled["artifact"],
-                                      settings=settings, repository_root=_root(unit), executor_factory=executor_factory)
-        _check(_schemas(unit), PDF_RECEIPT, read_bound_json(run_root, result["files"]["receipt"]))
+                                      settings=settings, repository_root=repo_root, executor_factory=executor_factory)
+        _check(schemas, PDF_RECEIPT, read_bound_json(run_root, result["files"]["receipt"]))
         unit.job.events.write("FINAL_REPORT_PDF_RENDERED", status=result["status"], findings=len(report["findings"]),
                               dossiers_certified=len(dossiers), dossiers_read=sum(1 for row in dossiers if row.document),
                               gap_count=len(result["gaps"]), render_pdf=settings.render_pdf,
                               duration_ms=max(0, round((time.monotonic() - started) * 1000)))
+        candidate_pdfs: dict[str, dict[str, Any]] = {}
+        for cid in CANDIDATE_IDS:
+            cand_tex = render_executive_candidate_latex_bytes(cid, report, dossiers, tpl_dir)
+            cand_res = render_executive_pdf(
+                run_root,
+                unit.unit_root,
+                report,
+                dossiers,
+                report_ref=assembled["artifact"],
+                settings=settings,
+                repository_root=repo_root,
+                executor_factory=executor_factory,
+                stem=f"executive-report-candidate-{cid}",
+                receipt_name=f"receipt-candidate-{cid}.json",
+                artifact_prefix=f"candidate-{cid}-",
+                latex_bytes=cand_tex,
+                template_identity_fn=dossier_template_identity,
+                gap_prefix=f"executive_candidate_{cid}_pdf",
+            )
+            _check(schemas, PDF_RECEIPT, read_bound_json(run_root, cand_res["files"]["receipt"]))
+            candidate_pdfs[cid] = cand_res
+        pdf_gaps = [
+            producer_gap(GapCode.PRODUCER_REPORTED_GAP, gap, scope_id="executive_pdf")
+            for gap in result["gaps"]
+        ]
+        primary_suffixes = {gap.removeprefix("final_report_pdf_") for gap in result["gaps"]}
+        for cid, cand_res in candidate_pdfs.items():
+            for cgap in cand_res["gaps"]:
+                suffix = cgap.removeprefix(f"executive_candidate_{cid}_pdf_")
+                if cgap not in result["gaps"] and suffix not in primary_suffixes:
+                    pdf_gaps.append(
+                        producer_gap(GapCode.PRODUCER_REPORTED_GAP, cgap, scope_id=f"executive_candidate_{cid}_pdf")
+                    )
         return {"status": result["status"], "reason": result["reason"], "files": result["files"],
                 "tex_sha256": result["tex_sha256"], "pdf_sha256": result["pdf_sha256"],
+                "executive_candidates": candidate_pdfs,
                 "settings": settings.pdf_identity(),
-                "gaps": [producer_gap(GapCode.PRODUCER_REPORTED_GAP, gap, scope_id="executive_pdf")
-                         for gap in result["gaps"]],
-                "terminal_status": "SUCCEEDED" if not result["gaps"] else "COMPLETED_WITH_GAPS"}
+                "gaps": pdf_gaps,
+                "terminal_status": "SUCCEEDED" if not pdf_gaps else "COMPLETED_WITH_GAPS"}
 
     def publish(unit: UnitContext) -> Mapping[str, Any]:
         run_root = unit.job.run_root
         settings = _settings(unit)
+        schemas = _schemas(unit)
+        tpl_dir = template_dir(_root(unit))
         loaded, assembled, rendered, pdf = (unit.output(name) for name in (
             "load.accepted_gate", "report.assemble", "report.render", "report.render_pdf"))
         gate = read_bound_json(run_root, loaded["gate_document"])
         _verify_bindings(run_root, gate)
         report = read_bound_json(run_root, assembled["artifact"])
-        _check(_schemas(unit), report_schema_name(report), report)
+        _check(schemas, report_schema_name(report), report)
         if report["provenance"]["gate_handoff"] != loaded["gate_handoff"]:
             raise IntegrityError("final report is not bound to the accepted gate handoff")
         expected_report = build_report(
@@ -250,7 +327,7 @@ def build_job(*, repository_root: Path | None = None,
         if report != expected_report:
             raise IntegrityError("final-report.json is not the projection of the accepted gate")
         sarif = gate_sarif(run_root, gate, report)
-        _check(_schemas(unit), "sarif-export-result", sarif.result)
+        _check(schemas, "sarif-export-result", sarif.result)
         if (read_bound(run_root, assembled["sarif"]) != sarif.sarif_bytes
                 or read_bound_json(run_root, assembled["sarif_result"]) != sarif.result):
             raise IntegrityError("SARIF does not match the accepted gate projection")
@@ -267,9 +344,9 @@ def build_job(*, repository_root: Path | None = None,
             raise IntegrityError("final-report.html is not the rendering of final-report.json")
         files = pdf["files"]
         receipt = read_bound_json(run_root, files["receipt"])
-        _check(_schemas(unit), PDF_RECEIPT, receipt)
+        _check(schemas, PDF_RECEIPT, receipt)
         tex = read_bound(run_root, files["latex"])
-        if tex != render_executive_latex(report, dossiers, template_dir(_root(unit))):
+        if tex != render_executive_latex(report, dossiers, tpl_dir):
             raise IntegrityError("final-report.tex is not the rendering of final-report.json and its bound dossiers")
         if receipt["tex_sha256"] != hashlib.sha256(tex).hexdigest() or receipt["report"] != assembled["artifact"]:
             raise IntegrityError("the executive PDF receipt does not name the published report and LaTeX")
@@ -280,6 +357,45 @@ def build_job(*, repository_root: Path | None = None,
                 raise IntegrityError("final-report.pdf is not a valid PDF")
         elif files["pdf"] is not None or receipt["pdf_sha256"] is not None:
             raise IntegrityError("a PDF is published without a rendered receipt")
+        rendered_cands = rendered.get("executive_candidates")
+        pdf_cands = pdf.get("executive_candidates")
+        if not isinstance(rendered_cands, Mapping) or not isinstance(pdf_cands, Mapping):
+            raise IntegrityError("executive candidate renderings are missing from upstream units")
+        published_candidates: dict[str, dict[str, Any]] = {}
+        for cid in CANDIDATE_IDS:
+            if cid not in rendered_cands or cid not in pdf_cands:
+                raise IntegrityError(f"missing executive candidate {cid} artifacts")
+            cand_doc = build_executive_candidate_document(
+                cid, report, dossiers=dossiers, source_date_epoch=SOURCE_DATE_EPOCH,
+            )
+            expected_cand_md = render_executive_candidate_markdown(cand_doc).encode("utf-8")
+            if read_bound(run_root, rendered_cands[cid]["markdown"]) != expected_cand_md:
+                raise IntegrityError(f"executive-report-candidate-{cid}.md is not the rendering of final-report.json")
+            expected_cand_html = render_executive_candidate_html(cand_doc).encode("utf-8")
+            if read_bound(run_root, rendered_cands[cid]["html"]) != expected_cand_html:
+                raise IntegrityError(f"executive-report-candidate-{cid}.html is not the rendering of final-report.json")
+            cand_files = pdf_cands[cid]["files"]
+            cand_receipt = read_bound_json(run_root, cand_files["receipt"])
+            _check(schemas, PDF_RECEIPT, cand_receipt)
+            cand_tex = read_bound(run_root, cand_files["latex"])
+            if cand_tex != render_executive_candidate_latex_bytes(cid, report, dossiers, tpl_dir):
+                raise IntegrityError(f"executive-report-candidate-{cid}.tex does not match final-report.json")
+            if cand_receipt["tex_sha256"] != hashlib.sha256(cand_tex).hexdigest() or cand_receipt["report"] != assembled["artifact"]:
+                raise IntegrityError(f"receipt-candidate-{cid}.json does not name the published report and LaTeX")
+            if cand_receipt["status"] == "rendered":
+                if cand_files["pdf"] is None or cand_receipt["pdf_sha256"] != cand_files["pdf"]["sha256"]:
+                    raise IntegrityError(f"receipt-candidate-{cid}.json claims a rendering without the PDF it hashes")
+                if not valid_pdf(read_bound(run_root, cand_files["pdf"]), settings.max_pdf_bytes):
+                    raise IntegrityError(f"executive-report-candidate-{cid}.pdf is not a valid PDF")
+            elif cand_files["pdf"] is not None or cand_receipt["pdf_sha256"] is not None:
+                raise IntegrityError(f"executive-report-candidate-{cid}.pdf is published without a rendered receipt")
+            published_candidates[cid] = {
+                "label": CANDIDATE_LABELS[cid],
+                "title": CANDIDATE_TITLES[cid],
+                "markdown": rendered_cands[cid]["markdown"],
+                "html": rendered_cands[cid]["html"],
+                "pdf": pdf_record(cand_receipt, cand_files),
+            }
         # SARIF already carries every gate gap. Reuse those identities and the PDF unit's records
         # so publication and runtime outcome aggregation do not count the same gap again.
         gaps = list(pdf["gaps"]) + list(sarif.gaps)
@@ -301,6 +417,7 @@ def build_job(*, repository_root: Path | None = None,
             "artifact": assembled["artifact"],
             "markdown": rendered["artifact"],
             "html": rendered["html"],
+            "executive_candidates": published_candidates,
             "sarif": assembled["sarif"],
             "sarif_result": assembled["sarif_result"],
             "gate_handoff": loaded["gate_handoff"],

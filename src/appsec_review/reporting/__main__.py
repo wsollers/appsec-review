@@ -22,6 +22,7 @@ from typing import Sequence
 from appsec_review.config.efficacy_report import EfficacyReportSettings, parse_efficacy_report
 from appsec_review.config.telemetry_report import TelemetryReportSettings, parse_telemetry_report
 from .efficacy_finalize import run_efficacy_finalization
+from .executive_candidates import CANDIDATE_IDS, render_executive_candidates
 from .html import render_html
 from .latex import PALETTE, default_template_dir, render_latex
 from .loader import Selection, load_document
@@ -36,8 +37,12 @@ def _parser() -> argparse.ArgumentParser:
     render = commands.add_parser("render", help="render a run's report")
     render.add_argument("--run", required=True, help="run id (under --runs-dir) or a run directory")
     render.add_argument("--runs-dir", default="runs", help="directory holding run directories (default: runs)")
-    render.add_argument("--format", required=True, choices=("html", "tex"))
-    render.add_argument("--out", required=True, help="output directory (created)")
+    render.add_argument("--format", default=None, choices=("html", "tex"),
+                        help="report format (required when --candidate is none)")
+    render.add_argument("--out", "--output-dir", dest="out", required=True,
+                        help="output directory (created)")
+    render.add_argument("--candidate", choices=("none", "a", "b", "c", "all"), default="none",
+                        help="streamlined executive report candidate(s) to write (default: none)")
     render.add_argument("--limit", type=int, default=None, help="render only the first N packages")
     render.add_argument("--package", action="append", default=[], help="render only packages whose id starts with or contains this (repeatable)")
     render.add_argument("--max-cells", type=int, default=None, help="interchanges shown per package (default %d)" % Limits().cells_per_package)
@@ -210,8 +215,39 @@ def _efficacy(args: argparse.Namespace, renderer=None) -> int:
     ok_statuses = {"rendered"} if output_format == "pdf" else {"rendered", "latex_only", "tex_only"}
     return 0 if status in ok_statuses else 1
 
+def _load_candidate_inputs(run_dir: Path) -> tuple[dict, tuple]:
+    from .sources import RunReader
+
+    direct_json = run_dir / "final-report.json"
+    if direct_json.is_file():
+        report = json.loads(direct_json.read_text(encoding="utf-8"))
+        if not isinstance(report, dict):
+            raise ValueError("final-report.json is not a JSON object")
+        return report, ()
+    reader = RunReader(run_dir)
+    report_pair = reader.final_report()
+    if report_pair is None or not isinstance(report_pair[1], dict):
+        raise ValueError(f"final-report.json is unavailable under {run_dir}")
+    report = report_pair[1]
+    dossiers: tuple = ()
+    if (report.get("dossiers") or {}).get("items"):
+        try:
+            from appsec_review.jobs.bound_artifacts import read_bound_json
+            from appsec_review.jobs.job_final_report_publication.pdf import bind_dossiers
+            gate_ref = (report.get("provenance") or {}).get("gate_document")
+            bindings = None
+            if isinstance(gate_ref, dict) and gate_ref.get("path") and gate_ref.get("sha256"):
+                gate_doc = read_bound_json(run_dir, gate_ref)
+                bindings = gate_doc.get("bindings") if isinstance(gate_doc, dict) else None
+            dossiers = bind_dossiers(run_dir, report, bindings)
+        except Exception:
+            dossiers = ()
+    return report, dossiers
+
+
 def main(argv: Sequence[str] | None = None, *, telemetry_renderer=None, efficacy_renderer=None) -> int:
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
     if args.command == "telemetry":
         return _telemetry(args, telemetry_renderer)
     if args.command == "efficacy":
@@ -224,8 +260,11 @@ def main(argv: Sequence[str] | None = None, *, telemetry_renderer=None, efficacy
         else:
             sys.stdout.write(palette_tex())
         return 0
+    if args.candidate == "none" and args.format is None:
+        print("error: --format is required when --candidate is none", file=sys.stderr)
+        return 2
     run_dir = _resolve_run(args.run, args.runs_dir)
-    if not (run_dir / "data").is_dir():
+    if not (run_dir / "data").is_dir() and not (args.candidate != "none" and (run_dir / "final-report.json").is_file()):
         print(f"error: {run_dir} is not a run directory (no data/ subdirectory)", file=sys.stderr)
         return 2
     limits = Limits()
@@ -239,25 +278,55 @@ def main(argv: Sequence[str] | None = None, *, telemetry_renderer=None, efficacy
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    document = load_document(run_dir, limits=limits, selection=selection)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     files: list[str] = []
-    if args.format == "html":
-        _write(out / "report.html", render_html(document))
-        files.append("report.html")
-    else:
-        template = Path(args.template_dir) if args.template_dir else None
+    template = Path(args.template_dir) if args.template_dir else None
+    run_id_out = run_dir.name
+    epoch_out = 0
+    named_gaps_out = 0
+    if args.format is not None:
+        document = load_document(run_dir, limits=limits, selection=selection)
+        run_id_out = document.run_id
+        epoch_out = document.source_date_epoch
+        named_gaps_out = len(document.named_gaps)
+        if args.format == "html":
+            _write(out / "report.html", render_html(document))
+            files.append("report.html")
+        else:
+            try:
+                tex = render_latex(document, template)
+            except FileNotFoundError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            _write(out / "report.tex", tex)
+            _write(out / "source-date-epoch", f"{document.source_date_epoch}\n")
+            files += ["report.tex", "source-date-epoch"]
+    if args.candidate != "none":
+        cand_ids = CANDIDATE_IDS if args.candidate == "all" else (args.candidate,)
         try:
-            tex = render_latex(document, template)
-        except FileNotFoundError as exc:
+            report_doc, dossiers = _load_candidate_inputs(run_dir)
+            rendered_cands = render_executive_candidates(
+                report_doc,
+                dossiers=dossiers,
+                candidate_ids=cand_ids,
+                source_date_epoch=0,
+                template_dir=template,
+            )
+        except (OSError, ValueError, FileNotFoundError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        _write(out / "report.tex", tex)
-        _write(out / "source-date-epoch", f"{document.source_date_epoch}\n")
-        files += ["report.tex", "source-date-epoch"]
-    print(json.dumps({"format": args.format, "run_id": document.run_id, "files": files,
-                      "source_date_epoch": document.source_date_epoch, "named_gaps": len(document.named_gaps)},
+        for cid in cand_ids:
+            item = rendered_cands[cid]
+            run_id_out = item.document.run_id
+            named_gaps_out = len(item.document.named_gaps)
+            stem = f"executive-report-candidate-{cid}"
+            _write(out / f"{stem}.md", item.markdown)
+            _write(out / f"{stem}.html", item.html)
+            _write(out / f"{stem}.tex", item.latex)
+            files += [f"{stem}.md", f"{stem}.html", f"{stem}.tex"]
+    print(json.dumps({"format": args.format or f"candidate:{args.candidate}", "run_id": run_id_out, "files": files,
+                      "source_date_epoch": epoch_out, "named_gaps": named_gaps_out},
                      sort_keys=True))
     return 0
 
