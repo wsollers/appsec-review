@@ -850,3 +850,117 @@ def test_bundle_units_round_trips_and_refuses_unbound_or_noncanonical_bundles(tm
     refused(lambda value: value.update(unbound_hint={"invented": True}), "not canonical")
     refused(lambda value: value["documents"][0].update(content="tampered"),
             "does not resolve its accepted bytes")
+
+
+def test_cmake_builtin_threads_and_posix_toolchain_links_do_not_create_external_blockers(tmp_path: Path):
+    units = _units(tmp_path, {
+        "CMakeLists.txt": (
+            "cmake_minimum_required(VERSION 3.16)\n"
+            "project(smoke_like LANGUAGES C CXX)\n"
+            "find_package(Threads REQUIRED)\n"
+            "add_library(smoke_zlib STATIC z.c)\n"
+            "add_library(smoke_cjson STATIC j.c)\n"
+            "add_executable(smoke_server srv.c)\n"
+            "target_link_libraries(smoke_server PRIVATE smoke_zlib smoke_cjson Threads::Threads m dl rt pthread -pthread)\n"
+            "add_subdirectory(sub)\n"
+        ),
+        "z.c": "int z_fn(void) { return 1; }\n",
+        "j.c": "int j_fn(void) { return 2; }\n",
+        "srv.c": "int main(void) { return 0; }\n",
+        "sub/CMakeLists.txt": (
+            "add_executable(sub_worker worker.c)\n"
+            "target_link_libraries(sub_worker LINK_PRIVATE smoke_zlib Threads::Threads -lm)\n"
+        ),
+        "sub/worker.c": "int main(void) { return 0; }\n",
+    })
+    graph = compile_build_topology(units, source_fingerprint="snapshot")
+    validate_build_topology(graph)
+    ids = _ids(graph)
+    assert graph["external_requirements"] == []
+    assert "external_requirement" not in {gap["code"] for gap in graph["coverage_gaps"]}
+    assert all(not gap["blocking"] for gap in graph["coverage_gaps"])
+    assert any(fact["predicate"] == "cmake:find_package" and fact["value"] == ["Threads", "REQUIRED"]
+               for fact in graph["facts"])
+    refinement = _refinement(graph, units)
+    root_bound = refinement_unit(graph, refinement, ids["."])
+    assert root_bound["blockers"] == []
+    assert ready_build_units(graph, {}, refinement=refinement) == {
+        "ready": [ids["."]],
+        "blocked": [{"build_unit_id": ids["sub"], "reasons": ["contained"]}],
+    }
+
+
+@pytest.mark.parametrize("cmake_body,expected_interface", [
+    (
+        "find_package(UnresolvedPkg REQUIRED)\n"
+        "add_executable(B b.c)\n"
+        "target_link_libraries(B PRIVATE UnresolvedPkg::Target)\n",
+        "UnresolvedPkg::Target",
+    ),
+    (
+        "find_package(OpenSSL REQUIRED)\n"
+        "add_executable(B b.c)\n"
+        "target_link_libraries(B PRIVATE OpenSSL::SSL)\n",
+        "OpenSSL::SSL",
+    ),
+    (
+        "find_package(Boost REQUIRED COMPONENTS system)\n"
+        "add_executable(B b.c)\n"
+        "target_link_libraries(B PRIVATE Boost::system)\n",
+        "Boost::system",
+    ),
+    (
+        "add_executable(B b.c)\n"
+        "target_link_libraries(B PRIVATE Threads::Threads)\n",
+        "Threads::Threads",
+    ),
+    (
+        "if(ENABLE_THREADS)\nfind_package(Threads REQUIRED)\nendif()\n"
+        "add_executable(B b.c)\n"
+        "target_link_libraries(B PRIVATE Threads::Threads)\n",
+        "Threads::Threads",
+    ),
+    (
+        "find_package(Threads CONFIG REQUIRED)\n"
+        "add_executable(B b.c)\n"
+        "target_link_libraries(B PRIVATE Threads::Threads)\n",
+        "Threads::Threads",
+    ),
+    (
+        "add_executable(B b.c)\n"
+        "add_dependencies(B pthread)\n",
+        "pthread",
+    ),
+])
+def test_cmake_unresolved_packages_and_unscoped_threads_remain_fail_closed(
+    tmp_path: Path, cmake_body: str, expected_interface: str
+):
+    units = _units(tmp_path, {
+        "CMakeLists.txt": "project(app)\n" + cmake_body,
+        "b.c": "int main(void) { return 0; }\n",
+    })
+    graph = compile_build_topology(units, source_fingerprint="snapshot")
+    validate_build_topology(graph)
+    assert [req["interface"] for req in graph["external_requirements"]] == [expected_interface]
+    assert any(gap["code"] == "external_requirement" and gap["blocking"] for gap in graph["coverage_gaps"])
+    refinement = _refinement(graph, units)
+    bound = refinement_unit(graph, refinement, _ids(graph)["."])
+    assert f"required_external_interface_unresolved:{expected_interface}" in bound["blockers"]
+    assert "active_coverage_gap:external_requirement" in bound["blockers"]
+    assert ready_build_units(graph, {}, refinement=refinement)["ready"] == []
+
+
+def test_cmake_find_threads_in_sibling_subdirectory_does_not_leak_to_peer(tmp_path: Path):
+    units = _units(tmp_path, {
+        "CMakeLists.txt": "project(root)\nadd_subdirectory(a)\nadd_subdirectory(b)\n",
+        "a/CMakeLists.txt": "find_package(Threads REQUIRED)\nadd_library(a_lib STATIC a.c)\n",
+        "a/a.c": "int a_fn(void) { return 1; }\n",
+        "b/CMakeLists.txt": "add_executable(b_app b.c)\ntarget_link_libraries(b_app PRIVATE a_lib Threads::Threads)\n",
+        "b/b.c": "int main(void) { return 0; }\n",
+    })
+    graph = compile_build_topology(units, source_fingerprint="snapshot")
+    assert [req["interface"] for req in graph["external_requirements"]] == ["Threads::Threads"]
+    refinement = _refinement(graph, units)
+    assert "required_external_interface_unresolved:Threads::Threads" in refinement_unit(
+        graph, refinement, _ids(graph)["."]
+    )["blockers"]

@@ -309,8 +309,11 @@ marker does not prove a separate build or every dependency edge.
 
 Cross-owner edges are `requires_product` or `order_only`, not shortest-root component
 projection. CMake target interfaces use `cmake-target:<name>` and product IDs `cmake:<name>`.
-Cycles, ambiguous ownership, unresolved/external requirements, and dynamic or unsupported
-declarations remain named gaps. The compatible component-proposal helper may retain only
+Built-in CMake `FindThreads` (`find_package(Threads ...)` supplying `Threads::Threads` in directory
+scope) and standard POSIX/libc toolchain link items are recognized as toolchain-provided rather than
+unresolved external requirements, while third-party CMake packages and imported targets remain
+fail-closed external requirements. Cycles, ambiguous ownership, unresolved/external requirements,
+and dynamic or unsupported declarations remain named gaps. The compatible component-proposal helper may retain only
 relationships already derived by that compiler; foreign, non-derivable or cyclic dependencies
 are rejected. These advisory component annotations never create scheduling edges or native proof.
 The actual model worker has empty component/scanner request allowlists, independent of the

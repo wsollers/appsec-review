@@ -354,3 +354,140 @@ def test_oversized_canonical_index_replacement_preserves_prior_bytes(tmp_path):
     with pytest.raises(ValueError, match="index publication exceeds its byte bound"):
         publish_refinement(root, [action])
     assert pointer.read_bytes() == before
+
+
+def _cmake_unit_with_links(tmp_path: Path, cmake_text: str):
+    from appsec_review.jobs.build_discovery import descriptor_package, discover_build_units
+    import hashlib
+
+    files_map = {
+        "CMakeLists.txt": cmake_text,
+        "lib.c": "int helper_fn(void) { return 7; }\n",
+        "main.cpp": "extern \"C\" int helper_fn(void); int main() { return helper_fn(); }\n",
+    }
+    files = []
+    for rel, content in files_map.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        raw = content.encode("utf-8")
+        path.write_bytes(raw)
+        files.append({"path": rel, "sha256": hashlib.sha256(raw).hexdigest(), "size_bytes": len(raw)})
+    unit = discover_build_units(files)[0]
+    unit["descriptor_package"] = descriptor_package(tmp_path, unit, files)
+    unit["build_variant"] = {
+        "configuration": "release", "target_arch": "x86_64", "execution_role": "target",
+        "linkage": "static", "toolchain": "clang", "abi": "linux-gnu",
+    }
+    unit["recipe"] = {
+        "schema": "appsec-review/build-recipe/1",
+        "build_unit_id": unit["build_unit_id"],
+        "image_profile": "native",
+        "source_dir": ".",
+        "build_dir": "build",
+        "system_packages": [],
+        "environment": {},
+        "dependency_files": ["CMakeLists.txt"],
+        "configure_commands": [["cmake", "-S", ".", "-B", "build", "-G", "Ninja"]],
+        "build_commands": [["cmake", "--build", "build", "--parallel", "2"]],
+        "expected_outputs": ["build"],
+        "network_required": False,
+        "reason": "CMakeLists.txt discovered at .",
+    }
+    return unit
+
+
+def _publish_cmake_plan_and_bind(case_dir: Path, cmake_text: str):
+    src_dir = case_dir / "src"
+    run_env = case_dir / "env"
+    run_env.mkdir(parents=True, exist_ok=True)
+    config_path = write_config(run_env)
+    with config_path.open("a", encoding="utf-8") as stream:
+        stream.write("""
+[review_policy.releases]
+platform = "synthetic-platform/1"
+validation = "synthetic-validation/1"
+build_toolchain = "synthetic-toolchain/1"
+
+[jobs.job_target_analysis_plan]
+name = "synthetic accepted source producer"
+
+[jobs.job_project_build]
+name = "synthetic native cache producer"
+""")
+    config = load_config(config_path)
+    runner = JobRunner(config)
+    unit = _cmake_unit_with_links(src_dir, cmake_text)
+    source_unit = copy.deepcopy(unit)
+    profile = _profile()
+    graph = compile_build_topology([source_unit], source_fingerprint="synthetic-cmake-fp", profiles=profile)
+    plan = {
+        "schema": PLAN_SCHEMA,
+        "source_fingerprint": "synthetic-cmake-fp",
+        "build_topology": {
+            "executable_graph": graph,
+            "build_actions": [source_unit],
+            "evidence_bundle": topology_evidence_bundle(
+                [source_unit], source_fingerprint="synthetic-cmake-fp", profiles=profile
+            ),
+            "planning_refinement": refine_build_topology(graph, [source_unit], profiles=profile),
+        },
+    }
+
+    def publish(context):
+        path = context.job.attempt_root / "accepted-analysis-plan.json"
+        atomic_json(path, plan)
+        return {"artifact": reference(context.job.run_root, path), "terminal_status": "SUCCEEDED"}
+
+    outcome = runner.run(
+        Job("job_target_analysis_plan", "synthetic accepted source producer", lambda _: {},
+            units=(Unit("plan_acceptance.publish_handoff", publish),)),
+        source_fingerprint="synthetic-cmake-fp",
+    )
+    root = config.runtime.runs_dir / outcome["status"]["run_id"]
+    action = bind_actions(
+        root, [unit], profiles=profile,
+        policy=config.job("job_project_build").settings["build_selection"],
+        releases=config.review_policy.releases.view(),
+    )[0]
+    action["image"] = {"image_id": profile["image_digest"]}
+    return root, plan, action
+
+
+def test_guard_action_admits_cmake_find_threads_and_blocks_unresolved_cmake_target(tmp_path: Path):
+    threads_cmake = (
+        "cmake_minimum_required(VERSION 3.16)\n"
+        "project(smoke_server_fixture LANGUAGES C CXX)\n"
+        "find_package(Threads REQUIRED)\n"
+        "add_library(helper STATIC lib.c)\n"
+        "add_executable(smoke_server main.cpp)\n"
+        "target_link_libraries(smoke_server PRIVATE helper Threads::Threads)\n"
+    )
+    ok_root, ok_plan, ok_action = _publish_cmake_plan_and_bind(tmp_path / "threads-ok", threads_cmake)
+    assert ok_plan["build_topology"]["executable_graph"]["external_requirements"] == []
+    assert ok_plan["build_topology"]["planning_refinement"]["units"][0]["blockers"] == []
+    admitted = guard_action(ok_root, ok_action)
+    assert admitted["blockers"] == []
+
+    unresolved_cmake = (
+        "cmake_minimum_required(VERSION 3.16)\n"
+        "project(smoke_server_fixture LANGUAGES C CXX)\n"
+        "find_package(Threads REQUIRED)\n"
+        "find_package(UnresolvedPkg REQUIRED)\n"
+        "add_library(helper STATIC lib.c)\n"
+        "add_executable(smoke_server main.cpp)\n"
+        "target_link_libraries(smoke_server PRIVATE helper Threads::Threads UnresolvedPkg::Target)\n"
+    )
+    bad_root, bad_plan, bad_action = _publish_cmake_plan_and_bind(tmp_path / "pkg-blocked", unresolved_cmake)
+    assert [req["interface"] for req in bad_plan["build_topology"]["executable_graph"]["external_requirements"]] == [
+        "UnresolvedPkg::Target"
+    ]
+    assert bad_plan["build_topology"]["planning_refinement"]["units"][0]["blockers"] == [
+        "active_coverage_gap:external_requirement",
+        "required_external_interface_unresolved:UnresolvedPkg::Target",
+    ]
+    with pytest.raises(
+        ValueError,
+        match="build execution blocked: active_coverage_gap:external_requirement; "
+              "required_external_interface_unresolved:UnresolvedPkg::Target",
+    ):
+        guard_action(bad_root, bad_action)

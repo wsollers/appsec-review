@@ -121,6 +121,20 @@ def _cmake_calls(document: Mapping[str, Any]):
         offset = match.end()
 
 
+_CMAKE_LINK_VISIBILITY_KEYWORDS = frozenset({
+    "PUBLIC", "PRIVATE", "INTERFACE", "LINK_PUBLIC", "LINK_PRIVATE", "LINK_INTERFACE_LIBRARIES",
+})
+_CMAKE_TOOLCHAIN_LINK_ITEMS = frozenset({
+    "dl", "m", "pthread", "rt", "-lc", "-ldl", "-lm", "-lpthread", "-lrt", "-pthread",
+})
+_CMAKE_THREADS_FIND_PACKAGE_OPTIONS = frozenset({"REQUIRED", "QUIET", "MODULE"})
+
+
+def _is_cmake_builtin_threads_find_package(args: Sequence[str]) -> bool:
+    return (bool(args) and args[0] == "Threads"
+            and all(arg.upper() in _CMAKE_THREADS_FIND_PACKAGE_OPTIONS for arg in args[1:]))
+
+
 def compile_build_topology(units: Sequence[Mapping[str, Any]], *, source_fingerprint: str,
                            component_relationships: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any]:
     """Compile conservative descriptor declarations, preserving every discovered disposition."""
@@ -248,7 +262,19 @@ def compile_build_topology(units: Sequence[Mapping[str, Any]], *, source_fingerp
             uid = nodes[uid]["owner_build_unit_id"]
         return uid if nodes[uid]["disposition"] == "independent" else None
 
+    def in_cmake_scope(declaring_uid: str, target_uid: str) -> bool:
+        seen: set[str] = set()
+        cursor: str | None = target_uid
+        while cursor is not None and cursor not in seen:
+            if cursor == declaring_uid:
+                return True
+            seen.add(cursor)
+            parent_ids = {parent_uid for parent_uid, _ev in owners.get(cursor, ())}
+            cursor = next(iter(parent_ids)) if len(parent_ids) == 1 else None
+        return False
+
     targets: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+    builtin_cmake_targets: list[tuple[str, str, str]] = []
     for uid, node in nodes.items():
         resolved_owner = owner(uid)
         if node["disposition"] == "contained":
@@ -259,6 +285,9 @@ def compile_build_topology(units: Sequence[Mapping[str, Any]], *, source_fingerp
         if node["disposition"] == "unresolved":
             gap("unresolved_ownership", [uid], "independent build ownership is not established by supported declarations")
         for name, args, literal, evidence in calls[uid]:
+            if name == "find_package" and literal and resolved_owner and _is_cmake_builtin_threads_find_package(args):
+                builtin_cmake_targets.append((resolved_owner, uid, "Threads::Threads"))
+                continue
             if name not in {"add_library", "add_executable"} or not literal or not resolved_owner:
                 continue
             if any(arg.upper() in {"IMPORTED", "ALIAS", "INTERFACE", "OBJECT"} for arg in args[1:]):
@@ -281,6 +310,10 @@ def compile_build_topology(units: Sequence[Mapping[str, Any]], *, source_fingerp
                 f"target has multiple owner/variant declarations: {name}")
     for uid in nodes:
         consumer = owner(uid)
+        scoped_builtin_targets = {
+            interface for target_owner, declaring_uid, interface in builtin_cmake_targets
+            if target_owner == consumer and in_cmake_scope(declaring_uid, uid)
+        }
         for name, args, literal, evidence in calls[uid]:
             if name not in {"target_link_libraries", "add_dependencies"} or not literal or not consumer:
                 continue
@@ -290,8 +323,10 @@ def compile_build_topology(units: Sequence[Mapping[str, Any]], *, source_fingerp
                     [evidence])
                 continue
             for target in args[1:]:
-                if target.upper() in {"PUBLIC", "PRIVATE", "INTERFACE", "DEBUG", "OPTIMIZED", "GENERAL"}:
-                    if target.upper() in {"DEBUG", "OPTIMIZED", "GENERAL"}:
+                upper_target = target.upper()
+                if (name == "target_link_libraries" and upper_target in _CMAKE_LINK_VISIBILITY_KEYWORDS
+                        or upper_target in {"PUBLIC", "PRIVATE", "INTERFACE", "DEBUG", "OPTIMIZED", "GENERAL"}):
+                    if upper_target in {"DEBUG", "OPTIMIZED", "GENERAL"}:
                         gap("unresolved_variant", [consumer], "configuration-qualified link requires variant resolution",
                             [evidence])
                     continue
@@ -299,6 +334,9 @@ def compile_build_topology(units: Sequence[Mapping[str, Any]], *, source_fingerp
                 if len(producers) != 1:
                     if producers:
                         gap("ambiguous_producer", [consumer], f"target producer is ambiguous: {target}", [evidence])
+                    elif target in scoped_builtin_targets or (
+                            name == "target_link_libraries" and target in _CMAKE_TOOLCHAIN_LINK_ITEMS):
+                        continue
                     else:
                         external.append({"consumer_build_unit_id": consumer, "interface": target,
                                          "status": "unresolved", "evidence": [evidence]})
