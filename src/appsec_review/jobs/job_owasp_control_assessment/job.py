@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections import Counter
+from collections.abc import Mapping, Sequence
 import hashlib
 import json
 from pathlib import Path
@@ -30,6 +31,14 @@ from appsec_review.review.scope import accept_manifest
 
 
 SCHEMA = "appsec-review/owasp-workbench-result/1"
+_MAX_EVENT_EVIDENCE_IDS = 25
+_MAX_EVENT_EVIDENCE_ID_CHARS = 160
+_MAX_EVENT_DISPOSITIONS = 64
+_MAX_EVENT_DISPOSITION_CHARS = 64
+_MAX_EVENT_METRIC_KEYS = 32
+_MAX_EVENT_NESTED_METRIC_KEYS = 16
+_MAX_EVENT_KEY_CHARS = 64
+_MAX_EVENT_STR_CHARS = 128
 CELLS = ("cell_01", "cell_02", "cell_03", "cell_04")
 TOPOLOGY = {
     "standards_selection": ("ingest_catalogs", "select_profiles"),
@@ -41,6 +50,81 @@ TOPOLOGY = {
     "join": ("deterministic_join",),
     "publication": ("publish_indexes", "publish_handoff"),
 }
+
+
+def _is_scalar_metric(value: Any) -> bool:
+    return value is None or isinstance(value, (bool, int, float))
+
+
+def _bounded_metric_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    for raw_key, value in mapping.items():
+        if len(summary) >= _MAX_EVENT_NESTED_METRIC_KEYS:
+            break
+        key = str(raw_key)[:_MAX_EVENT_KEY_CHARS]
+        if _is_scalar_metric(value):
+            summary[key] = value
+        elif isinstance(value, str):
+            summary[key] = value[:_MAX_EVENT_STR_CHARS]
+        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            summary[f"{key[:48]}_count"] = len(value)
+    return summary
+
+
+def _worker_completed_details(batch_id: Any, result: Mapping[str, Any]) -> dict[str, Any]:
+    rows = result.get("results") or ()
+    evidence_used = sorted({
+        str(citation["source_identity"])
+        for item in rows
+        for citation in item.get("evidence_used", ())
+        if isinstance(citation, Mapping) and citation.get("source_identity")
+    })
+    statuses = [str(item["status"])[:_MAX_EVENT_DISPOSITION_CHARS] for item in rows]
+    disposition_counts = dict(sorted(Counter(statuses).items())[:_MAX_EVENT_NESTED_METRIC_KEYS])
+    details: dict[str, Any] = {
+        "batch_id": str(batch_id)[:_MAX_EVENT_STR_CHARS],
+        "terminal_status": str(result["terminal_state"])[:_MAX_EVENT_DISPOSITION_CHARS],
+        "row_count": len(rows),
+        "evidence_used_count": len(evidence_used),
+        "evidence_used": [
+            identity[:_MAX_EVENT_EVIDENCE_ID_CHARS]
+            for identity in evidence_used[:_MAX_EVENT_EVIDENCE_IDS]
+        ],
+        "proposed_observation_count": sum(len(item.get("observations", ())) for item in rows),
+        "gap_count": sum(len(item.get("gaps", ())) for item in rows),
+        "disposition_counts": disposition_counts,
+        "dispositions": statuses[:_MAX_EVENT_DISPOSITIONS],
+    }
+    reserved = set(details)
+    metrics = result.get("metrics")
+    if isinstance(metrics, Mapping):
+        added = 0
+        for raw_key, value in metrics.items():
+            if added >= _MAX_EVENT_METRIC_KEYS:
+                break
+            key = str(raw_key)[:_MAX_EVENT_KEY_CHARS]
+            if key in reserved or (key == "attempt_count" and "attempt_count" in details):
+                continue
+            if key == "attempts":
+                if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+                    details["attempt_count"] = len(value)
+                    added += 1
+                continue
+            if _is_scalar_metric(value):
+                details[key] = value
+                added += 1
+            elif isinstance(value, str):
+                details[key] = value[:_MAX_EVENT_STR_CHARS]
+                added += 1
+            elif isinstance(value, Mapping):
+                details[key] = _bounded_metric_mapping(value)
+                added += 1
+            elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+                count_key = f"{key[:48]}_count"
+                if count_key not in reserved and count_key not in details:
+                    details[count_key] = len(value)
+                    added += 1
+    return details
 
 
 def _artifact(unit: UnitContext, name: str, value: Mapping[str, Any]) -> dict[str, Any]:
@@ -296,18 +380,15 @@ def build_job(*, fail_cell: str | None = None, infer: Infer | None = None) -> Jo
                         row["gaps"] = ["batch not launched: max_batches cap; row remains accounted and unresolved"]
                         row["execution_completion"] = "not_dispatched"
                 results.append(result)
-                evidence_used = sorted({citation["source_identity"] for item in result["results"]
-                                        for citation in item.get("evidence_used", ())})
-                log.write("OWASP_WORKER_COMPLETED", run_id=unit.job.run_id,
-                    job_id="job_owasp_control_assessment", attempt_id=unit.job.attempt_id,
-                    step_id="validation", task_id=cell_id, details={"batch_id": batch["batch_id"],
-                    "terminal_status": result["terminal_state"],
-                    "evidence_used": evidence_used[:100],
-                    "proposed_observation_count": sum(len(item.get("observations", ()))
-                                                      for item in result["results"]),
-                    "gap_count": sum(len(item.get("gaps", ())) for item in result["results"]),
-                    "dispositions": [item["status"] for item in result["results"]],
-                    **result["metrics"]})
+                log.write(
+                    "OWASP_WORKER_COMPLETED",
+                    run_id=unit.job.run_id,
+                    job_id="job_owasp_control_assessment",
+                    attempt_id=unit.job.attempt_id,
+                    step_id="validation",
+                    task_id=cell_id,
+                    details=_worker_completed_details(batch["batch_id"], result),
+                )
             failed = sum(result["terminal_state"] == "failed" for result in results)
             gapped = failed or any(row.get("gaps") for result in results for row in result["results"])
             return {"cell": cell_id, "batch_results": results, "assigned_batch_count": len(assigned),
