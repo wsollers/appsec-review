@@ -801,7 +801,7 @@ def test_input_matrix_names_the_graph_producer_and_resolves_planned_producers_on
 
 DOWNSTREAM = ("job_poc_generation", "job_remediation_planning", "job_remediation_validation",
               "job_dossier_publication", "job_final_publication_gate", "job_openvex_export",
-              "job_final_report_publication")
+              "job_final_report_publication", "job_detailed_finding_report")
 
 
 def test_downstream_review_consumers_preserve_certified_completion_order() -> None:
@@ -815,7 +815,7 @@ def test_downstream_review_consumers_preserve_certified_completion_order() -> No
     named = {producer for _source, producers, *_ in input_matrix.INPUT_SOURCES for producer in producers}
     assert set(DOWNSTREAM) <= named
     assert PLANNED_CONSUMER_JOBS == tuple(
-        job for job in DOWNSTREAM if job not in {"job_poc_generation", "job_dossier_publication"})
+        job for job in DOWNSTREAM if job not in {"job_poc_generation", "job_dossier_publication", "job_detailed_finding_report"})
     projected = input_matrix.downstream_consumers()
     assert [consumer for consumer, _ in projected] == list(DOWNSTREAM)
     graph = wave1_dependencies(set(builtin_contracts()))

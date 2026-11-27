@@ -117,6 +117,7 @@ def test_job_context_preserves_an_immutable_explicit_upstream_admission(tmp_path
     (tmp_path / "runs" / "test-context" / "attempt").mkdir(parents=True)
     claim = {"run_id": "test-context", "attempt_id": "attempt_0001", "trigger": "manual",
              "attempt_path": "attempt",
+             "resolved_config_sha256": config.resolved_sha256,
              "upstream_handoffs": {"job_poc_generation": "a" * 64}}
     context = runner._context(job, claim)
     assert context.upstream_handoffs == {"job_poc_generation": "a" * 64}
