@@ -3,8 +3,8 @@ title: "Reporting and metrics"
 kind: "architecture"
 subsystem: "reporting and metrics"
 status: "current"
-jobs: ["job_dossier_publication", "job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_openvex_export", "job_poc_generation", "job_remediation_planning", "job_remediation_validation"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+jobs: ["job_detailed_finding_report", "job_dossier_publication", "job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_openvex_export", "job_poc_generation", "job_remediation_planning", "job_remediation_validation"]
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Reporting and metrics
 
@@ -32,8 +32,15 @@ class is unavailable. `gap`, `not_run` and `notice` limitations remain distinct.
 publication with limitations is not a clean-target or ship-approval verdict.
 
 The [terminal report](../../src/appsec_review/jobs/job_final_report_publication/report.py) projects
-only that certified gate into JSON, deterministic Markdown/HTML, and the configured executive
-PDF. SARIF is assembled inside the existing report task, not a new pipeline stage. Before
+only that certified gate into JSON, deterministic Markdown/HTML, the configured executive PDF,
+and three streamlined visual executive formats (`Candidate A`, `Candidate B`, and `Candidate C`
+in [`reporting/executive_candidates.py`](../../src/appsec_review/reporting/executive_candidates.py))
+that replace raw evidence dumps with severity/funnel/domain visuals and concise risk summaries.
+In parallel after the same gate, [`job_detailed_finding_report`](../operations/job_detailed_finding_report.md)
+publishes per-defect `3a` (source taint flow), `3b` (call-fanout slice from accepted `alternate_cpg`
+or `exe_viewer --graph fanout`), and `3c` (intra-procedural CFG) diagrams via
+[`reporting/code_flow.py`](../../src/appsec_review/reporting/code_flow.py) and
+[`reporting/detailed_finding_report.py`](../../src/appsec_review/reporting/detailed_finding_report.py). SARIF is assembled inside the existing report task, not a new pipeline stage. Before
 acceptance, the producer revalidates gate bindings and reassembles the report and SARIF, checking
 their exact bytes and the Markdown/HTML renderings. It does not discover post-gate attachments
 or mutate findings.
@@ -229,7 +236,14 @@ The separate [telemetry renderer](../../src/appsec_review/reporting/telemetry_re
 a receipted operational report. Its [input loader](../../src/appsec_review/reporting/telemetry/inputs.py)
 can recompute a missing/incompatible summary in memory without rewriting it, and names torn-log
 or unavailable-input gaps. The [end-of-run finalizer](../../src/appsec_review/reporting/telemetry_finalize.py)
-is best-effort: a renderer exception warns without changing the existing run completion status.
+and [efficacy finalizer](../../src/appsec_review/reporting/efficacy_finalize.py) are best-effort:
+when `[reporting.efficacy_report]` is enabled, run completion archives content-addressed
+`finding-snapshot/1` records grouped by canonical `target_id` under
+`runs/metadata/finding-history/<target_id>/`, renders longitudinal Run-over-Run reports
+(`run-over-run-report.{json,md,tex,pdf}` via [`run_over_run_report.py`](../../src/appsec_review/reporting/run_over_run_report.py)),
+and for known smoke targets emits path/file/line effectiveness and SAST-vs-Hunter attribution
+(`smoke-effectiveness.{json,md,tex,pdf}` via [`smoke_effectiveness.py`](../../src/appsec_review/reporting/smoke_effectiveness.py);
+unkeyed inside blind containers and keyed when run by the operator on the host).
 None of these presentation paths establishes new finding, coverage or runtime-proof authority.
 
 ## Decisions
@@ -280,7 +294,7 @@ implementation absent.
 | --- | --- |
 | Accepted claims and engineering inputs | [Inference review](../operations/job_inference_security_review.md), [PoC generation](../operations/job_poc_generation.md), [remediation planning](../operations/job_remediation_planning.md), [remediation validation](../operations/job_remediation_validation.md) |
 | Protected developer publication | [Dossier publication](../operations/job_dossier_publication.md) |
-| Certification and final presentation | [Final gate](../operations/job_final_publication_gate.md), [final report](../operations/job_final_report_publication.md) |
+| Certification and final presentation | [Final gate](../operations/job_final_publication_gate.md), [final report](../operations/job_final_report_publication.md), [detailed finding report](../operations/job_detailed_finding_report.md) |
 | Affected-only machine-readable export | [OpenVEX export](../operations/job_openvex_export.md) |
 | Operational measurements | [Metrics](../operations/metrics.md), [finding metrics](../operations/finding-metrics.md), [manual guidance evaluation](../operations/guidance-evaluation.md) |
 
@@ -339,8 +353,9 @@ flowchart TD
   review --> gate["job_final_publication_gate"]
   engineering --> gate
   dossiers --> gate
-  gate --> report["job_final_report_publication: appsec-review/final-report/4 + SARIF 2.1.0"]
+  gate --> report["job_final_report_publication: appsec-review/final-report/4 + Candidate A/B/C + SARIF 2.1.0"]
   report --> radar["appsec-review/security-radar-tracker/2: 12 axes; unknown metrics remain N/A"]
+  gate --> dfr["job_detailed_finding_report: appsec-review/detailed-finding-report/1 + 3a/3b/3c slices"]
   gate --> vex["job_openvex_export: affected findings; optional dependency companion"]
   dependencies["Admitted job_dependency_intelligence: static SCA symbol-use evidence"] --> vex
   report --> snapshot["finding-snapshot/1"]

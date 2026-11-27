@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_change_context_analysis", "job_source_history_analysis", "job_tree_sitter_ast"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Change-context analysis operations
 

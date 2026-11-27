@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "scanners and evidence collection"
 status: "historical"
 jobs: ["job_artifact_indexing", "job_dependency_intelligence", "job_evidence_collection", "job_language_build", "job_target_catalog"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Native vendored dependency discovery and SPDX enrichment
 

@@ -4,14 +4,15 @@ kind: "operations"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: ["job_final_report_publication"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 
 # final_report_publication
 
 ## Purpose
 
-Publish deterministic JSON, Markdown, HTML and executive PDF projections of the accepted final gate. The report
+Publish deterministic JSON, Markdown, HTML, primary executive PDF, and streamlined visual
+`Candidate A`, `Candidate B`, and `Candidate C` executive report projections of the accepted final gate. The report
 separates publishable confirmed findings, verification backlog, withheld packages, coverage and
 completion limitations. It does not reassess vulnerabilities, upgrade assurance, resolve findings
 from build checks or turn a publication status into permission to ship.
@@ -29,11 +30,11 @@ Declarations describe possible work, not successful execution or consumed eviden
 
 | Step | Task | Workers | Pool | Bound tool or gap | Handler |
 | --- | --- | --- | --- | --- | --- |
-| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L235) |
-| `load` | `load.accepted_gate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L118) |
-| `report` | `report.assemble` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L132) |
-| `report` | `report.render` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L186) |
-| `report` | `report.render_pdf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L213) |
+| `acceptance` | `acceptance.publish_handoff` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L310) |
+| `load` | `load.accepted_gate` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L134) |
+| `report` | `report.assemble` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L148) |
+| `report` | `report.render` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L202) |
+| `report` | `report.render_pdf` | 1 | `application` | Undeclared ([T-147](../TODO.md)) | [source](../../src/appsec_review/jobs/job_final_report_publication/job.py#L252) |
 
 ### Accepted input declarations
 

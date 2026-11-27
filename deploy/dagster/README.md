@@ -729,8 +729,8 @@ Two jobs route by job before these step-name heuristics (`_JOB_STEP_POOLS` and
 `_JOB_DEFAULT_POOLS` in `orchestration/dagster/adapter.py`): every non-lifecycle unit of
 `job_code_graph_index` runs in `index`, and `job_inference_security_review` runs `lead_review`
 and `hunt_review` in `inference_teams` (limit 2), `scoring` in `inference_score` (limit 4),
-`publication` in `lifecycle` and everything else in `application`. `job_final_publication_gate` and
-`job_final_report_publication` have no routing of their own and use the default `application` pool. The optional
+`publication` in `lifecycle` and everything else in `application`. `job_final_publication_gate`, `job_final_report_publication`, and `job_detailed_finding_report`
+have no routing of their own and use the default `application` pool. The optional
 `job_poc_generation` (shipped disabled) has none either; by the step-name heuristics its `compile` step runs in
 `cpp_build` and every other step in `application`.
 

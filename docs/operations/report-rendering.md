@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: ["job_final_report_publication", "job_inference_security_review"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Report rendering (PDF and single-page HTML)
 
@@ -44,8 +44,13 @@ see the [acceptance ledger](../reviews/evidence-completion-documentation-invento
 The older sample below is not acceptance of that new path.
 [Dossier data inventory](../architecture/dossier-data-inventory.md) records inputs and visibility.
 
-The end-of-review **telemetry** rollup (runtimes, usage and data quality, one PDF per run) reuses
-this image and template; see [telemetry report](telemetry-report.md).
+The end-of-review **telemetry** rollup (runtimes, usage and data quality, one PDF per run) and
+**efficacy** rollup (`python -m appsec_review.reporting efficacy --run <run-id> --config appsec-review.toml`,
+producing target-grouped `run-over-run-report.{json,md,tex,pdf}` and known-smoke
+`smoke-effectiveness.{json,md,tex,pdf}`) reuse this image and template; `python -m appsec_review.reporting render`
+also accepts `--candidate {none,a,b,c,all}` to render streamlined **Candidate A**, **Candidate B**,
+and **Candidate C** executive formats. See [telemetry report](telemetry-report.md) and
+[finding metrics](finding-metrics.md).
 
 ## What it renders
 

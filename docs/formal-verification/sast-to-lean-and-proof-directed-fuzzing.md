@@ -4,7 +4,7 @@ kind: "history"
 subsystem: "review inference and guidance"
 status: "historical"
 jobs: ["job_poc_generation", "job_sanitizer_build"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Design: SAST-to-Lean Verification and Proof-Directed Fuzzing
 

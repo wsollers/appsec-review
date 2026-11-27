@@ -4,7 +4,7 @@ kind: "review"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_dossier_publication", "job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_poc_generation", "job_remediation_planning", "job_remediation_validation"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Lead triage and red-blue-verifier efficacy review
 

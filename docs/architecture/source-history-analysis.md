@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_change_context_analysis", "job_ci_configuration_analysis", "job_image_pin_verification", "job_model_connectivity", "job_review_intake", "job_review_prioritization", "job_source_history_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_tree_sitter_ast"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Source history analysis
 
@@ -410,7 +410,7 @@ Each file's `changes` list keeps every in-window change with its `added`, `delet
 ordinal, fix flag, and `excluded` reason (`bulk`, `formatting`, or `null`). `bulk_change_count`,
 `formatting_change_count`, and `excluded_churn_lines` count what was set aside.
 
-Path rules (`appsec-review/history-path-filters/1`) are POSIX globs in central TOML, grouped by
+Path rules (`appsec-review/history-path-filters/2`) are POSIX globs in central TOML, grouped by
 category and checked in this fixed order: `generated`, `lockfile`, `fixture`, `documentation`,
 `vendored`. `**/` spans directories. `*` and `?` stay inside one segment. A pattern without `/`
 matches the file name at any depth. A matching file keeps all its metrics but gets

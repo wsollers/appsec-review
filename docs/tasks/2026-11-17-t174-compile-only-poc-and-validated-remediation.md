@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_poc_generation", "job_remediation_planning", "job_remediation_validation"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Task plan T-174: Unify compile-only PoC harnesses and add multi-language remediation validation
 

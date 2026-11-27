@@ -4,7 +4,7 @@ kind: "process"
 subsystem: "testing and operations"
 status: "current"
 jobs: ["job_dependency_intelligence", "job_inference_security_review", "job_post_build_security_assessment", "job_project_build", "job_review_data_indexing", "job_review_prioritization", "job_target_analysis_plan"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Local and Dagster parity, one job at a time
 

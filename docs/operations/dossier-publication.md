@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: ["job_dossier_publication"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Dossier publication operations
 
@@ -30,8 +30,10 @@ still need an accounted dossier with their limitations. Supported claims are not
 confirmed findings by PoC generation or dossier rendering.
 
 The registered graph is review (including chain ledger/manifest before sealing), optional compile-only
-PoC, optional confirmed-only planning/validation, then dossier publication, **one final gate**,
-and the terminal public report. Dossiers never consume the final gate: that would create a cycle.
+PoC, optional confirmed-only planning/validation, then dossier publication (embedding deterministic
+source/binary `FlowDiagram` code-flow visuals across Markdown, HTML and TikZ/PDF), **one final gate**,
+and the parallel terminal leaves (`job_final_report_publication`, `job_openvex_export`, and
+[`job_detailed_finding_report`](job_detailed_finding_report.md)). Dossiers never consume the final gate: that would create a cycle.
 The gate certifies their manifest, and the report exposes only certified references and statuses.
 The [PoC](poc-generation.md) and [report](final-report.md) pages describe exact `/2` certification;
 an ordered graph alone does not make incompatible old accepted handoffs usable.

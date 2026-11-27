@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_change_context_analysis", "job_inference_security_review", "job_profile_data", "job_review_data_indexing", "job_review_prioritization", "job_source_history_analysis", "job_test_coverage"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Task plan T-171: Rewire change context test coverage and profile data into review prioritization
 

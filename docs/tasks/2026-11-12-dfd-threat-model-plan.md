@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "review inference and guidance"
 status: "historical"
 jobs: ["job_review_data_indexing", "job_threat_model_generation"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # PLAN - GENERATE A DFD AND THREAT MODEL FROM ACCEPTED RUN EVIDENCE
 

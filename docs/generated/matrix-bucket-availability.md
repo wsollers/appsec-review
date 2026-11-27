@@ -4,7 +4,7 @@ kind: "generated"
 subsystem: "runtime interchange"
 status: "current"
 jobs: []
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 
 <!-- generated from: appsec-review.toml, containers/catalog.toml, pipeline/guidance/registry.json, tests/job-test-map.json, src/appsec_review/runtime/registry.py, src/appsec_review/runtime/contracts.py, src/appsec_review/runtime/datasets.py, src/appsec_review/guidance/workers.py, src/appsec_review/mcp/schema.py, src/appsec_review/orchestration/topology.py, src/appsec_review/orchestration/dagster/adapter.py, docs/intelligence-buckets.json, src/appsec_review/tool_inputs.py, src/appsec_review/jobs/cataloging.py, src/appsec_review/review/capability.py by scripts/generate-docs.py; do not edit -->
@@ -26,7 +26,7 @@ Eligible roles are the registry allowlist intersected with in-process tool/index
 | `documents_and_retrieval` | Undeclared; see gap | 3 producers / 11 dataset IDs | `artifact_only`, `indexed` | `documents`, `inventory`, `links` (+1 in JSON)<br>`coverage`, `find`, `query_dataset_inventory` (+6 in JSON) | `adjudication_judge`, `attack_chain_analyst`, `blue_team_refuter` (+6 in JSON) | [T-157](../TODO.md) |
 | `history` | Undeclared; see gap | 2 producers / 8 dataset IDs | `artifact_only`, `indexed`, `protected` | `history`<br>`coverage`, `find`, `query_change_context` (+4 in JSON) | `adjudication_judge`, `attack_chain_analyst`, `blue_team_refuter` (+5 in JSON); incomplete declarations | [T-157](../TODO.md) |
 | `metrics` | Undeclared; see gap | 5 producers / 8 dataset IDs | `artifact_only`, `indexed` | `analysis`<br>`coverage`, `query_dataset_inventory`, `query_engineering_signals` | `completeness_reviewer`; incomplete declarations | [T-157](../TODO.md) |
-| `review_products` | Undeclared; see gap | 14 producers / 45 dataset IDs | `artifact_only`, `indexed`, `protected` | `applicability`, `component-classification`, `control-result` (+5 in JSON)<br>`coverage`, `find`, `query_dataset_inventory` (+5 in JSON) | `adjudication_judge`, `attack_chain_analyst`, `blue_team_refuter` (+5 in JSON); incomplete declarations | [T-157](../TODO.md) |
+| `review_products` | Undeclared; see gap | 15 producers / 46 dataset IDs | `artifact_only`, `indexed`, `protected` | `applicability`, `component-classification`, `control-result` (+5 in JSON)<br>`coverage`, `find`, `query_dataset_inventory` (+5 in JSON) | `adjudication_judge`, `attack_chain_analyst`, `blue_team_refuter` (+5 in JSON); incomplete declarations | [T-157](../TODO.md) |
 | `scanner_observations` | `C`, `C#`, `C++` (+10 in JSON); incomplete declarations | 7 producers / 26 dataset IDs | `artifact_only`, `indexed`, `protected` | `evidence`, `observations`<br>`coverage`, `find`, `query_artifacts` (+6 in JSON) | `adjudication_judge`, `attack_chain_analyst`, `blue_team_refuter` (+6 in JSON) | [T-157](../TODO.md) |
 | `source_snapshot` | Undeclared; see gap | 3 producers / 8 dataset IDs | `artifact_only`, `indexed` | `components`, `source`<br>`coverage`, `find`, `query_dataset_inventory` (+2 in JSON) | `adjudication_judge`, `attack_chain_analyst`, `blue_team_refuter` (+6 in JSON) | [T-157](../TODO.md) |
 | `symbols_and_calls` | Undeclared; see gap | 4 producers / 13 dataset IDs | `artifact_only`, `indexed`, `protected` | `analysis`, `compiled`, `debug_symbols`<br>`coverage`, `find`, `query_dataset_inventory` (+4 in JSON) | `adjudication_judge`, `attack_chain_analyst`, `blue_team_refuter` (+5 in JSON); incomplete declarations | [T-157](../TODO.md) |

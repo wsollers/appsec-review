@@ -4,7 +4,7 @@ kind: "review"
 subsystem: "review inference and guidance"
 status: "historical"
 jobs: ["job_inference_security_review", "job_poc_generation"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Second-opinion brief: review protocol v2, the judge role and PoC generation
 

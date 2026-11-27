@@ -1548,6 +1548,14 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "operations",
+      "path": "docs/operations/job_detailed_finding_report.md",
+      "reason": "Canonical operations contract for job_detailed_finding_report and its per-defect 3a/3b/3c diagram outputs.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "operations",
       "path": "docs/operations/job_document_issue_analysis.md",
       "reason": "Retain the authored T-130 job process and acceptance around its regenerated contract.",
       "subsystem": "review inference and guidance"
@@ -2676,6 +2684,22 @@
       "decision_record": false,
       "disposition": "keep",
       "kind": "schema",
+      "path": "docs/schemas/detailed-finding-report/v1/detailed-finding-report-handoff.schema.json",
+      "reason": "Keep detailed-finding-report-handoff.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
+      "path": "docs/schemas/detailed-finding-report/v1/detailed-finding-report.schema.json",
+      "reason": "Keep detailed-finding-report.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
+      "subsystem": "reporting and metrics"
+    },
+    {
+      "decision_record": false,
+      "disposition": "keep",
+      "kind": "schema",
       "path": "docs/schemas/discovery-case.schema.json",
       "reason": "Keep discovery-case.schema.json as a machine-readable contract consumed by code and linked rather than restated in prose.",
       "subsystem": "testing and operations"
@@ -3589,7 +3613,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-01-model-connectivity.md",
-      "reason": "Preserve Job pass 01 — `job_model_connectivity` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 01 \u2014 `job_model_connectivity` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "review inference and guidance"
     },
     {
@@ -3597,7 +3621,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-02-image-pin-verification.md",
-      "reason": "Preserve Job pass 02 — `job_image_pin_verification` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 02 \u2014 `job_image_pin_verification` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "images and deployment"
     },
     {
@@ -3605,7 +3629,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-03-target-acquisition.md",
-      "reason": "Preserve Job pass 03 — `job_target_acquisition` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 03 \u2014 `job_target_acquisition` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "target acquisition and build"
     },
     {
@@ -3613,7 +3637,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-04-review-intake.md",
-      "reason": "Preserve Job pass 04 — `job_review_intake` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 04 \u2014 `job_review_intake` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "target acquisition and build"
     },
     {
@@ -3621,7 +3645,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-05-target-catalog.md",
-      "reason": "Preserve Job pass 05 — `job_target_catalog` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 05 \u2014 `job_target_catalog` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "target acquisition and build"
     },
     {
@@ -3629,7 +3653,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-06-build-environment-analysis.md",
-      "reason": "Preserve Job pass 06 — `job_build_environment_analysis` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 06 \u2014 `job_build_environment_analysis` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "target acquisition and build"
     },
     {
@@ -3637,7 +3661,7 @@
       "disposition": "keep",
       "kind": "task",
       "path": "docs/tasks/2026-11-08-job-pass-07-ci-configuration-analysis.md",
-      "reason": "Preserve Job pass 07 — `job_ci_configuration_analysis` as the task brief or execution record rather than a second current-state reference.",
+      "reason": "Preserve Job pass 07 \u2014 `job_ci_configuration_analysis` as the task brief or execution record rather than a second current-state reference.",
       "subsystem": "scanners and evidence collection"
     },
     {

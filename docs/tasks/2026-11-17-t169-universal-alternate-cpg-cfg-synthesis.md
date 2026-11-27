@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "code intelligence"
 status: "current"
 jobs: ["job_code_graph_index", "job_codeql_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_inference_security_review", "job_tree_sitter_ast"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Task plan T-169: Synthesize universal alternate CPG and CFG from Tree-sitter and CodeQL
 

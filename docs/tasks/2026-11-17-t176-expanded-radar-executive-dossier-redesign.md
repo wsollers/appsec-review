@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: ["job_dossier_publication", "job_final_publication_gate", "job_final_report_publication", "job_openvex_export"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Task plan T-176: Expand radar dimensions to 12 axes and redesign executive reports and dossiers
 

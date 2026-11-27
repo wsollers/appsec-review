@@ -4,7 +4,7 @@ kind: "process"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: []
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Review monitoring and job-output reports
 
@@ -427,8 +427,11 @@ clearing the old monitor's schedule and ending that old conversation's work. Ret
 handoff/report history. Never let two monitors write the same checkpoint at once or end before
 the successor accepts responsibility.
 
-At completion, give native execution status AND the verifier's output-quality status, unresolved
-gaps, meaningful findings and actual report/PDF/OpenVEX dispositions/counts/references. A successful
+At completion (once the run is terminal; never read answer keys during the run), run
+`.venv/bin/python -m appsec_review.reporting efficacy --run EXACT_APP_ID --config appsec-review.toml`
+on the WSL host to refresh keyed smoke effectiveness and target-grouped Run-over-Run reports, and
+give native execution status AND the verifier's output-quality status, unresolved
+gaps, meaningful findings and actual report/Candidate A-B-C/detailed-finding-report/PDF/OpenVEX/efficacy dispositions/counts/references. A successful
 step is not proof a file was produced; zero findings with unexplained gaps is not a clean result.
 Retain command-to-start, claim-to-first-handler, application-terminal and native-finalization
 timings separately. Finish the verifier's completion backlog and clear the corresponding

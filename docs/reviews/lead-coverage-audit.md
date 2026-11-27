@@ -4,7 +4,7 @@ kind: "review"
 subsystem: "review inference and guidance"
 status: "historical"
 jobs: ["job_artifact_security_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_evidence_collection", "job_post_build_security_assessment"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Lead coverage audit
 

@@ -3,8 +3,8 @@ title: "Dossier data, queries and provenance"
 kind: "architecture"
 subsystem: "reporting and metrics"
 status: "historical"
-jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection", "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification", "job_inference_security_review", "job_language_build", "job_model_connectivity", "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync", "job_threat_model_generation", "job_tree_sitter_ast"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_cbmc_analysis", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_detailed_finding_report", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection", "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification", "job_inference_security_review", "job_language_build", "job_model_connectivity", "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync", "job_threat_model_generation", "job_tree_sitter_ast"]
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Dossier data, queries and provenance
 
@@ -20,7 +20,7 @@ not the planning output. These declarations are not new public retrieval endpoin
 package identities, shipped artifacts or native target proof. The counts/history below retain
 their named source baselines; this candidate does not claim a new accepted run or dossier result.
 At source `826b6a29a55a756e59b4a7209227f8f6a4051c5f`, the static registry and TOML inventory
-contains 48 registered/configured jobs and 43 enabled review-graph jobs, including CBMC.
+contains 49 registered/configured jobs and 44 enabled review-graph jobs, including CBMC and detailed finding reports.
 The registry also includes internal build iteration and maintenance reference synchronization, and
 the default-disabled generated threat model. The completion-era counts below are historical,
 not current dataset/tool inventories.
@@ -36,8 +36,8 @@ and reconciliation with main `799ea3c2` for debug symbols and native SBOM eviden
 standalone OpenVEX integration over completed main `c47e3fea`. Operative OpenVEX default-policy
 rows are reconciled at `74d93127`, containing landed main `83e67b23`; historical evidence below
 retains its original source attribution.
-The inventory at that earlier checkpoint contained **47 registered/configured
-jobs, 191 dataset kinds, 31 public retrieval tools, 19 logical SQLite indexes and 16 allowed
+The inventory at the current reconciled source contains **49 registered/configured
+jobs, 198 dataset kinds, 31 public retrieval tools, 19 logical SQLite indexes and 16 allowed
 query sets (10 produced, 6 pending)**. This is a catalog of implemented input surfaces,
 **not** evidence that a particular run produced them. Chain, remediation and dossier producers,
 central wiring, process metrics, immutable PoC `/2`, gate/report `/2` and chain/base isolation now
@@ -459,6 +459,7 @@ sanitized public references do not make those bytes public.
 | [`job_debug_symbol_indexing`](../../src/appsec_review/jobs/job_debug_symbol_indexing/datasets.py) | `normalized_symbols` | `symbol_coverage`, `target_decision`, `debug_symbol_summary` | `raw_artifact_refs`, `reader_executions` |
 | [`job_artifact_security_analysis`](../../src/appsec_review/jobs/job_artifact_security_analysis/datasets.py) | `artifact_security_observations` | `artifact_security_results`, `artifact_security_acceptance` | `artifact_scanner_io` |
 | [`job_cpp_compiled_analysis`](../../src/appsec_review/jobs/job_cpp_compiled_analysis/datasets.py) | `cpp_build_graph`, `clang_ast`, `llvm_ir`, `infer_observations`, `binary_symbols`, `cpp_blocked_branches` | `cpp_plan_and_summary` A(s) | `cpp_case_material` |
+| [`job_cbmc_analysis`](../../src/appsec_review/jobs/job_cbmc_analysis/datasets.py) | `cbmc_results`, `cbmc_coverage` | `cbmc_plan`, `cbmc_summary` | `cbmc_raw` |
 | [`job_clang_static_analysis`](../../src/appsec_review/jobs/job_clang_static_analysis/datasets.py) | `clang_static_observations`, `clang_static_scope_coverage` | `clang_static_summary` | `clang_static_raw` |
 | [`job_cpp_symbol_index`](../../src/appsec_review/jobs/job_cpp_symbol_index/datasets.py) | `clangd_symbols`, `clangd_coverage` | `clangd_summary` | `clangd_tool_io` |
 | [`job_binary_evidence_indexing`](../../src/appsec_review/jobs/job_binary_evidence_indexing/datasets.py) | `binary_functions` | `binary_pseudo_c`, `binary_evidence_summary` | none |
@@ -479,7 +480,7 @@ sanitized public references do not make those bytes public.
 | [`job_third_party_data_sync`](../../src/appsec_review/jobs/job_third_party_data_sync/datasets.py) | none | none | `feed_sync_work` (published snapshots are pinned separately) |
 | [`job_review_data_indexing`](../../src/appsec_review/jobs/job_review_data_indexing/datasets.py) | `cross_domain_links`, `precomputed_products`, `dataset_inventory` | `accepted_input_summary`, `derived_checkpoints`, `fts_image_validation`, `dataset_audit_report`, `coverage_matrices` | none |
 | [`job_review_package_assembly`](../../src/appsec_review/jobs/job_review_package_assembly/datasets.py) | none | `review_packages` | none |
-| [`job_document_issue_analysis`](../../src/appsec_review/jobs/job_document_issue_analysis/datasets.py) | none | `document_issue_ledger`, `document_drift_issues` | none |
+| [`job_document_issue_analysis`](../../src/appsec_review/jobs/job_document_issue_analysis/datasets.py) | `document_navigation` | `document_issue_ledger`, `document_drift_issues` | none |
 | [`job_inference_security_review`](../../src/appsec_review/jobs/job_inference_security_review/datasets.py) | none | `accepted_scope`, `review_packages`, `claim_ledger`, `scores_and_findings` | `lead_triage`, `review_cells`, `attack_chains`, `review_audit_metadata`, `review_decision_audit`, `review_decisions`, `review_verification_coverage`, `review_decision_bases`, `review_audit_continuations` |
 | [`job_poc_generation`](../../src/appsec_review/jobs/job_poc_generation/datasets.py) | none | `poc_generation_summary` | `poc_writer_cells`, `poc_reproducers` |
 | [`job_remediation_planning`](../../src/appsec_review/jobs/job_remediation_planning/datasets.py) | none | `remediation_planning_summary` | `remediation_proposals` |
@@ -488,6 +489,7 @@ sanitized public references do not make those bytes public.
 | [`job_final_publication_gate`](../../src/appsec_review/jobs/job_final_publication_gate/datasets.py) | none | `publication_gate_decisions` | none |
 | [`job_openvex_export`](../../src/appsec_review/jobs/job_openvex_export/datasets.py) | none | none | `openvex_dependency_documents`, `openvex_dependency_accounting`, `openvex_verified_inputs`, `openvex_documents`, `openvex_export_accounting` |
 | [`job_final_report_publication`](../../src/appsec_review/jobs/job_final_report_publication/datasets.py) | none | `final_report_publications`, `final_report_sarif_accounting` | `final_report_sarif` |
+| [`job_detailed_finding_report`](../../src/appsec_review/jobs/job_detailed_finding_report/datasets.py) | none | `detailed_finding_reports` | none |
 
 The runtime also owns configuration, attempt/status/unit/handoff/claim and orchestration receipts,
 bounded event logs, sanitized retrieval audit receipts, and shared-object custody receipts.

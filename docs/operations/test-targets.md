@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "testing and operations"
 status: "current"
 jobs: []
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Test targets: where to get the repositories
 
@@ -24,7 +24,7 @@ documentation reconciliation does not read an answer key or establish target acc
 | Public C corpus CASTLE-C250, blind tag `castle-c250-v1` | prepared from <https://github.com/CASTLE-Benchmark/CASTLE-Benchmark> at the commit in [`../../data/reference/castle/castle-c250.lock.json`](../../data/reference/castle/castle-c250.lock.json) by `python -m appsec_review.acceptance.castle prepare` | `targets/castle-c250` | Detector-scoring regression against the paper's numbers |
 | Build-topology fixture monorepo | committed at [`../../test/topology/monorepo/`](../../test/topology/monorepo/README.md) (46 small text files, byte-pinned by `MANIFEST.json`); copied out by `python -m appsec_review.acceptance.topology prepare --into targets/topology-monorepo` | `targets/topology-monorepo` | `tests/test_topology_fixture.py` (fast, no Docker) and live `appsec-review start --target targets/topology-monorepo`, scored with `... topology score --run <run>` against `test/topology/monorepo.expectations.json` ([task](../tasks/2026-11-07-topology-fixture-monorepo.md)) |
 | Freeciv at `b1b0768bfaca9b2fae68f9466defe1e80636e9fa` (whole repository; the parent of the fix for CVE-2026-90556, so that defect and CVE-2026-90557 are both present) | <https://github.com/freeciv/freeciv> | `targets/freeciv` | Job-by-job walk on a real game codebase; answers belong in the private `appsec-review-answers` repository, not here |
-| Smoke target `appsec-review-smoke-cpp` (C/C++), tag `v1.0.0` = `bededb650d0c…` | <https://github.com/wsollers/appsec-review-smoke-cpp> | `targets/appsec-review-smoke-cpp`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `native`, planted advisory zlib 1.2.11 (CVE-2018-25032), vendored |
+| Smoke target `appsec-review-smoke-cpp` (C/C++), tag `v2.0.0` = `c59efefeaca8…` (supersedes `v1.0.0` = `bededb650d0c…`) | <https://github.com/wsollers/appsec-review-smoke-cpp> | `targets/appsec-review-smoke-cpp`, checked out at the tag | Attribution walks (T-134); 20-file / 1,579-SLOC blind C/C++ smoke v2.0.0 (`PLANTED.md` and `tools/` removed; 42 items across `21 TP-C`, `3 TP-D`, `6 FX-C`, `1 FX-D`, `11 FP`), build profile `native`, planted advisory zlib 1.2.11 (CVE-2018-25032), vendored |
 | Smoke target `appsec-review-smoke-java` (Java), tag `v1.0.0` = `3219d1700d69…` | <https://github.com/wsollers/appsec-review-smoke-java> | `targets/appsec-review-smoke-java`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `java`, planted advisory log4j-core 2.14.1 (CVE-2021-44228) |
 | Smoke target `appsec-review-smoke-javascript` (JavaScript/TypeScript), tag `v1.0.0` = `84e3c01a2b31…` | <https://github.com/wsollers/appsec-review-smoke-javascript> | `targets/appsec-review-smoke-javascript`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `node`, planted advisory lodash 4.17.15 (CVE-2020-8203) |
 | Smoke target `appsec-review-smoke-python` (Python), tag `v1.0.0` = `0821c008da6e…` | <https://github.com/wsollers/appsec-review-smoke-python> | `targets/appsec-review-smoke-python`, checked out at the tag | Attribution walks (T-134); one build unit, build profile `python`, planted advisory urllib3 1.24 (CVE-2018-25091) |

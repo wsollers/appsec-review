@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_document_issue_analysis", "job_inference_security_review", "job_review_data_indexing", "job_review_package_assembly", "job_target_catalog"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Target document analysis and finding handoff
 

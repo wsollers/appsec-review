@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "testing and operations"
 status: "current"
 jobs: []
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Smoke scorecard
 
@@ -22,6 +22,7 @@ metrics, the radar chart and PDF, and the run-to-run trend. The code is
 .venv/bin/python scripts/smoke-score.py --run runs/<run-id> --answer-key ~/smoke-work/cpp/answer-key.json
 .venv/bin/python scripts/smoke-score.py --run runs/<run-id> --answer-key ~/smoke-work/cpp/answer-key.json --no-pdf
 .venv/bin/python scripts/smoke-score.py --run runs/<run-id> --answer-key ~/smoke-work/cpp/answer-key.json --compare <other-run-id>
+.venv/bin/python -m appsec_review.reporting efficacy --run <run-id> --config appsec-review.toml
 ```
 
 With the key, the scorecard renders by default (`--pdf`); `--no-pdf` keeps the score only. `--compare`
@@ -42,6 +43,10 @@ key the user names on the command line. It writes only under `runs/<run-id>/data
 | `smoke-scorecard.pdf` | the PDF, when the pinned `tool-report-latex` image rendered it (offline, read-only template and input, non-root, `SOURCE_DATE_EPOCH=0`) |
 | `smoke-scorecard.log`, `smoke-scorecard.pdfinfo.txt` | the renderer's log and `pdfinfo` output, when it left them |
 | `smoke-scorecard-receipt.json` | `appsec-review/smoke-scorecard-receipt/1`: status `rendered`, `render_failed` or `latex_only`; SHA-256 of the score, the `.tex` and the `.pdf`; the template file hashes; the tool identity (image tag, version, manifest hash) and the execution record (exit code, image id); page count and overfull-box count; named gaps |
+| `smoke-effectiveness.json`, `smoke-effectiveness.md`, `smoke-effectiveness.tex`, `smoke-effectiveness.pdf` | Known-smoke effectiveness matrix (`reporting/smoke_effectiveness.py`) comparing found `path:line` issues against planted positive (`TP-C`/`TP-D`), fixed-in-history (`FX-C`/`FX-D`), and false-positive decoy (`FP`) items plus SAST-lead (`finding_lead`) versus Hunter-only (`hunt`) attribution (`unkeyed` inside blind Dagster containers; `keyed` when run on the host beside `../appsec-review-smoke-guide`) |
+| `run-over-run-report.json`, `run-over-run-report.md`, `run-over-run-report.tex`, `run-over-run-report.pdf` | Target-grouped longitudinal efficacy report (`reporting/run_over_run_report.py`) over `runs/metadata/finding-history/<target_id>/` |
+| `smoke-effectiveness.json`, `smoke-effectiveness.md`, `smoke-effectiveness.tex`, `smoke-effectiveness.pdf` | Known-smoke effectiveness matrix (`reporting/smoke_effectiveness.py`) comparing found `path:line` issues against planted positive (`TP-C`/`TP-D`), fixed-in-history (`FX-C`/`FX-D`), and false-positive decoy (`FP`) items plus SAST-lead (`finding_lead`) versus Hunter-only (`hunt`) attribution (`unkeyed` inside blind Dagster containers; `keyed` when run on the host beside `../appsec-review-smoke-guide`) |
+| `run-over-run-report.json`, `run-over-run-report.md`, `run-over-run-report.tex`, `run-over-run-report.pdf` | Target-grouped longitudinal efficacy report (`reporting/run_over_run_report.py`) over `runs/metadata/finding-history/<target_id>/` |
 
 A rendering problem (image absent or unpinned, no container runtime, no signing policy on the host, a
 timeout, an invalid PDF) is a named gap in the receipt (`smoke_scorecard_renderer_unavailable`,

@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: ["job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_poc_generation"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Operating the final publication gate and the final report
 
@@ -31,7 +31,9 @@ review accepted them (design: [`../architecture/inference-security-review.md`](.
 
 ```text
 review (chains before seal) -> enabled PoC / planning / validation / dossiers
-                           -> one final gate -> final report
+                           -> one final gate -> final report (+ Candidate A/B/C)
+                                             -> detailed finding report (3a/3b/3c slices)
+                                             -> standalone OpenVEX export
 ```
 
 The report closes the completion publication path. The default-on standalone OpenVEX exporter
@@ -47,7 +49,19 @@ consumers, including separately enabled export.
 ### Final-report export integrity
 
 The existing `report.assemble` task writes `findings.sarif` and `sarif-export-result.json`
-alongside `final-report.json`; there is no separate SARIF job. The accepted handoff binds
+alongside `final-report.json`; there is no separate SARIF job. In `report.render` and
+`report.render_pdf`, `job_final_report_publication` also emits three streamlined visual executive
+candidates (`executive-report-candidate-{a,b,c}.{md,html,tex,pdf}` with
+`receipt-candidate-{a,b,c}.json`, titled **Candidate A**, **Candidate B**, and **Candidate C**)
+that present severity distributions, verification funnels, domain posture charts, and concise
+top-risk summaries without dossier-level evidence dumps (which live in protected dossiers and
+[`job_detailed_finding_report`](job_detailed_finding_report.md)). In `report.render` and
+`report.render_pdf`, `job_final_report_publication` also emits three streamlined visual executive
+candidates (`executive-report-candidate-{a,b,c}.{md,html,tex,pdf}` with
+`receipt-candidate-{a,b,c}.json`, titled **Candidate A**, **Candidate B**, and **Candidate C**)
+that present severity distributions, verification funnels, domain posture charts, and concise
+top-risk summaries without dossier-level evidence dumps (which live in protected dossiers and
+[`job_detailed_finding_report`](job_detailed_finding_report.md)). The accepted handoff binds
 both SARIF artifacts and the existing `final-report.html`. Publication reassembles the
 gate-derived JSON/SARIF and checks the Markdown and HTML renderings before accepting them.
 

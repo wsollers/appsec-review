@@ -4,7 +4,7 @@ kind: "review"
 subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_artifact_security_analysis", "job_dependency_intelligence", "job_evidence_collection", "job_inference_security_review", "job_review_data_indexing", "job_review_package_assembly", "job_target_catalog", "job_third_party_data_sync"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Dependency and supply-chain intelligence subsystem review
 

@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_inference_security_review", "job_owasp_control_assessment", "job_poc_generation", "job_remediation_planning", "job_remediation_validation", "job_review_package_assembly"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Task plan T-173: Publish common querying skills rebalance frontier prompts and widen attack chains
 

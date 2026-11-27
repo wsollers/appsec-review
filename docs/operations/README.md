@@ -4,7 +4,7 @@ kind: "generated"
 subsystem: "testing and operations"
 status: "current"
 jobs: []
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 
 <!-- generated from: document frontmatter by scripts/generate-docs.py; do not edit -->
@@ -104,6 +104,7 @@ last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
 | [cpp_symbol_index](job_cpp_symbol_index.md) | code intelligence | current |
 | [Debug-symbol indexing job](job_debug_symbol_indexing.md) | code intelligence | current |
 | [dependency_intelligence](job_dependency_intelligence.md) | scanners and evidence collection | current |
+| [detailed_finding_report](job_detailed_finding_report.md) | reporting and metrics | current |
 | [document_issue_analysis](job_document_issue_analysis.md) | review inference and guidance | current |
 | [dossier_publication](job_dossier_publication.md) | reporting and metrics | current |
 | [evidence_collection](job_evidence_collection.md) | scanners and evidence collection | current |

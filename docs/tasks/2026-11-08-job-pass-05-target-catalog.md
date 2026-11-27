@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "target acquisition and build"
 status: "historical"
 jobs: ["job_build_environment_analysis", "job_ci_configuration_analysis", "job_language_build", "job_project_build", "job_source_history_analysis", "job_target_analysis_plan", "job_target_catalog"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Job pass 05 — `job_target_catalog`
 

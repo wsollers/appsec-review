@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "target acquisition and build"
 status: "current"
 jobs: ["job_build_iteration", "job_language_build", "job_project_build", "job_target_analysis_plan"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Target build topology and bounded iterations
 

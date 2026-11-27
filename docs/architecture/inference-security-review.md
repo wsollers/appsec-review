@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "review inference and guidance"
 status: "current"
 jobs: ["job_code_graph_index", "job_cpg_analysis", "job_document_issue_analysis", "job_dossier_publication", "job_final_publication_gate", "job_final_report_publication", "job_inference_security_review", "job_poc_generation", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_tree_sitter_ast"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Near-terminal inference security review
 

@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "overview"
 status: "current"
 jobs: []
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 
 # How an appsec-review run works
@@ -31,7 +31,7 @@ auditable; they do not prove every claim is correct or every relevant behavior w
 
 This is a conceptual evidence flow, not the complete scheduling graph or a grant to consume
 every predecessor. Typed contracts and actual read receipts govern consumption. The checked-in
-recipe registers 48 jobs: 46 review-graph declarations, of which 43 are enabled; maintenance
+recipe registers 49 jobs: 47 review-graph declarations, of which 44 are enabled; maintenance
 sync and internal build iteration have separate dispatch boundaries.
 
 ```mermaid
@@ -83,13 +83,18 @@ flowchart TB
     inf --> gate
     poc --> gate
     rem --> gate
-    gate --> rep["job_final_report_publication: appsec-review/final-report/4 + radar/2 + SARIF 2.1.0"]
+    gate --> rep["job_final_report_publication: appsec-review/final-report/4 + Candidate A/B/C + SARIF 2.1.0"]
     gate --> vex["job_openvex_export: confirmed affected-only export; separate optional dependency companion"]
+    gate --> dfr["job_detailed_finding_report: appsec-review/detailed-finding-report/1 + 3a/3b/3c slices"]
   end
 ```
 
-The report renders deterministic Markdown and HTML plus a configured executive PDF from the
-certified gate snapshot and gate-bound dossiers. The accepted handoff's `pdf` outcome and renderer
+The report renders deterministic Markdown and HTML, a configured executive PDF, and streamlined
+visual `Candidate A`, `Candidate B`, and `Candidate C` executive reports from the certified gate
+snapshot and gate-bound dossiers, while `job_detailed_finding_report` pairs each confirmed defect
+with deterministic `3a` (source taint flow), `3b` (call-fanout slice), and `3c` (function CFG)
+diagrams and run-completion efficacy archival records target-grouped Run-over-Run and Smoke
+Effectiveness reports. The accepted handoff's `pdf` outcome and renderer
 receipt distinguish rendered, failed and disabled output; the initial JSON's pre-render
 `not_rendered` declaration is not that outcome. Radar `/2` retains unknown measurements as
 `null` with reasons (**N/A** in renderings), not measured zero. Protected dossier PDFs remain

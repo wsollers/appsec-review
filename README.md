@@ -17,7 +17,11 @@ The upgraded job JSON contract, native scanner provenance, migration rules, and 
 Schema are documented in [job interchange](docs/architecture/job-interchange.md).
 Admission, execution, and coverage are separate; scanner observations are not confirmed findings.
 
-The [final report](docs/operations/final-report.md) publishes report `/4` with radar `/2`.
+The [final report](docs/operations/final-report.md) publishes report `/4` with radar `/2` plus
+streamlined visual `Candidate A`, `Candidate B`, and `Candidate C` executive reports, while
+[`job_detailed_finding_report`](docs/operations/job_detailed_finding_report.md) pairs each
+confirmed defect with `3a`/`3b`/`3c` code-flow diagrams and post-run efficacy archival emits
+target-grouped Run-over-Run and Known-Smoke Effectiveness reports.
 Unknown exposure, inspection and corroboration remain `null` with reasons (**N/A** in renderings),
 not measured zero. Protected [dossiers](docs/operations/dossier-publication.md) preserve accepted
 evidence and exact-edit patch references without inventing paths, guard conclusions or fix verification.

@@ -700,6 +700,7 @@
           "accepted_scope",
           "attack_chains",
           "claim_ledger",
+          "detailed_finding_reports",
           "document_issue_ledger",
           "dossier_publications",
           "final_report_publications",
@@ -776,6 +777,7 @@
         "gaps": [],
         "state": "declared",
         "values": [
+          "job_detailed_finding_report",
           "job_document_issue_analysis",
           "job_dossier_publication",
           "job_final_publication_gate",
@@ -6166,6 +6168,56 @@
       "stage": "artifact_only",
       "store": "retrieval",
       "target_access": "checkout"
+    },
+    {
+      "access": "sanitized_metadata_only",
+      "authority": "producer_evidence",
+      "bucket": "review_products",
+      "dataset": "detailed_finding_reports",
+      "description": "The machine-readable detailed finding report (detailed-finding-report.json), its deterministic Markdown (detailed-finding-report.md), HTML (detailed-finding-report.html), standalone 3a/3b/3c SVG/Mermaid/DOT diagrams, and vector LaTeX/PDF (detailed-finding-report.tex, detailed-finding-report.pdf, receipt.json and retained renderer logs), all hash-pinned by the accepted handoff.",
+      "family": "inference_review",
+      "gap": [
+        "T-157"
+      ],
+      "job_enabled": true,
+      "mcp_tools": {
+        "basis": "query_dataset_inventory (sanitized identity, hash, status and coverage only)",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "coverage",
+          "query_dataset_inventory"
+        ]
+      },
+      "producer": "job_detailed_finding_report",
+      "producer_languages": {
+        "basis": "job_detailed_finding_report: no explicit producer-language declaration in the inventory",
+        "gaps": [
+          "T-157"
+        ],
+        "state": "gap",
+        "values": []
+      },
+      "retrieval_indexes": {
+        "basis": "typed DatasetDeclaration.disposition=artifact_only; no payload index is declared",
+        "gaps": [],
+        "state": "not_applicable",
+        "values": []
+      },
+      "review_roles": {
+        "basis": "pipeline/guidance/registry.json role tools and src/appsec_review/review/capability.py; static eligibility only, requiring a run/package-scoped grant",
+        "gaps": [],
+        "state": "declared",
+        "values": [
+          "completeness_reviewer"
+        ]
+      },
+      "schema": "appsec-review/detailed-finding-report/1",
+      "sensitivity": "internal",
+      "source": "docs/generated/inventory.json: jobs.job_detailed_finding_report.datasets",
+      "stage": "artifact_only",
+      "store": "retrieval",
+      "target_access": "accepted_evidence"
     },
     {
       "access": "sanitized_metadata_only",
@@ -20950,6 +21002,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -20998,6 +21051,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -21070,6 +21124,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -21118,6 +21173,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -21190,6 +21246,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -21238,6 +21295,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -21310,6 +21368,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -21358,6 +21417,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -21430,6 +21490,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -21478,6 +21539,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -21550,6 +21612,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -21598,6 +21661,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -21670,6 +21734,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -21718,6 +21783,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -21790,6 +21856,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -21838,6 +21905,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -21910,6 +21978,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -21958,6 +22027,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -22030,6 +22100,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -22078,6 +22149,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -22150,6 +22222,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -22198,6 +22271,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -22270,6 +22344,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -22318,6 +22393,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -22390,6 +22466,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -22438,6 +22515,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -22510,6 +22588,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -22558,6 +22637,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -22630,6 +22710,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -22678,6 +22759,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -22750,6 +22832,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -22798,6 +22881,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",
@@ -22870,6 +22954,7 @@
       },
       "target_independent_producers": [],
       "unbound_datasets": [
+        "job_detailed_finding_report/detailed_finding_reports",
         "job_document_issue_analysis/document_issue_ledger",
         "job_dossier_publication/dossier_publications",
         "job_final_publication_gate/publication_gate_decisions",
@@ -22918,6 +23003,7 @@
         "job_threat_model_generation/threat_model_documents"
       ],
       "unbound_producers": [
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_final_publication_gate",

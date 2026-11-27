@@ -4,7 +4,7 @@ kind: "task"
 subsystem: "images and deployment"
 status: "current"
 jobs: ["job_codeql_analysis", "job_image_pin_verification", "job_model_connectivity"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Task plan T-177: Rebuild and register container images compile CodeQL packs and refresh Dagster pins
 

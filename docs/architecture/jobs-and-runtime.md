@@ -3,8 +3,8 @@ title: "Jobs and runtime"
 kind: "architecture"
 subsystem: "runtime interchange"
 status: "current"
-jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_cbmc_analysis", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection", "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification", "job_inference_security_review", "job_language_build", "job_model_connectivity", "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync", "job_threat_model_generation", "job_tree_sitter_ast"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+jobs: ["job_artifact_indexing", "job_artifact_security_analysis", "job_binary_evidence_indexing", "job_build_environment_analysis", "job_build_iteration", "job_cbmc_analysis", "job_change_context_analysis", "job_ci_configuration_analysis", "job_clang_static_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpg_analysis", "job_cpp_compiled_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_detailed_finding_report", "job_document_issue_analysis", "job_dossier_publication", "job_evidence_collection", "job_final_publication_gate", "job_final_report_publication", "job_image_pin_verification", "job_inference_security_review", "job_language_build", "job_model_connectivity", "job_openvex_export", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_profile_data", "job_project_build", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_intake", "job_review_package_assembly", "job_review_prioritization", "job_sanitizer_build", "job_security_tagging", "job_source_history_analysis", "job_svf_alias_analysis", "job_target_acquisition", "job_target_analysis_plan", "job_target_catalog", "job_test_coverage", "job_third_party_data_sync", "job_threat_model_generation", "job_tree_sitter_ast"]
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Jobs and runtime
 
@@ -118,7 +118,7 @@ input, output, tool, and acceptance contracts.
 
 `runtime/registry.py` registers 48 jobs, exactly matching the 48 `[jobs.<job_id>]` tables in
 `appsec-review.toml`, and its Dagster job is named from that table's `name`.
-At the reconciled source, 46 are review-graph jobs and 43 are enabled in the default review
+At the reconciled source, 47 are review-graph jobs and 44 are enabled in the default review
 projection; the internal build transaction and external feed maintenance are outside that graph.
 
 | Job | Purpose | Operations |
@@ -169,8 +169,9 @@ projection; the internal build transaction and external feed maintenance are out
 | `job_remediation_planning` | Confirmed-only inert exact patches, separate regression specifications and accounted manual/insufficient/capped outcomes | [remediation](../operations/remediation.md) |
 | `job_remediation_validation` | Exact scratch applicability, independent semantic assessment, selected static/native syntax checks and cleanup; never runtime verification | [remediation](../operations/remediation.md) |
 | `job_dossier_publication` | Protected per-confirmed-finding and per-PoC-outcome JSON/LaTeX/PDF/receipts before the final gate; real PDF only when rendered | [dossier-publication](../operations/dossier-publication.md) |
-| `job_final_report_publication` | Model-free report artifacts from the accepted gate, including JSON/Markdown and independently recorded PDF/SARIF export outcomes; an unavailable optional export never replaces the primary report | [final-report](../operations/final-report.md) |
+| `job_final_report_publication` | Model-free report artifacts from the accepted gate, including JSON/Markdown/HTML/PDF, streamlined visual `Candidate A`/`B`/`C` executive reports, and independently recorded PDF/SARIF export outcomes; an unavailable optional export never replaces the primary report | [final-report](../operations/final-report.md) |
 | `job_openvex_export` | Default-enabled conservative OpenVEX statement export from the same immutable accepted gate snapshot; no report fan-in or external publication | [openvex-export](openvex-export.md) |
+| `job_detailed_finding_report` | Default-enabled model-free per-defect visual report pairing each gate-publishable confirmed finding with deterministic `3a` (source taint flow), `3b` (call-fanout slice), and `3c` (function CFG) diagrams across JSON/Markdown/HTML/LaTeX/PDF | [job_detailed_finding_report](../operations/job_detailed_finding_report.md) |
 
 Each orchestrated graph launch also publishes an immutable run-level orchestration receipt. This
 keeps the current Dagster run linked to the application run even when every job is reused and the

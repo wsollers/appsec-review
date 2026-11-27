@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "reporting and metrics"
 status: "current"
 jobs: []
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Finding metrics: operator guide
 
@@ -34,7 +34,17 @@ computed prints as `n/a (<reason>)`; it is never printed as zero and never chang
 The run is read through the verified readers the final report uses. A run whose current accepted
 report cannot be verified is an error; nothing is published. The snapshot is content-addressed
 under `<history>/<target-id>/snapshots/`; publishing the same snapshot again reports `duplicate`,
-and a second, different snapshot of the same run and stage is refused.
+and a second, different snapshot of the same run and stage is refused. When
+`[reporting.efficacy_report]` is enabled (`enabled = true`, `history_dir = "runs/metadata/finding-history"`),
+end-of-run completion (`finalize_efficacy_report`) and the operator command
+`.venv/bin/python -m appsec_review.reporting efficacy --run <run-id> --config appsec-review.toml`
+automatically archive each completed run under its canonical `target_id` so longitudinal
+`run-over-run-report.{json,md,tex,pdf}` comparisons remain strictly apples-to-apples per target. When
+`[reporting.efficacy_report]` is enabled (`enabled = true`, `history_dir = "runs/metadata/finding-history"`),
+end-of-run completion (`finalize_efficacy_report`) and the operator command
+`.venv/bin/python -m appsec_review.reporting efficacy --run <run-id> --config appsec-review.toml`
+automatically archive each completed run under its canonical `target_id` so longitudinal
+`run-over-run-report.{json,md,tex,pdf}` comparisons remain strictly apples-to-apples per target.
 
 - `--target-id` is your stable name for the target (`[a-z0-9][a-z0-9._-]*`). A run names its
   target by path and fingerprint, neither of which survives a new revision.

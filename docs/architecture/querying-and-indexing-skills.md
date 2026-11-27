@@ -4,7 +4,7 @@ kind: "architecture"
 subsystem: "code intelligence"
 status: "current"
 jobs: ["job_artifact_indexing", "job_binary_evidence_indexing", "job_ci_configuration_analysis", "job_code_graph_index", "job_codeql_analysis", "job_cpp_symbol_index", "job_debug_symbol_indexing", "job_dependency_intelligence", "job_document_issue_analysis", "job_evidence_collection", "job_inference_security_review", "job_owasp_control_assessment", "job_poc_generation", "job_post_build_security_assessment", "job_remediation_planning", "job_remediation_validation", "job_review_data_indexing", "job_review_prioritization", "job_source_history_analysis", "job_threat_model_generation", "job_tree_sitter_ast"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Hosted querying and indexing skills architecture
 

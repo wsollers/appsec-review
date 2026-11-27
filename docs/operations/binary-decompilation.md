@@ -4,7 +4,7 @@ kind: "operations"
 subsystem: "scanners and evidence collection"
 status: "current"
 jobs: ["job_binary_evidence_indexing", "job_review_intake"]
-last reconciled: "5dddbe5dd49bb7c5b3202b56802a1f9c1c2aaa73"
+last reconciled: "ea03df9695991eafe37065717624278af845a74c"
 ---
 # Binary decompilation: running Ghidra before a review
 
