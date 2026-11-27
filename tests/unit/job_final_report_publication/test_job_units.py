@@ -382,9 +382,21 @@ def test_units_execute_clean_and_gapped_flows_and_claim_every_written_file(
     assert receipt["tool"]["image_id"] == IMAGE_ID and receipt["execution"] is not None
     assert receipt["dossiers"] == {"certified": 0, "read": 0, "unavailable": []}
     unit_dir = fx.root / ATTEMPT / "steps/report/tasks/render_pdf"
-    assert sorted(p.name for p in unit_dir.iterdir()) == [
+    expected_render_pdf_files = sorted([
         "container-execution.json", "container-stderr.bin", "container-stdout.bin", "final-report.pdf",
-        "final-report.tex", "receipt.json", "report.log", "report.pdfinfo.txt"]
+        "final-report.tex", "receipt.json", "report.log", "report.pdfinfo.txt",
+        *(name for cid in ("a", "b", "c") for name in (
+            f"candidate-{cid}-container-execution.json",
+            f"candidate-{cid}-container-stderr.bin",
+            f"candidate-{cid}-container-stdout.bin",
+            f"candidate-{cid}-report.log",
+            f"candidate-{cid}-report.pdfinfo.txt",
+            f"executive-report-candidate-{cid}.pdf",
+            f"executive-report-candidate-{cid}.tex",
+            f"receipt-candidate-{cid}.json",
+        )),
+    ])
+    assert sorted(p.name for p in unit_dir.iterdir()) == expected_render_pdf_files
     assert published["pdf"] == {"state": "rendered", "reason": receipt["reason"], "file": files["pdf"],
                                 "sha256": files["pdf"]["sha256"], "latex": files["latex"], "receipt": files["receipt"]}
     tex = (fx.root / files["latex"]["path"]).read_text(encoding="utf-8")
@@ -561,7 +573,13 @@ def test_render_pdf_disabled_by_policy_keeps_latex_and_names_the_gap(
     assert published["gaps"] == [*outputs["report.render_pdf"]["gaps"], *outputs["report.assemble"]["gaps"]]
     assert published["pdf"]["state"] == "not_rendered" and "disabled by policy" in published["pdf"]["reason"]
     unit_dir = fx.root / ATTEMPT / "steps/report/tasks/render_pdf"
-    assert sorted(p.name for p in unit_dir.iterdir()) == ["final-report.tex", "receipt.json"]
+    assert sorted(p.name for p in unit_dir.iterdir()) == sorted([
+        "final-report.tex", "receipt.json",
+        *(name for cid in ("a", "b", "c") for name in (
+            f"executive-report-candidate-{cid}.tex",
+            f"receipt-candidate-{cid}.json",
+        )),
+    ])
 
 
 @pytest.mark.parametrize("tamper", ["result", "metadata"])
