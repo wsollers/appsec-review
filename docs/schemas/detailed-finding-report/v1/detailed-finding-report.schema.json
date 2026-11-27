@@ -1,0 +1,621 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/detailed-finding-report/1",
+  "title": "Detailed Finding Report",
+  "description": "Deterministic visual defect report pairing each gate-certified finding with 3a source taint/invariant, 3b call-fanout slice, and 3c intra-procedural CFG diagrams.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "run_id",
+    "provenance",
+    "status",
+    "summary",
+    "defects",
+    "backlog_defects",
+    "limitations"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/detailed-finding-report/1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_handoff",
+        "gate_document",
+        "code_graph_handoff",
+        "alternate_cpg_summary",
+        "configuration_profile",
+        "renderer"
+      ],
+      "properties": {
+        "gate_handoff": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "gate_document": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "code_graph_handoff": {
+          "$ref": "#/$defs/nullable_artifact_ref"
+        },
+        "alternate_cpg_summary": {
+          "$ref": "#/$defs/nullable_artifact_ref"
+        },
+        "configuration_profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "sha256"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "renderer": {
+          "const": "appsec-review-detailed-finding-report/1"
+        }
+      }
+    },
+    "status": {
+      "$ref": "#/$defs/report_status"
+    },
+    "summary": {
+      "$ref": "#/$defs/report_summary"
+    },
+    "defects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/defect_entry"
+      }
+    },
+    "backlog_defects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/defect_entry"
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "nullable_artifact_ref": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "report_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_status",
+        "review_status",
+        "code_graph_status",
+        "include_backlog"
+      ],
+      "properties": {
+        "gate_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "review_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "code_graph_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "include_backlog": {
+          "type": "boolean"
+        }
+      }
+    },
+    "report_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publishable_defect_count",
+        "backlog_defect_count",
+        "total_defect_count",
+        "diagram_count",
+        "cpg_fanout_resolved_count",
+        "cpg_cfg_resolved_count",
+        "fallback_fanout_count",
+        "fallback_cfg_count"
+      ],
+      "properties": {
+        "publishable_defect_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "backlog_defect_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_defect_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diagram_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cpg_fanout_resolved_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cpg_cfg_resolved_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fallback_fanout_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fallback_cfg_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "flow_node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node_id",
+        "label",
+        "role",
+        "location",
+        "detail"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "entry",
+            "source",
+            "hop",
+            "guard",
+            "sink",
+            "callee"
+          ]
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 512
+        }
+      }
+    },
+    "flow_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target",
+        "label",
+        "style"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "solid",
+            "dashed"
+          ]
+        }
+      }
+    },
+    "diagram_bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "title",
+        "provenance",
+        "orientation",
+        "caption",
+        "lane_badge",
+        "nodes",
+        "edges",
+        "relative_paths"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "3a",
+            "3b",
+            "3c"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "provenance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "LR",
+            "TD"
+          ]
+        },
+        "caption": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "lane_badge": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/flow_node"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/flow_edge"
+          }
+        },
+        "relative_paths": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "svg",
+            "mermaid",
+            "dot"
+          ],
+          "properties": {
+            "svg": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "mermaid": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "dot": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        }
+      }
+    },
+    "defect_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding_package_id",
+        "finding_id",
+        "defect_slug",
+        "section",
+        "title",
+        "severity",
+        "severity_rank",
+        "disposition",
+        "cwe",
+        "domain",
+        "primary_location",
+        "enclosing_symbol",
+        "violated_invariant",
+        "remediation_validation_status",
+        "poc_status",
+        "dossier",
+        "diagram_provenance",
+        "diagrams"
+      ],
+      "properties": {
+        "finding_package_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "finding_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "defect_slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+        },
+        "section": {
+          "type": "string",
+          "enum": [
+            "publishable",
+            "backlog"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "CRITICAL",
+            "HIGH",
+            "MEDIUM",
+            "LOW",
+            "INFO",
+            "UNSPECIFIED"
+          ]
+        },
+        "severity_rank": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "disposition": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "supported"
+          ]
+        },
+        "cwe": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "primary_location": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "start_line",
+            "end_line",
+            "display"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "start_line": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "end_line": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "display": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1080
+            }
+          }
+        },
+        "enclosing_symbol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "violated_invariant": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "remediation_validation_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "poc_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "dossier": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dossier_id",
+            "artifact"
+          ],
+          "properties": {
+            "dossier_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "artifact": {
+              "$ref": "#/$defs/artifact_ref"
+            }
+          }
+        },
+        "diagram_provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "3a",
+            "3b",
+            "3c",
+            "notes"
+          ],
+          "properties": {
+            "3a": {
+              "type": "string",
+              "enum": [
+                "dossier_flow_diagram",
+                "dossier_invariant_fallback"
+              ]
+            },
+            "3b": {
+              "type": "string",
+              "enum": [
+                "alternate_cpg_call_fanout",
+                "exe_viewer_fanout",
+                "dossier_structural_fallback"
+              ]
+            },
+            "3c": {
+              "type": "string",
+              "enum": [
+                "alternate_cpg_cfg",
+                "exe_viewer_cfg",
+                "dossier_cfg_fallback"
+              ]
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              }
+            }
+          }
+        },
+        "diagrams": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "3a",
+            "3b",
+            "3c"
+          ],
+          "properties": {
+            "3a": {
+              "$ref": "#/$defs/diagram_bundle"
+            },
+            "3b": {
+              "$ref": "#/$defs/diagram_bundle"
+            },
+            "3c": {
+              "$ref": "#/$defs/diagram_bundle"
+            }
+          }
+        }
+      }
+    }
+  }
+}

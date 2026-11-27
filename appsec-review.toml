@@ -3905,6 +3905,38 @@ workers = 1
 workers = 1
 [jobs.job_final_report_publication.steps.acceptance.tasks.publish_handoff]
 
+# Detailed finding report: terminal visual defect report pairing each gate-certified defect with
+# deterministic 3a source-taint/invariant, 3b call-fanout slice, and 3c intra-procedural CFG diagrams
+# across JSON, Markdown (relative SVG image embeds), HTML (inline SVGs), standalone SVG/Mermaid/DOT
+# files, and vector TikZ PDF compiled via tool-report-latex.
+[jobs.job_detailed_finding_report]
+name = "detailed_finding_report"
+workers = 1
+
+[jobs.job_detailed_finding_report.settings]
+enabled = true
+include_backlog = false
+max_fanout_nodes = 12
+max_cfg_nodes = 14
+render_pdf = true
+image_tag = "appsec-review/tool-report-latex:1.0.0"
+render_timeout_seconds = 600
+max_pdf_bytes = 33554432
+
+[jobs.job_detailed_finding_report.steps.load]
+workers = 1
+[jobs.job_detailed_finding_report.steps.load.tasks.accepted_inputs]
+
+[jobs.job_detailed_finding_report.steps.report]
+workers = 1
+[jobs.job_detailed_finding_report.steps.report.tasks.assemble]
+[jobs.job_detailed_finding_report.steps.report.tasks.render]
+[jobs.job_detailed_finding_report.steps.report.tasks.render_pdf]
+
+[jobs.job_detailed_finding_report.steps.acceptance]
+workers = 1
+[jobs.job_detailed_finding_report.steps.acceptance.tasks.publish_handoff]
+
 # End-of-review telemetry report: one LaTeX/PDF rollup of a run's telemetry, runtimes and metrics, written
 # under runs/<id>/data/telemetry/report/ through the pinned tool-report-latex image (the dossier pin).
 # It reads the run's telemetry read-only; a rendering failure is a receipt gap, never a run failure.

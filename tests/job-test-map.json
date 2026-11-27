@@ -1,14 +1,6 @@
 {
   "schema": "appsec-review/job-test-map/2",
   "jobs": {
-    "job_cbmc_analysis": {
-      "unit": [
-        "tests/unit/job_cbmc_analysis/test_cbmc_analysis.py"
-      ],
-      "integration": [],
-      "acceptance": [],
-      "live": []
-    },
     "job_artifact_indexing": {
       "unit": [
         "tests/unit/job_artifact_indexing/test_contract.py",
@@ -106,6 +98,14 @@
         "tests/integration/job_build_iteration/test_build_iteration_executor.py",
         "tests/integration/job_build_iteration/test_build_iteration_cli.py"
       ],
+      "acceptance": [],
+      "live": []
+    },
+    "job_cbmc_analysis": {
+      "unit": [
+        "tests/unit/job_cbmc_analysis/test_cbmc_analysis.py"
+      ],
+      "integration": [],
       "acceptance": [],
       "live": []
     },
@@ -326,6 +326,15 @@
         "tests/integration/job_dependency_intelligence/test_native_sbom_job.py",
         "tests/integration/test_dependency_job_acceptance.py"
       ],
+      "acceptance": [],
+      "live": []
+    },
+    "job_detailed_finding_report": {
+      "unit": [
+        "tests/unit/job_detailed_finding_report/test_contract_and_settings.py",
+        "tests/unit/job_detailed_finding_report/test_detailed_finding_report.py"
+      ],
+      "integration": [],
       "acceptance": [],
       "live": []
     },
@@ -1185,6 +1194,7 @@
         "job_cpp_symbol_index",
         "job_debug_symbol_indexing",
         "job_dependency_intelligence",
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_evidence_collection",
@@ -1254,6 +1264,7 @@
         "job_cpp_symbol_index",
         "job_debug_symbol_indexing",
         "job_dependency_intelligence",
+        "job_detailed_finding_report",
         "job_document_issue_analysis",
         "job_dossier_publication",
         "job_evidence_collection",

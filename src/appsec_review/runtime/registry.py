@@ -112,6 +112,7 @@ def builtin_registry() -> JobRegistry:
     from appsec_review.jobs.job_remediation_planning import build_job as build_remediation_planning
     from appsec_review.jobs.job_remediation_validation import build_job as build_remediation_validation
     from appsec_review.jobs.job_final_report_publication import build_job as build_final_report_publication
+    from appsec_review.jobs.job_detailed_finding_report import build_job as build_detailed_finding_report
 
     # Parity walks record and replay model responses here (docs/processes/local-dagster-parity.md).
     infer = recorded(live_infer)
@@ -184,4 +185,5 @@ def builtin_registry() -> JobRegistry:
     registry.register("job_remediation_planning", lambda: build_remediation_planning(infer=infer))
     registry.register("job_remediation_validation", lambda: build_remediation_validation(infer=infer))
     registry.register("job_final_report_publication", build_final_report_publication)
+    registry.register("job_detailed_finding_report", build_detailed_finding_report)
     return registry

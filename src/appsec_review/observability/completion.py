@@ -15,6 +15,7 @@ LANES = {
     "job_dossier_publication": "dossiers",
     "job_final_publication_gate": "publication_gate",
     "job_final_report_publication": "report_publication",
+    "job_detailed_finding_report": "detailed_finding_report",
 }
 COUNTERS = frozenset({
     "proposed", "admitted", "assessed", "capped", "rejected", "deduplicated",

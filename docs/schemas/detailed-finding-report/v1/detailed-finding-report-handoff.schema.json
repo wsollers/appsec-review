@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "appsec-review/detailed-finding-report-handoff/1",
+  "title": "Detailed Finding Report Handoff",
+  "description": "Accepted handoff payload published by job_detailed_finding_report.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "report_schema",
+    "artifact",
+    "markdown",
+    "html",
+    "diagram_files",
+    "gate_handoff",
+    "code_graph_handoff",
+    "status",
+    "summary",
+    "item_count",
+    "pdf",
+    "gaps",
+    "terminal_status"
+  ],
+  "properties": {
+    "schema": {
+      "const": "appsec-review/detailed-finding-report-handoff/1"
+    },
+    "report_schema": {
+      "const": "appsec-review/detailed-finding-report/1"
+    },
+    "artifact": {
+      "$ref": "#/$defs/artifact_ref"
+    },
+    "markdown": {
+      "$ref": "#/$defs/artifact_ref"
+    },
+    "html": {
+      "$ref": "#/$defs/artifact_ref"
+    },
+    "diagram_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "defect_slug",
+          "diagram",
+          "svg",
+          "mermaid",
+          "dot"
+        ],
+        "properties": {
+          "defect_slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,95}$"
+          },
+          "diagram": {
+            "type": "string",
+            "enum": [
+              "3a",
+              "3b",
+              "3c"
+            ]
+          },
+          "svg": {
+            "$ref": "#/$defs/artifact_ref"
+          },
+          "mermaid": {
+            "$ref": "#/$defs/artifact_ref"
+          },
+          "dot": {
+            "$ref": "#/$defs/artifact_ref"
+          }
+        }
+      }
+    },
+    "gate_handoff": {
+      "$ref": "#/$defs/artifact_ref"
+    },
+    "code_graph_handoff": {
+      "$ref": "#/$defs/nullable_artifact_ref"
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_status",
+        "review_status",
+        "code_graph_status",
+        "include_backlog"
+      ],
+      "properties": {
+        "gate_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "review_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "code_graph_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "include_backlog": {
+          "type": "boolean"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publishable_defect_count",
+        "backlog_defect_count",
+        "total_defect_count",
+        "diagram_count",
+        "cpg_fanout_resolved_count",
+        "cpg_cfg_resolved_count",
+        "fallback_fanout_count",
+        "fallback_cfg_count"
+      ],
+      "properties": {
+        "publishable_defect_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "backlog_defect_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_defect_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diagram_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cpg_fanout_resolved_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cpg_cfg_resolved_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fallback_fanout_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fallback_cfg_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "item_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "pdf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "reason",
+        "file",
+        "sha256",
+        "latex",
+        "receipt"
+      ],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "rendered",
+            "not_rendered",
+            "render_failed"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "file": {
+          "$ref": "#/$defs/nullable_artifact_ref"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "latex": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "receipt": {
+          "$ref": "#/$defs/artifact_ref"
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/producer_gap"
+      }
+    },
+    "terminal_status": {
+      "type": "string",
+      "enum": [
+        "SUCCEEDED",
+        "COMPLETED_WITH_GAPS"
+      ]
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "nullable_artifact_ref": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "producer_gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "gap_id",
+        "code",
+        "reason",
+        "retryable",
+        "unit_id",
+        "scope_id",
+        "evidence_refs"
+      ],
+      "properties": {
+        "schema": {
+          "const": "appsec-review/producer-gap/1"
+        },
+        "gap_id": {
+          "$ref": "#/$defs/sha256"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "unit_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact_ref"
+          }
+        }
+      }
+    }
+  }
+}

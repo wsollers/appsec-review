@@ -137,6 +137,7 @@ INPUT_SOURCES: tuple[tuple[str, tuple[str, ...], str, tuple[str, ...], tuple[str
     ("publication_gate_decisions", ("job_final_publication_gate",), "artifact_only", (), ("coverage",)),
     ("openvex_exports", ("job_openvex_export",), "protected", (), ("coverage",)),
     ("final_report_publications", ("job_final_report_publication",), "artifact_only", (), ("coverage",)),
+    ("detailed_finding_reports", ("job_detailed_finding_report",), "artifact_only", (), ("coverage",)),
     # Proof-of-concept unit-test functions for the claims the judge agreed with: developer-facing files, hash-bound
     # by the handoff and shown by the final report; compile-checked, never linked or run.
     ("poc_generation", ("job_poc_generation",), "artifact_only", (), ("coverage",)),
