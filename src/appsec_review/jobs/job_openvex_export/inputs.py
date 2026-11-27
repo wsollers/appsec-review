@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 import hashlib
 import os
@@ -41,6 +41,7 @@ from appsec_review.retrieval.index import MANIFEST_SCHEMA, load_verified_manifes
 from appsec_review.review.models import IntegrityError
 from appsec_review.review.ship_block import policy_sha256
 from appsec_review.storage.shared import safe_path
+from appsec_review.storage.validation import validation_scope
 
 from .contracts import (
     ArtifactRef, ExportError, ExportFailureReason as Reason, ExportPhase, ExportProvenance,
@@ -130,6 +131,7 @@ class BoundedInputReader:
         self._seeded_paths: set[str] = set()
         self._accepted_refs: dict[str, ArtifactRef] = {}
         self._verified_manifests: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+        self._verified_stamps: dict[str, tuple[int, int, int, int]] = {}
         for item in seed_inventory:
             _require(item.path in self._inventory or len(self._inventory) < self.settings.max_bindings,
                      "unique input binding bound exceeded", Reason.BOUND_EXCEEDED, phase=self.phase)
@@ -212,6 +214,7 @@ class BoundedInputReader:
                      Reason.INPUT_TAMPERED, phase=self.phase)
             if old is None:
                 self._inventory[relative] = measured
+            self._verified_stamps[relative] = self._stamp(after)
             self.check_deadline()
             return payload, measured
 
@@ -228,8 +231,24 @@ class BoundedInputReader:
             reference.size_bytes if isinstance(reference, SizedArtifactRef) else None))[0]
 
     def verify(self, reference: ArtifactRef) -> None:
-        self._read(reference.path, reference.sha256, retain_bytes=False, declared_size=(
-            reference.size_bytes if isinstance(reference, SizedArtifactRef) else None))
+        declared_size = reference.size_bytes if isinstance(reference, SizedArtifactRef) else None
+        old = self._inventory.get(reference.path)
+        stamped = self._verified_stamps.get(reference.path)
+        if old is not None and stamped is not None:
+            with _errors(self.phase, Reason.INPUT_TAMPERED):
+                path = self.path(reference.path)
+                before = path.stat()
+                _require(stat.S_ISREG(before.st_mode), "input is not a regular file",
+                         Reason.INPUT_TAMPERED, phase=self.phase)
+                _require(old.sha256 == reference.sha256, "one input path has conflicting identities",
+                         Reason.IDENTITY_CONFLICT, phase=self.phase)
+                _require(declared_size is None or declared_size == old.size_bytes,
+                         "declared input size disagrees with bytes",
+                         Reason.INPUT_TAMPERED, phase=self.phase)
+                if stamped == self._stamp(before):
+                    self.check_deadline()
+                    return
+        self._read(reference.path, reference.sha256, retain_bytes=False, declared_size=declared_size)
 
     def json(self, reference: ArtifactRef, *, max_bytes: int | None = None) -> dict[str, Any]:
         limit = max_bytes if max_bytes is not None else max(self.settings.max_manifest_bytes, _MIN_JSON_INPUT_BYTES)
@@ -245,6 +264,7 @@ class BoundedInputReader:
         return tuple(self._inventory[key] for key in sorted(self._inventory))
 
     def reprove(self, *, skip_seeded: bool = False) -> None:
+        self._verified_stamps.clear()
         for reference in self.inventory:
             if skip_seeded and reference.path in self._seeded_paths:
                 continue
@@ -562,16 +582,24 @@ def _manifest(reader: BoundedInputReader, reference: ArtifactRef, run_id: str, s
         return cached
     pending = [reference]
     seen: set[ArtifactRef] = set()
+    visited: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     root_document: dict[str, Any] | None = None
     while pending:
         current = pending.pop()
         if current in seen:
             continue
         seen.add(current)
+        sub_key = (current.path, current.sha256, run_id, snapshot)
+        cached_sub = reader._verified_manifests.get(sub_key)
+        if cached_sub is not None:
+            if current == reference:
+                root_document = cached_sub
+            continue
         document = reader.json(current)
         _require(document.get("schema") == MANIFEST_SCHEMA and document.get("run_id") == run_id
                  and document.get("target_snapshot") == snapshot,
                  "accepted manifest scope identity disagrees", Reason.IDENTITY_CONFLICT)
+        visited[sub_key] = document
         if current == reference:
             root_document = document
         for raw in document["indexes"]:
@@ -583,6 +611,7 @@ def _manifest(reader: BoundedInputReader, reference: ArtifactRef, run_id: str, s
     _require(digest == reference.sha256 and canonical_bytes(verified) == canonical_bytes(root_document),
              "accepted manifest changed during verification", Reason.INPUT_TAMPERED)
     assert root_document is not None
+    reader._verified_manifests.update(visited)
     reader._verified_manifests[cache_key] = root_document
     return root_document
 
@@ -721,7 +750,7 @@ def verify_inputs(
     resolved_config_sha256: str | None = None,
 ) -> VerifiedInputs:
     """Re-prove accepted gate/review/scope/configuration without accessing a target checkout."""
-    with _errors(ExportPhase.LOAD):
+    with _errors(ExportPhase.LOAD), ExitStack() as stack:
         with _errors(ExportPhase.LOAD, Reason.CONFIGURATION_INVALID):
             settings = OpenVexExportSettings.from_mapping(settings.to_mapping())
             settings.require_enabled()
@@ -729,6 +758,7 @@ def verify_inputs(
         config_manifest_ref, config_ref, resolved = _configuration(
             reader, settings, expected_sha256=resolved_config_sha256,
         )
+        stack.enter_context(validation_scope(reader.root))
         gate_job = _accepted(reader, GATE_JOB)
         review_job = _accepted(reader, REVIEW_JOB)
         assert gate_job is not None and review_job is not None
