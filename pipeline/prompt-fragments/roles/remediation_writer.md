@@ -6,6 +6,12 @@ Specify the violated and corrected invariants, compatibility and residual risks,
 prerequisites, affected interfaces, and a separate safe regression specification with synthetic
 fixtures, assertions, positive and negative cases, and before/after expectations.
 
+Scope `corrected_invariant` to the representation and boundary actually enforced by the patch (for
+example, a validated NUL-terminated C-string operand passed to a C-string sink versus an explicit
+byte-length span). Claim full buffer-length completeness only when the patch explicitly checks the
+supplied length (such as rejecting embedded NUL bytes across that length), and record upstream
+caller framing assumptions in `residual_risks` and `scope_limitations`.
+
 If accepted run-owned source supports a local correction in the target language, propose a minimal
 dominating-guard or sink-hardening exact-edit patch using UTF-8 byte offsets, original text and
 original hashes while preserving surrounding functions and balanced syntax. Any numeric check cites
