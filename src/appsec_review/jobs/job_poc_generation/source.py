@@ -31,6 +31,9 @@ class HeaderResolver(Protocol):
     def resolve(self, include: str) -> str | None:
         """The workspace-relative path of a project header, or ``None`` when no project header matches."""
 
+    def include_spelling(self, include: str) -> str | None:
+        """An include-path-relative header spelling when ``include`` names a workspace-relative header."""
+
 
 @dataclass(frozen=True, slots=True)
 class WriterAnswer:
@@ -77,6 +80,32 @@ def decline_of(result: Mapping[str, Any]) -> tuple[str, str] | None:
 
 def include_line(include: str, settings: PocGenerationSettings) -> str:
     return f"#include <{include}>" if include in settings.policy.allowed_std_headers else f'#include "{include}"'
+
+
+def normalize_includes(answer: WriterAnswer, settings: PocGenerationSettings,
+                       resolver: HeaderResolver | None) -> WriterAnswer:
+    """Rewrite workspace-relative project header paths from ``brief.declarations`` to include-path spellings."""
+    if resolver is None or not answer.includes or not hasattr(resolver, "include_spelling"):
+        return answer
+    rewritten: list[str] = []
+    changed = False
+    for include in answer.includes:
+        if include in settings.policy.allowed_std_headers:
+            rewritten.append(include)
+            continue
+        spelled = resolver.include_spelling(include)
+        if spelled is not None and spelled != include:
+            rewritten.append(spelled)
+            changed = True
+        else:
+            rewritten.append(include)
+    if not changed:
+        return answer
+    return WriterAnswer(
+        answer.test_name, answer.test_source, tuple(rewritten),
+        answer.control_name, answer.control_source, answer.setup,
+        answer.expected_observation, answer.breakpoints, answer.notes,
+    )
 
 
 def assemble(answer: WriterAnswer, settings: PocGenerationSettings, *, claim_id: str, package_id: str) -> str:

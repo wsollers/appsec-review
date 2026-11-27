@@ -395,6 +395,30 @@ class Headers:
                 return candidate
         return None
 
+    def include_spelling(self, include: str) -> str | None:
+        """Return an include-path-relative header spelling for ``include`` (or workspace-relative path)."""
+        if not include or any(part in {"", ".", ".."} for part in include.split("/")):
+            return None
+        logical = PurePosixPath(include)
+        if logical.is_absolute() or ".." in logical.parts:
+            return None
+        if self.resolve(include) is not None:
+            return logical.as_posix()
+        candidate = logical.as_posix()
+        if candidate not in self.unit.workspace_manifest:
+            return None
+        for directory in self.directories:
+            if directory == ".":
+                if self.resolve(candidate) is not None:
+                    return candidate
+                continue
+            prefix = directory.rstrip("/") + "/"
+            if candidate.startswith(prefix):
+                spelling = candidate[len(prefix):]
+                if spelling and self.resolve(spelling) is not None:
+                    return spelling
+        return None
+
     def search_directories(self) -> tuple[str, ...]:
         return tuple(self.directories)
 

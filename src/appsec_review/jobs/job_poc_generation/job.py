@@ -39,7 +39,7 @@ from .datasets import CONTRACT, DATASETS
 from .package import describe, source_file_name, write_candidate
 from .policy import check_ast
 from .settings import PocGenerationSettings
-from .source import WriterAnswer, assemble, check_answer, decline_of, file_violations
+from .source import WriterAnswer, assemble, check_answer, decline_of, file_violations, normalize_includes
 from .static_compile_check import validate_static_poc_harness
 from .statuses import (
     ARTIFACT_GENERATED, COMPILE_FAILED, COMPILE_VERIFIED, GAP_CANDIDATE_BOUND,
@@ -503,6 +503,7 @@ def _validate_candidate(unit: UnitContext, settings: PocGenerationSettings, serv
         return {"terminal": _terminal(NOT_APPLICABLE, located.reason)}
     build = located.unit
     headers = Headers(build)
+    answer = normalize_includes(answer, settings, headers)
     text = assemble(answer, settings, claim_id=candidate.claim_id, package_id=candidate.package_id)
     source_ref = _write_json(unit, f"sources/{candidate.claim_id}.json",
                              {"claim_id": candidate.claim_id, "language": build.command.language,

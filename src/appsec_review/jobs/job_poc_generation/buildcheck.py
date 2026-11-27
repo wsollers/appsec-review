@@ -61,9 +61,18 @@ class Names:
     object_file: str = "poc.o"
     sanitized_object: str = "poc_san.o"
     synthesized_header: str | None = None
+    quote_directories: tuple[str, ...] = ()
 
     def container(self, name: str) -> str:
         return f"{CONTAINER_ROOT}/{self.directory}/{name}"
+
+
+def _quote_flags(names: Names) -> list[str]:
+    flags: list[str] = []
+    for directory in names.quote_directories:
+        path = CONTAINER_ROOT if directory in ("", ".") else f"{CONTAINER_ROOT}/{directory.strip('/')}"
+        flags += ["-iquote", path]
+    return flags
 
 
 def derive(argv: Sequence[str], source: str, mode: str, names: Names, settings: PocGenerationSettings
@@ -107,6 +116,7 @@ def derive(argv: Sequence[str], source: str, mode: str, names: Names, settings: 
         out.append(item)
         index += 1
     poc = names.container(names.source)
+    out += _quote_flags(names)
     if names.synthesized_header:
         out += ["-include", names.container(names.synthesized_header)]
     if mode == "syntax":
@@ -142,9 +152,10 @@ def derive_ast(argv: Sequence[str], language: str, names: Names, settings: PocGe
         if AST_ATTACHED.match(item):
             kept.append(item)
         index += 1
+    quote_inc = tuple(_quote_flags(names))
     extra_inc = ("-include", names.container(names.synthesized_header)) if names.synthesized_header else ()
     return ["python3", names.container(names.reducer), "--source", names.container(names.source),
-            "--project-root", CONTAINER_ROOT, "--", compiler, *kept, *extra_inc, "-fsyntax-only",
+            "--project-root", CONTAINER_ROOT, "--", compiler, *kept, *quote_inc, *extra_inc, "-fsyntax-only",
             "-Xclang", "-ast-dump=json", names.container(names.source)]
 
 
@@ -193,7 +204,7 @@ class Step:
 
     def visible(self, names: Names) -> set[str]:
         """Arguments the job chose itself: tool names, its scratch paths, the reducer's compiler, system libraries."""
-        chosen = {self.argv[0], "python3", "nm", "-ast-dump=json", "-include"}
+        chosen = {self.argv[0], "python3", "nm", "-ast-dump=json", "-include", "-iquote", CONTAINER_ROOT}
         chosen |= {item for item in self.argv if item.startswith(f"{CONTAINER_ROOT}/{names.directory}/")}
         if self.argv[0] == "python3" and "--" in self.argv:
             chosen.add(self.argv[self.argv.index("--") + 1])
@@ -274,7 +285,9 @@ def prepare(builds: AcceptedBuilds, unit: BuildUnit, parent: Path, *, name: str,
     directory = settings.build.scratch_directory
     suffix = ".c" if unit.command.language == "c" else ".cpp"
     synth_name = "synthesized_decls.h" if synthesized_header else None
-    names = Names(directory, f"poc{suffix}", synthesized_header=synth_name)
+    source_parent = PurePosixPath(unit.command.source).parent.as_posix()
+    quote_dirs = (source_parent, ".") if source_parent not in ("", ".") else (".",)
+    names = Names(directory, f"poc{suffix}", synthesized_header=synth_name, quote_directories=quote_dirs)
     folder = root / directory
     if folder.exists():
         raise ValueError("the accepted workspace already holds the PoC scratch directory")
