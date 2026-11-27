@@ -744,7 +744,7 @@ def render_run_over_run_markdown(payload: Mapping[str, Any]) -> str:
     latest = rows[-1] if rows else {}
 
     lines = [
-        f"# Run-over-Run Efficacy Report ? `{tid}`",
+        f"# Run-over-Run Efficacy Report — `{tid}`",
         "",
         "## 1. KPI Summary",
         "",
@@ -752,8 +752,8 @@ def render_run_over_run_markdown(payload: Mapping[str, Any]) -> str:
         f"- **Repository:** `{ident.get('repository') or 'n/a'}`",
         f"- **Latest Run ID:** `{curr_run}` (`{str(latest.get('source_revision') or 'n/a')[:16]}`)",
         f"- **Archived Target Cohort Size:** `{cohort}` run(s)",
-        f"- **Latest Confirmed Findings:** `{latest.get('confirmed_total', 0)}` "
-        f"(Critical `{latest.get('critical', 0)}`, High `{latest.get('high', 0)}`, "
+        f"- **Latest Confirmed Root-Cause Issues (Deduplicated):** `{latest.get('confirmed_total', 0)}` " + f"(`{latest.get('funnel', {}).get('confirmed', latest.get('confirmed_total', 0))}` confirmed finding records; "
+        f"Critical `{latest.get('critical', 0)}`, High `{latest.get('high', 0)}`, "
         f"Medium `{latest.get('medium', 0)}`, Low `{latest.get('low', 0)}`)",
         f"- **Mean Consecutive Jaccard Stability:** `{_fmt_pct(stab.get('mean_jaccard'))}` "
         f"(Latest: `{_fmt_pct(stab.get('latest_jaccard'))}`)",

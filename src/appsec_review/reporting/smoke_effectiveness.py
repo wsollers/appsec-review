@@ -843,7 +843,14 @@ def _reconcile_keyed(
             is_hit = bool(confirmed_recs) or scored.get("outcome") == "hit"
             if not is_hit:
                 attr_lane = "missed"
-                attr_display = "MISSED"
+                supported_recs = [r for r in matched_recs if r["status"] == "supported"]
+                if supported_recs:
+                    lanes_seen = sorted({"Hunter" if r["package_kind"] == "hunt" else ("Both" if r["package_kind"] == "both" else "SAST") for r in supported_recs})
+                    attr_display = f"Backlog supported ({', '.join(lanes_seen)})"
+                elif klass == "true_positive_dependency" and scored.get("leads"):
+                    attr_display = "SCA lead packaged (VEX under_investigation; 0 claims)"
+                else:
+                    attr_display = "MISSED"
             elif klass == "true_positive_dependency" or (confirmed_recs and all(r.get("is_dependency") for r in confirmed_recs)):
                 attr_lane = "dependency_scanner"
                 attr_display = "Dependency Scanner (OSV/Trivy)"
@@ -1068,7 +1075,7 @@ def _pct(val: float | None) -> str:
 def render_smoke_effectiveness_markdown(payload: Mapping[str, Any]) -> str:
     """Render crisp Markdown summary of ``appsec-review/smoke-effectiveness/1``."""
     lines: list[str] = [
-        f"# Smoke & Lane Effectiveness Report ? `{payload['run_id']}`",
+        f"# Smoke & Lane Effectiveness Report — `{payload['run_id']}`",
         "",
     ]
     ak = payload.get("answer_key")
