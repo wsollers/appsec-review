@@ -108,6 +108,8 @@ async def _delete_after_use(client, session_id: str, working: str, state: dict[s
 
 _DISCONNECTED_SESSION_MESSAGES = frozenset({
     "Session closed before response completed",
+    "Session aborted before response completed",
+    "Autopilot request failed",
     "Session is disconnected",
 })
 _CONTENT_FILTER_CODES = frozenset({
@@ -276,6 +278,17 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
                 raise
             except RuntimeError as exc:
                 if type(exc) is RuntimeError and str(exc) in _DISCONNECTED_SESSION_MESSAGES:
+                    if session_errors:
+                        raise _classify_session_error(
+                            session_errors[-1],
+                            str(getattr(session_errors[-1], "message", "") or str(exc)),
+                        ) from None
+                    if policy_blocked:
+                        raise ProviderError(
+                            "Copilot provider blocked the request under content policy",
+                            retryable=False,
+                            code="content_filter",
+                        ) from None
                     raise ProviderError(
                         "Copilot session disconnected before response completed",
                         retryable=True,

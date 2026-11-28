@@ -1007,13 +1007,15 @@ def test_sdk_session_errors_classify_retryability_without_leaking_raw_messages(
         assert leaked not in str(raised.value)
 
 
-@pytest.mark.parametrize("kind", ["closed", "disconnected", "eof", "process_exited"])
+@pytest.mark.parametrize("kind", ["closed", "aborted", "autopilot_error", "disconnected", "eof", "process_exited"])
 def test_sdk_mid_call_transport_disconnects_become_retryable_network_provider_errors(sdk, kind):
     class ProcessExitedError(Exception):
         __module__ = "copilot._jsonrpc"
 
     failures = {
         "closed": RuntimeError("Session closed before response completed"),
+        "aborted": RuntimeError("Session aborted before response completed"),
+        "autopilot_error": RuntimeError("Autopilot request failed"),
         "disconnected": RuntimeError("Session is disconnected"),
         "eof": EOFError("Unexpected end of stream while reading JSON-RPC message"),
         "process_exited": ProcessExitedError("CLI exited with raw stderr"),
@@ -1023,3 +1025,20 @@ def test_sdk_mid_call_transport_disconnects_become_retryable_network_provider_er
         copilot_sdk.send(request(), timeout_seconds=5)
     assert raised.value.code == "network" and raised.value.retryable is True
     assert "raw stderr" not in str(raised.value)
+
+
+def test_sdk_session_aborted_after_session_error_preserves_422_classification(sdk):
+    from copilot.session_events import SessionErrorData
+
+    sdk.session_events = [
+        SessionErrorData(
+            error_type="execution",
+            message="Execution failed: 422 This content was flagged for possible cybersecurity risk.",
+            status_code=422,
+        )
+    ]
+    sdk.failure = RuntimeError("Session aborted before response completed")
+    with pytest.raises(ProviderError) as raised:
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert raised.value.code == "content_filter" and raised.value.retryable is False
+    assert "cybersecurity" not in str(raised.value)
