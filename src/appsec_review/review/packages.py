@@ -52,6 +52,7 @@ named gap; a membership or integrity failure raises :class:`IntegrityError`.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import copy
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, fields, replace
 import hashlib
@@ -2204,18 +2205,17 @@ class _Assembler:
         budget = bound - len({(item.role, item.id) for item in unit.context})
         graph_context, graph_omitted = ([], 0) if unit.operation else self.graph.unit_context(unit.paths, budget)
         bounded_entries, bounded_gaps = self.bounded_analysis.for_leads(unit.leads)
-        context, omitted, gaps = self._cap(
+        context, omitted, unit_gaps = self._cap(
             (*unit.context, *graph_context, *bounded_entries,
              *self.scoped_tags(unit.component_id, unit.source_ids, unit.paths),
              *self.scoped_controls(unit.component_id, unit.source_ids), *self.document_entries(unit.paths)),
             unit.key, "lane_b_hunt")
-        gaps.extend(self.document_gaps)
-        gaps.extend(bounded_gaps)
+        unit_gaps.extend(self.document_gaps)
         if graph_omitted:
             omitted += graph_omitted
-            gaps.append(ScopeGap(GRAPH_PRODUCER, unit.key, "truncated",
-                                 f"{graph_omitted} graph context entr{'y' if graph_omitted == 1 else 'ies'} "
-                                 f"exceeded max_context_entries={bound}"))
+            unit_gaps.append(ScopeGap(GRAPH_PRODUCER, unit.key, "truncated",
+                                      f"{graph_omitted} graph context entr{'y' if graph_omitted == 1 else 'ies'} "
+                                      f"exceeded max_context_entries={bound}"))
         families, graph_shards, graph_gaps = self.graph.families(unit.build_unit_id, unit.paths, unit.key)
         graph_scopes = self.graph.scopes(unit.build_unit_id, unit.paths)
         neighborhood = self.graph.unit_neighborhood(context, self.graph_settings.max_call_depth)
@@ -2233,22 +2233,58 @@ class _Assembler:
         unit_context = self.unit_context_document(unit, context)
         self.unit_contexts[unit.key] = unit_context
 
-        def render(chunk: list, number: int, count: int) -> tuple[str, bytes]:
+        def render(chunk: list, number: int, count: int) -> tuple[str, bytes, list[ScopeGap]]:
             key = f"{unit.key}#{number:05d}"
             following = f"{unit.key}#{number + 1:05d}" if number + 1 < count else None
-            return self._build(
-                kind="hunt", lead_family=None, scope_record={
-                    **scope_record, "partition_key": key,
-                    "artifact_ids": sorted({identity for lead, *_ in chunk for identity, role in lead.related
-                                            if role == "artifact"})},
+            _, chunk_bounded_gaps = self.bounded_analysis.for_leads([lead for lead, *_ in chunk])
+            base_gaps = [*unit_gaps, *chunk_bounded_gaps, *graph_gaps, *missing]
+            part_scope = {
+                **scope_record, "partition_key": key,
+                "artifact_ids": sorted({identity for lead, *_ in chunk for identity, role in lead.related
+                                        if role == "artifact"}),
+            }
+            part_truncation = {"omitted_leads": 0, "omitted_context": omitted, "next_partition": following}
+            package_id, body = self._build(
+                kind="hunt", lead_family=None, scope_record=part_scope,
                 partition=(number, count), rank=rank, menu=chunk, context=context, obligations=OBLIGATIONS["hunt"],
-                gaps=[*gaps, *graph_gaps, *missing],
-                truncation={"omitted_leads": 0, "omitted_context": omitted, "next_partition": following},
+                gaps=base_gaps, truncation=part_truncation,
                 graph_families=families, graph_shards=graph_shards, graph_scopes=graph_scopes,
                 neighborhood=neighborhood, unit_context=unit_context, campaign=campaign)
+            if len(chunk) > 1 or len(body) <= self.settings.max_package_bytes:
+                return package_id, body, []
+            part_nb = copy.deepcopy(dict(neighborhood)) if neighborhood is not None else None
+            part_campaign = copy.deepcopy(dict(campaign)) if campaign is not None else None
+            trimmed_rows: Counter[str] = Counter()
+            trimmed_campaign = 0
+            while len(body) > self.settings.max_package_bytes:
+                if part_nb is not None and (section := self.trim_neighborhood(part_nb, [])) is not None:
+                    trimmed_rows[section] += 1
+                elif part_campaign is not None and (part_campaign["entry_points"] or part_campaign["functions"]):
+                    if part_campaign["entry_points"]:
+                        part_campaign["entry_points"].pop()
+                    else:
+                        part_campaign["functions"].pop()
+                    trimmed_campaign += 1
+                else:
+                    break
+                trim_extra = self.trim_gaps("lane_b_hunt", key, Counter(), trimmed_rows, Counter())
+                if trimmed_campaign:
+                    trim_extra.append(ScopeGap(
+                        "hunting_campaign", key, "truncated",
+                        f"{trimmed_campaign} campaign_area routing entr{'y' if trimmed_campaign == 1 else 'ies'} "
+                        "omitted to respect max_package_bytes"))
+                package_id, body = self._build(
+                    kind="hunt", lead_family=None, scope_record=part_scope,
+                    partition=(number, count), rank=rank, menu=chunk, context=context, obligations=OBLIGATIONS["hunt"],
+                    gaps=[*base_gaps, *trim_extra], truncation=part_truncation,
+                    graph_families=families, graph_shards=graph_shards, graph_scopes=graph_scopes,
+                    neighborhood=part_nb, unit_context=unit_context, campaign=part_campaign)
+            else:
+                return package_id, body, trim_extra
+            return package_id, body, []
 
         def split(chunk: list) -> list[list]:
-            _identity, body = render(chunk, 99_997, 99_999)  # include the non-final continuation pointer
+            _identity, body, _trim_extra = render(chunk, 99_997, 99_999)  # include the non-final continuation pointer
             if len(body) <= self.settings.max_package_bytes:
                 return [chunk]
             if len(chunk) <= 1:
@@ -2260,12 +2296,13 @@ class _Assembler:
         size = self.settings.hunt_menu_partition_size
         chunks = [chunk for offset in range(0, max(1, len(menu)), size)
                   for chunk in split(menu[offset:offset + size])]
-        self.extra_gaps.extend(gaps)
+        self.extra_gaps.extend((*unit_gaps, *bounded_gaps))
         packages = []
         for number, chunk in enumerate(chunks):
-            package_id, body = render(chunk, number, len(chunks))
+            package_id, body, trim_extra = render(chunk, number, len(chunks))
             if len(body) > self.settings.max_package_bytes:
                 raise IntegrityError(f"hunt partition of {unit.key} exceeds max_package_bytes after numbering")
+            self.extra_gaps.extend(trim_extra)
             packages.append(Package(package_id, "hunt", "hunt", None, f"{unit.key}#{number:05d}",
                                     tuple(sorted(item[0].observation_id for item in chunk)), unit.key, body,
                                     unit_context))

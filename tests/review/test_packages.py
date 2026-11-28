@@ -565,3 +565,161 @@ def test_a_constant_banned_function_call_is_not_admitted_while_an_attacker_reach
                    triage_state="assessed")
     assert rule_table_decision(tainted, rules) is None
     assert admission_reasons(tainted, policy) == ["assessed_severity"]
+
+
+# -- DEFECT-03 (run 2026-11-27-0001): hunt partition bounded_analysis gaps & single-lead byte resilience ----------
+
+def test_hunt_partitions_scope_per_lead_bounded_analysis_gaps_while_manifest_retains_unit_union(
+    scope, fixture, tmp_path: Path,
+) -> None:
+    """Run 2026-11-27-0001: a hunted C/C++ unit with 235+ leads generated 249 per-lead bounded_analysis gaps
+    (~78 KB > max_package_bytes=65,536). Copying unit-wide bounded_analysis gaps into every partition caused even
+    1-lead partitions to exceed max_package_bytes."""
+    import hashlib
+    from appsec_review.review.bounded_analysis import BoundedAnalysisContext
+    from appsec_review.review.packages import resolve_package_document
+    from appsec_review.storage.atomic import canonical_json
+
+    base = collect_leads(scope)
+    template = next(lead for lead in base.leads if lead.observation_id == fixture.ids["sast_critical"])
+    synthetic = [
+        replace(
+            template,
+            observation_id="asr:tool_observation:" + hashlib.sha256(f"defect03-{idx}".encode()).hexdigest(),
+            reported_severity="medium",
+            assessed_severity=None,
+            triage_state="not_applicable",
+            duplicate_of=None,
+            flow_ids=(),
+            related=(),
+            coverage_gaps=(),
+            advisory=None,
+            control_assessment=None,
+            start_line=3 + idx % 5,
+            message=f"synthetic native lead {idx}",
+        )
+        for idx in range(240)
+    ]
+    collection = replace(base, leads=tuple(sorted((*base.leads, *synthetic), key=lambda lead: lead.observation_id)))
+
+    ba = BoundedAnalysisContext(scope)
+    native_unit = "unit:component:0002:-:native-main:r0000"
+    unit_ba_Lead_candidates = [lead for lead in collection.leads if lead.path and lead.path.startswith("native/")]
+    _, unit_ba_gaps = ba.for_leads(unit_ba_Lead_candidates)
+    assert len(canonical_json([gap.record() for gap in unit_ba_gaps])) > 65_536, (
+        "premise: unit-wide bounded_analysis gaps alone exceed max_package_bytes=65,536"
+    )
+
+    settings = PackageSettings(hunt_menu_partition_size=25, max_package_bytes=65_536)
+    built = assemble_packages(scope, settings, collection=collection)
+    assert built.manifest["audit"]["lane_a"]["status"] == "passed"
+    assert built.manifest["audit"]["lane_b"]["status"] == "passed"
+
+    hunts = sorted(
+        (pkg for pkg in built.packages if pkg.kind == "hunt" and pkg.unit_key == native_unit),
+        key=lambda pkg: pkg.document()["partition"]["number"],
+    )
+    assert [len(pkg.lead_ids) for pkg in hunts] == [25] * 9 + [20]
+    assert all(len(pkg.body) <= 65_536 for pkg in built.packages)
+
+    hunted_leads = [lead for lead in collection.leads if lead.observation_id in {lid for p in hunts for lid in p.lead_ids}]
+    _, expected_unit_ba_gaps = ba.for_leads(hunted_leads)
+    expected_unit_ba_ids = {gap.gap_id for gap in expected_unit_ba_gaps}
+    assert len(expected_unit_ba_ids) == 245
+
+    partition_ba_union: set[str] = set()
+    for pkg in hunts:
+        doc = pkg.document()
+        jsonschema.validate(doc, SCHEMA)
+        part_ba = [gap for gap in doc["coverage_gaps"] if gap["producer"] == "bounded_analysis"]
+        assert {gap["scope"] for gap in part_ba} == set(pkg.lead_ids)
+        partition_ba_union.update(gap["gap_id"] for gap in part_ba)
+
+    assert partition_ba_union == expected_unit_ba_ids
+    manifest_ba_ids = {gap["gap_id"] for gap in built.manifest["gaps"] if gap["producer"] == "bounded_analysis"}
+    assert expected_unit_ba_ids <= manifest_ba_ids
+
+    out = tmp_path / "assembly"
+    manifest_path = publish_packages(built, out)
+    verify_package_manifest(manifest_path)
+    assert resolve_package_document(out / "packages" / f"{hunts[0].package_id}.json") == hunts[0].resolved()
+
+
+def test_single_lead_hunt_partition_trims_oversized_campaign_area_within_byte_cap(scope, fixture) -> None:
+    """When a 1-lead hunt partition still exceeds max_package_bytes because of unit-wide routing metadata
+    (neighborhood / campaign_area), _Assembler.hunts trims partition-local copies deterministically and records
+    explicit truncation gaps in both partition coverage_gaps and manifest['gaps']."""
+    from appsec_review.review import hunt_plan
+    from appsec_review.review.hunt_plan import ARTIFACT_SCHEMA, CAMPAIGN_RULE, HuntSelection
+
+    native_unit = "unit:component:0002:-:native-main:r0000"
+    baseline = assemble_packages(scope, PackageSettings(hunt_menu_partition_size=1))
+    max_finding_bytes = max(len(pkg.body) for pkg in baseline.packages if pkg.kind == "finding_lead")
+    max_plain_1lead_hunt = max(len(pkg.body) for pkg in baseline.packages if pkg.kind == "hunt")
+
+    plan_doc = {
+        "schema": ARTIFACT_SCHEMA,
+        "status": hunt_plan.STATUS_PLANNED,
+        "plan_id": "plan-" + "a" * 64,
+        "plan": {
+            "areas": [
+                {
+                    "area_id": "area-native-parse",
+                    "title": "Native parser surface",
+                    "mission": "Audit native parser entry points and buffer bounds.",
+                    "weakness_classes": ["memory_corruption"],
+                    "priority": 1,
+                    "agents": 2,
+                    "status": hunt_plan.AREA_REACHED,
+                    "functions": [
+                        {
+                            "identity": f"asr:symbol:{idx:064x}",
+                            "name": f"parse_packet_handler_{idx:03d}_" + "x" * 60,
+                            "path": "native/src/parse.c",
+                            "line": 1 + (idx % 20),
+                        }
+                        for idx in range(60)
+                    ],
+                    "entry_points": [
+                        {
+                            "identity": f"asr:entry_point:{idx:064x}",
+                            "path": "native/src/parse.c",
+                            "line": 1 + (idx % 20),
+                            "display": f"recv_entry_{idx:03d}_" + "y" * 60,
+                        }
+                        for idx in range(60)
+                    ],
+                    "files": [{"path": "native/src/parse.c"}],
+                }
+            ],
+            "unassigned": [],
+        },
+    }
+    selection = HuntSelection(plan_doc)
+    untrimmed = assemble_packages(scope, PackageSettings(hunt_menu_partition_size=25), hunt_selection=selection)
+    untrimmed_hunt_bytes = max(
+        len(pkg.body) for pkg in untrimmed.packages if pkg.kind == "hunt" and pkg.unit_key == native_unit
+    )
+    cap = max(max_finding_bytes, max_plain_1lead_hunt) + 1_500
+    assert cap < untrimmed_hunt_bytes, "premise: untrimmed campaign_area pushes 1-lead partitions over cap"
+
+    trimmed = assemble_packages(
+        scope,
+        PackageSettings(hunt_menu_partition_size=25, max_package_bytes=cap),
+        hunt_selection=selection,
+    )
+    assert trimmed.manifest["audit"]["lane_a"]["status"] == "passed"
+    assert trimmed.manifest["audit"]["lane_b"]["status"] == "passed"
+    assert all(len(pkg.body) <= cap for pkg in trimmed.packages)
+
+    native_hunts = [pkg for pkg in trimmed.packages if pkg.kind == "hunt" and pkg.unit_key == native_unit]
+    assert len(native_hunts) == 5
+    manifest_campaign_gaps = [g for g in trimmed.manifest["gaps"] if g["producer"] == "hunting_campaign"]
+    assert len(manifest_campaign_gaps) == len(native_hunts)
+    for pkg in native_hunts:
+        doc = pkg.document()
+        jsonschema.validate(doc, SCHEMA)
+        assert doc["campaign_area"]["rule"] == CAMPAIGN_RULE
+        part_campaign_gaps = [g for g in doc["coverage_gaps"] if g["producer"] == "hunting_campaign"]
+        assert len(part_campaign_gaps) == 1 and part_campaign_gaps[0]["state"] == "truncated"
+        assert part_campaign_gaps[0]["scope"] == pkg.partition_key

@@ -97,7 +97,10 @@ lead. `review/bounded_analysis.py` joins a result only to its exact accepted see
 path, file hash and line span. The view retains assumptions, property/trace bounds and
 `counterexample_candidate`, `bounded_pass`, `inconclusive` or `not_attempted` judgments.
 Missing exact-seed results are gaps, never a safe verdict; this context cannot itself confirm a
-finding or satisfy an unrestricted runtime claim.
+finding or satisfy an unrestricted runtime claim. On hunt partitions, unit-wide `bounded_analysis`
+entries live in `unit_context` while each partition's `coverage_gaps` carries only the
+`bounded_analysis` gaps for its own `lead_menu` seeds (with all unit-wide gaps retained in the
+assembly manifest).
 
 ### Artifact-local evidence and coverage
 
