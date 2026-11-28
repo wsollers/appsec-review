@@ -157,6 +157,13 @@ class ConnectionObservation:
     client_cold_start_ms: int | None = None
 
 
+def _is_sdk_transport_error(error: BaseException) -> bool:
+    if isinstance(error, (ConnectionError, EOFError)):
+        return True
+    cls = type(error)
+    return cls.__module__.startswith("copilot") and cls.__name__ == "ProcessExitedError"
+
+
 class _Worker:
     def __init__(self):
         self.loop = None
@@ -274,10 +281,9 @@ class _Worker:
         except TimeoutError as error:
             original = (error.__cause__ if isinstance(error.__cause__, _UnconfirmedTeardown)
                         else ModelTimeout("Copilot call timed out"))
-        except ConnectionError:
-            original = ProviderError("Copilot connection failed", code="network", retryable=True)
         except BaseException as error:
-            original = error
+            original = (ProviderError("Copilot connection failed", code="network", retryable=True)
+                        if _is_sdk_transport_error(error) else error)
         else:
             original = None
 

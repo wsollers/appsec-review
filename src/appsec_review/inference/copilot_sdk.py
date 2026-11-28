@@ -8,6 +8,7 @@ from dataclasses import replace
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 from typing import Any, Sequence
 
@@ -105,6 +106,98 @@ async def _delete_after_use(client, session_id: str, working: str, state: dict[s
                 raise _cleanup_failure(f"Copilot session {session_id} persisted after deletion")
 
 
+_DISCONNECTED_SESSION_MESSAGES = frozenset({
+    "Session closed before response completed",
+    "Session is disconnected",
+})
+_CONTENT_FILTER_CODES = frozenset({
+    "content_filter",
+    "content_policy_violation",
+    "policy_blocked",
+    "cyber_policy_violation",
+    "safety",
+})
+_CONTENT_FILTER_MARKERS = (
+    "flagged for possible cybersecurity risk",
+    "content_filter",
+    "content management policy",
+    "content policy",
+    "safety system",
+    "policy_blocked",
+    "violates our usage policy",
+)
+_RATE_LIMIT_CODES = frozenset({"rate_limit", "rate_limit_exceeded", "too_many_requests"})
+_TRANSIENT_STATUS_CODES = frozenset({408, 500, 502, 503, 504, 529})
+_TRANSIENT_ERROR_CODES = frozenset({
+    "server_error",
+    "overloaded",
+    "overloaded_error",
+    "service_unavailable",
+    "bad_gateway",
+    "gateway_timeout",
+})
+_TRANSIENT_MARKERS = (
+    "overloaded",
+    "service unavailable",
+    "bad gateway",
+    "gateway timeout",
+    "connection reset",
+    "econnreset",
+    "etimedout",
+    "socket hang up",
+)
+_EXECUTION_STATUS_RE = re.compile(r"(?:^|\bExecution failed:\s*)([1-5]\d\d)\b")
+
+
+def _classify_session_error(error_data: Any | None, raw_message: str) -> ProviderError:
+    raw_status = getattr(error_data, "status_code", None)
+    if isinstance(raw_status, int) and not isinstance(raw_status, bool):
+        status_code: int | None = raw_status
+    else:
+        match = _EXECUTION_STATUS_RE.search(raw_message)
+        status_code = int(match.group(1)) if match else None
+    error_code = str(getattr(error_data, "error_code", None) or "").strip().lower()
+    error_type = str(getattr(error_data, "error_type", None) or "").strip().lower()
+    provider_error_type = str(getattr(error_data, "provider_error_type", None) or "").strip().lower()
+    combined_msg = f"{getattr(error_data, 'message', None) or ''}\n{raw_message}".lower()
+
+    if (error_code in _CONTENT_FILTER_CODES
+            or provider_error_type in _CONTENT_FILTER_CODES
+            or any(marker in combined_msg for marker in _CONTENT_FILTER_MARKERS)
+            or (status_code == 422 and any(word in combined_msg for word in (
+                "flagged", "cybersecurity", "safeguards", "policy", "safety")))):
+        return ProviderError(
+            "Copilot provider blocked the request under content policy",
+            retryable=False,
+            code="content_filter",
+        )
+    if (status_code == 429
+            or error_code in _RATE_LIMIT_CODES
+            or provider_error_type in _RATE_LIMIT_CODES
+            or "rate limit" in combined_msg
+            or "too many requests" in combined_msg):
+        return ProviderError(
+            "Copilot provider rate limit exceeded",
+            retryable=True,
+            code="rate_limit",
+        )
+    if (status_code in _TRANSIENT_STATUS_CODES
+            or error_code in _TRANSIENT_ERROR_CODES
+            or provider_error_type in _TRANSIENT_ERROR_CODES
+            or error_type in {"network", "connection", "transient"}
+            or any(marker in combined_msg for marker in _TRANSIENT_MARKERS)):
+        return ProviderError(
+            "Copilot upstream provider failed transiently",
+            retryable=True,
+            code="upstream_error",
+        )
+    return ProviderError(
+        "Copilot session failed with a non-retryable provider error",
+        retryable=False,
+        code="session_error",
+    )
+
+
 def _prompt_text(request: ModelRequest | ReviewModelRequest) -> str:
     if not isinstance(request, ReviewModelRequest):
         return json.dumps(plan_prompt(request), sort_keys=True)
@@ -119,7 +212,11 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
         from copilot.session import (
             ModelCapabilitiesOverride, ModelLimitsOverride, PermissionDecisionUserNotAvailable,
         )
-        from copilot.session_events import AssistantMessageData, AssistantUsageData
+        import copilot.session_events as session_events
+        AssistantMessageData = session_events.AssistantMessageData
+        AssistantUsageData = session_events.AssistantUsageData
+        session_error_cls = getattr(session_events, "SessionErrorData", None)
+        session_warning_cls = getattr(session_events, "SessionWarningData", None)
 
         model = catalog.get(request.model)
         if model is None or not _available(model):
@@ -129,10 +226,20 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
                              f"effort {request.reasoning}")
         prompt = _prompt_text(request)
         usage: list[AssistantUsageData] = []
+        session_errors: list[Any] = []
+        policy_blocked = False
 
         def observe(event):
-            if not event.agent_id and isinstance(event.data, AssistantUsageData):
+            nonlocal policy_blocked
+            if event.agent_id:
+                return
+            if isinstance(event.data, AssistantUsageData):
                 usage.append(event.data)
+            elif session_error_cls is not None and isinstance(event.data, session_error_cls):
+                session_errors.append(event.data)
+            elif session_warning_cls is not None and isinstance(event.data, session_warning_cls):
+                if getattr(event.data, "warning_type", None) == "policy_blocked":
+                    policy_blocked = True
 
         session = await client.create_session(
             model=request.model, reasoning_effort=request.reasoning,
@@ -167,7 +274,33 @@ async def _send(request: ModelRequest | ReviewModelRequest, timeout_seconds: int
                     original.add_note("Copilot session abort failed")
                     raise original from failure
                 raise
+            except RuntimeError as exc:
+                if type(exc) is RuntimeError and str(exc) in _DISCONNECTED_SESSION_MESSAGES:
+                    raise ProviderError(
+                        "Copilot session disconnected before response completed",
+                        retryable=True,
+                        code="network",
+                    ) from None
+                raise
+            except Exception as exc:
+                if type(exc) is Exception and (session_errors or str(exc).startswith("Session error:")):
+                    raise _classify_session_error(
+                        session_errors[-1] if session_errors else None,
+                        str(exc),
+                    ) from None
+                raise
             if response is None or not isinstance(response.data, AssistantMessageData):
+                if session_errors:
+                    raise _classify_session_error(
+                        session_errors[-1],
+                        str(getattr(session_errors[-1], "message", "") or ""),
+                    )
+                if policy_blocked:
+                    raise ProviderError(
+                        "Copilot provider blocked the request under content policy",
+                        retryable=False,
+                        code="content_filter",
+                    )
                 raise ModelOutputError("Copilot returned no final assistant message")
             data = response.data
             if data.tool_requests:

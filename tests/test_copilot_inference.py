@@ -48,8 +48,16 @@ def fake_sdk_modules(monkeypatch):
     class AssistantUsageData(SimpleNamespace):
         pass
 
+    class SessionErrorData(SimpleNamespace):
+        pass
+
+    class SessionWarningData(SimpleNamespace):
+        pass
+
     events.AssistantMessageData = AssistantMessageData
     events.AssistantUsageData = AssistantUsageData
+    events.SessionErrorData = SessionErrorData
+    events.SessionWarningData = SessionWarningData
     for module in (package, session, events):
         monkeypatch.setitem(sys.modules, module.__name__, module)
 
@@ -94,8 +102,12 @@ def sdk(monkeypatch, tmp_path, fake_sdk_modules):
             state.raw_prompt = prompt
             state.prompt = json.loads(prompt)
             await asyncio.sleep(state.delay)
+            for event_data in getattr(state, "session_events", ()):
+                state.options["on_event"](SimpleNamespace(agent_id=None, data=event_data))
             if state.failure:
                 raise state.failure
+            if getattr(state, "no_response", False):
+                return None
             if state.usage:
                 for counts in [(state.input_tokens, state.output_tokens, state.cache_read_tokens),
                                *state.extra_usage]:
@@ -924,3 +936,90 @@ def test_sdk_preserves_turn_and_disconnect_causes_when_delete_raises_not_found(s
     assert str(exc_info.value.__cause__) == "disconnect failed"
     assert any("session deletion teardown failed" in note for note in getattr(exc_info.value, "__notes__", ()))
     assert "copilot_teardown_unconfirmed" in quarantined
+
+
+def test_sdk_session_error_422_content_filter_is_non_retryable_sanitized_provider_error(sdk):
+    from copilot.session_events import SessionErrorData
+    from appsec_review.inference.execution import Execution, RetryPolicy
+
+    raw_msg = (
+        "Execution failed: 422 This content was flagged for possible cybersecurity risk. "
+        "If this seems wrong, try rephrasing your request. If you're doing authorized security "
+        "work that requires more cyber permissive safeguards, apply for Daybreak access via "
+        "https://platform.openai.com/settings/organization/status-and-access before retrying. "
+        "(Request ID: D508:B2F79:98853:BC24B:6B0A642D)"
+    )
+    sdk.session_events = [SessionErrorData(error_type="execution", message=raw_msg, status_code=422)]
+    sdk.failure = Exception(f"Session error: {raw_msg}")
+
+    policy = RetryPolicy(3, on_provider_error=True)
+    execution = Execution(timeout_seconds=10, max_calls=3)
+    with worker_scope():
+        with pytest.raises(ProviderError) as raised:
+            execution.call(copilot_sdk.send, request(), timeout_seconds=5)
+        err = raised.value
+        assert err.code == "content_filter" and err.retryable is False
+        assert err.__cause__ is None
+        assert "Daybreak" not in str(err) and "D508" not in str(err)
+        assert policy.allows(1, err) is False
+        assert execution.receipts[-1].category == "provider"
+        assert execution.receipts[-1].failure_code == "content_filter"
+        # Subsequent turn on the same worker_scope recovers cleanly with a fresh client.
+        sdk.session_events = []
+        sdk.failure = None
+        recovered = copilot_sdk.send(request(), timeout_seconds=5)
+        assert recovered.proposal == VALUE
+    assert (sdk.starts, sdk.stops, sdk.sends) == (2, 2, 2)
+
+
+def test_sdk_policy_blocked_warning_without_assistant_message_is_content_filter(sdk):
+    from copilot.session_events import SessionWarningData
+
+    sdk.session_events = [SessionWarningData(warning_type="policy_blocked", message="raw policy text")]
+    sdk.no_response = True
+    with pytest.raises(ProviderError) as raised:
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert raised.value.code == "content_filter" and raised.value.retryable is False
+    assert "raw policy" not in str(raised.value)
+
+
+@pytest.mark.parametrize(("status_code", "error_code", "message", "expected_code", "expected_retryable"), [
+    (429, "rate_limit_exceeded", "Execution failed: 429 rate limit sensitive detail", "rate_limit", True),
+    (503, "service_unavailable", "Execution failed: 503 service unavailable internal host", "upstream_error", True),
+    (None, None, "Execution failed: 422 This content was flagged for possible cybersecurity risk.", "content_filter", False),
+    (400, "invalid_request_error", "Execution failed: 400 invalid parameter secret", "session_error", False),
+])
+def test_sdk_session_errors_classify_retryability_without_leaking_raw_messages(
+    sdk, status_code, error_code, message, expected_code, expected_retryable
+):
+    from copilot.session_events import SessionErrorData
+
+    sdk.session_events = (
+        [SessionErrorData(error_type="execution", message=message, status_code=status_code, error_code=error_code)]
+        if status_code is not None else []
+    )
+    sdk.failure = Exception(f"Session error: {message}")
+    with pytest.raises(ProviderError) as raised:
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert raised.value.code == expected_code
+    assert raised.value.retryable is expected_retryable
+    for leaked in ("sensitive", "internal host", "cybersecurity", "secret"):
+        assert leaked not in str(raised.value)
+
+
+@pytest.mark.parametrize("kind", ["closed", "disconnected", "eof", "process_exited"])
+def test_sdk_mid_call_transport_disconnects_become_retryable_network_provider_errors(sdk, kind):
+    class ProcessExitedError(Exception):
+        __module__ = "copilot._jsonrpc"
+
+    failures = {
+        "closed": RuntimeError("Session closed before response completed"),
+        "disconnected": RuntimeError("Session is disconnected"),
+        "eof": EOFError("Unexpected end of stream while reading JSON-RPC message"),
+        "process_exited": ProcessExitedError("CLI exited with raw stderr"),
+    }
+    sdk.failure = failures[kind]
+    with pytest.raises(ProviderError) as raised:
+        copilot_sdk.send(request(), timeout_seconds=5)
+    assert raised.value.code == "network" and raised.value.retryable is True
+    assert "raw stderr" not in str(raised.value)
